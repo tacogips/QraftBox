@@ -274,34 +274,6 @@ function scrollResultIntoView(lineNumber: number): void;
 - [ ] Implement scrollResultIntoView()
 - [ ] Unit tests
 
-### 9. Search Keyboard Shortcuts
-
-#### client/lib/search-shortcuts.ts
-
-**Status**: NOT_STARTED
-
-```typescript
-// Search-related keyboard shortcuts
-const SEARCH_SHORTCUTS = {
-  '/': 'Search in current file',
-  '<Space>/': 'Search in changed files',
-  '<Space><Space>/': 'Search in entire repo',
-  'n': 'Next search result',
-  'N': 'Previous search result',
-  '*': 'Search word under cursor',
-  'Ctrl+p': 'File fuzzy finder (future)',
-};
-
-function registerSearchShortcuts(handlers: SearchHandlers): void;
-```
-
-**Checklist**:
-- [ ] Implement shortcut registration
-- [ ] Handle scope shortcuts
-- [ ] Handle navigation shortcuts
-- [ ] Handle word under cursor
-- [ ] Unit tests
-
 ---
 
 ## Module Status
@@ -316,7 +288,6 @@ function registerSearchShortcuts(handlers: SearchHandlers): void;
 | Search Results | `client/components/SearchResults.svelte` | NOT_STARTED | - |
 | Search Highlight | `client/components/SearchHighlight.svelte` | NOT_STARTED | - |
 | Search Navigation | `client/lib/search-navigation.ts` | NOT_STARTED | - |
-| Search Shortcuts | `client/lib/search-shortcuts.ts` | NOT_STARTED | - |
 
 ## Dependencies
 
@@ -333,8 +304,7 @@ function registerSearchShortcuts(handlers: SearchHandlers): void;
 - [ ] Search in entire repo works
 - [ ] Regex patterns supported
 - [ ] Results display with context
-- [ ] Navigation (n/N) works
-- [ ] Keyboard shortcuts work
+- [ ] Result navigation works via UI
 - [ ] Type checking passes
 - [ ] Unit tests passing
 

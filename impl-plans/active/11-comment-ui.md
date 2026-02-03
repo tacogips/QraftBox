@@ -210,35 +210,6 @@ function createCommentsStore(): CommentsStore & CommentActions;
 - [ ] Handle sync in progress
 - [ ] Unit tests
 
-### 8. Comment Keyboard Shortcuts
-
-#### client/lib/comment-shortcuts.ts
-
-**Status**: NOT_STARTED
-
-```typescript
-// Comment-related keyboard shortcuts
-const COMMENT_SHORTCUTS = {
-  'c': 'Add comment at current line',
-  'C': 'Add comment for selected range',
-  'gc': 'Go to next comment',
-  'gC': 'Go to previous comment',
-  'dc': 'Delete comment at cursor',
-  'ec': 'Edit comment at cursor',
-  'yc': 'Copy comment as prompt',
-  '<Space>p': 'Push notes to remote',
-  '<Space>P': 'Pull notes from remote',
-};
-
-function registerCommentShortcuts(handlers: CommentHandlers): void;
-```
-
-**Checklist**:
-- [ ] Implement shortcut registration
-- [ ] Handle all comment shortcuts
-- [ ] Integrate with keyboard manager
-- [ ] Unit tests
-
 ---
 
 ## Module Status
@@ -252,7 +223,6 @@ function registerCommentShortcuts(handlers: CommentHandlers): void;
 | Line Indicator | `client/components/LineCommentIndicator.svelte` | NOT_STARTED | - |
 | Comments Panel | `client/components/CommentsPanel.svelte` | NOT_STARTED | - |
 | Sync Status | `client/components/SyncStatusBar.svelte` | NOT_STARTED | - |
-| Shortcuts | `client/lib/comment-shortcuts.ts` | NOT_STARTED | - |
 
 ## Dependencies
 
@@ -270,7 +240,6 @@ function registerCommentShortcuts(handlers: CommentHandlers): void;
 - [ ] Can edit/delete own comments
 - [ ] Sync status shows correctly
 - [ ] Push/pull operations work
-- [ ] Keyboard shortcuts work
 - [ ] Type checking passes
 - [ ] Unit tests passing
 

@@ -2,7 +2,7 @@
   "lastUpdated": "2026-02-03T00:00:00Z",
   "phases": {
     "1": { "status": "READY", "description": "Foundation - CLI, Server, Git Operations, API Routes" },
-    "2": { "status": "BLOCKED", "dependsOn": ["1"], "description": "Core Features - Client, Diff View, File Tree, File Watcher, git-xnotes" },
+    "2": { "status": "BLOCKED", "dependsOn": ["1"], "description": "Core Features - Client, Diff View, File Tree, File Watcher, git-xnotes, Branch Switching" },
     "3": { "status": "BLOCKED", "dependsOn": ["2"], "description": "Advanced Features - Current State View, Comments UI, Search" },
     "4": { "status": "BLOCKED", "dependsOn": ["3"], "description": "AI Integration - AI Agent, Session Queue" }
   },
@@ -144,8 +144,7 @@
         "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "CommentForm (client/components/CommentForm.svelte)" },
         "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "LineCommentIndicator (client/components/LineCommentIndicator.svelte)" },
         "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-002", "TASK-003"], "description": "CommentsPanel (client/components/CommentsPanel.svelte)" },
-        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SyncStatusBar (client/components/SyncStatusBar.svelte)" },
-        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Comment Shortcuts (client/lib/comment-shortcuts.ts)" }
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SyncStatusBar (client/components/SyncStatusBar.svelte)" }
       }
     },
     "12-ai-integration": {
@@ -193,8 +192,21 @@
         "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchInput (client/components/SearchInput.svelte)" },
         "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchResults (client/components/SearchResults.svelte)" },
         "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SearchHighlight (client/components/SearchHighlight.svelte)" },
-        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Navigation (client/lib/search-navigation.ts)" },
-        "TASK-009": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Shortcuts (client/lib/search-shortcuts.ts)" }
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Navigation (client/lib/search-navigation.ts)" }
+      }
+    },
+    "15-branch-switching": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/15-branch-switching.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Branch Types (src/types/branch.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "Branch Git Ops (src/server/git/branch.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-002"], "description": "Branch Routes (src/server/routes/branches.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Branch Store (client/stores/branches.ts)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "BranchHeader (client/components/BranchHeader.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "BranchSelector (client/components/BranchSelector.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "CheckoutWarning (client/components/CheckoutWarning.svelte)" }
       }
     }
   }

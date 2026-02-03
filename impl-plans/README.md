@@ -93,6 +93,7 @@ Large features are split into multiple related plans with cross-references.
 | 12-ai-integration | 4 | Ready | design-local-diff-viewer.md#ai-agent-integration | 2026-02-03 |
 | 13-session-queue | 4 | Ready | design-local-diff-viewer.md#session-queue-screen | 2026-02-03 |
 | 14-search | 3 | Ready | design-local-diff-viewer.md#search-functionality | 2026-02-03 |
+| 15-branch-switching | 2 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-03 |
 
 ## Completed Plans
 
@@ -129,7 +130,8 @@ PHASE_TO_PLANS = {
     "06-file-watcher.md",
     "07-client-core.md",
     "08-diff-view.md",
-    "10-file-tree.md"
+    "10-file-tree.md",
+    "15-branch-switching.md"
   ],
   3: [
     "09-current-state-view.md",

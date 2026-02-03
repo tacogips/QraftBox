@@ -24,7 +24,8 @@ This document describes the design of a local diff viewer inspired by difit but 
 | R6 | High performance for large file sets | Must |
 | R7 | File watching with auto-refresh (non-gitignored files) | Must |
 | R8 | AI Agent Integration via claude-code-agent | Must |
-| R9 | LSP integration for caller linking | Future |
+| R9 | Branch switching (base/current) with search | Must |
+| R10 | LSP integration for caller linking | Future |
 
 ## Architecture Overview
 
@@ -75,6 +76,39 @@ This document describes the design of a local diff viewer inspired by difit but 
 | AI Integration | claude-code-agent (library) | Claude Code session orchestration |
 
 **Note**: git-xnotes and claude-code-agent are used as **TypeScript libraries** (imported as npm packages), NOT as CLI commands. aynd calls their APIs programmatically from the server layer.
+
+### Library Dependency Policy
+
+git-xnotes and claude-code-agent are maintained by us and can be modified as needed.
+
+| Library | Repository | Maintainer |
+|---------|------------|------------|
+| git-xnotes | https://github.com/tacogips/git-xnotes | tacogips |
+| claude-code-agent | https://github.com/tacogips/claude-code-agent | tacogips |
+
+**When library modifications are needed:**
+
+1. Create an issue in the respective library repository
+2. Document the required feature/fix in the issue
+3. If the modification blocks aynd implementation, note the blocker in:
+   - The implementation plan's Progress Log
+   - PROGRESS.json task status (mark as "Blocked")
+4. Link the library issue in the implementation plan
+
+**Issue Template:**
+
+```
+Title: [aynd] Feature request: <description>
+
+## Context
+Required by aynd for: <feature description>
+
+## Requested Change
+<specific API or behavior change needed>
+
+## Impact
+If not addressed: <what is blocked in aynd>
+```
 
 ### Build Tools
 
@@ -260,7 +294,7 @@ Shows only the latest file state with visual diff annotations:
 |---------|-------|
 | Expand method | Inline expansion (pushes content down) |
 | Default state | All collapsed |
-| Multiple deletions | Expand individually + "Expand All" button (`zR`) |
+| Multiple deletions | Expand individually + "Expand All" button |
 
 **Interaction (Touch-first):**
 
@@ -271,8 +305,6 @@ Shows only the latest file state with visual diff annotations:
 | Tap expanded block | Collapse back |
 | Pinch on code | Zoom in/out |
 | Two-finger tap | Expand/collapse all |
-
-Keyboard shortcuts (`za`, `zR`, `zM`) available when hardware keyboard connected.
 
 **Expanded State Example:**
 
@@ -337,12 +369,12 @@ src/
 
 #### Adding Comments (Touch-first)
 
-| Step | Touch | Keyboard (optional) |
-|------|-------|---------------------|
-| 1. Select line(s) | Tap line number, or long-press and drag | `V` visual mode |
-| 2. Open comment | Tap [+] button or long-press | `c` key |
-| 3. Write comment | On-screen keyboard | Hardware keyboard |
-| 4. Submit | Tap [Send] button | `Ctrl+Enter` |
+| Step | Touch Gesture |
+|------|---------------|
+| 1. Select line(s) | Tap line number, or long-press and drag |
+| 2. Open comment | Tap [+] button or long-press |
+| 3. Write comment | On-screen keyboard |
+| 4. Submit | Tap [Send] button |
 
 - Comment form slides up as bottom sheet on tablet
 - Author pre-filled from git config (editable)
@@ -369,7 +401,7 @@ src/
 
 | Mode | Behavior |
 |------|----------|
-| Manual (default) | User explicitly pushes/pulls with `<Space>p` / `<Space>P` |
+| Manual (default) | User explicitly pushes/pulls via UI buttons |
 | Auto-push | Automatically push after adding/editing comments |
 | Auto-pull | Automatically pull on startup |
 | Full auto | Both auto-push and auto-pull |
@@ -444,14 +476,14 @@ Select lines and send context-aware prompts to Claude Code.
 
 **Interaction Flow (Touch-first):**
 
-| Step | Touch Gesture | Keyboard (optional) |
-|------|---------------|---------------------|
-| 1. Select lines | Tap line, or long-press + drag | `V` visual mode |
-| 2. Open AI prompt | Tap [AI] button in selection toolbar | `a` key |
-| 3. Add file refs | Tap [@] button, search and tap to add | Type `@filename` |
-| 4. Write prompt | On-screen keyboard | Hardware keyboard |
-| 5. Choose mode | Tap "Immediate" or "Queue" toggle | - |
-| 6. Submit | Tap [Send] button | `Ctrl+Enter` |
+| Step | Touch Gesture |
+|------|---------------|
+| 1. Select lines | Tap line, or long-press + drag |
+| 2. Open AI prompt | Tap [AI] button in selection toolbar |
+| 3. Add file refs | Tap [@] button, search and tap to add |
+| 4. Write prompt | On-screen keyboard |
+| 5. Choose mode | Tap "Immediate" or "Queue" toggle |
+| 6. Submit | Tap [Send] button |
 
 AI prompt opens as **bottom sheet** on tablet for comfortable typing.
 
@@ -544,10 +576,6 @@ Type `@` to trigger file reference autocomplete.
 - Tap file in list to insert reference
 - Large touch targets (48px+ height) for easy selection
 
-**Keyboard (optional):**
-- Type `@` to trigger inline autocomplete
-- Arrow keys to navigate, Enter to select
-
 #### Prompt Context Construction
 
 When sending a prompt, aynd constructs context for Claude Code:
@@ -631,7 +659,6 @@ Clicking the Session Button navigates to the **Session Queue Screen**.
 
 Dedicated screen for managing AI sessions. Accessed via:
 - Session Button in viewer
-- Keyboard shortcut `Q`
 - URL: `/sessions`
 
 **Layout:**
@@ -703,7 +730,7 @@ Two display modes for conversation history:
 | **Chat View** | Traditional vertical scrolling | Reading full context |
 | **Carousel View** | Horizontal card carousel | Quick navigation between turns |
 
-Toggle with `[Chat]` / `[Carousel]` buttons or `Tab` key.
+Toggle with `[Chat]` / `[Carousel]` buttons.
 
 **Chat View (vertical, default):**
 
@@ -844,19 +871,6 @@ interface SessionQueue {
 | Auto-advance | true | Start next queued when current completes |
 | Keep history | 50 | Number of completed sessions to retain |
 
-#### Keyboard Shortcuts (AI-related)
-
-| Key | Action |
-|-----|--------|
-| `a` | Open AI prompt for selected lines |
-| `A` | Open global AI prompt panel |
-| `Q` | Open Session Queue screen |
-| `Ctrl+Enter` | Send prompt (in AI text area) |
-| `Ctrl+Shift+Enter` | Send prompt immediately (bypass queue) |
-| `Escape` | Cancel/close AI prompt |
-| `@` | Trigger file reference autocomplete |
-| `Tab` | Accept autocomplete suggestion |
-
 #### Server-Side Integration
 
 ```typescript
@@ -959,17 +973,57 @@ aynd --ai-queue                 # Default to queued execution
 aynd --ai-concurrent=2          # Allow 2 concurrent sessions
 ```
 
+#### AI Authentication
+
+Authentication is handled entirely by claude-code-agent library. aynd does not manage API credentials.
+
+| Responsibility | Handler |
+|----------------|---------|
+| API key storage | claude-code-agent |
+| Authentication flow | claude-code-agent |
+| Token refresh | claude-code-agent |
+
+#### AI Session Persistence
+
+aynd stores only session IDs locally. Full session content is retrieved via claude-code-agent.
+
+**Storage Location:** `~/.local/aynd/sessions/`
+
+**Stored Data:**
+
+```typescript
+// ~/.local/aynd/sessions/sessions.json
+interface StoredSessions {
+  sessions: Array<{
+    id: string;                    // Session ID from claude-code-agent
+    createdAt: number;             // Unix timestamp
+    prompt: string;                // Original prompt (for display)
+    context: {
+      primaryFile?: string;        // File path if line-based
+      references: string[];        // Referenced file paths
+    };
+  }>;
+}
+```
+
+**Session Content Retrieval:**
+
+```typescript
+// Session content is fetched from claude-code-agent on demand
+const session = await agent.getSession(sessionId);
+```
+
 ### Search Functionality
 
 #### Search Scope
 
-Search supports three scopes, switchable during search:
+Search supports three scopes, switchable via UI dropdown:
 
-| Scope | Key | Description |
-|-------|-----|-------------|
-| Current file | `/` | Search within active file only |
-| Changed files | `<Space>/` | Search across all files with changes |
-| Entire repo | `<Space><Space>/` | Search entire repository |
+| Scope | Description |
+|-------|-------------|
+| Current file | Search within active file only |
+| Changed files | Search across all files with changes |
+| Entire repo | Search entire repository |
 
 #### Search Type
 
@@ -990,6 +1044,134 @@ Search supports three scopes, switchable during search:
 │ ...                                                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Branch Switching
+
+Switch between branches for both the diff base and current (target) branch directly from the UI.
+
+#### Branch Switching UI
+
+**Header Branch Display:**
+
+```
++---------------------------------------------------------------------+
+| aynd                                                                 |
+|                                                                      |
+| Base: [main         v]  -->  Current: [feature/auth   v]  [Refresh] |
+|                                                                      |
++---------------------------------------------------------------------+
+```
+
+**Branch Selector Component:**
+
+```
++---------------------------------------------------------------------+
+| Select Branch                                         [x] Close     |
++---------------------------------------------------------------------+
+| [Search branches...]                                                |
++---------------------------------------------------------------------+
+| RECENT                                                              |
+|   feature/auth                               (current)              |
+|   main                                       (default)              |
+|   develop                                                           |
++---------------------------------------------------------------------+
+| ALL BRANCHES (15)                                                   |
+|   bugfix/login-error                                                |
+|   feature/auth                               (current)              |
+|   feature/dashboard                                                 |
+|   feature/search                                                    |
+|   hotfix/security-patch                                             |
+|   main                                       (default)              |
+|   release/v1.0                                                      |
+|   ...                                                               |
++---------------------------------------------------------------------+
+```
+
+#### Branch Search/Filter
+
+| Feature | Description |
+|---------|-------------|
+| Partial match | Filter branches by typing partial name |
+| Case insensitive | Search is case-insensitive |
+| Fuzzy matching | Optional fuzzy match for typos |
+| Recent branches | Show recently used branches at top |
+
+**Search Behavior:**
+
+| Input | Result |
+|-------|--------|
+| `feat` | Shows `feature/auth`, `feature/dashboard`, etc. |
+| `auth` | Shows `feature/auth`, `bugfix/auth-error`, etc. |
+| `main` | Shows `main` branch |
+| (empty) | Shows all branches with recent at top |
+
+#### Three Branch Operations
+
+| Operation | Description | UI Element |
+|-----------|-------------|------------|
+| Switch current branch | Checkout to different branch (changes working directory) | "Current" dropdown |
+| Change diff base | Change the base branch for comparison | "Base" dropdown |
+| Change diff target | Change the target branch for comparison | "Current" dropdown (when not on working tree) |
+
+**Working Tree vs Branch Comparison:**
+
+| Mode | Base | Target | Description |
+|------|------|--------|-------------|
+| Working tree | Branch (e.g., main) | Working tree (uncommitted) | Compare branch to current changes |
+| Branch diff | Branch (e.g., main) | Branch (e.g., feature/auth) | Compare two branches |
+| Commit range | Commit (e.g., HEAD~3) | Commit (e.g., HEAD) | Compare commit range |
+
+#### Branch Checkout Behavior
+
+When switching the current branch (actual checkout):
+
+| Step | Action |
+|------|--------|
+| 1. Check status | Verify no uncommitted changes that would conflict |
+| 2. Show warning | If uncommitted changes exist, prompt user |
+| 3. Checkout | Execute `git checkout <branch>` |
+| 4. Refresh | Refresh entire diff view with new branch |
+
+**Uncommitted Changes Warning:**
+
+```
++---------------------------------------------------------------------+
+| Warning: Uncommitted Changes                                        |
++---------------------------------------------------------------------+
+| You have uncommitted changes that may be lost or conflict.          |
+|                                                                      |
+| Modified files:                                                      |
+|   src/main.ts                                                       |
+|   src/lib.ts                                                        |
+|                                                                      |
+|              [Cancel]  [Stash & Switch]  [Force Switch]             |
++---------------------------------------------------------------------+
+```
+
+| Option | Behavior |
+|--------|----------|
+| Cancel | Abort branch switch |
+| Stash & Switch | Run `git stash`, checkout, optionally `git stash pop` |
+| Force Switch | Discard changes and checkout |
+
+#### Touch Interactions (Branch Switching)
+
+| Gesture | Action |
+|---------|--------|
+| Tap branch dropdown | Open branch selector |
+| Tap branch in list | Select that branch |
+| Swipe down on selector | Close selector |
+| Long-press branch | Show branch info (last commit, author) |
+
+#### API Endpoints (Branch)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/branches` | List all branches with metadata |
+| GET | `/api/branches/current` | Get current branch name |
+| POST | `/api/branches/checkout` | Checkout to specified branch |
+| GET | `/api/branches/search?q=` | Search branches by partial name |
+| GET | `/api/status` | Get working tree status (for checkout warning) |
 
 ### Theme and Appearance
 
@@ -1022,6 +1204,186 @@ Light theme is the primary focus for initial release. Dark mode support will be 
 | Comment bg | #f6f8fa |
 | Border | #d0d7de |
 
+### Error Handling
+
+All errors are displayed as toast notifications in the browser UI.
+
+#### Error Toast Display
+
+```
++---------------------------------------------------------------------+
+|                                                      [x] Close      |
+|  [!] Error: Failed to checkout branch                               |
+|      Uncommitted changes would be overwritten                       |
+|                                                                      |
++---------------------------------------------------------------------+
+```
+
+#### Error Categories
+
+| Category | Display | Duration | Action |
+|----------|---------|----------|--------|
+| Transient (network, timeout) | Toast | 5 seconds | Auto-dismiss |
+| Validation (invalid input) | Toast | Until dismissed | Manual close |
+| Critical (git failure) | Toast + Details | Until dismissed | Show error details |
+| Offline (feature unavailable) | Toast | 3 seconds | Auto-dismiss |
+
+#### Error Toast Types
+
+| Type | Color | Icon | Use Case |
+|------|-------|------|----------|
+| Error | Red (#cf222e) | ! | Operation failed |
+| Warning | Yellow (#9a6700) | ! | Partial success or degraded |
+| Info | Blue (#0969da) | i | Informational message |
+| Success | Green (#1a7f37) | check | Operation completed |
+
+### Binary and Large File Handling
+
+#### Binary File Display
+
+| File Type | Display Behavior |
+|-----------|------------------|
+| Images (png, jpg, gif, svg, webp) | Display in browser with preview |
+| Videos (mp4, webm, mov) | Display with video player |
+| Other binary files | Show "Binary file not shown" message (like GitHub) |
+
+**Binary File Indicator in File Tree:**
+
+```
+src/
+├── main.ts          [M]
+├── logo.png         [M] [IMG]    (image badge)
+├── data.bin         [M] [BIN]    (binary badge)
+```
+
+#### Large File Handling
+
+| Setting | Value |
+|---------|-------|
+| Threshold | 1MB |
+| Default behavior | Show warning with partial content |
+| Partial content | First 10KB of file |
+
+**Large File Warning UI:**
+
+```
++---------------------------------------------------------------------+
+| src/generated/large-data.ts                          [Large File]   |
++---------------------------------------------------------------------+
+| This file is 2.5MB which may affect performance.                    |
+|                                                                      |
+| Showing first 10KB:                                                  |
+| ------------------------------------------------------------------- |
+| 1: // Auto-generated file                                            |
+| 2: export const data = {                                             |
+| 3:   items: [                                                        |
+| ...                                                                  |
+| ------------------------------------------------------------------- |
+|                                                                      |
+|                    [Load Full File]  [Skip This File]                |
++---------------------------------------------------------------------+
+```
+
+### Operation Queue (Git Concurrency)
+
+Git operations and git-xnotes sync operations are queued and executed serially to prevent conflicts.
+
+#### Queue Architecture
+
+```
++------------------+     +------------------+     +------------------+
+|   User Actions   | --> | Operation Queue  | --> |  Git Executor    |
+|   (concurrent)   |     | (serial FIFO)    |     |  (one at a time) |
++------------------+     +------------------+     +------------------+
+```
+
+#### Queued Operations
+
+| Operation Type | Examples |
+|----------------|----------|
+| Git read | diff, status, branch list, file content |
+| Git write | checkout, stash |
+| git-xnotes | read comments, write comments, push, pull |
+
+#### Queue Behavior
+
+| Setting | Value |
+|---------|-------|
+| Max concurrent | 1 (serial execution) |
+| Queue timeout | 30 seconds per operation |
+| Conflict resolution | Later operation waits |
+
+**Queue Status Indicator:**
+
+```
++---------------------------------------------------------------------+
+| [Git: Busy]  Checking out branch...                 [2 pending]     |
++---------------------------------------------------------------------+
+```
+
+### URL Routing / Deep Linking
+
+File path and line numbers are reflected in the URL for direct linking and browser navigation.
+
+#### URL Structure
+
+| URL Pattern | Description |
+|-------------|-------------|
+| `/` | Main diff view (first file selected) |
+| `/file/:path` | Specific file view |
+| `/file/:path#L10` | File at specific line |
+| `/file/:path#L10-L20` | File with line range selected |
+| `/sessions` | Session queue screen |
+| `/sessions/:id` | Session detail view |
+
+**Examples:**
+
+```
+http://localhost:7144/
+http://localhost:7144/file/src/main.ts
+http://localhost:7144/file/src/main.ts#L42
+http://localhost:7144/file/src/main.ts#L10-L25
+http://localhost:7144/sessions
+http://localhost:7144/sessions/abc123
+```
+
+#### Navigation Behavior
+
+| Action | Behavior |
+|--------|----------|
+| Browser back | Navigate to previous URL state |
+| Browser forward | Navigate to next URL state |
+| File selection | Update URL without page reload |
+| Line selection | Update URL hash fragment |
+
+### Offline Mode
+
+aynd works fully offline for local diff viewing. Network-dependent features degrade gracefully.
+
+#### Feature Availability
+
+| Feature | Offline | Online |
+|---------|---------|--------|
+| Local diff viewing | Yes | Yes |
+| File tree navigation | Yes | Yes |
+| Current State View | Yes | Yes |
+| Branch switching (local) | Yes | Yes |
+| Comment viewing (cached) | Yes | Yes |
+| Comment sync (push/pull) | No (error shown) | Yes |
+| AI features | No (error shown) | Yes |
+| Remote branch fetch | No (error shown) | Yes |
+
+#### Offline Status Display
+
+No explicit offline indicator. Errors are shown when attempting network-dependent operations:
+
+```
++---------------------------------------------------------------------+
+| [!] Cannot sync comments: Network unavailable                       |
+|     Comments saved locally. Sync when online.                       |
++---------------------------------------------------------------------+
+```
+
 ## API Design
 
 ### REST Endpoints
@@ -1036,6 +1398,11 @@ Light theme is the primary focus for initial release. Dark mode support will be 
 | GET | `/api/notes/status` | Get git-xnotes sync status |
 | POST | `/api/notes/push` | Push notes to remote |
 | POST | `/api/notes/pull` | Pull notes from remote |
+| GET | `/api/branches` | List all branches with metadata |
+| GET | `/api/branches/current` | Get current branch name |
+| POST | `/api/branches/checkout` | Checkout to specified branch |
+| GET | `/api/branches/search` | Search branches by partial name |
+| GET | `/api/status` | Get working tree status |
 | POST | `/api/ai/prompt` | Send prompt (immediate or queued) |
 | GET | `/api/ai/queue` | Get queue status (running, queued, completed) |
 | GET | `/api/ai/queue/status` | Get minimal status for Session Button |
@@ -1110,7 +1477,7 @@ Monitor local files (excluding gitignored) and refresh diff on changes.
 
 - Visual indicator when files change
 - Option to pause auto-refresh
-- Manual refresh button (`r` key)
+- Manual refresh button
 
 ## Data Models
 
@@ -1180,6 +1547,68 @@ interface WatcherStatus {
   enabled: boolean;
   watchedPaths: number;
   lastUpdate: number | null;
+}
+```
+
+### Branch Types
+
+```typescript
+interface Branch {
+  name: string;                    // Branch name (e.g., "feature/auth")
+  isCurrent: boolean;              // Is this the currently checked out branch
+  isDefault: boolean;              // Is this the default branch (main/master)
+  isRemote: boolean;               // Is this a remote tracking branch
+  lastCommit: {
+    hash: string;
+    message: string;
+    author: string;
+    date: number;                  // Unix timestamp
+  };
+  aheadBehind?: {
+    ahead: number;                 // Commits ahead of upstream
+    behind: number;                // Commits behind upstream
+  };
+}
+
+interface BranchListResponse {
+  branches: Branch[];
+  current: string;                 // Current branch name
+  default: string;                 // Default branch name (main/master)
+}
+
+interface BranchSearchRequest {
+  query: string;                   // Partial match search query
+  limit?: number;                  // Max results (default 20)
+  includeRemote?: boolean;         // Include remote branches (default false)
+}
+
+interface BranchCheckoutRequest {
+  branch: string;                  // Branch name to checkout
+  force?: boolean;                 // Force checkout (discard changes)
+  stash?: boolean;                 // Stash changes before checkout
+}
+
+interface BranchCheckoutResponse {
+  success: boolean;
+  previousBranch: string;
+  currentBranch: string;
+  stashCreated?: string;           // Stash reference if stashed
+  error?: string;
+}
+
+interface WorkingTreeStatus {
+  clean: boolean;                  // No uncommitted changes
+  staged: string[];                // Staged file paths
+  modified: string[];              // Modified but unstaged file paths
+  untracked: string[];             // Untracked file paths
+  conflicts: string[];             // Files with merge conflicts
+}
+
+// Diff target type (extended to support branch switching)
+interface DiffTarget {
+  type: 'working' | 'branch' | 'commit';
+  base: string;                    // Base reference (branch/commit)
+  target: string;                  // Target reference (branch/commit or 'working')
 }
 ```
 
@@ -1288,101 +1717,18 @@ type ConversationViewMode = 'chat' | 'carousel';
 - Cache highlighted code with LRU eviction
 - Debounce search input (300ms)
 
-## Keyboard Shortcuts (Optional, Vim-like)
+## Keyboard Shortcuts (Future Feature)
 
-**Note**: All keyboard shortcuts are optional. The UI is fully usable with touch-only interaction. Shortcuts are available when a hardware keyboard is connected (iPad + keyboard, desktop).
+**Status**: Not implemented in initial release. Touch-only UI is the primary interface.
 
-### Navigation
+Vim-like keyboard shortcuts may be added in a future version when hardware keyboard support is prioritized. The initial release focuses exclusively on touch-first interaction for tablet devices.
 
-| Key | Action |
-|-----|--------|
-| `j` / `k` | Move to next/previous line |
-| `J` / `K` | Move to next/previous diff chunk (hunk) |
-| `gg` | Go to first line |
-| `G` | Go to last line |
-| `Ctrl+d` / `Ctrl+u` | Page down / Page up |
-| `n` / `N` | Jump to next/previous change (added/deleted) |
-
-### File Tree Navigation
-
-| Key | Action |
-|-----|--------|
-| `h` / `l` | Collapse/expand directory |
-| `]f` / `[f` | Next/previous file with changes |
-| `]c` / `[c` | Next/previous comment |
-| `gf` | Go to file (fuzzy finder) |
-| `gt` / `gT` | Next/previous tab (if multi-file tabs) |
-
-### View Mode
-
-| Key | Action |
-|-----|--------|
-| `v` | Toggle view mode (GitHub diff / Current State) |
-| `s` | Toggle side-by-side / inline diff |
-| `za` | Toggle fold at cursor (expand/collapse deleted block) |
-| `zR` | Expand all folds (show all deleted content) |
-| `zM` | Collapse all folds (hide all deleted content) |
-| `zz` | Center current line on screen |
-
-### Comments
-
-| Key | Action |
-|-----|--------|
-| `c` | Add comment at current line |
-| `C` | Add comment for selected range (visual mode) |
-| `gc` | Go to next comment |
-| `gC` | Go to previous comment |
-| `dc` | Delete comment at cursor |
-| `ec` | Edit comment at cursor |
-| `yc` | Copy comment as prompt |
-
-### Visual Mode (Range Selection)
-
-| Key | Action |
-|-----|--------|
-| `V` | Enter line visual mode |
-| `Esc` | Exit visual mode |
-| `c` | Comment on selected range |
-| `y` | Yank (copy) selected lines |
-
-### Search
-
-| Key | Action |
-|-----|--------|
-| `/` | Search forward (current file, regex) |
-| `?` | Search backward (current file, regex) |
-| `<Space>/` | Search in all changed files |
-| `<Space><Space>/` | Search in entire repository |
-| `*` | Search word under cursor |
-| `n` / `N` | Next/previous search result |
-| `Ctrl+p` | File fuzzy finder |
-
-### Actions
-
-| Key | Action |
-|-----|--------|
-| `r` | Reload diff |
-| `q` | Quit / Close panel |
-| `?` | Show help modal |
-| `:` | Command mode (future) |
-
-### git-xnotes Sync
-
-| Key | Action |
-|-----|--------|
-| `<leader>p` | Push notes to remote |
-| `<leader>P` | Pull notes from remote |
-| `<leader>s` | Show sync status |
-
-**Note**: `<leader>` defaults to `Space`
-
-### Mode Indicator
-
-Display current mode in status bar:
-- `NORMAL` - Default navigation mode
-- `VISUAL` - Line selection mode
-- `SEARCH` - Search input active
-- `COMMENT` - Comment input active
+**Future Scope:**
+- Navigation shortcuts (j/k, gg, G)
+- View mode shortcuts (v, s, za, zR, zM)
+- Comment shortcuts (c, gc)
+- Search shortcuts (/, n/N)
+- Branch switching shortcuts (b, B)
 
 ## CLI Interface
 
@@ -1400,12 +1746,32 @@ aynd .                         # All uncommitted changes
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--port` | 4567 | Server port |
+| `--port` | 7144 | Server port |
 | `--host` | 127.0.0.1 | Bind address |
 | `--no-open` | false | Don't open browser |
 | `--mode` | github | Initial view mode (github/current) |
 | `--all-files` | false | Show all files initially |
 | `--sync` | manual | git-xnotes sync mode (manual/auto) |
+
+### Port Conflict Handling
+
+| Behavior | Description |
+|----------|-------------|
+| Default port | 7144 |
+| Auto-increment range | 7144 - 7244 |
+| On conflict | Try next port in range |
+| If all ports busy | Exit with error |
+
+When the default port is in use, aynd automatically tries the next available port within the range (7144-7244). If no port is available, it exits with an error message.
+
+### Working Directory
+
+aynd uses the current working directory as the repository root. Multi-repository support may be added in a future version.
+
+| Setting | Value |
+|---------|-------|
+| Repository root | Current working directory |
+| Multi-repo | Not supported (future feature) |
 
 ### Untracked Files Handling
 
@@ -1442,7 +1808,8 @@ src/
 │   ├── routes/
 │   │   ├── diff.ts           # Diff API
 │   │   ├── files.ts          # File tree API
-│   │   └── comments.ts       # git-xnotes bridge
+│   │   ├── comments.ts       # git-xnotes bridge
+│   │   └── branches.ts       # Branch API routes
 │   ├── watcher/
 │   │   ├── index.ts          # File watcher setup
 │   │   ├── gitignore.ts      # Gitignore filter using git check-ignore
@@ -1455,7 +1822,8 @@ src/
 │   │   └── session-manager.ts # claude-code-agent wrapper
 │   └── git/
 │       ├── diff.ts           # Git diff operations
-│       └── parser.ts         # Diff parsing
+│       ├── parser.ts         # Diff parsing
+│       └── branch.ts         # Branch operations (list, checkout, search)
 ├── client/
 │   ├── App.svelte            # Root component
 │   ├── components/
@@ -1467,7 +1835,9 @@ src/
 │   │   ├── AIPromptPanel.svelte     # Global AI prompt input (collapsible)
 │   │   ├── SessionButton.svelte     # Minimal session indicator
 │   │   ├── FileAutocomplete.svelte  # @ mention autocomplete
-│   │   └── ...
+│   │   ├── BranchSelector.svelte    # Branch dropdown/search component
+│   │   ├── BranchHeader.svelte      # Header with base/current branch display
+│   │   └── CheckoutWarning.svelte   # Uncommitted changes warning modal
 │   ├── routes/
 │   │   ├── +page.svelte             # Main diff viewer
 │   │   └── sessions/
@@ -1485,7 +1855,8 @@ src/
 │   │   ├── diff.ts           # Diff state
 │   │   ├── files.ts          # File tree state
 │   │   ├── comments.ts       # Comments state
-│   │   └── ai.ts             # AI session state and history
+│   │   ├── ai.ts             # AI session state and history
+│   │   └── branches.ts       # Branch state (list, current, search)
 │   └── lib/
 │       ├── highlighter.ts    # Shiki wrapper
 │       └── virtualList.ts    # Virtual list helpers
