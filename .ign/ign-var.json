@@ -1,0 +1,12 @@
+{
+  "variables": {
+    "AUTHOR_EMAIL": "",
+    "AUTHOR_NAME": "tacogips",
+    "DESCRIPTION": "All You Need Is Diff",
+    "HAS_AUTHOR": false,
+    "HOMEPAGE": "https://github.com/user/repo",
+    "PROJECT_NAME": "aynd",
+    "REPOSITORY": "https://github.com/user/repo",
+    "VERSION": "0.1.0"
+  }
+}
