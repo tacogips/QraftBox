@@ -77,9 +77,22 @@ Large features are split into multiple related plans with cross-references.
 
 ## Active Plans
 
-| Plan | Status | Design Reference | Last Updated |
-|------|--------|------------------|--------------|
-| (No active plans yet) | - | - | - |
+| Plan | Phase | Status | Design Reference | Last Updated |
+|------|-------|--------|------------------|--------------|
+| 01-cli-layer | 1 | Ready | design-local-diff-viewer.md#cli-interface | 2026-02-03 |
+| 02-server-core | 1 | Ready | design-local-diff-viewer.md#architecture-overview | 2026-02-03 |
+| 03-git-operations | 1 | Ready | design-local-diff-viewer.md#data-models | 2026-02-03 |
+| 04-api-routes | 1 | Ready | design-local-diff-viewer.md#api-design | 2026-02-03 |
+| 05-git-xnotes | 2 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
+| 06-file-watcher | 2 | Ready | design-local-diff-viewer.md#file-watching | 2026-02-03 |
+| 07-client-core | 2 | Ready | design-local-diff-viewer.md#ui-design | 2026-02-03 |
+| 08-diff-view | 2 | Ready | design-local-diff-viewer.md#github-style-diff-view | 2026-02-03 |
+| 09-current-state-view | 3 | Ready | design-local-diff-viewer.md#current-state-view | 2026-02-03 |
+| 10-file-tree | 2 | Ready | design-local-diff-viewer.md#file-tree | 2026-02-03 |
+| 11-comment-ui | 3 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
+| 12-ai-integration | 4 | Ready | design-local-diff-viewer.md#ai-agent-integration | 2026-02-03 |
+| 13-session-queue | 4 | Ready | design-local-diff-viewer.md#session-queue-screen | 2026-02-03 |
+| 14-search | 3 | Ready | design-local-diff-viewer.md#search-functionality | 2026-02-03 |
 
 ## Completed Plans
 
@@ -94,28 +107,38 @@ Only plans from eligible phases should be read to minimize context loading.
 
 ### Phase Status
 
-| Phase | Status | Depends On |
-|-------|--------|------------|
-| 1 | READY | - |
-| 2 | BLOCKED | Phase 1 |
-| 3 | BLOCKED | Phase 2 |
-| 4 | BLOCKED | Phase 3 |
+| Phase | Status | Description | Depends On |
+|-------|--------|-------------|------------|
+| 1 | READY | Foundation - CLI, Server, Git Operations, API Routes | - |
+| 2 | BLOCKED | Core Features - Client, Diff View, File Tree, File Watcher, git-xnotes | Phase 1 |
+| 3 | BLOCKED | Advanced Features - Current State View, Comments UI, Search | Phase 2 |
+| 4 | BLOCKED | AI Integration - AI Agent, Session Queue | Phase 3 |
 
 ### Phase to Plans Mapping
 
 ```
 PHASE_TO_PLANS = {
   1: [
-    # Add Phase 1 plan files here
+    "01-cli-layer.md",
+    "02-server-core.md",
+    "03-git-operations.md",
+    "04-api-routes.md"
   ],
   2: [
-    # Add Phase 2 plan files here
+    "05-git-xnotes.md",
+    "06-file-watcher.md",
+    "07-client-core.md",
+    "08-diff-view.md",
+    "10-file-tree.md"
   ],
   3: [
-    # Add Phase 3 plan files here
+    "09-current-state-view.md",
+    "11-comment-ui.md",
+    "14-search.md"
   ],
   4: [
-    # Add Phase 4 plan files here
+    "12-ai-integration.md",
+    "13-session-queue.md"
   ]
 }
 ```

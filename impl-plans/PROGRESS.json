@@ -1,11 +1,201 @@
 {
-  "lastUpdated": "2026-01-01T00:00:00Z",
+  "lastUpdated": "2026-02-03T00:00:00Z",
   "phases": {
-    "1": { "status": "READY" },
-    "2": { "status": "BLOCKED" },
-    "3": { "status": "BLOCKED" },
-    "4": { "status": "BLOCKED" }
+    "1": { "status": "READY", "description": "Foundation - CLI, Server, Git Operations, API Routes" },
+    "2": { "status": "BLOCKED", "dependsOn": ["1"], "description": "Core Features - Client, Diff View, File Tree, File Watcher, git-xnotes" },
+    "3": { "status": "BLOCKED", "dependsOn": ["2"], "description": "Advanced Features - Current State View, Comments UI, Search" },
+    "4": { "status": "BLOCKED", "dependsOn": ["3"], "description": "AI Integration - AI Agent, Session Queue" }
   },
   "plans": {
+    "01-cli-layer": {
+      "phase": 1,
+      "status": "Ready",
+      "file": "active/01-cli-layer.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Shared Types (src/types/index.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "CLI Entry (src/cli/index.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Configuration (src/cli/config.ts)" }
+      }
+    },
+    "02-server-core": {
+      "phase": 1,
+      "status": "Ready",
+      "file": "active/02-server-core.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Server Setup (src/server/index.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Static Serving (src/server/static.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "WebSocket Server (src/server/websocket/index.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Error Handling (src/server/errors.ts)" }
+      }
+    },
+    "03-git-operations": {
+      "phase": 1,
+      "status": "Ready",
+      "file": "active/03-git-operations.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Git Types (src/types/git.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Git Executor (src/server/git/executor.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Diff Generation (src/server/git/diff.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Diff Parser (src/server/git/parser.ts)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "File Tree (src/server/git/files.ts)" }
+      }
+    },
+    "04-api-routes": {
+      "phase": 1,
+      "status": "Ready",
+      "file": "active/04-api-routes.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": false, "deps": [], "description": "Diff Routes (src/server/routes/diff.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": [], "description": "Files Routes (src/server/routes/files.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Status Routes (src/server/routes/status.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "Route Index (src/server/routes/index.ts)" }
+      }
+    },
+    "05-git-xnotes": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/05-git-xnotes.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Comment Types (src/types/comments.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "Comment Bridge (src/server/comments/bridge.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-002"], "description": "Sync Manager (src/server/comments/sync.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-002", "TASK-003"], "description": "Comment Routes (src/server/routes/comments.ts)" }
+      }
+    },
+    "06-file-watcher": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/06-file-watcher.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Watcher Types (src/types/watcher.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Gitignore Filter (src/server/watcher/gitignore.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Debounce Utility (src/server/watcher/debounce.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "File Watcher (src/server/watcher/index.ts)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-004"], "description": "Broadcast (src/server/watcher/broadcast.ts)" }
+      }
+    },
+    "07-client-core": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/07-client-core.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Vite Config (client/vite.config.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Tailwind Config (client/tailwind.config.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "App Shell (client/App.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-003"], "description": "Main Page (client/routes/+page.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Diff Store (client/stores/diff.ts)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Files Store (client/stores/files.ts)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "UI Store (client/stores/ui.ts)" },
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "API Client (client/lib/api.ts)" },
+        "TASK-009": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "WS Client (client/lib/websocket.ts)" },
+        "TASK-010": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Highlighter (client/lib/highlighter.ts)" }
+      }
+    },
+    "08-diff-view": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/08-diff-view.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": false, "deps": [], "description": "DiffView Container (client/components/DiffView.svelte)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "SideBySide View (client/components/diff/SideBySideDiff.svelte)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Inline Diff (client/components/diff/InlineDiff.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "DiffLine (client/components/diff/DiffLine.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "VirtualList (client/components/diff/VirtualDiffList.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "DiffHeader (client/components/diff/DiffHeader.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "ChunkSeparator (client/components/diff/ChunkSeparator.svelte)" }
+      }
+    },
+    "09-current-state-view": {
+      "phase": 3,
+      "status": "Ready",
+      "file": "active/09-current-state-view.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "CS Types (client/types/current-state.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "CSView Container (client/components/CurrentStateView.svelte)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "CS Line (client/components/current-state/CurrentStateLine.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Deleted Marker (client/components/current-state/DeletedMarker.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Expanded Block (client/components/current-state/ExpandedDeletedBlock.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Expand Controls (client/components/current-state/ExpandControls.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "CS Store (client/stores/current-state.ts)" }
+      }
+    },
+    "10-file-tree": {
+      "phase": 2,
+      "status": "Ready",
+      "file": "active/10-file-tree.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": false, "deps": [], "description": "FileTree Container (client/components/FileTree.svelte)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "DirectoryNode (client/components/file-tree/DirectoryNode.svelte)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "FileNode (client/components/file-tree/FileNode.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "StatusBadge (client/components/file-tree/StatusBadge.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "ModeToggle (client/components/file-tree/ModeToggle.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "QuickActions (client/components/file-tree/QuickActions.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "TreeNavigation (client/lib/tree-navigation.ts)" }
+      }
+    },
+    "11-comment-ui": {
+      "phase": 3,
+      "status": "Ready",
+      "file": "active/11-comment-ui.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Comments Store (client/stores/comments.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "CommentDisplay (client/components/CommentDisplay.svelte)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-002"], "description": "CommentThread (client/components/CommentThread.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "CommentForm (client/components/CommentForm.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "LineCommentIndicator (client/components/LineCommentIndicator.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-002", "TASK-003"], "description": "CommentsPanel (client/components/CommentsPanel.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SyncStatusBar (client/components/SyncStatusBar.svelte)" },
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Comment Shortcuts (client/lib/comment-shortcuts.ts)" }
+      }
+    },
+    "12-ai-integration": {
+      "phase": 4,
+      "status": "Ready",
+      "file": "active/12-ai-integration.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "AI Types (src/types/ai.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Prompt Builder (src/server/ai/prompt-builder.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Session Manager (src/server/ai/session-manager.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-003"], "description": "AI Routes (src/server/routes/ai.ts)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "AI Store (client/stores/ai.ts)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptInline (client/components/AIPromptInline.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptPanel (client/components/AIPromptPanel.svelte)" },
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "FileAutocomplete (client/components/FileAutocomplete.svelte)" },
+        "TASK-009": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-005"], "description": "SessionButton (client/components/SessionButton.svelte)" }
+      }
+    },
+    "13-session-queue": {
+      "phase": 4,
+      "status": "Ready",
+      "file": "active/13-session-queue.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Queue Store (client/stores/queue.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "Queue Screen (client/routes/sessions/+page.svelte)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SessionCard (client/components/session/SessionCard.svelte)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-003"], "description": "RunningSession (client/components/session/RunningSession.svelte)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "Session Detail (client/routes/sessions/[id]/+page.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Chat View (client/components/session/ConversationChatView.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Carousel View (client/components/session/ConversationCarousel.svelte)" },
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "MessageCard (client/components/session/MessageCard.svelte)" },
+        "TASK-009": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "ToolCallDisplay (client/components/session/ToolCallDisplay.svelte)" },
+        "TASK-010": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SessionStats (client/components/session/SessionStats.svelte)" }
+      }
+    },
+    "14-search": {
+      "phase": 3,
+      "status": "Ready",
+      "file": "active/14-search.md",
+      "tasks": {
+        "TASK-001": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Types (src/types/search.ts)" },
+        "TASK-002": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-001"], "description": "Search Service (src/server/search/index.ts)" },
+        "TASK-003": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-002"], "description": "Search Route (src/server/routes/search.ts)" },
+        "TASK-004": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-001"], "description": "Search Store (client/stores/search.ts)" },
+        "TASK-005": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchInput (client/components/SearchInput.svelte)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchResults (client/components/SearchResults.svelte)" },
+        "TASK-007": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "SearchHighlight (client/components/SearchHighlight.svelte)" },
+        "TASK-008": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Navigation (client/lib/search-navigation.ts)" },
+        "TASK-009": { "status": "Not Started", "parallelizable": true, "deps": [], "description": "Search Shortcuts (client/lib/search-shortcuts.ts)" }
+      }
+    }
   }
 }
