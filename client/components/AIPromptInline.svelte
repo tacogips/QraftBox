@@ -1,0 +1,378 @@
+<script lang="ts">
+/**
+ * AIPromptInline Component
+ *
+ * Inline prompt input that appears after line selection in the diff viewer.
+ * Supports @ file references with autocomplete.
+ *
+ * Props:
+ * - lineStart: Start line of selection
+ * - lineEnd: End line of selection
+ * - filePath: Path of the file
+ * - selectedContent: Content of selected lines
+ * - changedFiles: List of changed files for autocomplete
+ * - allFiles: List of all files for autocomplete
+ * - onSubmit: Callback when prompt is submitted
+ * - onCancel: Callback when prompt is cancelled
+ *
+ * Design:
+ * - Appears inline after line selection
+ * - @ file reference autocomplete
+ * - Immediate/Queue toggle
+ * - Touch-friendly (bottom sheet on tablet)
+ */
+
+import type { FileReference } from "../../src/types/ai";
+import FileAutocomplete from "./FileAutocomplete.svelte";
+
+interface Props {
+  lineStart: number;
+  lineEnd: number;
+  filePath: string;
+  selectedContent?: string | undefined;
+  changedFiles: readonly string[];
+  allFiles: readonly string[];
+  onSubmit: (prompt: string, immediate: boolean, refs: readonly FileReference[]) => void;
+  onCancel: () => void;
+}
+
+// Svelte 5 props syntax
+const {
+  lineStart,
+  lineEnd,
+  filePath,
+  selectedContent = undefined,
+  changedFiles,
+  allFiles,
+  onSubmit,
+  onCancel,
+}: Props = $props();
+
+/**
+ * Current prompt text
+ */
+let prompt = $state("");
+
+/**
+ * Execution mode
+ */
+let immediate = $state(true);
+
+/**
+ * File references added via @
+ */
+let fileRefs = $state<FileReference[]>([]);
+
+/**
+ * Autocomplete state
+ */
+let showAutocomplete = $state(false);
+let autocompleteQuery = $state("");
+
+/**
+ * Get line range text
+ */
+const lineRangeText = $derived(
+  lineStart === lineEnd
+    ? `Line ${lineStart}`
+    : `Lines ${lineStart}-${lineEnd}`
+);
+
+/**
+ * Handle input changes and detect @ mentions
+ */
+function handleInput(event: Event): void {
+  const target = event.target as HTMLTextAreaElement;
+  prompt = target.value;
+
+  // Check for @ trigger
+  const cursorPos = target.selectionStart;
+  const textBeforeCursor = prompt.slice(0, cursorPos);
+  const atMatch = textBeforeCursor.match(/@([\w./-]*)$/);
+
+  if (atMatch !== null) {
+    showAutocomplete = true;
+    autocompleteQuery = atMatch[1] ?? "";
+  } else {
+    showAutocomplete = false;
+    autocompleteQuery = "";
+  }
+}
+
+/**
+ * Handle file selection from autocomplete
+ */
+function handleFileSelect(
+  path: string,
+  lineRange?: { start: number; end: number } | undefined
+): void {
+  // Add file reference
+  const ref: FileReference = { path };
+  if (lineRange !== undefined) {
+    fileRefs = [...fileRefs, { ...ref, startLine: lineRange.start, endLine: lineRange.end }];
+  } else {
+    fileRefs = [...fileRefs, ref];
+  }
+
+  // Replace @query with @path in prompt
+  const cursorPos = prompt.length;
+  const textBeforeCursor = prompt.slice(0, cursorPos);
+  const atIndex = textBeforeCursor.lastIndexOf("@");
+  if (atIndex !== -1) {
+    const lineRangeStr =
+      lineRange !== undefined ? `:L${lineRange.start}-L${lineRange.end}` : "";
+    prompt = prompt.slice(0, atIndex) + `@${path}${lineRangeStr} `;
+  }
+
+  showAutocomplete = false;
+  autocompleteQuery = "";
+}
+
+/**
+ * Remove a file reference
+ */
+function removeFileRef(path: string): void {
+  fileRefs = fileRefs.filter((r) => r.path !== path);
+}
+
+/**
+ * Handle close autocomplete
+ */
+function handleCloseAutocomplete(): void {
+  showAutocomplete = false;
+  autocompleteQuery = "";
+}
+
+/**
+ * Handle keyboard shortcuts
+ */
+function handleKeydown(event: KeyboardEvent): void {
+  // Ctrl/Cmd + Enter to submit
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    handleSubmit();
+  }
+  // Escape to cancel
+  if (event.key === "Escape" && !showAutocomplete) {
+    event.preventDefault();
+    onCancel();
+  }
+}
+
+/**
+ * Handle form submission
+ */
+function handleSubmit(): void {
+  if (prompt.trim().length === 0) return;
+  onSubmit(prompt, immediate, fileRefs);
+}
+
+/**
+ * Focus textarea on mount
+ */
+function handleTextareaMount(element: HTMLTextAreaElement): void {
+  setTimeout(() => {
+    element.focus();
+  }, 100);
+}
+</script>
+
+<div
+  class="ai-prompt-inline bg-bg-secondary border border-border-default rounded-lg
+         shadow-lg p-4 relative"
+  role="dialog"
+  aria-label="AI Prompt for {lineRangeText}"
+>
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-2">
+      <!-- AI Icon -->
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="text-blue-400"
+        aria-hidden="true"
+      >
+        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54" />
+        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54" />
+      </svg>
+      <span class="text-sm font-medium text-text-primary">
+        Ask AI about {lineRangeText}
+      </span>
+    </div>
+    <button
+      type="button"
+      onclick={onCancel}
+      class="p-1.5 min-w-[32px] min-h-[32px]
+             text-text-tertiary hover:text-text-primary
+             hover:bg-bg-hover rounded
+             focus:outline-none focus:ring-2 focus:ring-blue-500"
+      aria-label="Close"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <line x1="18" y1="6" x2="6" y2="18" />
+        <line x1="6" y1="6" x2="18" y2="18" />
+      </svg>
+    </button>
+  </div>
+
+  <!-- Context preview -->
+  <div class="mb-3 p-2 bg-bg-tertiary rounded border border-border-default">
+    <div class="text-xs text-text-tertiary mb-1">
+      {filePath} ({lineRangeText})
+    </div>
+    {#if selectedContent !== undefined}
+      <pre
+        class="text-xs text-text-secondary font-mono max-h-20 overflow-y-auto"
+      >{selectedContent.slice(0, 500)}{selectedContent.length > 500 ? "..." : ""}</pre>
+    {/if}
+  </div>
+
+  <!-- Prompt input -->
+  <div class="relative mb-3">
+    <textarea
+      bind:value={prompt}
+      oninput={handleInput}
+      onkeydown={handleKeydown}
+      use:handleTextareaMount
+      placeholder="Ask about this code... (Use @ to reference files)"
+      rows="3"
+      class="w-full px-3 py-2 min-h-[80px]
+             bg-bg-primary text-text-primary text-sm
+             border border-border-default rounded
+             placeholder:text-text-tertiary
+             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+             resize-y"
+      aria-label="AI prompt"
+    ></textarea>
+
+    <!-- Autocomplete dropdown -->
+    <div class="absolute left-0 right-0 top-full mt-1">
+      <FileAutocomplete
+        query={autocompleteQuery}
+        {changedFiles}
+        {allFiles}
+        visible={showAutocomplete}
+        onSelect={handleFileSelect}
+        onClose={handleCloseAutocomplete}
+      />
+    </div>
+  </div>
+
+  <!-- File references -->
+  {#if fileRefs.length > 0}
+    <div class="flex flex-wrap gap-2 mb-3">
+      {#each fileRefs as ref (ref.path)}
+        <span
+          class="inline-flex items-center gap-1 px-2 py-1
+                 bg-blue-600/20 text-blue-400 text-xs rounded"
+        >
+          <span class="truncate max-w-[150px]">@{ref.path}</span>
+          {#if ref.startLine !== undefined}
+            <span class="text-blue-300">
+              :L{ref.startLine}{ref.endLine !== ref.startLine ? `-L${ref.endLine}` : ""}
+            </span>
+          {/if}
+          <button
+            type="button"
+            onclick={() => removeFileRef(ref.path)}
+            class="ml-1 hover:text-red-400"
+            aria-label="Remove reference"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </span>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Footer with mode toggle and submit -->
+  <div class="flex items-center justify-between">
+    <!-- Execution mode toggle -->
+    <div
+      class="flex items-center rounded border border-border-default overflow-hidden"
+      role="group"
+      aria-label="Execution mode"
+    >
+      <button
+        type="button"
+        onclick={() => (immediate = true)}
+        class="px-3 py-1.5 min-h-[36px] text-xs font-medium
+               {immediate
+          ? 'bg-blue-600 text-white'
+          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
+               border-r border-border-default
+               transition-colors duration-150
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        aria-pressed={immediate}
+      >
+        Run Now
+      </button>
+      <button
+        type="button"
+        onclick={() => (immediate = false)}
+        class="px-3 py-1.5 min-h-[36px] text-xs font-medium
+               {!immediate
+          ? 'bg-blue-600 text-white'
+          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
+               transition-colors duration-150
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+        aria-pressed={!immediate}
+      >
+        Queue
+      </button>
+    </div>
+
+    <!-- Submit button -->
+    <button
+      type="button"
+      onclick={handleSubmit}
+      disabled={prompt.trim().length === 0}
+      class="px-4 py-2 min-h-[44px]
+             bg-blue-600 hover:bg-blue-700
+             text-white text-sm font-medium rounded
+             disabled:opacity-50 disabled:cursor-not-allowed
+             transition-colors duration-150
+             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-bg-secondary"
+    >
+      Submit
+    </button>
+  </div>
+
+  <!-- Keyboard hint -->
+  <div class="mt-2 text-xs text-text-tertiary text-right">
+    <kbd class="px-1 py-0.5 bg-bg-tertiary rounded">Ctrl+Enter</kbd> to submit
+  </div>
+</div>

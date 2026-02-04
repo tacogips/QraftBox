@@ -110,16 +110,16 @@ function handleAutocomplete(c: Context): Promise<Response>;
 
 #### src/server/routes/status.ts
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
-// GET /api/status - Health check and server info
+// GET /status - Health check and server info
 interface StatusResponse {
-  status: 'ok';
-  version: string;
-  projectPath: string;
-  diffTarget: DiffTarget;
-  watchEnabled: boolean;
+  readonly status: 'ok';
+  readonly version: string;
+  readonly projectPath: string;
+  readonly diffTarget: DiffTarget;
+  readonly watchEnabled: boolean;
 }
 
 // Create status routes
@@ -127,10 +127,10 @@ function createStatusRoutes(context: ServerContext): Hono;
 ```
 
 **Checklist**:
-- [ ] Implement createStatusRoutes()
-- [ ] Implement GET /api/status
-- [ ] Return version info
-- [ ] Unit tests
+- [x] Implement createStatusRoutes()
+- [x] Implement GET /status
+- [x] Return version info
+- [x] Unit tests (4 tests passing)
 
 ### 4. Route Index
 
@@ -160,7 +160,7 @@ function registerRoutes(api: Hono, context: ServerContext): void;
 |--------|-----------|--------|-------|
 | Diff Routes | `src/server/routes/diff.ts` | NOT_STARTED | - |
 | Files Routes | `src/server/routes/files.ts` | NOT_STARTED | - |
-| Status Routes | `src/server/routes/status.ts` | NOT_STARTED | - |
+| Status Routes | `src/server/routes/status.ts` | COMPLETED | 4 tests |
 | Route Index | `src/server/routes/index.ts` | NOT_STARTED | - |
 
 ## Dependencies
@@ -185,9 +185,12 @@ function registerRoutes(api: Hono, context: ServerContext): void;
 
 ### Session: 2026-02-03
 **Tasks Completed**: Plan created
+
+### Session: 2026-02-03 (Impl)
+**Tasks Completed**: TASK-003 Status Routes
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Initial plan creation
+**Notes**: Implemented src/server/routes/status.ts with createStatusRoutes function. Returns StatusResponse with health check and server configuration. 4 unit tests passing.
 
 ## Related Plans
 

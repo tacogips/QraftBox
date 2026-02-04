@@ -27,21 +27,21 @@ CLI entry point using Bun runtime and Commander for argument parsing. Handles se
 
 #### src/types/index.ts
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 // CLI configuration types
 interface CLIConfig {
-  port: number;
-  host: string;
-  noOpen: boolean;
-  mode: ViewMode;
-  allFiles: boolean;
-  sync: SyncMode;
-  watch: boolean;
-  ai: boolean;
-  aiQueue: boolean;
-  aiConcurrent: number;
+  readonly port: number;
+  readonly host: string;
+  readonly noOpen: boolean;
+  readonly mode: ViewMode;
+  readonly allFiles: boolean;
+  readonly sync: SyncMode;
+  readonly watch: boolean;
+  readonly ai: boolean;
+  readonly aiQueue: boolean;
+  readonly aiConcurrent: number;
 }
 
 type ViewMode = 'github' | 'current';
@@ -49,23 +49,31 @@ type SyncMode = 'manual' | 'auto-push' | 'auto-pull' | 'auto';
 
 // Diff target specification
 interface DiffTarget {
-  target: string;   // Branch, commit, or '.' for working tree
-  base?: string;    // Base branch/commit (optional)
+  readonly type: 'working' | 'branch' | 'commit';
+  readonly base: string;
+  readonly target: string;
+}
+
+interface ServerContext {
+  readonly projectPath: string;
+  readonly diffTarget: DiffTarget;
+  readonly config: CLIConfig;
 }
 ```
 
 **Checklist**:
-- [ ] Define CLIConfig interface
-- [ ] Define ViewMode type
-- [ ] Define SyncMode type
-- [ ] Define DiffTarget interface
-- [ ] Export all types
+- [x] Define CLIConfig interface
+- [x] Define ViewMode type
+- [x] Define SyncMode type
+- [x] Define DiffTarget interface
+- [x] Define ServerContext interface
+- [x] Export all types
 
 ### 2. CLI Module
 
 #### src/cli/index.ts
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 // CLI entry point
@@ -85,13 +93,13 @@ function setupShutdownHandlers(server: Server): void;
 ```
 
 **Checklist**:
-- [ ] Implement main() entry point
-- [ ] Implement parseArgs() with Commander
-- [ ] Implement resolveDiffTarget()
-- [ ] Implement openBrowser() using Bun APIs
-- [ ] Implement setupShutdownHandlers()
-- [ ] Add help text and version info
-- [ ] Unit tests for argument parsing
+- [x] Implement main() entry point
+- [x] Implement parseArgs() with Commander
+- [x] Implement resolveDiffTarget()
+- [x] Implement openBrowser() using Bun APIs
+- [x] Implement setupShutdownHandlers()
+- [x] Add help text and version info
+- [x] Unit tests for argument parsing
 
 ### 3. Configuration
 
@@ -123,8 +131,8 @@ function validateConfig(config: CLIConfig): void;
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| Shared Types | `src/types/index.ts` | NOT_STARTED | - |
-| CLI Entry | `src/cli/index.ts` | NOT_STARTED | - |
+| Shared Types | `src/types/index.ts` | COMPLETED | Passing |
+| CLI Entry | `src/cli/index.ts` | COMPLETED | Passing |
 | Configuration | `src/cli/config.ts` | NOT_STARTED | - |
 
 ## Dependencies
@@ -132,7 +140,7 @@ function validateConfig(config: CLIConfig): void;
 | Feature | Depends On | Status |
 |---------|------------|--------|
 | CLI | Bun runtime | Available |
-| CLI | Commander package | To install |
+| CLI | Commander package | Installed |
 | Browser open | Bun spawn | Available |
 
 ## Completion Criteria
@@ -148,9 +156,25 @@ function validateConfig(config: CLIConfig): void;
 
 ### Session: 2026-02-03
 **Tasks Completed**: Plan created
+
+### Session: 2026-02-03 (Impl)
+**Tasks Completed**: TASK-001 Shared Types
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Initial plan creation
+**Notes**: Implemented src/types/index.ts with CLIConfig, ViewMode, SyncMode, DiffTarget, and ServerContext interfaces. All use readonly properties. Tests passing.
+
+### Session: 2026-02-03 (CLI Entry)
+**Tasks Completed**: TASK-002 CLI Module (src/cli/index.ts)
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Implemented CLI entry point with:
+- parseArgs() using Commander for all CLI options (-p, -H, --no-open, -m, -a, --sync, -w, --ai, --ai-queue, --ai-concurrent)
+- resolveDiffTarget() handles '.', branch names, commit hashes (7-40 chars)
+- openBrowser() uses platform-specific commands (xdg-open/open/start)
+- setupShutdownHandlers() for graceful SIGINT/SIGTERM
+- main() entry point with configuration logging
+- All 37 unit tests passing
+- Follows strict TypeScript with bracket notation for index signatures
 
 ## Related Plans
 

@@ -1,0 +1,427 @@
+<script lang="ts">
+/**
+ * AIPromptPanel Component
+ *
+ * Global collapsible panel for AI prompts at the bottom of the screen.
+ * Provides full prompt input with file references and queue status.
+ *
+ * Props:
+ * - collapsed: Whether panel is collapsed
+ * - queueStatus: Queue status for display
+ * - changedFiles: List of changed files for autocomplete
+ * - allFiles: List of all files for autocomplete
+ * - onSubmit: Callback when prompt is submitted
+ * - onToggle: Callback to toggle collapsed state
+ *
+ * Design:
+ * - Collapsible panel at bottom
+ * - File reference autocomplete
+ * - Queue status indicator
+ * - Keyboard shortcut 'A' to expand
+ */
+
+import type { QueueStatus, FileReference } from "../../src/types/ai";
+import FileAutocomplete from "./FileAutocomplete.svelte";
+
+interface Props {
+  collapsed: boolean;
+  queueStatus: QueueStatus;
+  changedFiles: readonly string[];
+  allFiles: readonly string[];
+  onSubmit: (prompt: string, immediate: boolean, refs: readonly FileReference[]) => void;
+  onToggle: () => void;
+}
+
+// Svelte 5 props syntax
+const {
+  collapsed,
+  queueStatus,
+  changedFiles,
+  allFiles,
+  onSubmit,
+  onToggle,
+}: Props = $props();
+
+/**
+ * Current prompt text
+ */
+let prompt = $state("");
+
+/**
+ * Execution mode
+ */
+let immediate = $state(true);
+
+/**
+ * File references
+ */
+let fileRefs = $state<FileReference[]>([]);
+
+/**
+ * Autocomplete state
+ */
+let showAutocomplete = $state(false);
+let autocompleteQuery = $state("");
+
+/**
+ * Reference to textarea for focus management
+ */
+let textareaRef: HTMLTextAreaElement | null = null;
+
+/**
+ * Status text for queue indicator
+ */
+const queueStatusText = $derived.by(() => {
+  if (queueStatus.runningCount > 0 && queueStatus.queuedCount > 0) {
+    return `${queueStatus.runningCount} running, ${queueStatus.queuedCount} queued`;
+  }
+  if (queueStatus.runningCount > 0) {
+    return `${queueStatus.runningCount} running`;
+  }
+  if (queueStatus.queuedCount > 0) {
+    return `${queueStatus.queuedCount} queued`;
+  }
+  return "No active sessions";
+});
+
+/**
+ * Handle global keyboard shortcuts
+ */
+function handleGlobalKeydown(event: KeyboardEvent): void {
+  // 'A' key to toggle panel (when not in an input)
+  if (
+    event.key === "a" &&
+    !event.ctrlKey &&
+    !event.metaKey &&
+    !event.altKey &&
+    document.activeElement?.tagName !== "INPUT" &&
+    document.activeElement?.tagName !== "TEXTAREA"
+  ) {
+    event.preventDefault();
+    onToggle();
+    // Focus textarea when expanding
+    if (collapsed) {
+      setTimeout(() => {
+        textareaRef?.focus();
+      }, 100);
+    }
+  }
+}
+
+/**
+ * Handle input changes and detect @ mentions
+ */
+function handleInput(event: Event): void {
+  const target = event.target as HTMLTextAreaElement;
+  prompt = target.value;
+
+  // Check for @ trigger
+  const cursorPos = target.selectionStart;
+  const textBeforeCursor = prompt.slice(0, cursorPos);
+  const atMatch = textBeforeCursor.match(/@([\w./-]*)$/);
+
+  if (atMatch !== null) {
+    showAutocomplete = true;
+    autocompleteQuery = atMatch[1] ?? "";
+  } else {
+    showAutocomplete = false;
+    autocompleteQuery = "";
+  }
+}
+
+/**
+ * Handle file selection from autocomplete
+ */
+function handleFileSelect(
+  path: string,
+  lineRange?: { start: number; end: number } | undefined
+): void {
+  // Add file reference
+  const ref: FileReference = { path };
+  if (lineRange !== undefined) {
+    fileRefs = [...fileRefs, { ...ref, startLine: lineRange.start, endLine: lineRange.end }];
+  } else {
+    fileRefs = [...fileRefs, ref];
+  }
+
+  // Replace @query with @path in prompt
+  const cursorPos = prompt.length;
+  const textBeforeCursor = prompt.slice(0, cursorPos);
+  const atIndex = textBeforeCursor.lastIndexOf("@");
+  if (atIndex !== -1) {
+    const lineRangeStr =
+      lineRange !== undefined ? `:L${lineRange.start}-L${lineRange.end}` : "";
+    prompt = prompt.slice(0, atIndex) + `@${path}${lineRangeStr} `;
+  }
+
+  showAutocomplete = false;
+  autocompleteQuery = "";
+}
+
+/**
+ * Remove a file reference
+ */
+function removeFileRef(path: string): void {
+  fileRefs = fileRefs.filter((r) => r.path !== path);
+}
+
+/**
+ * Handle close autocomplete
+ */
+function handleCloseAutocomplete(): void {
+  showAutocomplete = false;
+  autocompleteQuery = "";
+}
+
+/**
+ * Handle keyboard shortcuts in textarea
+ */
+function handleKeydown(event: KeyboardEvent): void {
+  // Ctrl/Cmd + Enter to submit
+  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    event.preventDefault();
+    handleSubmit();
+  }
+  // Escape to collapse
+  if (event.key === "Escape" && !showAutocomplete) {
+    event.preventDefault();
+    onToggle();
+  }
+}
+
+/**
+ * Handle form submission
+ */
+function handleSubmit(): void {
+  if (prompt.trim().length === 0) return;
+  onSubmit(prompt, immediate, fileRefs);
+
+  // Clear form after submission
+  prompt = "";
+  fileRefs = [];
+}
+
+/**
+ * Store textarea reference
+ */
+function setTextareaRef(element: HTMLTextAreaElement): void {
+  textareaRef = element;
+}
+</script>
+
+<svelte:window on:keydown={handleGlobalKeydown} />
+
+<div
+  class="ai-prompt-panel fixed bottom-0 left-0 right-0 z-40
+         bg-bg-secondary border-t border-border-default
+         shadow-lg transition-all duration-300 ease-in-out
+         {collapsed ? 'h-12' : 'h-64'}"
+  role="region"
+  aria-label="AI Prompt Panel"
+>
+  <!-- Collapsed bar (always visible) -->
+  <button
+    type="button"
+    onclick={onToggle}
+    class="w-full h-12 px-4 flex items-center justify-between
+           hover:bg-bg-hover transition-colors duration-150
+           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+    aria-expanded={!collapsed}
+    aria-label={collapsed ? "Expand AI prompt panel" : "Collapse AI prompt panel"}
+  >
+    <div class="flex items-center gap-3">
+      <!-- AI Icon -->
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="text-blue-400"
+        aria-hidden="true"
+      >
+        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54" />
+        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54" />
+      </svg>
+      <span class="text-sm font-medium text-text-primary">
+        {collapsed ? "Ask AI" : "AI Prompt"}
+      </span>
+      <kbd class="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-tertiary rounded">
+        A
+      </kbd>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <!-- Queue status -->
+      <span class="text-xs text-text-tertiary">
+        {queueStatusText}
+      </span>
+
+      <!-- Expand/collapse chevron -->
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="text-text-tertiary transition-transform duration-300
+               {collapsed ? '' : 'rotate-180'}"
+        aria-hidden="true"
+      >
+        <polyline points="18 15 12 9 6 15" />
+      </svg>
+    </div>
+  </button>
+
+  <!-- Expanded content -->
+  {#if !collapsed}
+    <div class="h-52 p-4 flex flex-col">
+      <!-- Input area -->
+      <div class="flex-1 flex gap-4 min-h-0">
+        <!-- Prompt input -->
+        <div class="flex-1 relative flex flex-col min-w-0">
+          <textarea
+            bind:this={textareaRef}
+            bind:value={prompt}
+            oninput={handleInput}
+            onkeydown={handleKeydown}
+            use:setTextareaRef
+            placeholder="Ask AI about your code... (Use @ to reference files)"
+            class="flex-1 w-full px-3 py-2
+                   bg-bg-primary text-text-primary text-sm
+                   border border-border-default rounded
+                   placeholder:text-text-tertiary
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                   resize-none"
+            aria-label="AI prompt"
+          ></textarea>
+
+          <!-- Autocomplete dropdown -->
+          <div class="absolute left-0 right-0 bottom-full mb-1">
+            <FileAutocomplete
+              query={autocompleteQuery}
+              {changedFiles}
+              {allFiles}
+              visible={showAutocomplete}
+              onSelect={handleFileSelect}
+              onClose={handleCloseAutocomplete}
+            />
+          </div>
+
+          <!-- File references -->
+          {#if fileRefs.length > 0}
+            <div class="flex flex-wrap gap-2 mt-2">
+              {#each fileRefs as ref (ref.path)}
+                <span
+                  class="inline-flex items-center gap-1 px-2 py-1
+                         bg-blue-600/20 text-blue-400 text-xs rounded"
+                >
+                  <span class="truncate max-w-[120px]">@{ref.path}</span>
+                  {#if ref.startLine !== undefined}
+                    <span class="text-blue-300">
+                      :L{ref.startLine}{ref.endLine !== ref.startLine ? `-L${ref.endLine}` : ""}
+                    </span>
+                  {/if}
+                  <button
+                    type="button"
+                    onclick={() => removeFileRef(ref.path)}
+                    class="ml-1 hover:text-red-400"
+                    aria-label="Remove reference"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Controls -->
+        <div class="flex flex-col gap-3 w-32">
+          <!-- Mode toggle -->
+          <div
+            class="flex flex-col rounded border border-border-default overflow-hidden"
+            role="group"
+            aria-label="Execution mode"
+          >
+            <button
+              type="button"
+              onclick={() => (immediate = true)}
+              class="px-3 py-2 min-h-[36px] text-xs font-medium
+                     {immediate
+                ? 'bg-blue-600 text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
+                     border-b border-border-default
+                     transition-colors duration-150
+                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              aria-pressed={immediate}
+            >
+              Run Now
+            </button>
+            <button
+              type="button"
+              onclick={() => (immediate = false)}
+              class="px-3 py-2 min-h-[36px] text-xs font-medium
+                     {!immediate
+                ? 'bg-blue-600 text-white'
+                : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
+                     transition-colors duration-150
+                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+              aria-pressed={!immediate}
+            >
+              Queue
+            </button>
+          </div>
+
+          <!-- Submit button -->
+          <button
+            type="button"
+            onclick={handleSubmit}
+            disabled={prompt.trim().length === 0}
+            class="flex-1 min-h-[44px]
+                   bg-blue-600 hover:bg-blue-700
+                   text-white text-sm font-medium rounded
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-colors duration-150
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            Submit
+          </button>
+        </div>
+      </div>
+
+      <!-- Footer hint -->
+      <div class="mt-2 text-xs text-text-tertiary flex items-center justify-between">
+        <span>
+          <kbd class="px-1 py-0.5 bg-bg-tertiary rounded">Ctrl+Enter</kbd> to submit,
+          <kbd class="px-1 py-0.5 bg-bg-tertiary rounded">Esc</kbd> to collapse
+        </span>
+        <span>
+          Type <code class="px-1 bg-bg-tertiary rounded">@</code> to reference files
+        </span>
+      </div>
+    </div>
+  {/if}
+</div>

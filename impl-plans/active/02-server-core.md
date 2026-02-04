@@ -91,7 +91,7 @@ function spaFallback(indexPath: string): MiddlewareHandler;
 
 #### src/server/websocket/index.ts
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 // WebSocket event types
@@ -116,42 +116,48 @@ interface WSManager {
 ```
 
 **Checklist**:
-- [ ] Implement setupWebSocket()
-- [ ] Implement broadcast()
-- [ ] Handle connection/disconnection
-- [ ] Add ping/pong keepalive
-- [ ] Unit tests
+- [x] Implement setupWebSocket()
+- [x] Implement broadcast()
+- [x] Handle connection/disconnection
+- [x] Add ping/pong keepalive
+- [x] Unit tests (24 tests passing)
 
 ### 4. Error Handling
 
 #### src/server/errors.ts
 
-**Status**: NOT_STARTED
+**Status**: COMPLETED
 
 ```typescript
 // Application error classes
 class AppError extends Error {
-  constructor(message: string, statusCode: number);
-  statusCode: number;
+  public override readonly cause?: unknown;
+  constructor(message: string, public readonly statusCode: number, cause?: unknown);
 }
 
-class NotFoundError extends AppError;
-class ValidationError extends AppError;
-class GitError extends AppError;
+class NotFoundError extends AppError; // statusCode: 404
+class ValidationError extends AppError; // statusCode: 400
+class GitError extends AppError { // statusCode: 500
+  public readonly command?: string;
+}
 
 // Error handler middleware
 function errorHandler(): ErrorHandler;
 
 // Format error response
 function formatErrorResponse(error: Error): { error: string; code: number };
+
+// Helper utilities
+function isAppError(error: unknown): error is AppError;
+function getErrorMessage(error: unknown): string;
 ```
 
 **Checklist**:
-- [ ] Define error classes
-- [ ] Implement errorHandler()
-- [ ] Implement formatErrorResponse()
-- [ ] Log errors appropriately
-- [ ] Unit tests
+- [x] Define error classes
+- [x] Implement errorHandler()
+- [x] Implement formatErrorResponse()
+- [x] Log errors appropriately (5xx as error, 4xx as warning)
+- [x] Unit tests (24 tests passing)
 
 ---
 
@@ -159,10 +165,10 @@ function formatErrorResponse(error: Error): { error: string; code: number };
 
 | Module | File Path | Status | Tests |
 |--------|-----------|--------|-------|
-| Server Setup | `src/server/index.ts` | NOT_STARTED | - |
-| Static Serving | `src/server/static.ts` | NOT_STARTED | - |
-| WebSocket | `src/server/websocket/index.ts` | NOT_STARTED | - |
-| Error Handling | `src/server/errors.ts` | NOT_STARTED | - |
+| Server Setup | `src/server/index.ts` | COMPLETED | 8 tests |
+| Static Serving | `src/server/static.ts` | COMPLETED | 13 tests |
+| WebSocket | `src/server/websocket/index.ts` | COMPLETED | 24 tests |
+| Error Handling | `src/server/errors.ts` | COMPLETED | 24 tests |
 
 ## Dependencies
 
@@ -185,9 +191,18 @@ function formatErrorResponse(error: Error): { error: string; code: number };
 
 ### Session: 2026-02-03
 **Tasks Completed**: Plan created
+
+### Session: 2026-02-03 (Impl)
+**Tasks Completed**: TASK-004 Error Handling
 **Tasks In Progress**: None
 **Blockers**: None
-**Notes**: Initial plan creation
+**Notes**: Implemented src/server/errors.ts with AppError, NotFoundError, ValidationError, GitError classes. Added errorHandler middleware for Hono. 24 unit tests passing.
+
+### Session: 2026-02-03 (WebSocket)
+**Tasks Completed**: TASK-003 WebSocket Server
+**Tasks In Progress**: None
+**Blockers**: None
+**Notes**: Implemented src/server/websocket/index.ts with WSManager, setupWebSocket, broadcast, and createWebSocketHandler. Added connection management, ping/pong keepalive mechanism. 24 unit tests passing. Type checking passes. All 267 tests passing in full suite.
 
 ## Related Plans
 

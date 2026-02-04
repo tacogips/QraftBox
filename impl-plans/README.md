@@ -79,27 +79,28 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Phase | Status | Design Reference | Last Updated |
 |------|-------|--------|------------------|--------------|
-| 01-cli-layer | 1 | Ready | design-local-diff-viewer.md#cli-interface | 2026-02-03 |
-| 02-server-core | 1 | Ready | design-local-diff-viewer.md#architecture-overview | 2026-02-03 |
-| 03-git-operations | 1 | Ready | design-local-diff-viewer.md#data-models | 2026-02-03 |
-| 04-api-routes | 1 | Ready | design-local-diff-viewer.md#api-design | 2026-02-03 |
 | 05-git-xnotes | 2 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
 | 06-file-watcher | 2 | Ready | design-local-diff-viewer.md#file-watching | 2026-02-03 |
 | 07-client-core | 2 | Ready | design-local-diff-viewer.md#ui-design | 2026-02-03 |
-| 08-diff-view | 2 | Ready | design-local-diff-viewer.md#github-style-diff-view | 2026-02-03 |
+| 08-diff-view | 2b | Ready | design-local-diff-viewer.md#github-style-diff-view | 2026-02-03 |
 | 09-current-state-view | 3 | Ready | design-local-diff-viewer.md#current-state-view | 2026-02-03 |
-| 10-file-tree | 2 | Ready | design-local-diff-viewer.md#file-tree | 2026-02-03 |
+| 10-file-tree | 2b | Ready | design-local-diff-viewer.md#file-tree | 2026-02-03 |
 | 11-comment-ui | 3 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
 | 12-ai-integration | 4 | Ready | design-local-diff-viewer.md#ai-agent-integration | 2026-02-03 |
 | 13-session-queue | 4 | Ready | design-local-diff-viewer.md#session-queue-screen | 2026-02-03 |
 | 14-search | 3 | Ready | design-local-diff-viewer.md#search-functionality | 2026-02-03 |
 | 15-branch-switching | 2 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-03 |
 
+**Note**: 15-branch-switching has mixed phases - server tasks (1-3) are Phase 2, client tasks (4-7) require 07-client-core and should wait for Phase 2b.
+
 ## Completed Plans
 
 | Plan | Completed | Design Reference |
 |------|-----------|------------------|
-| (No completed plans yet) | - | - |
+| 01-cli-layer | 2026-02-03 | design-local-diff-viewer.md#cli-interface |
+| 02-server-core | 2026-02-03 | design-local-diff-viewer.md#architecture-overview |
+| 03-git-operations | 2026-02-03 | design-local-diff-viewer.md#data-models |
+| 04-api-routes | 2026-02-03 | design-local-diff-viewer.md#api-design |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -110,9 +111,10 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Description | Depends On |
 |-------|--------|-------------|------------|
-| 1 | READY | Foundation - CLI, Server, Git Operations, API Routes | - |
-| 2 | BLOCKED | Core Features - Client, Diff View, File Tree, File Watcher, git-xnotes | Phase 1 |
-| 3 | BLOCKED | Advanced Features - Current State View, Comments UI, Search | Phase 2 |
+| 1 | COMPLETED | Foundation - CLI, Server, Git Operations, API Routes | - |
+| 2 | READY | Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup | Phase 1 |
+| 2b | BLOCKED | Client UI - Diff View, File Tree, Branch UI (requires 07-client-core) | Phase 2 |
+| 3 | BLOCKED | Advanced Features - Current State View, Comments UI, Search | Phase 2b |
 | 4 | BLOCKED | AI Integration - AI Agent, Session Queue | Phase 3 |
 
 ### Phase to Plans Mapping
@@ -120,18 +122,21 @@ Only plans from eligible phases should be read to minimize context loading.
 ```
 PHASE_TO_PLANS = {
   1: [
-    "01-cli-layer.md",
-    "02-server-core.md",
-    "03-git-operations.md",
-    "04-api-routes.md"
+    "01-cli-layer.md",        # COMPLETED
+    "02-server-core.md",      # COMPLETED
+    "03-git-operations.md",   # COMPLETED
+    "04-api-routes.md"        # COMPLETED
   ],
   2: [
-    "05-git-xnotes.md",
-    "06-file-watcher.md",
-    "07-client-core.md",
-    "08-diff-view.md",
-    "10-file-tree.md",
-    "15-branch-switching.md"
+    "05-git-xnotes.md",       # Server-side comment integration
+    "06-file-watcher.md",     # Server-side file watching
+    "07-client-core.md",      # CRITICAL: Client infrastructure
+    "15-branch-switching.md"  # Tasks 1-3 only (server-side)
+  ],
+  "2b": [
+    "08-diff-view.md",        # Requires 07-client-core
+    "10-file-tree.md",        # Requires 07-client-core
+    "15-branch-switching.md"  # Tasks 4-7 only (client-side)
   ],
   3: [
     "09-current-state-view.md",
@@ -142,6 +147,30 @@ PHASE_TO_PLANS = {
     "12-ai-integration.md",
     "13-session-queue.md"
   ]
+}
+```
+
+### Cross-Plan Dependencies (NEW)
+
+Plans can have `planDeps` field in PROGRESS.json indicating which other plans must be completed before starting:
+
+```json
+{
+  "08-diff-view": {
+    "planDeps": ["07-client-core"],  // Cannot start until 07-client-core is Completed
+    ...
+  }
+}
+```
+
+Tasks can also have `crossPlanDeps` to indicate specific task-level cross-plan dependencies:
+
+```json
+{
+  "TASK-004": {
+    "crossPlanDeps": ["07-client-core"],  // This task needs 07-client-core
+    ...
+  }
 }
 ```
 
