@@ -1,11 +1,17 @@
 {
-  "lastUpdated": "2026-02-04T15:00:00Z",
+  "lastUpdated": "2026-02-05T18:00:00Z",
   "phases": {
     "1": { "status": "COMPLETED", "description": "Foundation - CLI, Server, Git Operations, API Routes" },
     "2": { "status": "COMPLETED", "dependsOn": ["1"], "description": "Core Features - Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup" },
     "2b": { "status": "COMPLETED", "dependsOn": ["2"], "description": "Client UI - Diff View, File Tree, Branch UI (requires 07-client-core)" },
     "3": { "status": "COMPLETED", "dependsOn": ["2b"], "description": "Advanced Features - Current State View, Comments UI, Search" },
-    "4": { "status": "COMPLETED", "dependsOn": ["3"], "description": "AI Integration - AI Agent, Session Queue" }
+    "4": { "status": "COMPLETED", "dependsOn": ["3"], "description": "AI Integration - AI Agent, Session Queue" },
+    "5": { "status": "COMPLETED", "dependsOn": ["4"], "description": "Commit Log Viewer" },
+    "6": { "status": "COMPLETED", "dependsOn": ["5"], "description": "Multi-Directory Workspace" },
+    "7": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Prompt System, AI Commit, AI Push" },
+    "8": { "status": "READY", "dependsOn": ["7"], "description": "GitHub Integration, AI PR" },
+    "9": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Git Worktree Support" },
+    "10": { "status": "READY", "dependsOn": ["4"], "description": "Claude Session Browser" }
   },
   "plans": {
     "01-cli-layer": {
@@ -82,12 +88,11 @@
       "status": "Completed",
       "file": "active/07-client-core.md",
       "planDeps": [],
-      "note": "CRITICAL: Must complete before 08-diff-view, 10-file-tree, and client tasks in 15-branch-switching",
       "tasks": {
         "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Vite Config (client/vite.config.ts)" },
         "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Tailwind Config (client/tailwind.config.ts)" },
         "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "App Shell (client/App.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "Main Page (integrated in App.svelte, no SvelteKit routing)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "Main Page (integrated in App.svelte)" },
         "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Diff Store (client/stores/diff.ts)" },
         "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Files Store (client/stores/files.ts)" },
         "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "UI Store (client/stores/ui.ts)" },
@@ -102,13 +107,13 @@
       "file": "active/08-diff-view.md",
       "planDeps": ["07-client-core"],
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": false, "deps": [], "description": "DiffView Container (client/components/DiffView.svelte)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "SideBySide View (client/components/diff/SideBySideDiff.svelte)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Inline Diff (client/components/diff/InlineDiff.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DiffLine (client/components/diff/DiffLine.svelte)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "VirtualList (client/components/diff/VirtualDiffList.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DiffHeader (client/components/diff/DiffHeader.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ChunkSeparator (client/components/diff/ChunkSeparator.svelte)" }
+        "TASK-001": { "status": "Completed", "parallelizable": false, "deps": [], "description": "DiffView Container" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "SideBySide View" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Inline Diff" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DiffLine" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "VirtualList" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DiffHeader" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ChunkSeparator" }
       }
     },
     "09-current-state-view": {
@@ -116,15 +121,14 @@
       "status": "Completed",
       "file": "active/09-current-state-view.md",
       "planDeps": ["08-diff-view"],
-      "note": "All tasks completed. Novel Current State View with collapsible deleted blocks implemented.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CS Types (client/src/types/current-state.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "CSView Container (client/components/CurrentStateView.svelte)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "CS Line (client/components/current-state/CurrentStateLine.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Deleted Marker (client/components/current-state/DeletedMarker.svelte)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Expanded Block (client/components/current-state/ExpandedDeletedBlock.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Expand Controls (client/components/current-state/ExpandControls.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CS Store (client/src/stores/current-state.ts)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CS Types" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "CSView Container" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "CS Line" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Deleted Marker" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Expanded Block" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Expand Controls" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CS Store" }
       }
     },
     "10-file-tree": {
@@ -133,13 +137,13 @@
       "file": "active/10-file-tree.md",
       "planDeps": ["07-client-core"],
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": false, "deps": [], "description": "FileTree Container (client/components/FileTree.svelte)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DirectoryNode (client/components/file-tree/DirectoryNode.svelte)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "FileNode (client/components/file-tree/FileNode.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "StatusBadge (client/components/file-tree/StatusBadge.svelte)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ModeToggle (client/components/file-tree/ModeToggle.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "QuickActions (client/components/file-tree/QuickActions.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "TreeNavigation (client/lib/tree-navigation.ts)" }
+        "TASK-001": { "status": "Completed", "parallelizable": false, "deps": [], "description": "FileTree Container" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "DirectoryNode" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "FileNode" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "StatusBadge" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ModeToggle" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "QuickActions" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "TreeNavigation" }
       }
     },
     "11-comment-ui": {
@@ -147,15 +151,14 @@
       "status": "Completed",
       "file": "active/11-comment-ui.md",
       "planDeps": ["05-git-xnotes", "08-diff-view"],
-      "note": "All tasks completed. Full comment UI with display, threading, forms, and sync status.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Comments Store (client/src/stores/comments.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CommentDisplay (client/components/CommentDisplay.svelte)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-002"], "description": "CommentThread (client/components/CommentThread.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CommentForm (client/components/CommentForm.svelte)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "LineCommentIndicator (client/components/LineCommentIndicator.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-002", "TASK-003"], "description": "CommentsPanel (client/components/CommentsPanel.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SyncStatusBar (client/components/SyncStatusBar.svelte)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Comments Store" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CommentDisplay" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-002"], "description": "CommentThread" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "CommentForm" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "LineCommentIndicator" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-002", "TASK-003"], "description": "CommentsPanel" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SyncStatusBar" }
       }
     },
     "12-ai-integration": {
@@ -163,17 +166,16 @@
       "status": "Completed",
       "file": "active/12-ai-integration.md",
       "planDeps": ["08-diff-view", "11-comment-ui"],
-      "note": "All tasks completed. AI types, prompt builder, session manager, API routes, client store, and UI components.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "AI Types (src/types/ai.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Prompt Builder (src/server/ai/prompt-builder.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Session Manager (src/server/ai/session-manager.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "AI Routes (src/server/routes/ai.ts)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "AI Store (client/stores/ai.ts)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptInline (client/components/AIPromptInline.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptPanel (client/components/AIPromptPanel.svelte)" },
-        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "FileAutocomplete (client/components/FileAutocomplete.svelte)" },
-        "TASK-009": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "SessionButton (client/components/SessionButton.svelte)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "AI Types" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Prompt Builder" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Session Manager" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "AI Routes" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "AI Store" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptInline" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "AIPromptPanel" },
+        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "FileAutocomplete" },
+        "TASK-009": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "SessionButton" }
       }
     },
     "13-session-queue": {
@@ -181,18 +183,17 @@
       "status": "Completed",
       "file": "active/13-session-queue.md",
       "planDeps": ["12-ai-integration"],
-      "note": "All tasks completed. Queue store, session screen, cards, conversation views (chat/carousel), message components.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Queue Store (client/src/stores/queue.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Queue Screen (client/components/session/SessionQueueScreen.svelte)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SessionCard (client/components/session/SessionCard.svelte)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-003"], "description": "RunningSession (client/components/session/RunningSession.svelte)" },
-        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Session Detail (client/components/session/SessionDetailView.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Chat View (client/components/session/ConversationChatView.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Carousel View (client/components/session/ConversationCarousel.svelte)" },
-        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "MessageCard (client/components/session/MessageCard.svelte)" },
-        "TASK-009": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ToolCallDisplay (client/components/session/ToolCallDisplay.svelte)" },
-        "TASK-010": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SessionStats (client/components/session/SessionStats.svelte)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Queue Store" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Queue Screen" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SessionCard" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-003"], "description": "RunningSession" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Session Detail" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Chat View" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Carousel View" },
+        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "MessageCard" },
+        "TASK-009": { "status": "Completed", "parallelizable": true, "deps": [], "description": "ToolCallDisplay" },
+        "TASK-010": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SessionStats" }
       }
     },
     "14-search": {
@@ -200,16 +201,15 @@
       "status": "Completed",
       "file": "active/14-search.md",
       "planDeps": ["08-diff-view"],
-      "note": "All tasks completed. Regex search with file/changed/all scopes, navigation, and result highlighting.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Search Types (src/types/search.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Search Service (src/server/search/index.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Search Route (src/server/routes/search.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Search Store (client/src/stores/search.ts)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchInput (client/components/SearchInput.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchResults (client/components/SearchResults.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SearchHighlight (client/components/SearchHighlight.svelte)" },
-        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Search Navigation (client/src/lib/search-navigation.ts)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Search Types" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Search Service" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Search Route" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Search Store" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchInput" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "SearchResults" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "SearchHighlight" },
+        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Search Navigation" }
       }
     },
     "15-branch-switching": {
@@ -217,15 +217,142 @@
       "status": "Completed",
       "file": "active/15-branch-switching.md",
       "planDeps": [],
-      "note": "All tasks completed. Server-side (TASK-001 to TASK-003) and client-side (TASK-004 to TASK-007) implementation done.",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Branch Types (src/types/branch.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Branch Git Ops (src/server/git/branch.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Branch Routes (src/server/routes/branches.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "crossPlanDeps": ["07-client-core"], "description": "Branch Store (client/stores/branches.ts)" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchHeader (client/components/BranchHeader.svelte)" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchSelector (client/components/BranchSelector.svelte)" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "CheckoutWarning (client/components/CheckoutWarning.svelte)" }
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Branch Types" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Branch Git Ops" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Branch Routes" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "crossPlanDeps": ["07-client-core"], "description": "Branch Store" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchHeader" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchSelector" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "CheckoutWarning" }
+      }
+    },
+    "16-commit-log-viewer": {
+      "phase": 5,
+      "status": "Completed",
+      "file": "active/16-commit-log-viewer.md",
+      "planDeps": ["08-diff-view", "10-file-tree"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Commit Types (src/types/commit.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Commit Git Ops (src/server/git/commit-log.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Commit Routes (src/server/routes/commits.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Commit Log Store (client/src/stores/commit-log.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "CommitLogPanel (client/src/components/CommitLogPanel.svelte)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "CommitListItem (client/src/components/commit-log/CommitListItem.svelte)" }
+      }
+    },
+    "17-multi-directory-workspace": {
+      "phase": 6,
+      "status": "Completed",
+      "file": "active/17-multi-directory-workspace.md",
+      "planDeps": ["16-commit-log-viewer"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Workspace Types (src/types/workspace.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Context Manager (src/server/workspace/context-manager.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Browse Routes (src/server/routes/browse.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Workspace Routes (src/server/routes/workspace.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Context Middleware (src/server/middleware/context.ts)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Workspace Store (client/src/stores/workspace.ts)" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-006"], "description": "TabBar (client/src/components/TabBar.svelte)" },
+        "TASK-008": { "status": "Completed", "parallelizable": true, "deps": ["TASK-006"], "description": "DirectoryPicker (client/src/components/DirectoryPicker.svelte)" }
+      }
+    },
+    "18-prompt-system": {
+      "phase": 7,
+      "status": "Completed",
+      "file": "active/18-prompt-system.md",
+      "planDeps": ["17-multi-directory-workspace", "12-ai-integration"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Prompt Types (src/types/prompt-config.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Prompt Loader (src/server/prompts/loader.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Prompt Builder (src/server/prompts/builder.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-002"], "description": "Default Templates (src/server/prompts/templates.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Prompt Routes (src/server/routes/prompts.ts)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Staged Files (src/server/git/staged.ts)" }
+      }
+    },
+    "19-ai-commit": {
+      "phase": 7,
+      "status": "Completed",
+      "file": "active/19-ai-commit.md",
+      "planDeps": ["18-prompt-system"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Commit Context Types (src/types/commit-context.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Commit Executor (src/server/commit/executor.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Commit Routes (src/server/routes/commit.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Commit Store (client/src/stores/commit.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "CommitButton (client/src/components/CommitButton.svelte)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "CommitPanel (client/src/components/CommitPanel.svelte)" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "description": "Commit Progress/Success (client/src/components/commit/)" }
+      }
+    },
+    "20-ai-push": {
+      "phase": 7,
+      "status": "Completed",
+      "file": "active/20-ai-push.md",
+      "planDeps": ["18-prompt-system", "19-ai-commit"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Push Context Types (src/types/push-context.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Push Git Ops (src/server/git/push.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Push Executor (src/server/push/executor.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "Push Routes (src/server/routes/push.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Push Store (client/src/stores/push.ts)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "Push UI Components (client/src/components/push/)" }
+      }
+    },
+    "21-github-integration": {
+      "phase": 8,
+      "status": "Completed",
+      "file": "active/21-github-integration.md",
+      "planDeps": ["20-ai-push"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "GitHub Types (src/types/github.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "GitHub Auth (src/server/github/auth.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Octokit Client (src/server/github/client.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "GitHub Service (src/server/github/service.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "URL Parser (src/server/github/url-parser.ts)" },
+        "TASK-006": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "GitHub Routes (src/server/routes/github.ts)" }
+      }
+    },
+    "22-ai-pr": {
+      "phase": 8,
+      "status": "In Progress",
+      "file": "active/22-ai-pr.md",
+      "planDeps": ["21-github-integration", "18-prompt-system"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "PR Types (src/types/pr.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "PR Service (src/server/github/pr-service.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "PR Executor (src/server/pr/executor.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "PR Routes (src/server/routes/pr.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "PR Store (client/src/stores/pr.ts)" },
+        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-005"], "description": "PR UI Components (client/src/components/pr/)" }
+      }
+    },
+    "23-git-worktree": {
+      "phase": 9,
+      "status": "Completed",
+      "file": "active/23-git-worktree.md",
+      "planDeps": ["17-multi-directory-workspace"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Worktree Types (src/types/worktree.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Workspace Types Extension (src/types/workspace.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Git Worktree Ops (src/server/git/worktree.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "Context Manager Fix (src/server/workspace/context-manager.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003", "TASK-004"], "description": "Worktree Routes (src/server/routes/worktree.ts)" }
+      }
+    },
+    "24-claude-session-browser": {
+      "phase": 10,
+      "status": "In Progress",
+      "file": "24-claude-session-browser.md",
+      "planDeps": ["13-session-queue"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Session Types and Registry" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Session Reader" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "API Routes" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Client Store" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "UI Components" },
+        "TASK-006": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-005"], "description": "Navigation Integration" }
       }
     }
   }

@@ -79,19 +79,12 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Phase | Status | Design Reference | Last Updated |
 |------|-------|--------|------------------|--------------|
-| 05-git-xnotes | 2 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
-| 06-file-watcher | 2 | Ready | design-local-diff-viewer.md#file-watching | 2026-02-03 |
-| 07-client-core | 2 | Ready | design-local-diff-viewer.md#ui-design | 2026-02-03 |
-| 08-diff-view | 2b | Ready | design-local-diff-viewer.md#github-style-diff-view | 2026-02-03 |
-| 09-current-state-view | 3 | Ready | design-local-diff-viewer.md#current-state-view | 2026-02-03 |
-| 10-file-tree | 2b | Ready | design-local-diff-viewer.md#file-tree | 2026-02-03 |
-| 11-comment-ui | 3 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-03 |
-| 12-ai-integration | 4 | Ready | design-local-diff-viewer.md#ai-agent-integration | 2026-02-03 |
-| 13-session-queue | 4 | Ready | design-local-diff-viewer.md#session-queue-screen | 2026-02-03 |
-| 14-search | 3 | Ready | design-local-diff-viewer.md#search-functionality | 2026-02-03 |
-| 15-branch-switching | 2 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-03 |
+| 21-github-integration | 8 | Ready | design-ai-commit.md | 2026-02-04 |
+| 22-ai-pr | 8 | Ready | design-ai-commit.md | 2026-02-04 |
+| 23-git-worktree | 9 | Ready | design-git-worktree.md | 2026-02-05 |
+| 24-claude-session-browser | 10 | Ready | design-claude-session-browser.md | 2026-02-05 |
 
-**Note**: 15-branch-switching has mixed phases - server tasks (1-3) are Phase 2, client tasks (4-7) require 07-client-core and should wait for Phase 2b.
+**Next Phase**: Phases 8, 9, and 10 are ready to start (GitHub Integration, Git Worktree, Claude Session Browser).
 
 ## Completed Plans
 
@@ -101,6 +94,22 @@ Large features are split into multiple related plans with cross-references.
 | 02-server-core | 2026-02-03 | design-local-diff-viewer.md#architecture-overview |
 | 03-git-operations | 2026-02-03 | design-local-diff-viewer.md#data-models |
 | 04-api-routes | 2026-02-03 | design-local-diff-viewer.md#api-design |
+| 05-git-xnotes | 2026-02-04 | design-local-diff-viewer.md#comment-system |
+| 06-file-watcher | 2026-02-04 | design-local-diff-viewer.md#file-watching |
+| 07-client-core | 2026-02-04 | design-local-diff-viewer.md#ui-design |
+| 08-diff-view | 2026-02-04 | design-local-diff-viewer.md#github-style-diff-view |
+| 09-current-state-view | 2026-02-04 | design-local-diff-viewer.md#current-state-view |
+| 10-file-tree | 2026-02-04 | design-local-diff-viewer.md#file-tree |
+| 11-comment-ui | 2026-02-04 | design-local-diff-viewer.md#comment-system |
+| 12-ai-integration | 2026-02-04 | design-local-diff-viewer.md#ai-agent-integration |
+| 13-session-queue | 2026-02-04 | design-local-diff-viewer.md#session-queue-screen |
+| 14-search | 2026-02-04 | design-local-diff-viewer.md#search-functionality |
+| 15-branch-switching | 2026-02-04 | design-local-diff-viewer.md#branch-switching |
+| 16-commit-log-viewer | 2026-02-04 | design-commit-log-viewer.md |
+| 17-multi-directory-workspace | 2026-02-05 | design-multi-directory-workspace.md |
+| 18-prompt-system | 2026-02-05 | design-ai-commit.md |
+| 19-ai-commit | 2026-02-05 | design-ai-commit.md |
+| 20-ai-push | 2026-02-05 | design-ai-commit.md |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -112,10 +121,16 @@ Only plans from eligible phases should be read to minimize context loading.
 | Phase | Status | Description | Depends On |
 |-------|--------|-------------|------------|
 | 1 | COMPLETED | Foundation - CLI, Server, Git Operations, API Routes | - |
-| 2 | READY | Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup | Phase 1 |
-| 2b | BLOCKED | Client UI - Diff View, File Tree, Branch UI (requires 07-client-core) | Phase 2 |
-| 3 | BLOCKED | Advanced Features - Current State View, Comments UI, Search | Phase 2b |
-| 4 | BLOCKED | AI Integration - AI Agent, Session Queue | Phase 3 |
+| 2 | COMPLETED | Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup | Phase 1 |
+| 2b | COMPLETED | Client UI - Diff View, File Tree, Branch UI (requires 07-client-core) | Phase 2 |
+| 3 | COMPLETED | Advanced Features - Current State View, Comments UI, Search | Phase 2b |
+| 4 | COMPLETED | AI Integration - AI Agent, Session Queue | Phase 3 |
+| 5 | COMPLETED | Commit Log Viewer | Phase 4 |
+| 6 | COMPLETED | Multi-Directory Workspace | Phase 5 |
+| 7 | COMPLETED | Prompt System, AI Commit, AI Push | Phase 6 |
+| 8 | READY | GitHub Integration, AI PR | Phase 7 |
+| 9 | READY | Git Worktree Support | Phase 6 |
+| 10 | READY | Claude Session Browser | Phase 4 |
 
 ### Phase to Plans Mapping
 
@@ -146,6 +161,16 @@ PHASE_TO_PLANS = {
   4: [
     "12-ai-integration.md",
     "13-session-queue.md"
+  ],
+  8: [
+    "21-github-integration.md",
+    "22-ai-pr.md"
+  ],
+  9: [
+    "23-git-worktree.md"
+  ],
+  10: [
+    "24-claude-session-browser.md"
   ]
 }
 ```

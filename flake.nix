@@ -6,6 +6,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/release-24.11";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    llm-agents.url = "github:numtide/llm-agents.nix";
   };
 
   outputs =
@@ -14,6 +15,7 @@
       nixpkgs,
       nixpkgs-unstable,
       flake-utils,
+      llm-agents,
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -35,6 +37,9 @@
           gnused
           gh
           go-task
+
+          # LLM agents
+          llm-agents.packages.${system}.agent-browser
         ];
 
       in
