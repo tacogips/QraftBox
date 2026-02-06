@@ -16,6 +16,7 @@ describe("ClaudeSessionsScreen component", () => {
 
   test("component uses correct Svelte 5 patterns", () => {
     // The component should:
+    // - Accept onBack callback prop for navigation
     // - Import claudeSessionsStore for state management
     // - Use onMount for initial data loading
     // - Use $derived for computed values (groupedSessions, hasSessions, hasMore)
@@ -28,7 +29,7 @@ describe("ClaudeSessionsScreen component", () => {
 
   test("component has main screen layout", () => {
     // Main layout structure:
-    // - Header with title and search bar
+    // - Header with back button, title and search bar
     // - Filter panel
     // - Error banner (conditional)
     // - Content area (loading/empty/session list)

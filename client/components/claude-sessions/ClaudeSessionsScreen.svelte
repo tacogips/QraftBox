@@ -6,7 +6,7 @@
    * Integrates filter panel, search, session list with grouping, and pagination.
    *
    * Props:
-   * - None (uses claudeSessionsStore directly)
+   * - onBack: Callback to navigate back to previous screen
    *
    * Features:
    * - Session grouping by date (Today, Yesterday, Older)
@@ -17,7 +17,7 @@
    * - Responsive layout
    *
    * Design:
-   * - Header with title and search
+   * - Header with title, back button, and search
    * - Filter panel (collapsible)
    * - Session list grouped by date
    * - Pagination controls
@@ -34,6 +34,13 @@
   import SearchInput from "./SearchInput.svelte";
   import FilterPanel from "./FilterPanel.svelte";
   import SessionCard from "./SessionCard.svelte";
+
+  interface Props {
+    onBack: () => void;
+  }
+
+  // Svelte 5 props syntax
+  const { onBack }: Props = $props();
 
   /**
    * Get date grouping label for a session
@@ -152,7 +159,37 @@
     class="screen-header px-6 py-4 border-b border-bg-border bg-bg-secondary"
   >
     <div class="flex items-center justify-between mb-4">
-      <h1 class="text-2xl font-bold text-text-primary">Claude Sessions</h1>
+      <div class="flex items-center gap-3">
+        <!-- Back button -->
+        <button
+          type="button"
+          onclick={onBack}
+          class="p-2 min-w-[44px] min-h-[44px]
+                 text-text-secondary hover:text-text-primary
+                 hover:bg-bg-hover rounded-lg
+                 transition-colors
+                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          aria-label="Back to previous screen"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+        </button>
+
+        <h1 class="text-2xl font-bold text-text-primary">Claude Sessions</h1>
+      </div>
+
       <!-- Total Count -->
       <div class="text-sm text-text-tertiary">
         {#if claudeSessionsStore.total > 0}

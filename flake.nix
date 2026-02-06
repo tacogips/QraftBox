@@ -23,6 +23,8 @@
         pkgs = import nixpkgs { inherit system; };
         pkgs-unstable = import nixpkgs-unstable { inherit system; };
 
+        playwrightBrowsers = pkgs-unstable.playwright-driver.browsers;
+
         devPackages = with pkgs; [
           # Bun runtime
           pkgs-unstable.bun
@@ -31,6 +33,9 @@
           pkgs-unstable.typescript
           pkgs-unstable.typescript-language-server
           nodePackages.prettier
+
+          # E2E testing (Playwright)
+          playwrightBrowsers
 
           # Development tools
           fd
@@ -48,10 +53,13 @@
           packages = devPackages;
 
           shellHook = ''
+            export PLAYWRIGHT_BROWSERS_PATH="${playwrightBrowsers}"
+            export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
             echo "TypeScript development environment ready"
             echo "Bun version: $(bun --version)"
             echo "TypeScript version: $(tsc --version)"
             echo "Task version: $(task --version 2>/dev/null || echo 'not available')"
+            echo "Playwright browsers: $PLAYWRIGHT_BROWSERS_PATH"
           '';
         };
       }

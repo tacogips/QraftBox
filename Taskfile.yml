@@ -75,6 +75,28 @@ tasks:
     cmds:
       - bun run clean
 
+  e2e:
+    desc: Run Playwright E2E tests
+    cmds:
+      - bunx playwright test
+
+  e2e-ui:
+    desc: Run Playwright E2E tests with UI mode
+    cmds:
+      - bunx playwright test --ui
+
+  e2e-headed:
+    desc: Run Playwright E2E tests in headed browser
+    cmds:
+      - bunx playwright test --headed
+
+  e2e-check:
+    desc: Verify Playwright browsers are installed and working
+    cmds:
+      - echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"
+      - bunx playwright --version
+      - ls "$PLAYWRIGHT_BROWSERS_PATH" 2>/dev/null || echo "Browsers not found. Run 'nix develop' first."
+
   ci:
     desc: Run all CI checks
     cmds:

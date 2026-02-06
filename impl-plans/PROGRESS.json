@@ -1,5 +1,5 @@
 {
-  "lastUpdated": "2026-02-05T18:00:00Z",
+  "lastUpdated": "2026-02-06T10:00:00Z",
   "phases": {
     "1": { "status": "COMPLETED", "description": "Foundation - CLI, Server, Git Operations, API Routes" },
     "2": { "status": "COMPLETED", "dependsOn": ["1"], "description": "Core Features - Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup" },
@@ -9,9 +9,9 @@
     "5": { "status": "COMPLETED", "dependsOn": ["4"], "description": "Commit Log Viewer" },
     "6": { "status": "COMPLETED", "dependsOn": ["5"], "description": "Multi-Directory Workspace" },
     "7": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Prompt System, AI Commit, AI Push" },
-    "8": { "status": "READY", "dependsOn": ["7"], "description": "GitHub Integration, AI PR" },
+    "8": { "status": "COMPLETED", "dependsOn": ["7"], "description": "GitHub Integration, AI PR" },
     "9": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Git Worktree Support" },
-    "10": { "status": "READY", "dependsOn": ["4"], "description": "Claude Session Browser" }
+    "10": { "status": "COMPLETED", "dependsOn": ["4"], "description": "Claude Session Browser" }
   },
   "plans": {
     "01-cli-layer": {
@@ -316,7 +316,7 @@
     },
     "22-ai-pr": {
       "phase": 8,
-      "status": "In Progress",
+      "status": "Completed",
       "file": "active/22-ai-pr.md",
       "planDeps": ["21-github-integration", "18-prompt-system"],
       "tasks": {
@@ -325,7 +325,7 @@
         "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "PR Executor (src/server/pr/executor.ts)" },
         "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-003"], "description": "PR Routes (src/server/routes/pr.ts)" },
         "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "PR Store (client/src/stores/pr.ts)" },
-        "TASK-006": { "status": "Not Started", "parallelizable": true, "deps": ["TASK-005"], "description": "PR UI Components (client/src/components/pr/)" }
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-005"], "description": "PR UI Components (client/src/components/pr/)" }
       }
     },
     "23-git-worktree": {
@@ -343,7 +343,7 @@
     },
     "24-claude-session-browser": {
       "phase": 10,
-      "status": "In Progress",
+      "status": "Completed",
       "file": "24-claude-session-browser.md",
       "planDeps": ["13-session-queue"],
       "tasks": {
@@ -352,7 +352,7 @@
         "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "API Routes" },
         "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Client Store" },
         "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "UI Components" },
-        "TASK-006": { "status": "Not Started", "parallelizable": false, "deps": ["TASK-005"], "description": "Navigation Integration" }
+        "TASK-006": { "status": "Completed", "parallelizable": false, "deps": ["TASK-005"], "description": "Navigation Integration" }
       }
     }
   }

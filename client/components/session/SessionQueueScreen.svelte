@@ -7,10 +7,12 @@
  * Props:
  * - onBack: Callback to navigate back to diff view
  * - onSelectSession: Callback when a session is selected
+ * - onBrowseAllSessions: Optional callback to navigate to Claude sessions browser
  *
  * Design:
  * - Running, Queued, and Completed sections
  * - Clear completed button
+ * - Browse all sessions button
  * - Back navigation
  */
 
@@ -22,10 +24,11 @@ import RunningSession from "./RunningSession.svelte";
 interface Props {
   onBack: () => void;
   onSelectSession: (sessionId: string) => void;
+  onBrowseAllSessions?: () => void;
 }
 
 // Svelte 5 props syntax
-const { onBack, onSelectSession }: Props = $props();
+const { onBack, onSelectSession, onBrowseAllSessions }: Props = $props();
 
 /**
  * Queue store instance
@@ -136,20 +139,54 @@ async function handleClearCompleted(): Promise<void> {
       </h1>
     </div>
 
-    <!-- Clear completed button -->
-    {#if queueStore.completed.length > 0}
-      <button
-        type="button"
-        onclick={() => void handleClearCompleted()}
-        class="px-3 py-1.5 text-sm
-               text-text-secondary hover:text-red-400
-               hover:bg-red-600/10 rounded-lg
-               transition-colors
-               focus:outline-none focus:ring-2 focus:ring-red-500"
-      >
-        Clear Completed
-      </button>
-    {/if}
+    <div class="flex items-center gap-2">
+      <!-- Browse all sessions button -->
+      {#if onBrowseAllSessions !== undefined}
+        <button
+          type="button"
+          onclick={onBrowseAllSessions}
+          class="px-3 py-1.5 text-sm
+                 text-text-secondary hover:text-blue-400
+                 hover:bg-blue-600/10 rounded-lg
+                 transition-colors
+                 focus:outline-none focus:ring-2 focus:ring-blue-500
+                 flex items-center gap-2"
+          aria-label="Browse all Claude sessions"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+          Browse All Sessions
+        </button>
+      {/if}
+
+      <!-- Clear completed button -->
+      {#if queueStore.completed.length > 0}
+        <button
+          type="button"
+          onclick={() => void handleClearCompleted()}
+          class="px-3 py-1.5 text-sm
+                 text-text-secondary hover:text-red-400
+                 hover:bg-red-600/10 rounded-lg
+                 transition-colors
+                 focus:outline-none focus:ring-2 focus:ring-red-500"
+        >
+          Clear Completed
+        </button>
+      {/if}
+    </div>
   </header>
 
   <!-- Content -->
