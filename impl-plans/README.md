@@ -79,23 +79,34 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Phase | Status | Design Reference | Last Updated |
 |------|-------|--------|------------------|--------------|
-| 21-github-integration | 8 | Ready | design-ai-commit.md | 2026-02-04 |
-| 22-ai-pr | 8 | Ready | design-ai-commit.md | 2026-02-04 |
-| 23-git-worktree | 9 | Ready | design-git-worktree.md | 2026-02-05 |
-| 24-claude-session-browser | 10 | Ready | design-claude-session-browser.md | 2026-02-05 |
+| 25-server-foundation | 11 | Ready | design-local-diff-viewer.md#architecture-overview | 2026-02-07 |
+| 26-git-core-operations | 11 | Ready | design-local-diff-viewer.md#data-models | 2026-02-07 |
+| 27-diff-file-routes | 11 | Ready | design-local-diff-viewer.md#api-design | 2026-02-07 |
+| 28-file-watcher | 11 | Ready | design-local-diff-viewer.md#file-watching | 2026-02-07 |
+| 29-branch-switching | 11 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-07 |
+| 30-git-xnotes | 12 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-07 |
+| 31-binary-large-files | 12 | Ready | design-local-diff-viewer.md#binary-and-large-file-handling | 2026-02-07 |
 
-**Next Phase**: Phases 8, 9, and 10 are ready to start (GitHub Integration, Git Worktree, Claude Session Browser).
+**Next Phase**: Phase 11 is ready to start. Plans 25 and 26 can be executed in parallel (no dependencies). Plans 27, 28, 29 depend on 25 and/or 26.
+
+## Superseded Plans
+
+Plans whose source files were never created (identified by audit). Replaced by Phase 11-12 plans.
+
+| Plan | Superseded By | Reason |
+|------|---------------|--------|
+| 01-cli-layer | 25-server-foundation | Source files never existed |
+| 02-server-core | 25-server-foundation | Source files never existed |
+| 03-git-operations | 26-git-core-operations | Source files never existed |
+| 04-api-routes | 27-diff-file-routes | Source files never existed |
+| 05-git-xnotes | 30-git-xnotes | Source files never existed |
+| 06-file-watcher | 28-file-watcher | Source files never existed |
+| 15-branch-switching | 29-branch-switching | Server-side source files never existed |
 
 ## Completed Plans
 
 | Plan | Completed | Design Reference |
 |------|-----------|------------------|
-| 01-cli-layer | 2026-02-03 | design-local-diff-viewer.md#cli-interface |
-| 02-server-core | 2026-02-03 | design-local-diff-viewer.md#architecture-overview |
-| 03-git-operations | 2026-02-03 | design-local-diff-viewer.md#data-models |
-| 04-api-routes | 2026-02-03 | design-local-diff-viewer.md#api-design |
-| 05-git-xnotes | 2026-02-04 | design-local-diff-viewer.md#comment-system |
-| 06-file-watcher | 2026-02-04 | design-local-diff-viewer.md#file-watching |
 | 07-client-core | 2026-02-04 | design-local-diff-viewer.md#ui-design |
 | 08-diff-view | 2026-02-04 | design-local-diff-viewer.md#github-style-diff-view |
 | 09-current-state-view | 2026-02-04 | design-local-diff-viewer.md#current-state-view |
@@ -104,12 +115,15 @@ Large features are split into multiple related plans with cross-references.
 | 12-ai-integration | 2026-02-04 | design-local-diff-viewer.md#ai-agent-integration |
 | 13-session-queue | 2026-02-04 | design-local-diff-viewer.md#session-queue-screen |
 | 14-search | 2026-02-04 | design-local-diff-viewer.md#search-functionality |
-| 15-branch-switching | 2026-02-04 | design-local-diff-viewer.md#branch-switching |
 | 16-commit-log-viewer | 2026-02-04 | design-commit-log-viewer.md |
 | 17-multi-directory-workspace | 2026-02-05 | design-multi-directory-workspace.md |
 | 18-prompt-system | 2026-02-05 | design-ai-commit.md |
 | 19-ai-commit | 2026-02-05 | design-ai-commit.md |
 | 20-ai-push | 2026-02-05 | design-ai-commit.md |
+| 21-github-integration | 2026-02-06 | design-ai-commit.md |
+| 22-ai-pr | 2026-02-06 | design-ai-commit.md |
+| 23-git-worktree | 2026-02-06 | design-git-worktree.md |
+| 24-claude-session-browser | 2026-02-06 | design-claude-session-browser.md |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -120,57 +134,72 @@ Only plans from eligible phases should be read to minimize context loading.
 
 | Phase | Status | Description | Depends On |
 |-------|--------|-------------|------------|
-| 1 | COMPLETED | Foundation - CLI, Server, Git Operations, API Routes | - |
-| 2 | COMPLETED | Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup | Phase 1 |
-| 2b | COMPLETED | Client UI - Diff View, File Tree, Branch UI (requires 07-client-core) | Phase 2 |
+| 1 | SUPERSEDED | Foundation (source files never existed) | - |
+| 2 | SUPERSEDED | Server-side features (source files never existed for 05/06/15) | Phase 1 |
+| 2b | COMPLETED | Client UI - Diff View, File Tree, Branch UI | Phase 2 |
 | 3 | COMPLETED | Advanced Features - Current State View, Comments UI, Search | Phase 2b |
 | 4 | COMPLETED | AI Integration - AI Agent, Session Queue | Phase 3 |
 | 5 | COMPLETED | Commit Log Viewer | Phase 4 |
 | 6 | COMPLETED | Multi-Directory Workspace | Phase 5 |
 | 7 | COMPLETED | Prompt System, AI Commit, AI Push | Phase 6 |
-| 8 | READY | GitHub Integration, AI PR | Phase 7 |
-| 9 | READY | Git Worktree Support | Phase 6 |
-| 10 | READY | Claude Session Browser | Phase 4 |
+| 8 | COMPLETED | GitHub Integration, AI PR | Phase 7 |
+| 9 | COMPLETED | Git Worktree Support | Phase 6 |
+| 10 | COMPLETED | Claude Session Browser | Phase 4 |
+| 11 | READY | Foundation Rebuild - Server, Git Core, Routes, File Watcher, Branch Switching | - |
+| 12 | BLOCKED | Comments & Binary Files - git-xnotes, binary/large file handling | Phase 11 |
 
 ### Phase to Plans Mapping
 
 ```
 PHASE_TO_PLANS = {
   1: [
-    "01-cli-layer.md",        # COMPLETED
-    "02-server-core.md",      # COMPLETED
-    "03-git-operations.md",   # COMPLETED
-    "04-api-routes.md"        # COMPLETED
+    "01-cli-layer.md",        # SUPERSEDED by 25-server-foundation
+    "02-server-core.md",      # SUPERSEDED by 25-server-foundation
+    "03-git-operations.md",   # SUPERSEDED by 26-git-core-operations
+    "04-api-routes.md"        # SUPERSEDED by 27-diff-file-routes
   ],
   2: [
-    "05-git-xnotes.md",       # Server-side comment integration
-    "06-file-watcher.md",     # Server-side file watching
-    "07-client-core.md",      # CRITICAL: Client infrastructure
-    "15-branch-switching.md"  # Tasks 1-3 only (server-side)
+    "05-git-xnotes.md",       # SUPERSEDED by 30-git-xnotes
+    "06-file-watcher.md",     # SUPERSEDED by 28-file-watcher
+    "07-client-core.md",      # COMPLETED (client infrastructure)
+    "15-branch-switching.md"  # SUPERSEDED by 29-branch-switching
   ],
   "2b": [
-    "08-diff-view.md",        # Requires 07-client-core
-    "10-file-tree.md",        # Requires 07-client-core
-    "15-branch-switching.md"  # Tasks 4-7 only (client-side)
+    "08-diff-view.md",        # COMPLETED
+    "10-file-tree.md",        # COMPLETED
   ],
   3: [
-    "09-current-state-view.md",
-    "11-comment-ui.md",
-    "14-search.md"
+    "09-current-state-view.md",  # COMPLETED
+    "11-comment-ui.md",          # COMPLETED
+    "14-search.md"               # COMPLETED
   ],
   4: [
-    "12-ai-integration.md",
-    "13-session-queue.md"
+    "12-ai-integration.md",  # COMPLETED
+    "13-session-queue.md"     # COMPLETED
+  ],
+  5: ["16-commit-log-viewer.md"],           # COMPLETED
+  6: ["17-multi-directory-workspace.md"],    # COMPLETED
+  7: [
+    "18-prompt-system.md",    # COMPLETED
+    "19-ai-commit.md",        # COMPLETED
+    "20-ai-push.md"           # COMPLETED
   ],
   8: [
-    "21-github-integration.md",
-    "22-ai-pr.md"
+    "21-github-integration.md",  # COMPLETED
+    "22-ai-pr.md"                # COMPLETED
   ],
-  9: [
-    "23-git-worktree.md"
+  9: ["23-git-worktree.md"],                # COMPLETED
+  10: ["24-claude-session-browser.md"],     # COMPLETED
+  11: [
+    "25-server-foundation.md",     # READY (no deps)
+    "26-git-core-operations.md",   # READY (no deps)
+    "27-diff-file-routes.md",      # READY (deps: 25, 26)
+    "28-file-watcher.md",          # READY (deps: 25, 26)
+    "29-branch-switching.md"       # READY (deps: 26)
   ],
-  10: [
-    "24-claude-session-browser.md"
+  12: [
+    "30-git-xnotes.md",           # READY (deps: 26, 27)
+    "31-binary-large-files.md"    # READY (deps: 26, 27)
   ]
 }
 ```

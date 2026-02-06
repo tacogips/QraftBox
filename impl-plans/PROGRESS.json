@@ -1,8 +1,8 @@
 {
-  "lastUpdated": "2026-02-06T10:00:00Z",
+  "lastUpdated": "2026-02-07T20:00:00Z",
   "phases": {
-    "1": { "status": "COMPLETED", "description": "Foundation - CLI, Server, Git Operations, API Routes" },
-    "2": { "status": "COMPLETED", "dependsOn": ["1"], "description": "Core Features - Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup" },
+    "1": { "status": "SUPERSEDED", "description": "Foundation - CLI, Server, Git Operations, API Routes (source files never existed, superseded by Phase 11)" },
+    "2": { "status": "SUPERSEDED", "dependsOn": ["1"], "description": "Core Features - Server-side (git-xnotes, file-watcher, branch server) + Client Core Setup (server-side source files never existed for 05/06/15, superseded by Phases 11-12)" },
     "2b": { "status": "COMPLETED", "dependsOn": ["2"], "description": "Client UI - Diff View, File Tree, Branch UI (requires 07-client-core)" },
     "3": { "status": "COMPLETED", "dependsOn": ["2b"], "description": "Advanced Features - Current State View, Comments UI, Search" },
     "4": { "status": "COMPLETED", "dependsOn": ["3"], "description": "AI Integration - AI Agent, Session Queue" },
@@ -11,77 +11,58 @@
     "7": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Prompt System, AI Commit, AI Push" },
     "8": { "status": "COMPLETED", "dependsOn": ["7"], "description": "GitHub Integration, AI PR" },
     "9": { "status": "COMPLETED", "dependsOn": ["6"], "description": "Git Worktree Support" },
-    "10": { "status": "COMPLETED", "dependsOn": ["4"], "description": "Claude Session Browser" }
+    "10": { "status": "COMPLETED", "dependsOn": ["4"], "description": "Claude Session Browser" },
+    "11": { "status": "COMPLETED", "dependsOn": [], "description": "Foundation Rebuild - Server, Git Core, Routes, File Watcher, Branch Switching" },
+    "12": { "status": "COMPLETED", "dependsOn": ["11"], "description": "Comments & Binary Files - git-xnotes integration, binary/large file handling" }
   },
   "plans": {
     "01-cli-layer": {
       "phase": 1,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "25-server-foundation",
+      "note": "Source files (src/cli/index.ts, src/cli/config.ts, src/types/index.ts) never existed",
       "file": "completed/01-cli-layer.md",
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Shared Types (src/types/index.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "CLI Entry (src/cli/index.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Configuration (src/cli/config.ts)" }
-      }
+      "tasks": {}
     },
     "02-server-core": {
       "phase": 1,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "25-server-foundation",
+      "note": "Source files (src/server/index.ts, src/server/static.ts, src/server/websocket/index.ts, src/server/errors.ts) never existed",
       "file": "completed/02-server-core.md",
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Server Setup (src/server/index.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Static Serving (src/server/static.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "WebSocket Server (src/server/websocket/index.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Error Handling (src/server/errors.ts)" }
-      }
+      "tasks": {}
     },
     "03-git-operations": {
       "phase": 1,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "26-git-core-operations",
+      "note": "Source files (src/types/git.ts, src/server/git/executor.ts, src/server/git/diff.ts, src/server/git/parser.ts, src/server/git/files.ts) never existed",
       "file": "completed/03-git-operations.md",
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Git Types (src/types/git.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Git Executor (src/server/git/executor.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Diff Generation (src/server/git/diff.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Diff Parser (src/server/git/parser.ts)" },
-        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "File Tree (src/server/git/files.ts)" }
-      }
+      "tasks": {}
     },
     "04-api-routes": {
       "phase": 1,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "27-diff-file-routes",
+      "note": "Source files (src/server/routes/diff.ts, src/server/routes/files.ts, src/server/routes/status.ts, src/server/routes/index.ts) never existed",
       "file": "completed/04-api-routes.md",
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": false, "deps": [], "description": "Diff Routes (src/server/routes/diff.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": [], "description": "Files Routes (src/server/routes/files.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Status Routes (src/server/routes/status.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "Route Index (src/server/routes/index.ts)" }
-      }
+      "tasks": {}
     },
     "05-git-xnotes": {
       "phase": 2,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "30-git-xnotes",
+      "note": "Source files (src/types/comments.ts, src/server/comments/bridge.ts, src/server/comments/sync.ts, src/server/routes/comments.ts) never existed",
       "file": "active/05-git-xnotes.md",
-      "planDeps": [],
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Comment Types (src/types/comments.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Comment Bridge (src/server/comments/bridge.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Sync Manager (src/server/comments/sync.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002", "TASK-003"], "description": "Comment Routes (src/server/routes/comments.ts)" }
-      }
+      "tasks": {}
     },
     "06-file-watcher": {
       "phase": 2,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "28-file-watcher",
+      "note": "Source files (src/types/watcher.ts, src/server/watcher/gitignore.ts, src/server/watcher/debounce.ts, src/server/watcher/index.ts, src/server/watcher/broadcast.ts) never existed",
       "file": "active/06-file-watcher.md",
-      "planDeps": [],
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Watcher Types (src/types/watcher.ts)" },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Gitignore Filter (src/server/watcher/gitignore.ts)" },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Debounce Utility (src/server/watcher/debounce.ts)" },
-        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "File Watcher (src/server/watcher/index.ts)" },
-        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "Broadcast (src/server/watcher/broadcast.ts)" }
-      }
+      "tasks": {}
     },
     "07-client-core": {
       "phase": 2,
@@ -214,18 +195,11 @@
     },
     "15-branch-switching": {
       "phase": 2,
-      "status": "Completed",
+      "status": "SUPERSEDED",
+      "supersededBy": "29-branch-switching",
+      "note": "Server-side source files (src/types/branch.ts, src/server/git/branch.ts, src/server/routes/branches.ts) never existed. Client-side tasks 4-7 were implemented.",
       "file": "active/15-branch-switching.md",
-      "planDeps": [],
-      "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Branch Types" },
-        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Branch Git Ops" },
-        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Branch Routes" },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "crossPlanDeps": ["07-client-core"], "description": "Branch Store" },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchHeader" },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "BranchSelector" },
-        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": ["TASK-004"], "crossPlanDeps": ["07-client-core"], "description": "CheckoutWarning" }
-      }
+      "tasks": {}
     },
     "16-commit-log-viewer": {
       "phase": 5,
@@ -353,6 +327,94 @@
         "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Client Store" },
         "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "UI Components" },
         "TASK-006": { "status": "Completed", "parallelizable": false, "deps": ["TASK-005"], "description": "Navigation Integration" }
+      }
+    },
+    "25-server-foundation": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "active/25-server-foundation.md",
+      "planDeps": [],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Shared Base Types (src/types/index.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "CLI Entry (src/cli/index.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Configuration (src/cli/config.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "HTTP Server (src/server/index.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Static Serving (src/server/static.ts)" },
+        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [], "description": "WebSocket Manager (src/server/websocket/index.ts)" },
+        "TASK-007": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Error Handling (src/server/errors.ts)" }
+      }
+    },
+    "26-git-core-operations": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "active/26-git-core-operations.md",
+      "planDeps": [],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Git Types (src/types/git.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Git Executor (src/server/git/executor.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "Diff Generation (src/server/git/diff.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": ["TASK-001"], "description": "Diff Parser (src/server/git/parser.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "File Tree Ops (src/server/git/files.ts)" }
+      }
+    },
+    "27-diff-file-routes": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "active/27-diff-file-routes.md",
+      "planDeps": ["25-server-foundation", "26-git-core-operations"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Diff Routes (src/server/routes/diff.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "File Routes (src/server/routes/files.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Status Route (src/server/routes/status.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "Route Registry (src/server/routes/index.ts)" }
+      }
+    },
+    "28-file-watcher": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "active/28-file-watcher.md",
+      "planDeps": ["25-server-foundation", "26-git-core-operations"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Watcher Types (src/types/watcher.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Gitignore Filter (src/server/watcher/gitignore.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Debounce Utility (src/server/watcher/debounce.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002", "TASK-003"], "description": "File Watcher (src/server/watcher/index.ts)" },
+        "TASK-005": { "status": "Completed", "parallelizable": false, "deps": ["TASK-004"], "description": "WS Broadcast (src/server/watcher/broadcast.ts)" }
+      }
+    },
+    "29-branch-switching": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "active/29-branch-switching.md",
+      "planDeps": ["26-git-core-operations"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Branch Types (src/types/branch.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Git Branch Ops (src/server/git/branch.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Branch Routes (src/server/routes/branches.ts)" }
+      }
+    },
+    "30-git-xnotes": {
+      "phase": 12,
+      "status": "Completed",
+      "file": "active/30-git-xnotes.md",
+      "planDeps": ["26-git-core-operations", "27-diff-file-routes"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Comment Types (src/types/comments.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "Comment Bridge (src/server/comments/bridge.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002"], "description": "Sync Manager (src/server/comments/sync.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-002", "TASK-003"], "description": "Comment Routes (src/server/routes/comments.ts)" }
+      }
+    },
+    "31-binary-large-files": {
+      "phase": 12,
+      "status": "Completed",
+      "file": "active/31-binary-large-files.md",
+      "planDeps": ["26-git-core-operations", "27-diff-file-routes"],
+      "tasks": {
+        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Binary Detection (src/server/git/binary.ts)" },
+        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [], "description": "Git Types Extension (src/types/git.ts)" },
+        "TASK-003": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001", "TASK-002"], "description": "File Route Extension (src/server/routes/files.ts)" },
+        "TASK-004": { "status": "Completed", "parallelizable": false, "deps": ["TASK-001"], "description": "File Tree Extension (src/server/git/files.ts)" }
       }
     }
   }
