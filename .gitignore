@@ -41,6 +41,12 @@ npm-debug.log*
 # Test coverage
 coverage/
 
+# E2E test outputs
+e2e-screenshots/
+e2e-results/
+playwright-report/
+test-results/
+
 # Temporary files
 tmp/
 temp/

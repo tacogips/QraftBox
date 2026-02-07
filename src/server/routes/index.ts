@@ -256,6 +256,35 @@ type ContextVariables = {
 };
 
 /**
+ * Create a new Request with the URL path rewritten to be relative to the route mount point.
+ *
+ * Context-scoped routes are mounted at /api/ctx/<contextId>/<prefix>/...
+ * The sub-app's route handlers expect paths relative to the mount point (e.g., "/" or "/autocomplete").
+ * However, c.req.raw retains the full original URL, so we must strip the prefix.
+ *
+ * Path structure: ['', 'api', 'ctx', '<contextId>', ...prefixParts, ...remaining]
+ * We strip the first 4 segments + prefix parts and keep only the remaining path.
+ *
+ * @param originalReq - Original Request with full URL
+ * @param prefix - Route group prefix (e.g., "/files", "/status", "/commits")
+ * @returns New Request with relative path
+ */
+function createRelativeRequest(originalReq: Request, prefix: string): Request {
+  const url = new URL(originalReq.url);
+  const prefixParts = prefix.split("/").filter(Boolean);
+  const segments = url.pathname.split("/");
+  // segments[0] = '', [1] = 'api', [2] = 'ctx', [3] = contextId, [4..] = prefix + remaining
+  const sliceAt = 4 + prefixParts.length;
+  const remaining = segments.slice(sliceAt);
+  url.pathname = "/" + remaining.join("/");
+  return new Request(url.toString(), {
+    method: originalReq.method,
+    headers: originalReq.headers,
+    body: originalReq.body,
+  });
+}
+
+/**
  * Create commits routes that get ServerContext from middleware
  *
  * Creates a middleware-wrapped version of commit routes that extracts
@@ -274,8 +303,8 @@ function createCommitsRoutes(): Hono<{ Variables: ContextVariables }> {
     // Create routes with the context for this specific request
     const commitRoutes = createCommitHistoryRoutes(serverContext);
 
-    // Forward the request to the dynamically created routes
-    return commitRoutes.fetch(c.req.raw, c.env);
+    // Forward the request with URL rewritten to be relative to mount point
+    return commitRoutes.fetch(createRelativeRequest(c.req.raw, "/commits"), c.env);
   });
 
   return app;
@@ -306,7 +335,7 @@ function createSearchRoutesWithMiddleware(): Hono<{
     };
 
     const searchRoutes = createSearchRoutesImpl(searchContext as any);
-    return searchRoutes.fetch(c.req.raw, c.env);
+    return searchRoutes.fetch(createRelativeRequest(c.req.raw, "/search"), c.env);
   });
 
   return app;
@@ -330,7 +359,7 @@ function createStatusRoutesWithMiddleware(): Hono<{
     }
 
     const statusRoutes = createStatusRoutesImpl(serverContext);
-    return statusRoutes.fetch(c.req.raw, c.env);
+    return statusRoutes.fetch(createRelativeRequest(c.req.raw, "/status"), c.env);
   });
 
   return app;
@@ -354,7 +383,7 @@ function createFileRoutesWithMiddleware(): Hono<{
     }
 
     const fileRoutes = createFileRoutesImpl(serverContext);
-    return fileRoutes.fetch(c.req.raw, c.env);
+    return fileRoutes.fetch(createRelativeRequest(c.req.raw, "/files"), c.env);
   });
 
   return app;

@@ -17,7 +17,7 @@ describe("DEFAULT_CONFIG", () => {
   test("has correct default values", () => {
     expect(DEFAULT_CONFIG.PORT).toBe(7144);
     expect(DEFAULT_CONFIG.HOST).toBe("localhost");
-    expect(DEFAULT_CONFIG.OPEN).toBe(true);
+    expect(DEFAULT_CONFIG.OPEN).toBe(false);
     expect(DEFAULT_CONFIG.WATCH).toBe(true);
     expect(DEFAULT_CONFIG.SYNC_MODE).toBe("manual");
     expect(DEFAULT_CONFIG.AI).toBe(true);

@@ -10,6 +10,8 @@ import type { CLIConfig } from "../types/index";
 import type { ContextManager } from "./workspace/context-manager";
 import { createErrorHandler } from "./errors";
 import { createStaticMiddleware, createSPAFallback } from "./static";
+import { mountAllRoutes } from "./routes/index";
+import { createSessionManager } from "./ai/session-manager";
 import { join } from "path";
 
 /**
@@ -77,22 +79,12 @@ export function createServer(options: ServerOptions): Hono {
     return c.json(response);
   });
 
-  // TODO: Mount workspace routes at /api/workspace
-  // import { createWorkspaceRoutes } from "./routes/workspace";
-  // app.route("/api/workspace", createWorkspaceRoutes(options.contextManager));
-
-  // TODO: Mount browse routes at /api/browse
-  // import { createBrowseRoutes } from "./routes/browse";
-  // app.route("/api/browse", createBrowseRoutes());
-
-  // TODO: Mount context-scoped routes under /api/ctx/:contextId
-  // Context-scoped routes pattern:
-  // const contextApp = new Hono();
-  // contextApp.use("/:contextId/*", contextMiddleware(options.contextManager));
-  // contextApp.route("/:contextId/commits", commitRoutes);
-  // contextApp.route("/:contextId/search", searchRoutes);
-  // ... other context-scoped routes
-  // app.route("/api/ctx", contextApp);
+  // Mount all API routes (workspace, browse, context-scoped routes)
+  const sessionManager = createSessionManager();
+  mountAllRoutes(app, {
+    contextManager: options.contextManager,
+    sessionManager,
+  });
 
   // Static file serving and SPA fallback
   // Assumes client build is at ./dist/client relative to project root

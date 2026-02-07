@@ -29,7 +29,7 @@ export interface ConfigDefaults {
 export const DEFAULT_CONFIG: ConfigDefaults = {
   PORT: 7144,
   HOST: "localhost",
-  OPEN: true,
+  OPEN: false,
   WATCH: true,
   SYNC_MODE: "manual",
   AI: true,

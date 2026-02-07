@@ -44,8 +44,7 @@ export function parseArgs(args: string[]): CLIConfig {
     .argument("[projectPath]", "Path to project directory", ".")
     .option("-p, --port <number>", "Server port", "7144")
     .option("-h, --host <string>", "Server host", "localhost")
-    .option("--open", "Open browser automatically (default: true)")
-    .option("--no-open", "Do not open browser automatically")
+    .option("--open", "Open browser automatically")
     .option("--watch", "Enable file watching (default: true)")
     .option("--no-watch", "Disable file watching")
     .option(
@@ -84,7 +83,7 @@ export function parseArgs(args: string[]): CLIConfig {
   return {
     port,
     host: options["host"],
-    open: options["open"] ?? true,
+    open: options["open"] ?? false,
     watch: options["watch"] ?? true,
     syncMode,
     ai: options["ai"] ?? true,
