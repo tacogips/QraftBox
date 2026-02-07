@@ -8,8 +8,8 @@
  * Follows the same pattern as src/server/prompts/loader.ts:
  * - Uses readdir() + readFile() from node:fs/promises
  * - Gracefully skips invalid files (collects errors, continues with rest)
- * - Config directory defaults to ~/.config/aynd/tools/
- * - Can be overridden via pluginDir parameter or AYND_TEST_TOOLS_DIR env var
+ * - Config directory defaults to ~/.config/qraftbox/tools/
+ * - Can be overridden via pluginDir parameter or QRAFTBOX_TEST_TOOLS_DIR env var
  */
 
 import { readdir, readFile, stat } from "node:fs/promises";
@@ -30,9 +30,9 @@ import {
 /**
  * Default plugin directory
  *
- * User-defined plugin JSON files are stored in ~/.config/aynd/tools/
+ * User-defined plugin JSON files are stored in ~/.config/qraftbox/tools/
  */
-const DEFAULT_PLUGIN_DIR = join(homedir(), ".config", "aynd", "tools");
+const DEFAULT_PLUGIN_DIR = join(homedir(), ".config", "qraftbox", "tools");
 
 /**
  * SdkTool-compatible tool definition
@@ -96,8 +96,8 @@ export interface PluginLoadResult {
  * Following the same pattern as src/server/prompts/loader.ts:
  * - Uses readdir() + readFile()
  * - Gracefully skips invalid files (adds error, continues with rest)
- * - Config directory defaults to ~/.config/aynd/tools/
- * - Can be overridden via pluginDir parameter or AYND_TEST_TOOLS_DIR env var
+ * - Config directory defaults to ~/.config/qraftbox/tools/
+ * - Can be overridden via pluginDir parameter or QRAFTBOX_TEST_TOOLS_DIR env var
  *
  * @param pluginDir - Directory to load plugins from (optional)
  * @returns Plugin load result with tools and errors
@@ -106,7 +106,7 @@ export async function loadPluginTools(
   pluginDir?: string | undefined,
 ): Promise<PluginLoadResult> {
   const dir =
-    pluginDir ?? process.env["AYND_TEST_TOOLS_DIR"] ?? DEFAULT_PLUGIN_DIR;
+    pluginDir ?? process.env["QRAFTBOX_TEST_TOOLS_DIR"] ?? DEFAULT_PLUGIN_DIR;
   const tools: LoadedPluginTool[] = [];
   const errors: ToolRegistrationError[] = [];
 

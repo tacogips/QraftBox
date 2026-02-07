@@ -84,7 +84,7 @@ const mockWorktrees: WorktreeInfo[] = [
     mainRepositoryPath: "/home/user/projects/my-app",
   },
   {
-    path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+    path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
     head: "def456",
     branch: "feature-auth",
     isMain: false,
@@ -104,7 +104,7 @@ const mockDetectionMain: RepositoryDetectionResult = {
 
 const mockDetectionWorktree: RepositoryDetectionResult = {
   type: "worktree",
-  path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+  path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
   gitDir: "/home/user/projects/my-app/.git/worktrees/feature-auth",
   mainRepositoryPath: "/home/user/projects/my-app",
   worktreeName: "feature-auth",
@@ -128,7 +128,7 @@ describe("Worktree Routes", () => {
     ): Promise<CreateWorktreeResult> => {
       return {
         success: true,
-        path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-new",
+        path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-new",
         branch: "feature-new",
       };
     },
@@ -146,7 +146,7 @@ describe("Worktree Routes", () => {
       return null; // Main repo by default
     },
     generateDefaultWorktreePath: (_projectPath: string, worktreeName: string): string => {
-      return `/home/user/.local/aynd/worktrees/home__user__projects__my-app/${worktreeName}`;
+      return `/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/${worktreeName}`;
     },
   });
 
@@ -398,7 +398,7 @@ describe("Worktree Routes", () => {
 
       const body = (await response.json()) as { path: string; exists: boolean };
       expect(body.path).toBe(
-        "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-test",
+        "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-test",
       );
       expect(typeof body.exists).toBe("boolean");
     });
@@ -610,7 +610,7 @@ describe("Worktree Routes", () => {
   describe("DELETE /:id/worktree", () => {
     it("should remove worktree", async () => {
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -625,7 +625,7 @@ describe("Worktree Routes", () => {
 
     it("should remove worktree with force flag", async () => {
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old&force=true`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old&force=true`,
         {
           method: "DELETE",
         },
@@ -640,7 +640,7 @@ describe("Worktree Routes", () => {
 
     it("should return 400 for invalid context ID", async () => {
       const response = await app.request(
-        `/${INVALID_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${INVALID_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -654,7 +654,7 @@ describe("Worktree Routes", () => {
 
     it("should return 404 for non-existent context", async () => {
       const response = await app.request(
-        `/${NON_EXISTENT_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -692,7 +692,7 @@ describe("Worktree Routes", () => {
       app = createWorktreeRoutes(contextManager, failingDeps);
 
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },

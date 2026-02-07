@@ -40,9 +40,9 @@ async function gitExec(
  */
 beforeAll(async () => {
   // Create temporary directories
-  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-push-test-"));
+  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-push-test-"));
   remoteRepoPath = await fs.mkdtemp(
-    path.join(os.tmpdir(), "aynd-push-remote-"),
+    path.join(os.tmpdir(), "qraftbox-push-remote-"),
   );
 
   // Initialize remote repository (bare)
@@ -180,7 +180,7 @@ describe("getRemotes", () => {
   test("should handle repository with no remotes", async () => {
     // Create a new repo without remotes
     const noRemoteRepoPath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-no-remote-"),
+      path.join(os.tmpdir(), "qraftbox-no-remote-"),
     );
 
     await gitExec(["init"], noRemoteRepoPath);
@@ -200,7 +200,7 @@ describe("getRemotes", () => {
   test("should handle multiple remotes", async () => {
     // Add another remote
     const secondRemotePath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-second-remote-"),
+      path.join(os.tmpdir(), "qraftbox-second-remote-"),
     );
     await gitExec(["init", "--bare"], secondRemotePath);
     await gitExec(["remote", "add", "upstream", secondRemotePath]);
@@ -293,7 +293,7 @@ describe("getPushStatus", () => {
   test("should detect behind status", async () => {
     // Create a commit directly on remote
     const tempClonePath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-clone-"),
+      path.join(os.tmpdir(), "qraftbox-clone-"),
     );
     await gitExec(["clone", remoteRepoPath, tempClonePath]);
     await gitExec(["config", "user.name", "Test User"], tempClonePath);

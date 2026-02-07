@@ -141,7 +141,7 @@ const MAX_RECENT = 20;
 /**
  * Local storage key for workspace persistence
  */
-const WORKSPACE_STORAGE_KEY = "aynd:workspace";
+const WORKSPACE_STORAGE_KEY = "qraftbox:workspace";
 
 /**
  * Create initial state for the workspace store

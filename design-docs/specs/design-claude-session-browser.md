@@ -2,15 +2,15 @@
 
 ## Overview
 
-This document describes the design for browsing, filtering, and resuming all Claude Code sessions from aynd, not just sessions created through aynd.
+This document describes the design for browsing, filtering, and resuming all Claude Code sessions from qraftbox, not just sessions created through qraftbox.
 
 ## Problem Statement
 
-Currently, aynd's session management only tracks sessions created within aynd itself (in-memory SessionManager). Users cannot:
+Currently, qraftbox's session management only tracks sessions created within qraftbox itself (in-memory SessionManager). Users cannot:
 1. View sessions created directly via Claude CLI
-2. Resume existing Claude sessions from aynd
+2. Resume existing Claude sessions from qraftbox
 3. Filter sessions by working directory
-4. Distinguish between aynd-spawned and external sessions
+4. Distinguish between qraftbox-spawned and external sessions
 
 ## Requirements Summary
 
@@ -19,7 +19,7 @@ Currently, aynd's session management only tracks sessions created within aynd it
 | R1 | List all Claude sessions across all projects | Must |
 | R2 | Filter sessions by working directory prefix | Must |
 | R3 | Display session metadata (summary, date, branch, message count) | Must |
-| R4 | Distinguish aynd-spawned vs external sessions | Must |
+| R4 | Distinguish qraftbox-spawned vs external sessions | Must |
 | R5 | Resume/continue existing sessions | Must |
 | R6 | Search sessions by prompt content or summary | Should |
 | R7 | Pagination for large session lists | Should |
@@ -33,7 +33,7 @@ Claude Code stores sessions in `~/.claude/projects/`:
 ```
 ~/.claude/
   projects/
-    -g-gits-tacogips-aynd/                   # Path encoded (/ -> -)
+    -g-gits-tacogips-qraftbox/                   # Path encoded (/ -> -)
       sessions-index.json                     # Session index
       {sessionId}.jsonl                       # Session content (JSONL)
     -g-gits-tacogips-other-project/
@@ -73,7 +73,7 @@ Claude encodes project paths by replacing `/` with `-`:
 
 | Original Path | Encoded Directory |
 |---------------|-------------------|
-| `/g/gits/tacogips/aynd` | `-g-gits-tacogips-aynd` |
+| `/g/gits/tacogips/qraftbox` | `-g-gits-tacogips-qraftbox` |
 | `/home/user/project` | `-home-user-project` |
 | `/d/work/repo` | `-d-work-repo` |
 
@@ -83,7 +83,7 @@ Claude encodes project paths by replacing `/` with `-`:
 
 ```typescript
 // Source of the session
-type SessionSource = 'aynd' | 'claude-cli' | 'unknown';
+type SessionSource = 'qraftbox' | 'claude-cli' | 'unknown';
 
 // Extended session entry with source tracking
 interface ExtendedSessionEntry extends ClaudeSessionEntry {
@@ -103,7 +103,7 @@ interface SessionListResponse {
 // Filter options
 interface SessionFilters {
   workingDirectoryPrefix?: string;  // Filter by path prefix (e.g., "/g/gits/tacogips")
-  source?: SessionSource;           // Filter by source (aynd, claude-cli, all)
+  source?: SessionSource;           // Filter by source (qraftbox, claude-cli, all)
   branch?: string;                  // Filter by git branch
   searchQuery?: string;             // Search in prompt/summary
   dateRange?: {
@@ -123,21 +123,21 @@ interface PaginationOptions {
 
 ## Session Source Detection
 
-To distinguish aynd-spawned sessions from external ones:
+To distinguish qraftbox-spawned sessions from external ones:
 
 ### Detection Strategy 1: Prompt Pattern Matching
 
-Aynd-created sessions have distinctive prompt patterns:
+QraftBox-created sessions have distinctive prompt patterns:
 
 ```typescript
 function detectSessionSource(entry: ClaudeSessionEntry): SessionSource {
-  // Check for aynd-specific markers in firstPrompt
+  // Check for qraftbox-specific markers in firstPrompt
   const prompt = entry.firstPrompt;
 
-  // Aynd sessions include context markers
-  if (prompt.includes('[aynd-context]') ||
-      prompt.includes('Context from aynd:')) {
-    return 'aynd';
+  // QraftBox sessions include context markers
+  if (prompt.includes('[qraftbox-context]') ||
+      prompt.includes('Context from qraftbox:')) {
+    return 'qraftbox';
   }
 
   // Future: Read session file header for metadata
@@ -147,11 +147,11 @@ function detectSessionSource(entry: ClaudeSessionEntry): SessionSource {
 
 ### Detection Strategy 2: Session Metadata Storage
 
-Store aynd session IDs in local storage:
+Store qraftbox session IDs in local storage:
 
 ```typescript
-// ~/.local/aynd/sessions.json
-interface AyndSessionRegistry {
+// ~/.local/qraftbox/sessions.json
+interface QraftBoxSessionRegistry {
   sessions: Array<{
     sessionId: string;
     createdAt: string;
@@ -160,12 +160,12 @@ interface AyndSessionRegistry {
 }
 ```
 
-When aynd creates a session via claude-code-agent, register it here. Cross-reference during listing.
+When qraftbox creates a session via claude-code-agent, register it here. Cross-reference during listing.
 
 ### Recommended Approach
 
 Use **both strategies**:
-1. Primary: Check aynd's local registry for known session IDs
+1. Primary: Check qraftbox's local registry for known session IDs
 2. Fallback: Pattern matching for migration from older versions
 
 ## API Design
@@ -210,8 +210,8 @@ interface ListSessionsResponse {
 // GET /api/claude/projects
 interface ListProjectsResponse {
   projects: Array<{
-    path: string;              // Original path (e.g., "/g/gits/tacogips/aynd")
-    encoded: string;           // Encoded name (e.g., "-g-gits-tacogips-aynd")
+    path: string;              // Original path (e.g., "/g/gits/tacogips/qraftbox")
+    encoded: string;           // Encoded name (e.g., "-g-gits-tacogips-qraftbox")
     sessionCount: number;      // Number of sessions
     lastModified: string;      // Most recent session modified time
   }>;
@@ -327,15 +327,15 @@ export class ClaudeSessionReader {
   }
 
   private async detectSource(entry: ClaudeSessionEntry): Promise<SessionSource> {
-    // Check aynd registry first
-    const registry = await this.loadAyndRegistry();
+    // Check qraftbox registry first
+    const registry = await this.loadQraftBoxRegistry();
     if (registry.sessions.some(s => s.sessionId === entry.sessionId)) {
-      return 'aynd';
+      return 'qraftbox';
     }
 
     // Fallback to prompt pattern matching
-    if (entry.firstPrompt.includes('[aynd-context]')) {
-      return 'aynd';
+    if (entry.firstPrompt.includes('[qraftbox-context]')) {
+      return 'qraftbox';
     }
 
     return 'claude-cli';
@@ -449,20 +449,20 @@ New route: `/claude-sessions`
 | Claude Sessions                           [Filter] [Search] [Back]   |
 +---------------------------------------------------------------------+
 | Working Directory: [/g/gits/tacogips         v]  [All Projects]      |
-| Source: [All v]  [aynd] [External]                                   |
+| Source: [All v]  [qraftbox] [External]                                   |
 +---------------------------------------------------------------------+
 | Showing 45 sessions (filtered from 234 total)                        |
 +---------------------------------------------------------------------+
 |                                                                      |
 | TODAY                                                                |
 | +----------------------------------------------------------------+  |
-| | [AYND] Phase 7 Implementation: Fix Tests           2 hours ago |  |
-| |        /g/gits/tacogips/aynd  |  main  |  20 msgs             |  |
+| | [QRAFTBOX] Phase 7 Implementation: Fix Tests           2 hours ago |  |
+| |        /g/gits/tacogips/qraftbox  |  main  |  20 msgs             |  |
 | |                                         [Resume] [View]        |  |
 | +----------------------------------------------------------------+  |
 | +----------------------------------------------------------------+  |
 | | [CLI]  Update README documentation                 3 hours ago |  |
-| |        /g/gits/tacogips/aynd  |  main  |  5 msgs              |  |
+| |        /g/gits/tacogips/qraftbox  |  main  |  5 msgs              |  |
 | |                                         [Resume] [View]        |  |
 | +----------------------------------------------------------------+  |
 |                                                                      |
@@ -475,8 +475,8 @@ New route: `/claude-sessions`
 |                                                                      |
 | OLDER                                                                |
 | +----------------------------------------------------------------+  |
-| | [AYND] Initial project setup                      3 days ago   |  |
-| |        /g/gits/tacogips/aynd  |  main  |  8 msgs              |  |
+| | [QRAFTBOX] Initial project setup                      3 days ago   |  |
+| |        /g/gits/tacogips/qraftbox  |  main  |  8 msgs              |  |
 | |                                         [Resume] [View]        |  |
 | +----------------------------------------------------------------+  |
 |                                                                      |
@@ -488,11 +488,11 @@ New route: `/claude-sessions`
 
 ```
 +---------------------------------------------------------------------+
-| [AYND]  Phase 7 Implementation: Fix Tests              2 hours ago  |
+| [QRAFTBOX]  Phase 7 Implementation: Fix Tests              2 hours ago  |
 |----------------------------------------------------------------------
 | First prompt: "impl progressを確認し次の実装をつづけよ"               |
 |                                                                      |
-| Project: /g/gits/tacogips/aynd                                       |
+| Project: /g/gits/tacogips/qraftbox                                       |
 | Branch:  main                                                        |
 | Messages: 20                                                         |
 |                                                       [Resume] [View]|
@@ -515,7 +515,7 @@ New route: `/claude-sessions`
 | +----------------------------------------------------------------+  |
 |                                                                      |
 | Source                                                               |
-| (*) All   ( ) aynd only   ( ) External only                         |
+| (*) All   ( ) qraftbox only   ( ) External only                         |
 |                                                                      |
 | Branch                                                               |
 | [Search branch...]                                                   |
@@ -538,7 +538,7 @@ New route: `/claude-sessions`
 | |        ...implement **authentication** using JWT...            |  |
 | +----------------------------------------------------------------+  |
 | +----------------------------------------------------------------+  |
-| | [AYND] Add **authentication** middleware          3 days ago   |  |
+| | [QRAFTBOX] Add **authentication** middleware          3 days ago   |  |
 | |        ...setup **authentication** for API routes...           |  |
 | +----------------------------------------------------------------+  |
 +---------------------------------------------------------------------+
@@ -756,7 +756,7 @@ When resuming a session:
 async function handleResumeSession(sessionId: string) {
   const session = await getSession(sessionId);
 
-  // Check if session belongs to current aynd project
+  // Check if session belongs to current qraftbox project
   const currentProject = getCurrentProjectPath();
   if (session.projectPath !== currentProject) {
     const confirmed = await showConfirmation(
@@ -772,17 +772,17 @@ async function handleResumeSession(sessionId: string) {
 }
 ```
 
-## Aynd Session Marking
+## QraftBox Session Marking
 
-When aynd creates a new session, mark it for later identification:
+When qraftbox creates a new session, mark it for later identification:
 
 ### Option A: Context Prefix
 
 Include marker in the prompt sent to Claude:
 
 ```typescript
-function buildAyndPrompt(userPrompt: string, context: AIPromptContext): string {
-  return `[aynd-context]
+function buildQraftBoxPrompt(userPrompt: string, context: AIPromptContext): string {
+  return `[qraftbox-context]
 Project: ${context.projectPath}
 ${context.primaryFile ? `File: ${context.primaryFile.path}:${context.primaryFile.startLine}-${context.primaryFile.endLine}` : ''}
 
@@ -792,10 +792,10 @@ ${userPrompt}`;
 
 ### Option B: Local Registry
 
-Store aynd session IDs:
+Store qraftbox session IDs:
 
 ```typescript
-// ~/.local/aynd/session-registry.json
+// ~/.local/qraftbox/session-registry.json
 interface SessionRegistry {
   sessions: Array<{
     sessionId: string;
@@ -804,7 +804,7 @@ interface SessionRegistry {
   }>;
 }
 
-async function registerAyndSession(sessionId: string, projectPath: string) {
+async function registerQraftBoxSession(sessionId: string, projectPath: string) {
   const registry = await loadRegistry();
   registry.sessions.push({
     sessionId,
@@ -817,7 +817,7 @@ async function registerAyndSession(sessionId: string, projectPath: string) {
 
 ### Recommended: Use Both
 
-1. Add `[aynd-context]` prefix to all aynd prompts (visible in firstPrompt)
+1. Add `[qraftbox-context]` prefix to all qraftbox prompts (visible in firstPrompt)
 2. Store session IDs in local registry for reliable lookup
 3. Detection uses registry first, falls back to prompt pattern
 
@@ -874,7 +874,7 @@ src/
   server/
     claude/
       session-reader.ts           # Read Claude session files
-      session-registry.ts         # Aynd session registry management
+      session-registry.ts         # QraftBox session registry management
     routes/
       claude-sessions.ts          # API routes for session browser
 
@@ -901,4 +901,4 @@ types/
 
 - Claude Code session storage: `~/.claude/projects/`
 - Session index format: `sessions-index.json`
-- Existing aynd session design: `design-docs/specs/design-local-diff-viewer.md#session-queue-screen`
+- Existing qraftbox session design: `design-docs/specs/design-local-diff-viewer.md#session-queue-screen`

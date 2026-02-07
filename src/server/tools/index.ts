@@ -1,13 +1,13 @@
 /**
  * Tool Registration System - Public Exports
  *
- * Re-exports the public API for the aynd tool registration system.
+ * Re-exports the public API for the qraftbox tool registration system.
  */
 
 export {
-  createAyndToolRegistry,
-  type AyndToolRegistry,
-  type AyndToolRegistryOptions,
+  createQraftBoxToolRegistry,
+  type QraftBoxToolRegistry,
+  type QraftBoxToolRegistryOptions,
 } from "./registry.js";
 
 export { loadPluginTools, type LoadedPluginTool, type PluginLoadResult } from "./plugin-loader.js";

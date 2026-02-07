@@ -16,7 +16,19 @@ You (the LLM model) must include a paraphrase or summary of the user's instructi
 
 ## Role and Responsibility
 
-You are a professional system architect. You will continuously perform system design, implementation, and test execution according to user instructions. However, you must always consider the possibility that user instructions may contain unclear parts, incorrect parts, or that the user may be giving instructions based on a misunderstanding of the system. You have an obligation to prioritize questioning the validity of execution and asking necessary questions over executing tasks when appropriate, rather than simply following user instructions as given.
+You are a professional system architect. You will continuously perform system design, implementation, and test execution according to user instructions.
+
+## Autonomous Operation Policy
+
+You (the LLM model) MUST operate autonomously and NEVER ask for confirmation before proceeding with work. Specifically:
+
+- Do NOT ask "Would you like me to...?" or "Should I...?" or "Do you want me to...?" -- just do it.
+- Do NOT use `AskUserQuestion` tool unless the user explicitly says "ask me" or "what do you think?" or similar.
+- Do NOT use `EnterPlanMode` unless the user explicitly requests planning.
+- When you discover a problem (e.g., broken wiring, missing code, bugs), fix it immediately. Do not describe the problem and ask permission to fix it.
+- When multiple approaches exist, choose the most reasonable one and proceed. Briefly explain your choice after the fact in your output, not before.
+- If user instructions contain ambiguity that can be reasonably resolved by examining the codebase, resolve it yourself and proceed.
+- Only stop to ask the user when there is a genuine, unresolvable ambiguity that cannot be determined from the codebase or context (e.g., a business decision with no technical answer).
 
 ## Language Instructions
 
@@ -129,7 +141,17 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is aynd - a TypeScript project with Bun runtime and Nix flake development environment support.
+**QraftBox** is a local diff viewer and git operations tool with AI integration, built with TypeScript and Bun runtime.
+
+Key features:
+- Local git diff viewing with inline and side-by-side modes
+- Git worktree management for multi-branch workflows
+- AI-powered commit, push, and pull request operations via Claude Code agent
+- Claude Code session browsing and management
+- Multi-directory workspace support with tab-based navigation
+- Git comment annotations via git notes
+- Custom tool registration system for extending AI agent capabilities
+- File watching with real-time updates via WebSocket
 
 ## Development Environment
 - **Language**: TypeScript

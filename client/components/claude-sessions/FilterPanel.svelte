@@ -13,7 +13,7 @@
    *
    * Design:
    * - Collapsible filter panel
-   * - Source filter (radio buttons: All / AYND / CLI)
+   * - Source filter (radio buttons: All / QRAFTBOX / CLI)
    * - Working directory selector (dropdown)
    * - Branch filter (text input with autocomplete suggestions)
    * - Clear all filters button
@@ -212,13 +212,13 @@
             <input
               type="radio"
               name="source-filter"
-              value="aynd"
-              checked={sourceValue === "aynd"}
+              value="qraftbox"
+              checked={sourceValue === "qraftbox"}
               onchange={handleSourceChange}
               class="mr-2 w-4 h-4 text-blue-600
                      focus:ring-2 focus:ring-blue-500"
             />
-            <span class="text-sm text-text-primary">AYND</span>
+            <span class="text-sm text-text-primary">QRAFTBOX</span>
           </label>
           <label class="inline-flex items-center cursor-pointer">
             <input

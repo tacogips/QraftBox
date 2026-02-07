@@ -833,9 +833,9 @@ describe("Worktree support", () => {
 
     test("creates worktree tab with all worktree fields", () => {
       const tab = createWorkspaceTab(
-        "/home/user/.local/aynd/worktrees/home__user__project/feature-auth",
+        "/home/user/.local/qraftbox/worktrees/home__user__project/feature-auth",
         "feature-auth",
-        "/home/user/.local/aynd/worktrees/home__user__project/feature-auth",
+        "/home/user/.local/qraftbox/worktrees/home__user__project/feature-auth",
         true,
         true,
         "/home/user/project",
@@ -882,9 +882,9 @@ describe("Worktree support", () => {
     test("worktree tab has all required fields", () => {
       const tab: WorkspaceTab = {
         id: crypto.randomUUID(),
-        path: "/home/user/.local/aynd/worktrees/project/feature",
+        path: "/home/user/.local/qraftbox/worktrees/project/feature",
         name: "feature",
-        repositoryRoot: "/home/user/.local/aynd/worktrees/project/feature",
+        repositoryRoot: "/home/user/.local/qraftbox/worktrees/project/feature",
         isGitRepo: true,
         createdAt: Date.now(),
         lastAccessedAt: Date.now(),

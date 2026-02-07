@@ -1,5 +1,5 @@
 /**
- * Library module for aynd
+ * Library module for qraftbox
  */
 
 /**

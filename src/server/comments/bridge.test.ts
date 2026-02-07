@@ -24,7 +24,7 @@ describe("Comment Bridge", () => {
 
   beforeEach(async () => {
     // Create temporary directory
-    tempDir = await mkdtemp(join(tmpdir(), "aynd-bridge-test-"));
+    tempDir = await mkdtemp(join(tmpdir(), "qraftbox-bridge-test-"));
 
     // Initialize git repository
     await execGit(["init"], { cwd: tempDir });

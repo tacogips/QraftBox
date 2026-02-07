@@ -67,7 +67,7 @@
         To create pull requests, you need to authenticate with GitHub.
       </p>
       <p class="text-sm text-gray-600">
-        You will be redirected to GitHub to authorize aynd.
+        You will be redirected to GitHub to authorize qraftbox.
       </p>
     </div>
 

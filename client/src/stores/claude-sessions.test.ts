@@ -57,8 +57,8 @@ describe('createClaudeSessionsStore', () => {
     it('should fetch projects successfully', async () => {
       const mockProjects: ProjectInfo[] = [
         {
-          path: '/g/gits/tacogips/aynd',
-          encoded: '-g-gits-tacogips-aynd',
+          path: '/g/gits/tacogips/qraftbox',
+          encoded: '-g-gits-tacogips-qraftbox',
           sessionCount: 10,
           lastModified: '2026-02-05T10:00:00Z',
         },
@@ -136,10 +136,10 @@ describe('createClaudeSessionsStore', () => {
       created: '2026-02-05T10:00:00Z',
       modified: '2026-02-05T12:00:00Z',
       gitBranch: 'main',
-      projectPath: '/g/gits/tacogips/aynd',
+      projectPath: '/g/gits/tacogips/qraftbox',
       isSidechain: false,
-      source: 'aynd',
-      projectEncoded: '-g-gits-tacogips-aynd',
+      source: 'qraftbox',
+      projectEncoded: '-g-gits-tacogips-qraftbox',
     };
 
     it('should fetch sessions successfully', async () => {
@@ -179,13 +179,13 @@ describe('createClaudeSessionsStore', () => {
 
       await store.fetchSessions({
         workingDirectoryPrefix: '/g/gits',
-        source: 'aynd',
+        source: 'qraftbox',
         branch: 'main',
       });
 
       const callArg = (fetchMock as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
       expect(callArg).toContain('workingDirectoryPrefix=%2Fg%2Fgits');
-      expect(callArg).toContain('source=aynd');
+      expect(callArg).toContain('source=qraftbox');
       expect(callArg).toContain('branch=main');
     });
 
@@ -204,7 +204,7 @@ describe('createClaudeSessionsStore', () => {
         }),
       } as Response);
 
-      await store.fetchSessions({ source: 'aynd' });
+      await store.fetchSessions({ source: 'qraftbox' });
 
       expect(store.pagination.offset).toBe(0);
     });
@@ -243,9 +243,9 @@ describe('createClaudeSessionsStore', () => {
         json: async () => ({ sessions: [], total: 0, offset: 0, limit: 50 }),
       } as Response);
 
-      store.setFilters({ source: 'aynd' });
+      store.setFilters({ source: 'qraftbox' });
 
-      expect(store.filters.source).toBe('aynd');
+      expect(store.filters.source).toBe('qraftbox');
       expect(store.pagination.offset).toBe(0);
     });
 
@@ -256,12 +256,12 @@ describe('createClaudeSessionsStore', () => {
       } as Response);
 
       store.setFilters({
-        source: 'aynd',
+        source: 'qraftbox',
         branch: 'main',
         workingDirectoryPrefix: '/g/gits',
       });
 
-      expect(store.filters.source).toBe('aynd');
+      expect(store.filters.source).toBe('qraftbox');
       expect(store.filters.branch).toBe('main');
       expect(store.filters.workingDirectoryPrefix).toBe('/g/gits');
     });
@@ -272,10 +272,10 @@ describe('createClaudeSessionsStore', () => {
         json: async () => ({ sessions: [], total: 0, offset: 0, limit: 50 }),
       } as Response);
 
-      store.setFilters({ source: 'aynd' });
+      store.setFilters({ source: 'qraftbox' });
       store.setFilters({ branch: 'main' });
 
-      expect(store.filters.source).toBe('aynd');
+      expect(store.filters.source).toBe('qraftbox');
       expect(store.filters.branch).toBe('main');
     });
 
@@ -286,7 +286,7 @@ describe('createClaudeSessionsStore', () => {
       } as Response);
 
       store.loadMore();
-      store.setFilters({ source: 'aynd' });
+      store.setFilters({ source: 'qraftbox' });
 
       expect(store.pagination.offset).toBe(0);
     });
@@ -297,7 +297,7 @@ describe('createClaudeSessionsStore', () => {
         json: async () => ({ sessions: [], total: 0, offset: 0, limit: 50 }),
       } as Response);
 
-      store.setFilters({ source: 'aynd' });
+      store.setFilters({ source: 'qraftbox' });
 
       // Wait for async fetch
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -313,7 +313,7 @@ describe('createClaudeSessionsStore', () => {
         json: async () => ({ sessions: [], total: 0, offset: 0, limit: 50 }),
       } as Response);
 
-      store.setFilters({ source: 'aynd', branch: 'main' });
+      store.setFilters({ source: 'qraftbox', branch: 'main' });
       store.clearFilters();
 
       expect(store.filters).toEqual({});
@@ -450,7 +450,7 @@ describe('createClaudeSessionsStore', () => {
               gitBranch: 'main',
               projectPath: '/test',
               isSidechain: false,
-              source: 'aynd',
+              source: 'qraftbox',
               projectEncoded: 'test',
             } as ExtendedSessionEntry,
           ],
@@ -460,7 +460,7 @@ describe('createClaudeSessionsStore', () => {
         }),
       } as Response);
 
-      await store.fetchSessions({ source: 'aynd' });
+      await store.fetchSessions({ source: 'qraftbox' });
       store.selectSession('session-123');
 
       store.reset();

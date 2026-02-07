@@ -1,5 +1,5 @@
 /**
- * Configuration module for aynd CLI
+ * Configuration module for qraftbox CLI
  *
  * This module provides configuration loading and validation for the CLI,
  * including default values and merging with user-provided overrides.

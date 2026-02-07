@@ -1,6 +1,6 @@
-# aynd - Local Diff Viewer Design Specification
+# qraftbox - Local Diff Viewer Design Specification
 
-**aynd** = "All You Need Is Diff"
+**qraftbox** = "All You Need Is Diff"
 
 A high-performance local diff viewer with git-xnotes integration, built with Svelte 5.
 
@@ -75,7 +75,7 @@ This document describes the design of a local diff viewer inspired by difit but 
 | Comments | git-xnotes (library) | Commit comment storage and retrieval |
 | AI Integration | claude-code-agent (library) | Claude Code session orchestration |
 
-**Note**: git-xnotes and claude-code-agent are used as **TypeScript libraries** (imported as npm packages), NOT as CLI commands. aynd calls their APIs programmatically from the server layer.
+**Note**: git-xnotes and claude-code-agent are used as **TypeScript libraries** (imported as npm packages), NOT as CLI commands. qraftbox calls their APIs programmatically from the server layer.
 
 ### Library Dependency Policy
 
@@ -90,7 +90,7 @@ git-xnotes and claude-code-agent are maintained by us and can be modified as nee
 
 1. Create an issue in the respective library repository
 2. Document the required feature/fix in the issue
-3. If the modification blocks aynd implementation, note the blocker in:
+3. If the modification blocks qraftbox implementation, note the blocker in:
    - The implementation plan's Progress Log
    - PROGRESS.json task status (mark as "Blocked")
 4. Link the library issue in the implementation plan
@@ -98,16 +98,16 @@ git-xnotes and claude-code-agent are maintained by us and can be modified as nee
 **Issue Template:**
 
 ```
-Title: [aynd] Feature request: <description>
+Title: [qraftbox] Feature request: <description>
 
 ## Context
-Required by aynd for: <feature description>
+Required by qraftbox for: <feature description>
 
 ## Requested Change
 <specific API or behavior change needed>
 
 ## Impact
-If not addressed: <what is blocked in aynd>
+If not addressed: <what is blocked in qraftbox>
 ```
 
 ### Build Tools
@@ -408,13 +408,13 @@ src/
 
 Configuration via CLI flag or settings:
 ```bash
-aynd --sync=manual    # Default
-aynd --sync=auto      # Full auto-sync
+qraftbox --sync=manual    # Default
+qraftbox --sync=auto      # Full auto-sync
 ```
 
 #### git-xnotes Library Usage
 
-**Important**: git-xnotes is used as a **TypeScript library** (npm package), not as a CLI command. aynd imports and calls its API directly from the server layer.
+**Important**: git-xnotes is used as a **TypeScript library** (npm package), not as a CLI command. qraftbox imports and calls its API directly from the server layer.
 
 ```typescript
 // Server-side bridge using git-xnotes library
@@ -452,7 +452,7 @@ Execute Claude Code prompts directly from the diff/file viewer to make code modi
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   aynd Client   │ --> │   aynd Server   │ --> │ claude-code-    │
+│   qraftbox Client   │ --> │   qraftbox Server   │ --> │ claude-code-    │
 │   (Svelte)      │     │   (Hono)        │     │ agent SDK       │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
         ^                       |                       |
@@ -578,7 +578,7 @@ Type `@` to trigger file reference autocomplete.
 
 #### Prompt Context Construction
 
-When sending a prompt, aynd constructs context for Claude Code:
+When sending a prompt, qraftbox constructs context for Claude Code:
 
 ```typescript
 interface AIPromptRequest {
@@ -874,7 +874,7 @@ interface SessionQueue {
 #### Server-Side Integration
 
 ```typescript
-// aynd server routes for AI integration
+// qraftbox server routes for AI integration
 interface AIRoutes {
   // Send prompt (immediate or queued)
   POST: '/api/ai/prompt' => {
@@ -904,7 +904,7 @@ interface AIRoutes {
 
 #### claude-code-agent Library Usage
 
-**Important**: claude-code-agent is used as a **TypeScript library** (npm package), not as a CLI command. aynd imports and calls its API directly.
+**Important**: claude-code-agent is used as a **TypeScript library** (npm package), not as a CLI command. qraftbox imports and calls its API directly.
 
 ```typescript
 import { ClaudeCodeAgent } from 'claude-code-agent';  // Library import
@@ -968,14 +968,14 @@ class AISessionQueue {
 
 CLI flags:
 ```bash
-aynd --no-ai                    # Disable AI integration
-aynd --ai-queue                 # Default to queued execution
-aynd --ai-concurrent=2          # Allow 2 concurrent sessions
+qraftbox --no-ai                    # Disable AI integration
+qraftbox --ai-queue                 # Default to queued execution
+qraftbox --ai-concurrent=2          # Allow 2 concurrent sessions
 ```
 
 #### AI Authentication
 
-Authentication is handled entirely by claude-code-agent library. aynd does not manage API credentials.
+Authentication is handled entirely by claude-code-agent library. qraftbox does not manage API credentials.
 
 | Responsibility | Handler |
 |----------------|---------|
@@ -985,14 +985,14 @@ Authentication is handled entirely by claude-code-agent library. aynd does not m
 
 #### AI Session Persistence
 
-aynd stores only session IDs locally. Full session content is retrieved via claude-code-agent.
+qraftbox stores only session IDs locally. Full session content is retrieved via claude-code-agent.
 
-**Storage Location:** `~/.local/aynd/sessions/`
+**Storage Location:** `~/.local/qraftbox/sessions/`
 
 **Stored Data:**
 
 ```typescript
-// ~/.local/aynd/sessions/sessions.json
+// ~/.local/qraftbox/sessions/sessions.json
 interface StoredSessions {
   sessions: Array<{
     id: string;                    // Session ID from claude-code-agent
@@ -1055,7 +1055,7 @@ Switch between branches for both the diff base and current (target) branch direc
 
 ```
 +---------------------------------------------------------------------+
-| aynd                                                                 |
+| qraftbox                                                                 |
 |                                                                      |
 | Base: [main         v]  -->  Current: [feature/auth   v]  [Refresh] |
 |                                                                      |
@@ -1358,7 +1358,7 @@ http://localhost:7144/sessions/abc123
 
 ### Offline Mode
 
-aynd works fully offline for local diff viewing. Network-dependent features degrade gracefully.
+qraftbox works fully offline for local diff viewing. Network-dependent features degrade gracefully.
 
 #### Feature Availability
 
@@ -1735,11 +1735,11 @@ Vim-like keyboard shortcuts may be added in a future version when hardware keybo
 ### Basic Usage
 
 ```bash
-aynd [target] [base]           # Compare target with base
-aynd                           # HEAD vs HEAD^
-aynd feature-branch            # feature-branch vs main
-aynd HEAD~3 HEAD               # Last 3 commits
-aynd .                         # All uncommitted changes
+qraftbox [target] [base]           # Compare target with base
+qraftbox                           # HEAD vs HEAD^
+qraftbox feature-branch            # feature-branch vs main
+qraftbox HEAD~3 HEAD               # Last 3 commits
+qraftbox .                         # All uncommitted changes
 ```
 
 ### Options
@@ -1762,11 +1762,11 @@ aynd .                         # All uncommitted changes
 | On conflict | Try next port in range |
 | If all ports busy | Exit with error |
 
-When the default port is in use, aynd automatically tries the next available port within the range (7144-7244). If no port is available, it exits with an error message.
+When the default port is in use, qraftbox automatically tries the next available port within the range (7144-7244). If no port is available, it exits with an error message.
 
 ### Working Directory
 
-aynd uses the current working directory as the repository root. Multi-repository support may be added in a future version.
+qraftbox uses the current working directory as the repository root. Multi-repository support may be added in a future version.
 
 | Setting | Value |
 |---------|-------|
@@ -1781,7 +1781,7 @@ When viewing uncommitted changes (`.` or `working`):
 |----------|-------------|
 | **Always include** | Untracked files are automatically included in the diff |
 
-Unlike difit which prompts for untracked file inclusion, aynd always includes untracked files when viewing uncommitted changes. This provides a complete view of all pending changes without user interaction.
+Unlike difit which prompts for untracked file inclusion, qraftbox always includes untracked files when viewing uncommitted changes. This provides a complete view of all pending changes without user interaction.
 
 ## Future Considerations (Out of Scope)
 

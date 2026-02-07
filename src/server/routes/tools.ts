@@ -7,7 +7,7 @@
  */
 
 import { Hono } from "hono";
-import type { AyndToolRegistry } from "../tools/registry.js";
+import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { RegisteredToolInfo } from "../../types/tool.js";
 
 /**
@@ -50,10 +50,10 @@ interface ErrorResponse {
  * - GET /api/tools/:name - Get specific tool metadata
  * - POST /api/tools/reload - Hot-reload plugin tools from disk
  *
- * @param registry - AyndToolRegistry instance
+ * @param registry - QraftBoxToolRegistry instance
  * @returns Hono app with tool routes mounted
  */
-export function createToolRoutes(registry: AyndToolRegistry): Hono {
+export function createToolRoutes(registry: QraftBoxToolRegistry): Hono {
   const app = new Hono();
 
   /**

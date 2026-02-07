@@ -1,7 +1,7 @@
 /**
  * Tool Registration System Types
  *
- * Type definitions for the aynd tool registration system, including built-in
+ * Type definitions for the qraftbox tool registration system, including built-in
  * tools, plugin tools, and tool registry interfaces.
  *
  * NOTE: JsonSchema and ToolInputSchema types are compatible with claude-code-agent
@@ -47,7 +47,7 @@ export type ToolInputSchema = JsonSchema;
 /**
  * Tool source type
  *
- * - builtin: Tools shipped with aynd (TypeScript implementations)
+ * - builtin: Tools shipped with qraftbox (TypeScript implementations)
  * - plugin: User-defined tools loaded from JSON config files
  */
 export type ToolSource = "builtin" | "plugin";
@@ -191,7 +191,7 @@ export interface PluginToolDefinition {
 /**
  * Plugin configuration file structure
  *
- * Top-level structure for JSON config files in ~/.config/aynd/tools/*.json
+ * Top-level structure for JSON config files in ~/.config/qraftbox/tools/*.json
  */
 export interface PluginConfigFile {
   /**

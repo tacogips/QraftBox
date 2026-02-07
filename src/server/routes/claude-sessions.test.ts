@@ -8,7 +8,7 @@ import { join } from 'path';
 import { mkdtemp, writeFile, mkdir } from 'fs/promises';
 import { tmpdir } from 'os';
 import type { ClaudeSessionIndex } from '../../types/claude-session';
-import type { AyndSessionRegistry } from '../claude/session-registry';
+import type { QraftBoxSessionRegistry } from '../claude/session-registry';
 
 describe('Claude Sessions Routes', () => {
   let app: ReturnType<typeof createClaudeSessionsRoutes>;
@@ -28,7 +28,7 @@ describe('Claude Sessions Routes', () => {
     await createTestProject2();
 
     // Create empty session registry
-    const emptyRegistry: AyndSessionRegistry = { sessions: [] };
+    const emptyRegistry: QraftBoxSessionRegistry = { sessions: [] };
     await writeFile(testRegistryPath, JSON.stringify(emptyRegistry, null, 2));
 
     // Create routes with test configuration
@@ -53,7 +53,7 @@ describe('Claude Sessions Routes', () => {
           sessionId: 'session-001',
           fullPath: join(projectDir, 'session-001.jsonl'),
           fileMtime: Date.now(),
-          firstPrompt: '[aynd-context] Implement feature X',
+          firstPrompt: '[qraftbox-context] Implement feature X',
           summary: 'Feature X implementation',
           messageCount: 10,
           created: '2026-01-01T10:00:00Z',
@@ -190,7 +190,7 @@ describe('Claude Sessions Routes', () => {
     });
 
     test('accepts source filter', async () => {
-      const response = await app.request('/sessions?source=aynd');
+      const response = await app.request('/sessions?source=qraftbox');
 
       expect(response.status).toBe(200);
 
@@ -201,7 +201,7 @@ describe('Claude Sessions Routes', () => {
 
       // Verify all returned sessions have correct source (if any exist)
       for (const session of body.sessions) {
-        expect(session.source).toBe('aynd');
+        expect(session.source).toBe('qraftbox');
       }
     });
 
@@ -324,7 +324,7 @@ describe('Claude Sessions Routes', () => {
 
     test('accepts multiple filters combined', async () => {
       const response = await app.request(
-        '/sessions?source=aynd&branch=main&limit=5'
+        '/sessions?source=qraftbox&branch=main&limit=5'
       );
 
       expect(response.status).toBe(200);

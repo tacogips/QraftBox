@@ -23,7 +23,7 @@ describe("branch module", () => {
 
   beforeEach(async () => {
     // Create temporary directory for test repository
-    repoPath = await mkdtemp(join(tmpdir(), "aynd-branch-test-"));
+    repoPath = await mkdtemp(join(tmpdir(), "qraftbox-branch-test-"));
 
     // Initialize git repository
     await execGit(["init", "-b", "main"], { cwd: repoPath });

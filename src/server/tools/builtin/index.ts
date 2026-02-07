@@ -1,7 +1,7 @@
 /**
  * Built-in Tools Module
  *
- * Provides default tools shipped with aynd:
+ * Provides default tools shipped with qraftbox:
  * - git-status: Working tree status
  * - git-diff-summary: Uncommitted changes summary
  * - workspace-info: Project metadata

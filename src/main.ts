@@ -1,14 +1,9 @@
 /**
- * aynd - Main entry point
+ * qraftbox - Main entry point
  *
  * All You Need Is Diff
  */
 
-import { greet } from "./lib";
+import { main } from "./cli/index";
 
-function main(): void {
-  const message = greet("World");
-  console.log(message);
-}
-
-main();
+void main();

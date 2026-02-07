@@ -51,7 +51,7 @@ describe("createPromptTemplate", () => {
       "custom-commit",
       "My Custom Template",
       "Custom template",
-      "/home/user/.config/aynd/prompts/custom.md",
+      "/home/user/.config/qraftbox/prompts/custom.md",
       "commit",
       false,
       false,

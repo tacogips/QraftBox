@@ -22,7 +22,7 @@ import {
 /**
  * Default config directory for prompts
  */
-const DEFAULT_CONFIG_DIR = join(homedir(), ".config", "aynd", "prompts");
+const DEFAULT_CONFIG_DIR = join(homedir(), ".config", "qraftbox", "prompts");
 
 /**
  * Default prompt selections for each category
@@ -38,11 +38,11 @@ interface DefaultPromptsConfig {
  * Can be overridden for testing via environment variable
  */
 function getDefaultsConfigFilePath(): string {
-  const testPath = process.env["AYND_TEST_CONFIG_DIR"];
+  const testPath = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
   if (testPath !== undefined) {
     return join(testPath, "defaults.json");
   }
-  return join(homedir(), ".config", "aynd", "defaults.json");
+  return join(homedir(), ".config", "qraftbox", "defaults.json");
 }
 
 /**
@@ -381,7 +381,7 @@ async function saveDefaultsConfig(config: DefaultPromptsConfig): Promise<void> {
 /**
  * Load all prompt templates from a directory
  *
- * @param configDir - Directory path to load templates from (defaults to ~/.config/aynd/prompts/)
+ * @param configDir - Directory path to load templates from (defaults to ~/.config/qraftbox/prompts/)
  * @returns Array of prompt templates
  */
 export async function loadPrompts(

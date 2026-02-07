@@ -1,5 +1,5 @@
 /**
- * AyndToolRegistry Module
+ * QraftBoxToolRegistry Module
  *
  * Central aggregator for both built-in and plugin tools.
  * Provides initialization, listing, and MCP server config conversion.
@@ -19,11 +19,11 @@ import { createBuiltinTools } from "./builtin/index.js";
 import { loadPluginTools, type LoadedPluginTool } from "./plugin-loader.js";
 
 /**
- * MCP server name used by aynd
+ * MCP server name used by qraftbox
  *
- * This is a fixed identifier for the aynd MCP server instance.
+ * This is a fixed identifier for the qraftbox MCP server instance.
  */
-const MCP_SERVER_NAME = "aynd-tools";
+const MCP_SERVER_NAME = "qraftbox-tools";
 
 /**
  * MCP server version
@@ -60,12 +60,12 @@ interface McpSdkServerConfigLike {
 }
 
 /**
- * AyndToolRegistry interface
+ * QraftBoxToolRegistry interface
  *
- * Central tool registry for aynd. Manages both built-in and plugin tools,
+ * Central tool registry for qraftbox. Manages both built-in and plugin tools,
  * provides tool listing and inspection, and converts tools to MCP server config.
  */
-export interface AyndToolRegistry {
+export interface QraftBoxToolRegistry {
   /**
    * Load built-in tools and plugin tools from disk
    *
@@ -142,12 +142,12 @@ export interface AyndToolRegistry {
 /**
  * Options for creating the tool registry
  */
-export interface AyndToolRegistryOptions {
+export interface QraftBoxToolRegistryOptions {
   /**
    * Plugin directory
    *
    * Directory to load plugin JSON files from.
-   * Defaults to ~/.config/aynd/tools/ if not specified.
+   * Defaults to ~/.config/qraftbox/tools/ if not specified.
    */
   readonly pluginDir?: string | undefined;
 
@@ -171,17 +171,17 @@ interface InternalTool {
 }
 
 /**
- * Create an AyndToolRegistry instance
+ * Create a QraftBoxToolRegistry instance
  *
  * Creates a new tool registry with the specified options.
  * Call initialize() after creation to load tools.
  *
  * @param options - Registry configuration options
- * @returns AyndToolRegistry instance
+ * @returns QraftBoxToolRegistry instance
  */
-export function createAyndToolRegistry(
-  options: AyndToolRegistryOptions,
-): AyndToolRegistry {
+export function createQraftBoxToolRegistry(
+  options: QraftBoxToolRegistryOptions,
+): QraftBoxToolRegistry {
   // Store tools: Map<name, InternalTool>
   const builtinTools = new Map<string, InternalTool>();
   const pluginTools = new Map<string, InternalTool>();

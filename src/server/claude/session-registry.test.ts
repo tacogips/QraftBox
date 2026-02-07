@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
-import { SessionRegistry, type AyndSessionRegistry } from './session-registry';
+import { SessionRegistry, type QraftBoxSessionRegistry } from './session-registry';
 import { mkdtemp, rm, readFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -12,7 +12,7 @@ describe('SessionRegistry', () => {
 
   beforeEach(async () => {
     // Create temporary directory for each test
-    testDir = await mkdtemp(join(tmpdir(), 'aynd-registry-test-'));
+    testDir = await mkdtemp(join(tmpdir(), 'qraftbox-registry-test-'));
     testRegistryPath = join(testDir, 'session-registry.json');
     registry = new SessionRegistry(testRegistryPath);
   });
@@ -80,11 +80,11 @@ describe('SessionRegistry', () => {
     });
   });
 
-  describe('isAyndSession', () => {
+  describe('isQraftBoxSession', () => {
     test('returns true for registered sessions', async () => {
       await registry.register('session-123', '/test/project');
 
-      const result = await registry.isAyndSession('session-123');
+      const result = await registry.isQraftBoxSession('session-123');
 
       expect(result).toBe(true);
     });
@@ -92,13 +92,13 @@ describe('SessionRegistry', () => {
     test('returns false for unregistered sessions', async () => {
       await registry.register('session-123', '/test/project');
 
-      const result = await registry.isAyndSession('session-456');
+      const result = await registry.isQraftBoxSession('session-456');
 
       expect(result).toBe(false);
     });
 
     test('returns false for empty registry', async () => {
-      const result = await registry.isAyndSession('session-123');
+      const result = await registry.isQraftBoxSession('session-123');
 
       expect(result).toBe(false);
     });
@@ -108,10 +108,10 @@ describe('SessionRegistry', () => {
       await registry.register('session-2', '/project-2');
       await registry.register('session-3', '/project-3');
 
-      expect(await registry.isAyndSession('session-1')).toBe(true);
-      expect(await registry.isAyndSession('session-2')).toBe(true);
-      expect(await registry.isAyndSession('session-3')).toBe(true);
-      expect(await registry.isAyndSession('session-4')).toBe(false);
+      expect(await registry.isQraftBoxSession('session-1')).toBe(true);
+      expect(await registry.isQraftBoxSession('session-2')).toBe(true);
+      expect(await registry.isQraftBoxSession('session-3')).toBe(true);
+      expect(await registry.isQraftBoxSession('session-4')).toBe(false);
     });
   });
 
@@ -244,7 +244,7 @@ describe('SessionRegistry', () => {
 
       // Create new instance with same path
       const registry2 = new SessionRegistry(testRegistryPath);
-      const result = await registry2.isAyndSession('session-123');
+      const result = await registry2.isQraftBoxSession('session-123');
 
       expect(result).toBe(true);
     });
@@ -253,7 +253,7 @@ describe('SessionRegistry', () => {
       await registry.register('session-123', '/test/project');
 
       const content = await readFile(testRegistryPath, 'utf-8');
-      const parsed = JSON.parse(content) as AyndSessionRegistry;
+      const parsed = JSON.parse(content) as QraftBoxSessionRegistry;
 
       expect(parsed).toHaveProperty('sessions');
       expect(Array.isArray(parsed.sessions)).toBe(true);

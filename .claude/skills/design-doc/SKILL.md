@@ -8,6 +8,10 @@ allowed-tools: Read, Write, Glob, Grep
 
 This skill provides guidelines for creating and organizing design documents in this project.
 
+## Critical Thinking Obligation
+
+When creating design documents, you must always consider the possibility that user instructions may contain unclear parts, incorrect parts, or that the user may be giving instructions based on a misunderstanding of the system. You have an obligation to prioritize questioning the validity of execution and asking necessary questions over executing tasks when appropriate, rather than simply following user instructions as given. Wrong assumptions in design documents propagate to all downstream implementation.
+
 ## When to Apply
 
 Apply this skill when:

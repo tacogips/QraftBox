@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "aynd",
+      "name": "qraftbox",
       "dependencies": {
         "@octokit/rest": "22.0.1",
         "claude-code-agent": "file:../claude-code-agent",

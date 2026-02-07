@@ -2,7 +2,7 @@
  * Comment Bridge Module
  *
  * Wraps git notes operations to store and retrieve comments as JSON.
- * Uses git notes with a custom ref (aynd-comments) for persistent storage.
+ * Uses git notes with a custom ref (qraftbox-comments) for persistent storage.
  */
 
 import type {
@@ -103,7 +103,7 @@ export interface CommentBridge {
 /**
  * Git notes reference for storing comments
  */
-const NOTES_REF = "aynd-comments";
+const NOTES_REF = "qraftbox-comments";
 
 /**
  * Create a Comment Bridge instance for a git repository

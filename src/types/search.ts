@@ -1,5 +1,5 @@
 /**
- * Search types for the aynd diff viewer
+ * Search types for the qraftbox diff viewer
  *
  * This module defines types for regex-based search functionality
  * with three scopes: file, changed, and all.

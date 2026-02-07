@@ -18,7 +18,7 @@ import type { PromptTemplate } from "../../types/prompt-config";
  * Test fixture directory setup
  */
 async function setupTestDir(): Promise<string> {
-  const testDir = join(tmpdir(), `aynd-test-${Date.now()}`);
+  const testDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
   await mkdir(testDir, { recursive: true });
   return testDir;
 }
@@ -336,7 +336,7 @@ describe("loadPrompts", () => {
 
   test("should use default config directory when not specified", async () => {
     // This test checks that the function doesn't throw
-    // It will return empty array if ~/.config/aynd/prompts/ doesn't exist
+    // It will return empty array if ~/.config/qraftbox/prompts/ doesn't exist
     const templates = await loadPrompts();
     expect(Array.isArray(templates)).toBe(true);
   });
@@ -501,20 +501,20 @@ describe("getDefaultPromptId", () => {
 
   beforeEach(async () => {
     testDir = await setupTestDir();
-    configDir = join(testDir, ".config", "aynd");
+    configDir = join(testDir, ".config", "qraftbox");
     await mkdir(configDir, { recursive: true });
 
     // Override config directory for testing
-    originalEnv = process.env["AYND_TEST_CONFIG_DIR"];
-    process.env["AYND_TEST_CONFIG_DIR"] = configDir;
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
     // Restore original environment
     if (originalEnv !== undefined) {
-      process.env["AYND_TEST_CONFIG_DIR"] = originalEnv;
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
     } else {
-      delete process.env["AYND_TEST_CONFIG_DIR"];
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
     }
 
     await cleanupTestDir(testDir);
@@ -560,20 +560,20 @@ describe("setDefaultPromptId", () => {
 
   beforeEach(async () => {
     testDir = await setupTestDir();
-    configDir = join(testDir, ".config", "aynd");
+    configDir = join(testDir, ".config", "qraftbox");
     await mkdir(configDir, { recursive: true });
 
     // Override config directory for testing
-    originalEnv = process.env["AYND_TEST_CONFIG_DIR"];
-    process.env["AYND_TEST_CONFIG_DIR"] = configDir;
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
     // Restore original environment
     if (originalEnv !== undefined) {
-      process.env["AYND_TEST_CONFIG_DIR"] = originalEnv;
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
     } else {
-      delete process.env["AYND_TEST_CONFIG_DIR"];
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
     }
 
     await cleanupTestDir(testDir);

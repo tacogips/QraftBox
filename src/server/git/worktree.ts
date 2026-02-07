@@ -482,12 +482,12 @@ export async function removeWorktree(
 
 /**
  * Ensure the worktree base directory exists
- * Creates ~/.local/aynd/worktrees/ if it doesn't exist
+ * Creates ~/.local/qraftbox/worktrees/ if it doesn't exist
  *
  * @returns Base directory path
  */
 export async function ensureWorktreeBaseDir(): Promise<string> {
-  const baseDir = join(homedir(), ".local", "aynd", "worktrees");
+  const baseDir = join(homedir(), ".local", "qraftbox", "worktrees");
 
   try {
     await stat(baseDir);
@@ -518,7 +518,7 @@ export function getWorktreePathConfig(
   fullPath: string;
 } {
   const encoded = encodeProjectPath(projectPath);
-  const basePath = join(homedir(), ".local", "aynd", "worktrees", encoded);
+  const basePath = join(homedir(), ".local", "qraftbox", "worktrees", encoded);
   const fullPath = generateDefaultWorktreePath(projectPath, worktreeName);
 
   return {

@@ -1,25 +1,25 @@
 /**
- * AyndToolRegistry Tests
+ * QraftBoxToolRegistry Tests
  *
  * Tests for tool registry initialization, plugin loading, and MCP config generation.
  */
 
 import { describe, test, expect, beforeEach } from "vitest";
-import { createAyndToolRegistry } from "./registry.js";
+import { createQraftBoxToolRegistry } from "./registry.js";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-describe("AyndToolRegistry", () => {
+describe("QraftBoxToolRegistry", () => {
   let tempDir: string;
 
   beforeEach(async () => {
     // Create a temporary directory for test plugins
-    tempDir = await mkdtemp(join(tmpdir(), "aynd-tools-test-"));
+    tempDir = await mkdtemp(join(tmpdir(), "qraftbox-tools-test-"));
   });
 
   test("initialize() registers built-in tools", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -73,7 +73,7 @@ describe("AyndToolRegistry", () => {
       JSON.stringify(pluginConfig, null, 2),
     );
 
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -115,7 +115,7 @@ describe("AyndToolRegistry", () => {
       JSON.stringify(conflictingPlugin, null, 2),
     );
 
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -133,7 +133,7 @@ describe("AyndToolRegistry", () => {
   });
 
   test("getToolInfo() returns tool metadata", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -148,7 +148,7 @@ describe("AyndToolRegistry", () => {
   });
 
   test("hasTool() checks tool existence", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -160,7 +160,7 @@ describe("AyndToolRegistry", () => {
   });
 
   test("toMcpServerConfig() returns valid MCP config", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -170,7 +170,7 @@ describe("AyndToolRegistry", () => {
     const mcpConfig = registry.toMcpServerConfig();
 
     expect(mcpConfig.type).toBe("sdk");
-    expect(mcpConfig.name).toBe("aynd-tools");
+    expect(mcpConfig.name).toBe("qraftbox-tools");
     expect(mcpConfig.version).toBe("1.0.0");
     expect(mcpConfig.tools.length).toBeGreaterThan(0);
 
@@ -184,7 +184,7 @@ describe("AyndToolRegistry", () => {
   });
 
   test("getAllowedToolNames() returns MCP-formatted names", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -195,18 +195,18 @@ describe("AyndToolRegistry", () => {
 
     expect(allowedNames.length).toBeGreaterThan(0);
 
-    // All names should follow mcp__aynd-tools__<name> format
+    // All names should follow mcp__qraftbox-tools__<name> format
     for (const name of allowedNames) {
-      expect(name).toMatch(/^mcp__aynd-tools__[a-zA-Z0-9_-]+$/);
+      expect(name).toMatch(/^mcp__qraftbox-tools__[a-zA-Z0-9_-]+$/);
     }
 
     // Should contain known built-in tools
-    expect(allowedNames).toContain("mcp__aynd-tools__git-status");
-    expect(allowedNames).toContain("mcp__aynd-tools__workspace-info");
+    expect(allowedNames).toContain("mcp__qraftbox-tools__git-status");
+    expect(allowedNames).toContain("mcp__qraftbox-tools__workspace-info");
   });
 
   test("reloadPlugins() preserves built-in tools", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -225,7 +225,7 @@ describe("AyndToolRegistry", () => {
   });
 
   test("reloadPlugins() picks up new plugin files", async () => {
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });
@@ -286,7 +286,7 @@ describe("AyndToolRegistry", () => {
     const pluginPath = join(tempDir, "temp-plugin.json");
     await writeFile(pluginPath, JSON.stringify(initialPlugin, null, 2));
 
-    const registry = createAyndToolRegistry({
+    const registry = createQraftBoxToolRegistry({
       projectPath: process.cwd(),
       pluginDir: tempDir,
     });

@@ -10,7 +10,7 @@ Architectural patterns, system structure, and technical decisions.
 
 ## Sections
 
-### aynd (All You Need Is Diff)
+### qraftbox (All You Need Is Diff)
 
 A high-performance local diff viewer with git-xnotes integration.
 

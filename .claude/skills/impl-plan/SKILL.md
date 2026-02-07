@@ -8,6 +8,10 @@ allowed-tools: Read, Write, Glob, Grep
 
 This skill provides guidelines for creating and managing implementation plans from design documents.
 
+## Critical Thinking Obligation
+
+When creating implementation plans, you must always consider the possibility that user instructions may contain unclear parts, incorrect parts, or that the user may be giving instructions based on a misunderstanding of the system. You have an obligation to prioritize questioning the validity of the plan and asking necessary questions over proceeding blindly. Wrong assumptions in implementation plans lead to wasted implementation effort.
+
 ## When to Apply
 
 Apply this skill when:

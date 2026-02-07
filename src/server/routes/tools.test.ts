@@ -11,15 +11,15 @@ import type {
   ToolRegistrationResult,
   JsonSchema,
 } from "../../types/tool.js";
-import type { AyndToolRegistry } from "../tools/registry.js";
+import type { QraftBoxToolRegistry } from "../tools/registry.js";
 
 /**
  * Create a mock tool registry for testing
  *
  * @param tools - Array of tool info to return
- * @returns Mock AyndToolRegistry instance
+ * @returns Mock QraftBoxToolRegistry instance
  */
-function createMockRegistry(tools: RegisteredToolInfo[]): AyndToolRegistry {
+function createMockRegistry(tools: RegisteredToolInfo[]): QraftBoxToolRegistry {
   let reloadResult: ToolRegistrationResult = {
     success: true,
     toolCount: tools.length,
@@ -39,15 +39,15 @@ function createMockRegistry(tools: RegisteredToolInfo[]): AyndToolRegistry {
     getToolCount: () => tools.length,
     toMcpServerConfig: () => ({
       type: "sdk" as const,
-      name: "aynd-tools",
+      name: "qraftbox-tools",
       version: "1.0.0",
       tools: [],
     }),
-    getAllowedToolNames: () => tools.map((t) => `mcp__aynd-tools__${t.name}`),
+    getAllowedToolNames: () => tools.map((t) => `mcp__qraftbox-tools__${t.name}`),
     _setReloadResult: (result: ToolRegistrationResult) => {
       reloadResult = result;
     },
-  } as AyndToolRegistry & {
+  } as QraftBoxToolRegistry & {
     _setReloadResult: (result: ToolRegistrationResult) => void;
   };
 }
@@ -212,7 +212,7 @@ describe("createToolRoutes", () => {
         createSampleTool("plugin-1", "plugin", "test-plugin"),
       ];
 
-      const registry = createMockRegistry(mockTools) as AyndToolRegistry & {
+      const registry = createMockRegistry(mockTools) as QraftBoxToolRegistry & {
         _setReloadResult: (result: ToolRegistrationResult) => void;
       };
 
@@ -243,7 +243,7 @@ describe("createToolRoutes", () => {
     test("returns errors when reload encounters problems", async () => {
       const mockTools: RegisteredToolInfo[] = [];
 
-      const registry = createMockRegistry(mockTools) as AyndToolRegistry & {
+      const registry = createMockRegistry(mockTools) as QraftBoxToolRegistry & {
         _setReloadResult: (result: ToolRegistrationResult) => void;
       };
 
@@ -286,7 +286,7 @@ describe("createToolRoutes", () => {
     });
 
     test("returns 500 when reload throws exception", async () => {
-      const registry: AyndToolRegistry = {
+      const registry: QraftBoxToolRegistry = {
         initialize: async () => ({ success: true, toolCount: 0, errors: [] }),
         reloadPlugins: async () => {
           throw new Error("Reload failed");
@@ -297,7 +297,7 @@ describe("createToolRoutes", () => {
         getToolCount: () => 0,
         toMcpServerConfig: () => ({
           type: "sdk" as const,
-          name: "aynd-tools",
+          name: "qraftbox-tools",
           version: "1.0.0",
           tools: [],
         }),
@@ -317,7 +317,7 @@ describe("createToolRoutes", () => {
     });
 
     test("returns 500 with fallback message when non-Error thrown", async () => {
-      const registry: AyndToolRegistry = {
+      const registry: QraftBoxToolRegistry = {
         initialize: async () => ({ success: true, toolCount: 0, errors: [] }),
         reloadPlugins: async () => {
           throw "String error";
@@ -328,7 +328,7 @@ describe("createToolRoutes", () => {
         getToolCount: () => 0,
         toMcpServerConfig: () => ({
           type: "sdk" as const,
-          name: "aynd-tools",
+          name: "qraftbox-tools",
           version: "1.0.0",
           tools: [],
         }),

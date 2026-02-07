@@ -1,5 +1,5 @@
 /**
- * Watcher Types for the aynd file watching system
+ * Watcher Types for the qraftbox file watching system
  *
  * This module defines types for monitoring file system changes with
  * gitignore-aware filtering and debouncing capabilities.

@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  PROJECT_NAME: aynd
+  PROJECT_NAME: qraftbox
 
 tasks:
   default:

@@ -120,7 +120,7 @@ describe("loadConfig", () => {
 });
 
 describe("validateConfig", () => {
-  const testDir = path.join("/tmp", "aynd-config-test-" + Date.now());
+  const testDir = path.join("/tmp", "qraftbox-config-test-" + Date.now());
 
   beforeAll(async () => {
     await mkdir(testDir, { recursive: true });

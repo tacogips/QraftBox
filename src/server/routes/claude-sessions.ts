@@ -73,7 +73,7 @@ export function createClaudeSessionsRoutes(): Hono {
    *
    * Query parameters:
    * - workingDirectoryPrefix: Filter by working directory prefix
-   * - source: Filter by session source (aynd, claude-cli, unknown)
+   * - source: Filter by session source (qraftbox, claude-cli, unknown)
    * - branch: Filter by git branch
    * - search: Search in firstPrompt and summary
    * - dateFrom: Start date (ISO 8601)
@@ -102,7 +102,7 @@ export function createClaudeSessionsRoutes(): Hono {
       if (sourceParam !== undefined) {
         if (!isSessionSource(sourceParam)) {
           const errorResponse: ErrorResponse = {
-            error: `Invalid source value: ${sourceParam}. Must be one of: aynd, claude-cli, unknown`,
+            error: `Invalid source value: ${sourceParam}. Must be one of: qraftbox, claude-cli, unknown`,
             code: 400,
           };
           return c.json(errorResponse, 400);

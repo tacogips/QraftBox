@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the design of a commit log viewing feature for aynd. The feature allows users to browse the git commit history and view diffs for any selected commit, integrating seamlessly with the existing file tree and diff view components.
+This document describes the design of a commit log viewing feature for qraftbox. The feature allows users to browse the git commit history and view diffs for any selected commit, integrating seamlessly with the existing file tree and diff view components.
 
 ## Requirements Summary
 

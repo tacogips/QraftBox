@@ -15,7 +15,7 @@
 
 ### Summary
 
-Git worktree support for aynd: create worktrees with consistent path convention, detect repository type (main/worktree/bare/not-git), navigate between worktrees and main repository. **Key feature**: When in a worktree, user can navigate back to the original main repository using the stored `mainRepositoryPath`.
+Git worktree support for qraftbox: create worktrees with consistent path convention, detect repository type (main/worktree/bare/not-git), navigate between worktrees and main repository. **Key feature**: When in a worktree, user can navigate back to the original main repository using the stored `mainRepositoryPath`.
 
 ### Scope
 
@@ -509,7 +509,7 @@ Use dependency injection for testing. The `/main` endpoint is critical for enabl
 - TASK-003: Implemented listWorktrees() - parses `git worktree list --porcelain` output
 - TASK-003: Implemented createWorktree() - validates name, generates path, runs git worktree add
 - TASK-003: Implemented removeWorktree() - handles force flag, runs git worktree remove
-- TASK-003: Implemented ensureWorktreeBaseDir() - creates ~/.local/aynd/worktrees/
+- TASK-003: Implemented ensureWorktreeBaseDir() - creates ~/.local/qraftbox/worktrees/
 - TASK-003: Implemented getWorktreePathConfig() - computes encoded paths
 - TASK-003: Created comprehensive tests (26 tests, 73 assertions)
 - TASK-003: All tests passing, type checking passes

@@ -22,7 +22,7 @@ import * as os from "os";
  * Helper to create a temporary git repository for testing
  */
 async function createTestRepo(): Promise<string> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-push-test-"));
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-push-test-"));
 
   // Initialize git repo
   await Bun.spawn(["git", "init"], { cwd: tmpDir }).exited;
@@ -248,7 +248,7 @@ describe("executePush", () => {
 
     // Create a bare remote repo
     remoteRepoPath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-push-remote-"),
+      path.join(os.tmpdir(), "qraftbox-push-remote-"),
     );
     await Bun.spawn(["git", "init", "--bare"], { cwd: remoteRepoPath }).exited;
 
@@ -292,7 +292,7 @@ describe("executePush", () => {
   test("pushes with custom remote and branch", async () => {
     // Add another remote
     const customRemotePath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-push-custom-"),
+      path.join(os.tmpdir(), "qraftbox-push-custom-"),
     );
     await Bun.spawn(["git", "init", "--bare"], {
       cwd: customRemotePath,

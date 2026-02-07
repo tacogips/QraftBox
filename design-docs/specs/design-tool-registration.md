@@ -1,12 +1,12 @@
 # Custom Tool Registration System
 
-Design specification for the aynd tool registration system. Enables built-in tools, user-defined plugin tools via JSON config, MCP server aggregation for `ClaudeCodeToolAgent`, and a REST API for tool listing and management.
+Design specification for the qraftbox tool registration system. Enables built-in tools, user-defined plugin tools via JSON config, MCP server aggregation for `ClaudeCodeToolAgent`, and a REST API for tool listing and management.
 
 ## Overview
 
-aynd needs to provide custom tools to Claude Code agent sessions. These tools extend what the AI can do during sessions -- for example, running git status, reading workspace metadata, or executing user-defined shell commands. The system must:
+qraftbox needs to provide custom tools to Claude Code agent sessions. These tools extend what the AI can do during sessions -- for example, running git status, reading workspace metadata, or executing user-defined shell commands. The system must:
 
-1. Ship default built-in tools with aynd
+1. Ship default built-in tools with qraftbox
 2. Support user-defined plugin tools loaded from JSON config files
 3. Aggregate all tools into an `McpSdkServerConfig` for `ClaudeCodeToolAgent`
 4. Expose a REST API for listing, inspecting, and hot-reloading tools
@@ -16,7 +16,7 @@ aynd needs to provide custom tools to Claude Code agent sessions. These tools ex
 ```
 +-------------------------+     +-------------------------+
 | Built-in Tools          |     | Plugin JSON Files       |
-| (TypeScript functions)  |     | (~/.config/aynd/tools/) |
+| (TypeScript functions)  |     | (~/.config/qraftbox/tools/) |
 +------------+------------+     +------------+------------+
              |                               |
              v                               v
@@ -29,7 +29,7 @@ aynd needs to provide custom tools to Claude Code agent sessions. These tools ex
                      |               |
                      v               v
           +----------+--------------+----------+
-          | AyndToolRegistry                    |
+          | QraftBoxToolRegistry                    |
           | - builtin tools                     |
           | - plugin tools                      |
           | - toMcpServerConfig()               |
@@ -48,7 +48,7 @@ aynd needs to provide custom tools to Claude Code agent sessions. These tools ex
 
 Source: `/g/gits/tacogips/claude-code-agent/`
 
-Types consumed by aynd (see `src/sdk/types/tool.ts`, `src/sdk/types/mcp.ts`, `src/sdk/tool-registry.ts`, `src/sdk/agent.ts`):
+Types consumed by qraftbox (see `src/sdk/types/tool.ts`, `src/sdk/types/mcp.ts`, `src/sdk/tool-registry.ts`, `src/sdk/agent.ts`):
 
 ```typescript
 // Tool definition
@@ -99,7 +99,7 @@ interface ToolAgentOptions {
 }
 ```
 
-Tool naming convention for MCP: `mcp__<serverName>__<toolName>`. For example, tools on a server named `aynd-tools` are referenced as `mcp__aynd-tools__git-status`.
+Tool naming convention for MCP: `mcp__<serverName>__<toolName>`. For example, tools on a server named `qraftbox-tools` are referenced as `mcp__qraftbox-tools__git-status`.
 
 ## Type Definitions
 
@@ -210,7 +210,7 @@ src/
   types/tool.ts                          # Type definitions above
   server/tools/
     index.ts                             # Public exports
-    registry.ts                          # AyndToolRegistry implementation
+    registry.ts                          # QraftBoxToolRegistry implementation
     plugin-loader.ts                     # JSON plugin file loading + validation
     handler-strategies.ts                # Shell/HTTP/file-read handler execution
     builtin/
@@ -222,14 +222,14 @@ src/
   server/routes/tools.ts                 # REST API for tool listing
 ```
 
-## AyndToolRegistry
+## QraftBoxToolRegistry
 
 File: `src/server/tools/registry.ts`
 
 ### Interface
 
 ```typescript
-interface AyndToolRegistry {
+interface QraftBoxToolRegistry {
   /** Load built-in tools and plugin tools from disk */
   initialize(): Promise<ToolRegistrationResult>;
 
@@ -258,7 +258,7 @@ interface AyndToolRegistry {
 
 ### Implementation Notes
 
-- Uses a fixed MCP server name: `"aynd-tools"`
+- Uses a fixed MCP server name: `"qraftbox-tools"`
 - `initialize()` calls `createBuiltinTools()` then `loadPluginTools()`
 - `reloadPlugins()` clears plugin tools only, then reloads from disk; built-in tools are kept
 - `toMcpServerConfig()` calls `createSdkMcpServer()` from claude-code-agent with all registered `SdkTool[]`
@@ -267,10 +267,10 @@ interface AyndToolRegistry {
 ### Factory Function
 
 ```typescript
-function createAyndToolRegistry(options: {
-  pluginDir?: string;   // Default: ~/.config/aynd/tools/
+function createQraftBoxToolRegistry(options: {
+  pluginDir?: string;   // Default: ~/.config/qraftbox/tools/
   projectPath?: string; // For tools that need workspace context
-}): AyndToolRegistry;
+}): QraftBoxToolRegistry;
 ```
 
 ## Plugin Loader
@@ -288,12 +288,12 @@ File: `src/server/tools/plugin-loader.ts`
 Follows the same pattern as `src/server/prompts/loader.ts`:
 - Uses `readdir()` + `readFile()` from `node:fs/promises`
 - Gracefully skips invalid files (logs error, continues with rest)
-- Config directory defaults to `~/.config/aynd/tools/`
-- Can be overridden via `AYND_TEST_TOOLS_DIR` env var for testing
+- Config directory defaults to `~/.config/qraftbox/tools/`
+- Can be overridden via `QRAFTBOX_TEST_TOOLS_DIR` env var for testing
 
 ### Plugin JSON Format
 
-Config directory: `~/.config/aynd/tools/*.json`
+Config directory: `~/.config/qraftbox/tools/*.json`
 
 ```json
 {
@@ -523,7 +523,7 @@ File: `src/server/ai/session-manager.ts`
 // Updated signature
 function createSessionManager(
   config: AIConfig,
-  toolRegistry: AyndToolRegistry,
+  toolRegistry: QraftBoxToolRegistry,
 ): SessionManager;
 ```
 
@@ -535,7 +535,7 @@ The current `executeSession()` (line 151-209) simulates a session with timeouts.
 executeSession(sessionId):
   1. Get session from sessions map
   2. Create ClaudeCodeToolAgent with:
-     - mcpServers: { "aynd-tools": toolRegistry.toMcpServerConfig() }
+     - mcpServers: { "qraftbox-tools": toolRegistry.toMcpServerConfig() }
      - allowedTools: toolRegistry.getAllowedToolNames()
      - cwd: session.request.options.projectPath
      - permissionMode: "bypassPermissions"
@@ -596,7 +596,7 @@ The file-read handler resolves paths using `path.resolve(basePath, requestedPath
 Application startup sequence (in `src/main.ts` or server setup):
 
 ```
-1. createAyndToolRegistry({ projectPath, pluginDir })
+1. createQraftBoxToolRegistry({ projectPath, pluginDir })
 2. await registry.initialize()
    - createBuiltinTools(projectPath)     -> SdkTool[]
    - loadPluginTools(pluginDir)          -> SdkTool[] + errors
@@ -608,7 +608,7 @@ Application startup sequence (in `src/main.ts` or server setup):
 ## Verification Criteria
 
 1. `bun run typecheck` passes with all new types
-2. Plugin JSON files load correctly from `~/.config/aynd/tools/`
+2. Plugin JSON files load correctly from `~/.config/qraftbox/tools/`
 3. `GET /api/tools` returns both built-in and plugin tools with correct source labels
 4. Built-in tools execute correctly via `ClaudeCodeToolAgent` (git-status returns real status)
 5. Shell handler sanitizes arguments -- injected shell metacharacters do not execute

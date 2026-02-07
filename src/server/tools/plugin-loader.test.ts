@@ -26,7 +26,7 @@ let testDir: string;
  * Setup test directory before all tests
  */
 beforeAll(async () => {
-  testDir = join(tmpdir(), `aynd-plugin-test-${Date.now()}`);
+  testDir = join(tmpdir(), `qraftbox-plugin-test-${Date.now()}`);
   await mkdir(testDir, { recursive: true });
 });
 

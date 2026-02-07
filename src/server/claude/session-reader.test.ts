@@ -22,7 +22,7 @@ describe('ClaudeSessionReader', () => {
 
   beforeEach(async () => {
     // Create temporary test directory
-    tempDir = join(tmpdir(), `aynd-test-${Date.now()}`);
+    tempDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
     projectsDir = join(tempDir, '.claude', 'projects');
     registryPath = join(tempDir, 'session-registry.json');
 
@@ -55,7 +55,7 @@ describe('ClaudeSessionReader', () => {
 
     it('should list all projects with session metadata', async () => {
       // Create test project directories with indices
-      const project1Dir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const project1Dir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       const project2Dir = join(projectsDir, '-home-user-other');
 
       await mkdir(project1Dir, { recursive: true });
@@ -63,7 +63,7 @@ describe('ClaudeSessionReader', () => {
 
       const index1: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [
           createMockSessionEntry('session-1', '2026-02-05T10:00:00Z', '2026-02-05T11:00:00Z'),
           createMockSessionEntry('session-2', '2026-02-05T09:00:00Z', '2026-02-05T12:00:00Z'),
@@ -89,8 +89,8 @@ describe('ClaudeSessionReader', () => {
       projects.sort((a, b) => a.path.localeCompare(b.path));
 
       expect(projects[0]).toEqual({
-        path: '/g/gits/tacogips/aynd',
-        encoded: '-g-gits-tacogips-aynd',
+        path: '/g/gits/tacogips/qraftbox',
+        encoded: '-g-gits-tacogips-qraftbox',
         sessionCount: 2,
         lastModified: '2026-02-05T12:00:00Z', // Latest modified
       });
@@ -104,7 +104,7 @@ describe('ClaudeSessionReader', () => {
     });
 
     it('should skip projects with corrupted indices', async () => {
-      const project1Dir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const project1Dir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       const project2Dir = join(projectsDir, '-g-gits-tacogips-bad');
 
       await mkdir(project1Dir, { recursive: true });
@@ -113,7 +113,7 @@ describe('ClaudeSessionReader', () => {
       // Valid index
       const validIndex: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [createMockSessionEntry('session-1', '2026-02-05T10:00:00Z')],
       };
 
@@ -128,11 +128,11 @@ describe('ClaudeSessionReader', () => {
       const projects = await reader.listProjects();
 
       expect(projects).toHaveLength(1);
-      expect(projects[0]?.path).toBe('/g/gits/tacogips/aynd');
+      expect(projects[0]?.path).toBe('/g/gits/tacogips/qraftbox');
     });
 
     it('should skip directories without sessions-index.json', async () => {
-      const project1Dir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const project1Dir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       const project2Dir = join(projectsDir, '-g-gits-tacogips-no-index');
 
       await mkdir(project1Dir, { recursive: true });
@@ -141,7 +141,7 @@ describe('ClaudeSessionReader', () => {
       // Only project1 has index
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [createMockSessionEntry('session-1', '2026-02-05T10:00:00Z')],
       };
 
@@ -150,14 +150,14 @@ describe('ClaudeSessionReader', () => {
       const projects = await reader.listProjects();
 
       expect(projects).toHaveLength(1);
-      expect(projects[0]?.path).toBe('/g/gits/tacogips/aynd');
+      expect(projects[0]?.path).toBe('/g/gits/tacogips/qraftbox');
     });
   });
 
   describe('listSessions', () => {
     beforeEach(async () => {
       // Setup test projects
-      const project1Dir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const project1Dir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       const project2Dir = join(projectsDir, '-home-user-other');
 
       await mkdir(project1Dir, { recursive: true });
@@ -165,7 +165,7 @@ describe('ClaudeSessionReader', () => {
 
       const index1: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [
           createMockSessionEntry(
             'session-1',
@@ -201,8 +201,8 @@ describe('ClaudeSessionReader', () => {
       await writeFile(join(project1Dir, 'sessions-index.json'), JSON.stringify(index1, null, 2));
       await writeFile(join(project2Dir, 'sessions-index.json'), JSON.stringify(index2, null, 2));
 
-      // Register session-1 as aynd session
-      await registry.register('session-1', '/g/gits/tacogips/aynd');
+      // Register session-1 as qraftbox session
+      await registry.register('session-1', '/g/gits/tacogips/qraftbox');
     });
 
     it('should list all sessions by default', async () => {
@@ -239,18 +239,18 @@ describe('ClaudeSessionReader', () => {
       });
 
       expect(result.sessions).toHaveLength(2);
-      expect(result.sessions[0]?.projectPath).toBe('/g/gits/tacogips/aynd');
-      expect(result.sessions[1]?.projectPath).toBe('/g/gits/tacogips/aynd');
+      expect(result.sessions[0]?.projectPath).toBe('/g/gits/tacogips/qraftbox');
+      expect(result.sessions[1]?.projectPath).toBe('/g/gits/tacogips/qraftbox');
     });
 
-    it('should filter sessions by source (aynd)', async () => {
+    it('should filter sessions by source (qraftbox)', async () => {
       const result = await reader.listSessions({
-        source: 'aynd',
+        source: 'qraftbox',
       });
 
       expect(result.sessions).toHaveLength(1);
       expect(result.sessions[0]?.sessionId).toBe('session-1');
-      expect(result.sessions[0]?.source).toBe('aynd');
+      expect(result.sessions[0]?.source).toBe('qraftbox');
     });
 
     it('should filter sessions by source (claude-cli)', async () => {
@@ -327,7 +327,7 @@ describe('ClaudeSessionReader', () => {
       const result = await reader.listSessions({
         workingDirectoryPrefix: '/g/gits/tacogips',
         branch: 'main',
-        source: 'aynd',
+        source: 'qraftbox',
       });
 
       expect(result.sessions).toHaveLength(1);
@@ -361,12 +361,12 @@ describe('ClaudeSessionReader', () => {
 
   describe('getSession', () => {
     beforeEach(async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [
           createMockSessionEntry('session-1', '2026-02-05T10:00:00Z'),
           createMockSessionEntry('session-2', '2026-02-04T10:00:00Z'),
@@ -381,7 +381,7 @@ describe('ClaudeSessionReader', () => {
 
       expect(session).not.toBeNull();
       expect(session?.sessionId).toBe('session-1');
-      expect(session?.projectEncoded).toBe('-g-gits-tacogips-aynd');
+      expect(session?.projectEncoded).toBe('-g-gits-tacogips-qraftbox');
     });
 
     it('should return null for non-existent session', async () => {
@@ -391,35 +391,35 @@ describe('ClaudeSessionReader', () => {
     });
 
     it('should include source in returned session', async () => {
-      await registry.register('session-1', '/g/gits/tacogips/aynd');
+      await registry.register('session-1', '/g/gits/tacogips/qraftbox');
 
       const session = await reader.getSession('session-1');
 
-      expect(session?.source).toBe('aynd');
+      expect(session?.source).toBe('qraftbox');
     });
   });
 
   describe('source detection', () => {
-    it('should detect aynd sessions from registry', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+    it('should detect qraftbox sessions from registry', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [createMockSessionEntry('session-1', '2026-02-05T10:00:00Z')],
       };
 
       await writeFile(join(projectDir, 'sessions-index.json'), JSON.stringify(index, null, 2));
-      await registry.register('session-1', '/g/gits/tacogips/aynd');
+      await registry.register('session-1', '/g/gits/tacogips/qraftbox');
 
       const result = await reader.listSessions();
 
-      expect(result.sessions[0]?.source).toBe('aynd');
+      expect(result.sessions[0]?.source).toBe('qraftbox');
     });
 
-    it('should detect aynd sessions from prompt pattern [aynd-context]', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+    it('should detect qraftbox sessions from prompt pattern [qraftbox-context]', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       const entry = createMockSessionEntry(
@@ -427,12 +427,12 @@ describe('ClaudeSessionReader', () => {
         '2026-02-05T10:00:00Z',
         '2026-02-05T11:00:00Z',
         'main',
-        '[aynd-context] Implement feature'
+        '[qraftbox-context] Implement feature'
       );
 
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [entry],
       };
 
@@ -440,11 +440,11 @@ describe('ClaudeSessionReader', () => {
 
       const result = await reader.listSessions();
 
-      expect(result.sessions[0]?.source).toBe('aynd');
+      expect(result.sessions[0]?.source).toBe('qraftbox');
     });
 
-    it('should detect aynd sessions from prompt pattern "context from aynd"', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+    it('should detect qraftbox sessions from prompt pattern "context from qraftbox"', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       const entry = createMockSessionEntry(
@@ -452,12 +452,12 @@ describe('ClaudeSessionReader', () => {
         '2026-02-05T10:00:00Z',
         '2026-02-05T11:00:00Z',
         'main',
-        'Context from aynd: Implement feature'
+        'Context from qraftbox: Implement feature'
       );
 
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [entry],
       };
 
@@ -465,16 +465,16 @@ describe('ClaudeSessionReader', () => {
 
       const result = await reader.listSessions();
 
-      expect(result.sessions[0]?.source).toBe('aynd');
+      expect(result.sessions[0]?.source).toBe('qraftbox');
     });
 
     it('should default to claude-cli for sessions without markers', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       const index: ClaudeSessionIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [
           createMockSessionEntry('session-1', '2026-02-05T10:00:00Z', '2026-02-05T11:00:00Z', 'main', 'Regular prompt'),
         ],
@@ -490,7 +490,7 @@ describe('ClaudeSessionReader', () => {
 
   describe('error handling', () => {
     it('should handle corrupted session indices gracefully', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       // Write invalid JSON
@@ -503,13 +503,13 @@ describe('ClaudeSessionReader', () => {
     });
 
     it('should skip sessions with invalid entry format', async () => {
-      const projectDir = join(projectsDir, '-g-gits-tacogips-aynd');
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
       await mkdir(projectDir, { recursive: true });
 
       // Create index with invalid entry
       const invalidIndex = {
         version: 1,
-        originalPath: '/g/gits/tacogips/aynd',
+        originalPath: '/g/gits/tacogips/qraftbox',
         entries: [
           {
             sessionId: 'session-1',
@@ -547,7 +547,7 @@ function createMockSessionEntry(
     created,
     modified: modified ?? created,
     gitBranch: branch,
-    projectPath: '/g/gits/tacogips/aynd',
+    projectPath: '/g/gits/tacogips/qraftbox',
     isSidechain: false,
   };
 }

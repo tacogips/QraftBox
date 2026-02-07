@@ -152,7 +152,7 @@ describe("getRepoFromRemote", () => {
 
   beforeAll(async () => {
     // Create temporary directory for test repository
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-test-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-test-"));
     repoDir = path.join(tempDir, "test-repo");
     await fs.mkdir(repoDir);
 

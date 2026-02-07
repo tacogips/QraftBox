@@ -20,7 +20,7 @@ import * as os from "node:os";
  * Helper to create a test git repository
  */
 async function createTestRepo(): Promise<string> {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "aynd-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "qraftbox-test-"));
 
   // Initialize git repo
   await Bun.spawn(["git", "init"], { cwd: tmpDir }).exited;

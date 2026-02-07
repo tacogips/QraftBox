@@ -38,7 +38,7 @@ const BUILTIN_COMMIT_DEFAULT: BuiltinTemplateDefinition = {
 name: Standard Commit
 description: Standard commit message with context
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: stagedFiles
     description: List of staged files
@@ -103,7 +103,7 @@ const BUILTIN_COMMIT_CONVENTIONAL: BuiltinTemplateDefinition = {
 name: Conventional Commits
 description: Commit message following Conventional Commits format
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: stagedFiles
     description: List of staged files
@@ -173,7 +173,7 @@ const BUILTIN_COMMIT_DETAILED: BuiltinTemplateDefinition = {
 name: Detailed Commit
 description: Detailed commit message with bullet points
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: stagedFiles
     description: List of staged files
@@ -253,7 +253,7 @@ const BUILTIN_COMMIT_MINIMAL: BuiltinTemplateDefinition = {
 name: Minimal Commit
 description: Short one-line commit message
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: stagedFiles
     description: List of staged files
@@ -302,7 +302,7 @@ const BUILTIN_PUSH_DEFAULT: BuiltinTemplateDefinition = {
 name: Standard Push
 description: Standard push verification prompt
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: unpushedCommits
     description: List of commits to be pushed
@@ -379,7 +379,7 @@ const BUILTIN_PUSH_FORCE: BuiltinTemplateDefinition = {
 name: Force Push with Warnings
 description: Force push with safety warnings
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: unpushedCommits
     description: List of commits to be pushed
@@ -464,7 +464,7 @@ const BUILTIN_PR_DEFAULT: BuiltinTemplateDefinition = {
 name: Standard PR
 description: Standard pull request description
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: prTitle
     description: PR title
@@ -546,7 +546,7 @@ const BUILTIN_PR_DETAILED: BuiltinTemplateDefinition = {
 name: Detailed PR
 description: Detailed pull request with comprehensive sections
 version: "1.0.0"
-author: aynd
+author: qraftbox
 variables:
   - name: prTitle
     description: PR title

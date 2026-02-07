@@ -49,7 +49,7 @@
 - Keyboard shortcuts (`Cmd+T`, `Cmd+W`, `Cmd+Tab`)
 - URL routing for contexts (`http://localhost:3000/ctx/{id}`)
 - `DirectoryBrowserState` and `DirectoryBrowserStore` with history/back/forward
-- Workspace persistence to `~/.aynd/workspace.json`
+- Workspace persistence to `~/.qraftbox/workspace.json`
 
 ### 1.3 Type/Interface Mismatches
 
@@ -130,7 +130,7 @@
 |------|-------------|
 | `src/types/claude-session.ts` | Claude session browsing types |
 | `src/server/claude/session-reader.ts` | Reads Claude sessions from `~/.claude/projects/` |
-| `src/server/claude/session-registry.ts` | Tracks aynd-created sessions |
+| `src/server/claude/session-registry.ts` | Tracks qraftbox-created sessions |
 | `src/server/routes/claude-sessions.ts` | REST API for session browsing |
 | `src/server/prompts/templates.ts` | Built-in prompt templates |
 
@@ -160,7 +160,7 @@ All design docs expose powerful REST APIs (file browsing, git checkout, AI execu
 `/api/browse` accepts any path with no restrictions. The design mentions "Optional: whitelist base directories" but the implementation has no path restrictions. Combined with C1, any process can list `/etc/`, `~/.ssh/`, `~/.claude/`.
 
 **C3. Worktree Removal Has No Safety Guards**
-No check prevents removing the currently active worktree (the one aynd serves from), a worktree with an open tab, or one being modified by an AI session.
+No check prevents removing the currently active worktree (the one qraftbox serves from), a worktree with an open tab, or one being modified by an AI session.
 
 **C4. AI Session Manager Is Completely Stubbed**
 `src/server/ai/session-manager.ts` `executeSession` contains only stub code with `TODO: Integrate with actual claude-code-agent`. All AI features depend on this.
@@ -168,7 +168,7 @@ No check prevents removing the currently active worktree (the one aynd serves fr
 ### 3.2 HIGH
 
 **H1. Two Incompatible Session Management Systems**
-aynd SessionManager (in-memory queue, shown at `/sessions`) and Claude Session Browser (reads `~/.claude/projects/`, shown at `/claude-sessions`) are not reconciled. No specification for how aynd sessions map to Claude sessions on disk, or what happens after restart.
+qraftbox SessionManager (in-memory queue, shown at `/sessions`) and Claude Session Browser (reads `~/.claude/projects/`, shown at `/claude-sessions`) are not reconciled. No specification for how qraftbox sessions map to Claude sessions on disk, or what happens after restart.
 
 **H2. Concurrent AI Sessions Can Cause Git Conflicts**
 Design allows `maxConcurrent > 1`, but multiple Claude Code sessions can modify the same files simultaneously. The git operation queue only serializes git commands, not file modifications by Claude Code.
@@ -216,7 +216,7 @@ No specification for crash recovery, cleanup of running AI sessions, or when wor
 
 **L2.** `architecture.md` and `command.md` are placeholder documents with no value.
 
-**L3.** Session storage uses three different directories (`~/.local/aynd/`, `~/.aynd/`, `~/.config/aynd/`) without following XDG consistently.
+**L3.** Session storage uses three different directories (`~/.local/qraftbox/`, `~/.qraftbox/`, `~/.config/qraftbox/`) without following XDG consistently.
 
 **L4.** No file tree badge for `[R]` (renamed) status.
 

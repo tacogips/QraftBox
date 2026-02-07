@@ -2,7 +2,7 @@
  * Commit Context Types for AI-powered git commit feature
  *
  * This module defines types for building commit context and executing
- * AI-powered commit operations within the aynd application.
+ * AI-powered commit operations within the qraftbox application.
  */
 
 import type { CommitInfo } from "./commit";

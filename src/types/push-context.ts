@@ -1,5 +1,5 @@
 /**
- * Push Context Types for the aynd AI push feature
+ * Push Context Types for the qraftbox AI push feature
  *
  * This module defines types for managing git push operations with AI assistance,
  * including push status, context for prompts, and request/response types.

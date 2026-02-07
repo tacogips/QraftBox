@@ -212,26 +212,26 @@ export class ClaudeSessionReader {
   }
 
   /**
-   * Detect session source (aynd, claude-cli, or unknown)
+   * Detect session source (qraftbox, claude-cli, or unknown)
    */
   private async detectSource(entry: ClaudeSessionEntry): Promise<SessionSource> {
-    // Primary detection: Check aynd session registry
-    const isAynd = await this.sessionRegistry.isAyndSession(entry.sessionId);
-    if (isAynd) {
-      return 'aynd';
+    // Primary detection: Check qraftbox session registry
+    const isQraftBox = await this.sessionRegistry.isQraftBoxSession(entry.sessionId);
+    if (isQraftBox) {
+      return 'qraftbox';
     }
 
-    // Fallback detection: Pattern matching for aynd context markers
+    // Fallback detection: Pattern matching for qraftbox context markers
     const prompt = entry.firstPrompt.toLowerCase();
     if (
-      prompt.includes('[aynd-context]') ||
-      prompt.includes('context from aynd:') ||
-      prompt.includes('aynd session')
+      prompt.includes('[qraftbox-context]') ||
+      prompt.includes('context from qraftbox:') ||
+      prompt.includes('qraftbox session')
     ) {
-      return 'aynd';
+      return 'qraftbox';
     }
 
-    // Default to claude-cli for sessions without aynd markers
+    // Default to claude-cli for sessions without qraftbox markers
     return 'claude-cli';
   }
 

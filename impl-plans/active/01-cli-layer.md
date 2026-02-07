@@ -145,7 +145,7 @@ function validateConfig(config: CLIConfig): void;
 
 ## Completion Criteria
 
-- [ ] `aynd` command starts server and opens browser
+- [ ] `qraftbox` command starts server and opens browser
 - [ ] All CLI options from design doc supported
 - [ ] Help text displays correctly
 - [ ] Graceful shutdown on SIGINT/SIGTERM

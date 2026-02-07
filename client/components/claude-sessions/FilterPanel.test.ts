@@ -36,7 +36,7 @@ describe("FilterPanel component", () => {
 
     // Functionality verified by TypeScript compilation:
     // - Collapsible panel with toggle
-    // - Source filter (radio buttons: All/AYND/CLI)
+    // - Source filter (radio buttons: All/QRAFTBOX/CLI)
     // - Working directory selector (dropdown with project list)
     // - Branch filter (text input)
     // - Active filter count badge

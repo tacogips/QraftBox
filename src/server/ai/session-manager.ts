@@ -16,7 +16,7 @@ import type {
 } from "../../types/ai";
 import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
-import type { AyndToolRegistry } from "../tools/registry.js";
+import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import {
   ClaudeCodeToolAgent,
   type ToolAgentSession,
@@ -131,7 +131,7 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
  */
 export function createSessionManager(
   config: AIConfig = DEFAULT_AI_CONFIG,
-  toolRegistry?: AyndToolRegistry | undefined,
+  toolRegistry?: QraftBoxToolRegistry | undefined,
 ): SessionManager {
   const sessions = new Map<string, InternalSession>();
   const queue: string[] = [];
@@ -177,7 +177,7 @@ export function createSessionManager(
         const agent = new ClaudeCodeToolAgent({
           cwd: session.request.options.projectPath,
           mcpServers: {
-            "aynd-tools": mcpServerConfig as any,
+            "qraftbox-tools": mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
           permissionMode: "bypassPermissions",

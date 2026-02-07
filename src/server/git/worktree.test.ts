@@ -353,7 +353,7 @@ describe("createWorktree", () => {
     const result = await createWorktree(testRepoDir, request);
 
     expect(result.success).toBe(true);
-    expect(result.path).toContain(".local/aynd/worktrees");
+    expect(result.path).toContain(".local/qraftbox/worktrees");
 
     // Cleanup the created worktree
     await removeWorktree(testRepoDir, result.path, true);
@@ -450,7 +450,7 @@ describe("ensureWorktreeBaseDir", () => {
   it("should return base directory path", async () => {
     const baseDir = await ensureWorktreeBaseDir();
 
-    expect(baseDir).toContain(".local/aynd/worktrees");
+    expect(baseDir).toContain(".local/qraftbox/worktrees");
   });
 
   it("should create directory if not exists", async () => {
@@ -471,15 +471,15 @@ describe("getWorktreePathConfig", () => {
   it("should compute correct paths", () => {
     const config = getWorktreePathConfig("/home/user/project", "feature-auth");
 
-    expect(config.basePath).toContain(".local/aynd/worktrees");
+    expect(config.basePath).toContain(".local/qraftbox/worktrees");
     expect(config.basePath).toContain("home__user__project");
     expect(config.fullPath).toContain("home__user__project/feature-auth");
   });
 
   it("should handle different project paths", () => {
-    const config = getWorktreePathConfig("/g/gits/tacogips/aynd", "hotfix");
+    const config = getWorktreePathConfig("/g/gits/tacogips/qraftbox", "hotfix");
 
-    expect(config.basePath).toContain("g__gits__tacogips__aynd");
-    expect(config.fullPath).toContain("g__gits__tacogips__aynd/hotfix");
+    expect(config.basePath).toContain("g__gits__tacogips__qraftbox");
+    expect(config.fullPath).toContain("g__gits__tacogips__qraftbox/hotfix");
   });
 });

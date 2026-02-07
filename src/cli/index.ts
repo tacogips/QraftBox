@@ -2,11 +2,14 @@
  * CLI Entry Point
  *
  * Provides CLI argument parsing, browser opening, and shutdown handlers
- * for the aynd server application.
+ * for the qraftbox server application.
  */
 
 import { Command } from "commander";
 import type { CLIConfig, SyncMode } from "../types/index";
+import { loadConfig, validateConfig } from "./config";
+import { createContextManager } from "../server/workspace/context-manager";
+import { createServer, startServer } from "../server/index";
 
 /**
  * Parse command-line arguments into CLIConfig
@@ -33,7 +36,7 @@ export function parseArgs(args: string[]): CLIConfig {
   const program = new Command();
 
   program
-    .name("aynd")
+    .name("qraftbox")
     .description(
       "All You Need Is Diff - Local diff viewer with git integration",
     )
@@ -187,7 +190,7 @@ export function setupShutdownHandlers(cleanup: () => Promise<void>): void {
 }
 
 /**
- * Main entry point for the aynd CLI application
+ * Main entry point for the qraftbox CLI application
  *
  * Orchestrates the startup sequence:
  * 1. Parse command-line arguments
@@ -206,25 +209,42 @@ export async function main(): Promise<void> {
     // Parse CLI arguments
     const cliConfig = parseArgs(process.argv);
 
-    console.log("aynd - All You Need Is Diff");
-    console.log(`Starting server on ${cliConfig.host}:${cliConfig.port}...`);
-    console.log(`Project path: ${cliConfig.projectPath}`);
-    console.log(`Sync mode: ${cliConfig.syncMode}`);
-    console.log(`AI features: ${cliConfig.ai ? "enabled" : "disabled"}`);
-    console.log(`File watching: ${cliConfig.watch ? "enabled" : "disabled"}`);
+    // Validate and resolve config
+    const config = loadConfig(cliConfig);
+    const validation = validateConfig(config);
+    if (!validation.valid) {
+      console.error(`Invalid configuration: ${validation.error}`);
+      process.exit(1);
+    }
 
-    // Import and call loadConfig from ../cli/config
-    // This will be implemented in the next task
-    // const config = await loadConfig(cliConfig);
+    console.log("qraftbox - All You Need Is Diff");
+    console.log(`Starting server on ${config.host}:${config.port}...`);
+    console.log(`Project path: ${config.projectPath}`);
+    console.log(`Sync mode: ${config.syncMode}`);
+    console.log(`AI features: ${config.ai ? "enabled" : "disabled"}`);
+    console.log(`File watching: ${config.watch ? "enabled" : "disabled"}`);
 
-    // TODO: Start server with configuration
-    // TODO: Setup shutdown handlers
-    // TODO: Open browser if cliConfig.open is true
+    // Create context manager and initial context
+    const contextManager = createContextManager();
+    await contextManager.createContext(config.projectPath);
 
-    console.log("Server started successfully");
+    // Create and start the HTTP server
+    const app = createServer({ config, contextManager });
+    const server = startServer(app, config);
+
     console.log(
-      `Open your browser at http://${cliConfig.host}:${cliConfig.port}`,
+      `Server started on http://${server.hostname}:${server.port}`,
     );
+
+    // Setup graceful shutdown
+    setupShutdownHandlers(async () => {
+      server.stop();
+    });
+
+    // Open browser if requested
+    if (config.open) {
+      await openBrowser(`http://${server.hostname}:${server.port}`);
+    }
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     console.error(`Failed to start server: ${errorMessage}`);

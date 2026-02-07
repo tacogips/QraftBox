@@ -63,7 +63,7 @@ export interface ValidationResult {
  *
  * @example
  * encodeProjectPath("/home/user/projects/my-app") // => "home__user__projects__my-app"
- * encodeProjectPath("/g/gits/tacogips/aynd") // => "g__gits__tacogips__aynd"
+ * encodeProjectPath("/g/gits/tacogips/qraftbox") // => "g__gits__tacogips__qraftbox"
  */
 export function encodeProjectPath(projectPath: string): string {
   // Remove leading slash and replace all remaining slashes with __
@@ -82,7 +82,7 @@ export function encodeProjectPath(projectPath: string): string {
  *
  * @example
  * decodeProjectPath("home__user__projects__my-app") // => "/home/user/projects/my-app"
- * decodeProjectPath("g__gits__tacogips__aynd") // => "/g/gits/tacogips/aynd"
+ * decodeProjectPath("g__gits__tacogips__qraftbox") // => "/g/gits/tacogips/qraftbox"
  */
 export function decodeProjectPath(encoded: string): string {
   // Replace __ with / and prepend /
@@ -91,7 +91,7 @@ export function decodeProjectPath(encoded: string): string {
 
 /**
  * Generate default worktree path using consistent convention
- * Path format: ~/.local/aynd/worktrees/{encoded_project_path}/{worktree_name}
+ * Path format: ~/.local/qraftbox/worktrees/{encoded_project_path}/{worktree_name}
  *
  * @param projectPath - Absolute project path
  * @param worktreeName - Name for the worktree
@@ -99,14 +99,14 @@ export function decodeProjectPath(encoded: string): string {
  *
  * @example
  * generateDefaultWorktreePath("/home/user/projects/my-app", "feature-auth")
- * // => "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth"
+ * // => "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth"
  */
 export function generateDefaultWorktreePath(
   projectPath: string,
   worktreeName: string,
 ): string {
   const encoded = encodeProjectPath(projectPath);
-  const base = join(homedir(), ".local", "aynd", "worktrees", encoded);
+  const base = join(homedir(), ".local", "qraftbox", "worktrees", encoded);
   return join(base, worktreeName);
 }
 

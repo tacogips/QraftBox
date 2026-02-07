@@ -37,7 +37,7 @@ async function gitExec(args: string[]): Promise<void> {
  */
 beforeAll(async () => {
   // Create temporary directory
-  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-test-"));
+  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-test-"));
 
   // Initialize git repository
   await gitExec(["init"]);
@@ -153,7 +153,7 @@ describe("getCommitLog", () => {
 
   test("should handle empty repository", async () => {
     const emptyRepoPath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-empty-"),
+      path.join(os.tmpdir(), "qraftbox-empty-"),
     );
     await Bun.spawn(["git", "init"], { cwd: emptyRepoPath }).exited;
 

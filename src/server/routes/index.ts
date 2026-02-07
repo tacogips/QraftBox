@@ -26,7 +26,7 @@ import { createDiffRoutes } from "./diff.js";
 import { createFileRoutes as createFileRoutesImpl } from "./files.js";
 import { createStatusRoutes as createStatusRoutesImpl } from "./status.js";
 import { createToolRoutes } from "./tools.js";
-import type { AyndToolRegistry } from "../tools/registry.js";
+import type { QraftBoxToolRegistry } from "../tools/registry.js";
 
 /**
  * Route group definition
@@ -46,7 +46,7 @@ export interface RouteGroup {
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
   readonly sessionManager: SessionManager;
-  readonly toolRegistry?: AyndToolRegistry | undefined;
+  readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
 }
 

@@ -21,7 +21,7 @@ describe("diff module", () => {
 
   beforeEach(async () => {
     // Create temporary directory for test repository
-    repoPath = await mkdtemp(join(tmpdir(), "aynd-diff-test-"));
+    repoPath = await mkdtemp(join(tmpdir(), "qraftbox-diff-test-"));
 
     // Initialize git repository
     await execGit(["init"], { cwd: repoPath });

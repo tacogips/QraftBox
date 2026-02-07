@@ -12,7 +12,7 @@ import {
 describe('Type Guards', () => {
   describe('isSessionSource', () => {
     test('returns true for valid session sources', () => {
-      expect(isSessionSource('aynd')).toBe(true);
+      expect(isSessionSource('qraftbox')).toBe(true);
       expect(isSessionSource('claude-cli')).toBe(true);
       expect(isSessionSource('unknown')).toBe(true);
     });
@@ -30,7 +30,7 @@ describe('Type Guards', () => {
   describe('isClaudeSessionEntry', () => {
     const validEntry: ClaudeSessionEntry = {
       sessionId: '123e4567-e89b-12d3-a456-426614174000',
-      fullPath: '/home/user/.claude/projects/-g-gits-tacogips-aynd/session.jsonl',
+      fullPath: '/home/user/.claude/projects/-g-gits-tacogips-qraftbox/session.jsonl',
       fileMtime: 1704067200000,
       firstPrompt: 'Implement feature X',
       summary: 'Discussion about feature X implementation',
@@ -38,7 +38,7 @@ describe('Type Guards', () => {
       created: '2024-01-01T00:00:00.000Z',
       modified: '2024-01-01T12:00:00.000Z',
       gitBranch: 'main',
-      projectPath: '/g/gits/tacogips/aynd',
+      projectPath: '/g/gits/tacogips/qraftbox',
       isSidechain: false,
     };
 
@@ -92,7 +92,7 @@ describe('Type Guards', () => {
       entries: [
         {
           sessionId: '123e4567-e89b-12d3-a456-426614174000',
-          fullPath: '/home/user/.claude/projects/-g-gits-tacogips-aynd/session.jsonl',
+          fullPath: '/home/user/.claude/projects/-g-gits-tacogips-qraftbox/session.jsonl',
           fileMtime: 1704067200000,
           firstPrompt: 'Implement feature X',
           summary: 'Discussion about feature X implementation',
@@ -100,11 +100,11 @@ describe('Type Guards', () => {
           created: '2024-01-01T00:00:00.000Z',
           modified: '2024-01-01T12:00:00.000Z',
           gitBranch: 'main',
-          projectPath: '/g/gits/tacogips/aynd',
+          projectPath: '/g/gits/tacogips/qraftbox',
           isSidechain: false,
         },
       ],
-      originalPath: '/g/gits/tacogips/aynd',
+      originalPath: '/g/gits/tacogips/qraftbox',
     };
 
     test('returns true for valid session index', () => {
@@ -156,7 +156,7 @@ describe('Type Guards', () => {
   describe('isExtendedSessionEntry', () => {
     const validExtendedEntry: ExtendedSessionEntry = {
       sessionId: '123e4567-e89b-12d3-a456-426614174000',
-      fullPath: '/home/user/.claude/projects/-g-gits-tacogips-aynd/session.jsonl',
+      fullPath: '/home/user/.claude/projects/-g-gits-tacogips-qraftbox/session.jsonl',
       fileMtime: 1704067200000,
       firstPrompt: 'Implement feature X',
       summary: 'Discussion about feature X implementation',
@@ -164,10 +164,10 @@ describe('Type Guards', () => {
       created: '2024-01-01T00:00:00.000Z',
       modified: '2024-01-01T12:00:00.000Z',
       gitBranch: 'main',
-      projectPath: '/g/gits/tacogips/aynd',
+      projectPath: '/g/gits/tacogips/qraftbox',
       isSidechain: false,
-      source: 'aynd',
-      projectEncoded: '-g-gits-tacogips-aynd',
+      source: 'qraftbox',
+      projectEncoded: '-g-gits-tacogips-qraftbox',
     };
 
     test('returns true for valid extended session entry', () => {
@@ -177,7 +177,7 @@ describe('Type Guards', () => {
     test('returns true for all valid source types', () => {
       expect(isExtendedSessionEntry({
         ...validExtendedEntry,
-        source: 'aynd',
+        source: 'qraftbox',
       })).toBe(true);
 
       expect(isExtendedSessionEntry({
@@ -215,8 +215,8 @@ describe('Type Guards', () => {
 
     test('returns false if base entry is invalid', () => {
       expect(isExtendedSessionEntry({
-        source: 'aynd',
-        projectEncoded: '-g-gits-tacogips-aynd',
+        source: 'qraftbox',
+        projectEncoded: '-g-gits-tacogips-qraftbox',
         // Missing all ClaudeSessionEntry fields
       })).toBe(false);
     });

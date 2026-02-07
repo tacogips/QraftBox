@@ -1,5 +1,5 @@
 /**
- * Git Types for the aynd git operations layer
+ * Git Types for the qraftbox git operations layer
  *
  * This module defines types for git operations including file status,
  * diff generation, file tree representation, and working tree state.

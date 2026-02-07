@@ -495,7 +495,7 @@ describe("Workspace Store", () => {
       await store.openDirectory("/test/path");
       await store.saveWorkspace();
 
-      const stored = localStorage.getItem("aynd:workspace");
+      const stored = localStorage.getItem("qraftbox:workspace");
       expect(stored).not.toBeNull();
       if (stored === null) return;
 
@@ -529,7 +529,7 @@ describe("Workspace Store", () => {
     });
 
     test("should handle corrupted localStorage data gracefully", async () => {
-      localStorage.setItem("aynd:workspace", "invalid json");
+      localStorage.setItem("qraftbox:workspace", "invalid json");
 
       await store.restoreWorkspace();
 
@@ -558,11 +558,11 @@ describe("Workspace Store", () => {
       await store.openDirectory("/test/path");
       await store.saveWorkspace();
 
-      expect(localStorage.getItem("aynd:workspace")).not.toBeNull();
+      expect(localStorage.getItem("qraftbox:workspace")).not.toBeNull();
 
       store.reset();
 
-      expect(localStorage.getItem("aynd:workspace")).toBeNull();
+      expect(localStorage.getItem("qraftbox:workspace")).toBeNull();
     });
   });
 

@@ -64,7 +64,7 @@ Execute git operations (Commit, Push, PR) using Claude Code agent with customiza
 - Update existing PR
 - GitHub authentication via GITHUB_TOKEN or `gh auth`
 
-**Prompt Location**: `~/.config/aynd/default-prompts/`
+**Prompt Location**: `~/.config/qraftbox/default-prompts/`
 - `commit.md`, `commit-*.md` - Commit prompts
 - `push.md`, `push-*.md` - Push prompts
 - `pr.md`, `pr-*.md` - PR prompts

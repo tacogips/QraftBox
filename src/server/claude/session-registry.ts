@@ -1,8 +1,8 @@
 /**
  * Session Registry
  *
- * Tracks aynd-created Claude Code sessions for source detection.
- * Stores session IDs in ~/.local/aynd/session-registry.json.
+ * Tracks qraftbox-created Claude Code sessions for source detection.
+ * Stores session IDs in ~/.local/qraftbox/session-registry.json.
  */
 
 import { readFile, writeFile, mkdir } from 'fs/promises';
@@ -11,9 +11,9 @@ import { homedir } from 'os';
 import { existsSync } from 'fs';
 
 /**
- * Registry entry for an aynd-created session
+ * Registry entry for a QraftBox-created session
  */
-export interface AyndSessionRecord {
+export interface QraftBoxSessionRecord {
   /** Claude session ID (UUID) */
   sessionId: string;
   /** Session creation timestamp (ISO 8601) */
@@ -25,9 +25,9 @@ export interface AyndSessionRecord {
 /**
  * Registry structure stored in file
  */
-export interface AyndSessionRegistry {
-  /** All aynd-created sessions */
-  sessions: AyndSessionRecord[];
+export interface QraftBoxSessionRegistry {
+  /** All qraftbox-created sessions */
+  sessions: QraftBoxSessionRecord[];
 }
 
 /**
@@ -38,14 +38,14 @@ interface LockInfo {
   timestamp: number;
 }
 
-const REGISTRY_DIR = join(homedir(), '.local', 'aynd');
+const REGISTRY_DIR = join(homedir(), '.local', 'qraftbox');
 const REGISTRY_FILE = join(REGISTRY_DIR, 'session-registry.json');
 const LOCK_FILE = join(REGISTRY_DIR, 'session-registry.lock');
 const LOCK_TIMEOUT_MS = 10000; // 10 seconds
 const LOCK_STALE_MS = 30000; // 30 seconds for stale lock detection
 
 /**
- * SessionRegistry manages aynd-created session tracking
+ * SessionRegistry manages qraftbox-created session tracking
  */
 export class SessionRegistry {
   private readonly registryPath: string;
@@ -62,7 +62,7 @@ export class SessionRegistry {
   }
 
   /**
-   * Register a new aynd session
+   * Register a new qraftbox session
    */
   async register(sessionId: string, projectPath: string): Promise<void> {
     await this.acquireLock();
@@ -90,9 +90,9 @@ export class SessionRegistry {
   }
 
   /**
-   * Check if a session was created by aynd
+   * Check if a session was created by qraftbox
    */
-  async isAyndSession(sessionId: string): Promise<boolean> {
+  async isQraftBoxSession(sessionId: string): Promise<boolean> {
     const registry = await this.getRegistry();
     return registry.sessions.some(s => s.sessionId === sessionId);
   }
@@ -100,7 +100,7 @@ export class SessionRegistry {
   /**
    * Get the full registry
    */
-  async getRegistry(): Promise<AyndSessionRegistry> {
+  async getRegistry(): Promise<QraftBoxSessionRegistry> {
     await this.ensureRegistryExists();
     return this.loadRegistryUnsafe();
   }
@@ -117,7 +117,7 @@ export class SessionRegistry {
 
     // Create empty registry if file doesn't exist
     if (!existsSync(this.registryPath)) {
-      const emptyRegistry: AyndSessionRegistry = { sessions: [] };
+      const emptyRegistry: QraftBoxSessionRegistry = { sessions: [] };
       await writeFile(
         this.registryPath,
         JSON.stringify(emptyRegistry, null, 2),
@@ -129,14 +129,14 @@ export class SessionRegistry {
   /**
    * Load registry without locking (internal use only)
    */
-  private async loadRegistryUnsafe(): Promise<AyndSessionRegistry> {
+  private async loadRegistryUnsafe(): Promise<QraftBoxSessionRegistry> {
     await this.ensureRegistryExists();
 
     const content = await readFile(this.registryPath, 'utf-8');
     const parsed = JSON.parse(content) as unknown;
 
     // Validate structure
-    if (!isAyndSessionRegistry(parsed)) {
+    if (!isQraftBoxSessionRegistry(parsed)) {
       throw new Error('Invalid registry format');
     }
 
@@ -146,7 +146,7 @@ export class SessionRegistry {
   /**
    * Save registry without locking (internal use only)
    */
-  private async saveRegistryUnsafe(registry: AyndSessionRegistry): Promise<void> {
+  private async saveRegistryUnsafe(registry: QraftBoxSessionRegistry): Promise<void> {
     await writeFile(
       this.registryPath,
       JSON.stringify(registry, null, 2),
@@ -247,9 +247,9 @@ export class SessionRegistry {
 }
 
 /**
- * Type guard for AyndSessionRegistry
+ * Type guard for QraftBoxSessionRegistry
  */
-function isAyndSessionRegistry(value: unknown): value is AyndSessionRegistry {
+function isQraftBoxSessionRegistry(value: unknown): value is QraftBoxSessionRegistry {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
