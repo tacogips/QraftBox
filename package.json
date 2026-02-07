@@ -43,6 +43,7 @@
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
+    "claude-code-agent": "file:../claude-code-agent",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

@@ -16,6 +16,11 @@ import type {
 } from "../../types/ai";
 import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
+import type { AyndToolRegistry } from "../tools/registry.js";
+import {
+  ClaudeCodeToolAgent,
+  type ToolAgentSession,
+} from "../../../../claude-code-agent/src/sdk/index.js";
 
 /**
  * Internal session representation
@@ -31,6 +36,8 @@ interface InternalSession {
   completedAt?: Date;
   listeners: Set<(event: AIProgressEvent) => void>;
   abortController?: AbortController;
+  toolAgentSession?: ToolAgentSession;
+  claudeAgent?: ClaudeCodeToolAgent;
 }
 
 /**
@@ -67,7 +74,7 @@ export interface SessionManager {
    */
   subscribe(
     sessionId: string,
-    listener: (event: AIProgressEvent) => void
+    listener: (event: AIProgressEvent) => void,
   ): () => void;
 
   /**
@@ -91,7 +98,7 @@ function generateSessionId(): string {
 function createProgressEvent(
   type: AIProgressEvent["type"],
   sessionId: string,
-  data: AIProgressEvent["data"] = {}
+  data: AIProgressEvent["data"] = {},
 ): AIProgressEvent {
   return {
     type,
@@ -123,7 +130,8 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
  * @returns Session manager instance
  */
 export function createSessionManager(
-  config: AIConfig = DEFAULT_AI_CONFIG
+  config: AIConfig = DEFAULT_AI_CONFIG,
+  toolRegistry?: AyndToolRegistry | undefined,
 ): SessionManager {
   const sessions = new Map<string, InternalSession>();
   const queue: string[] = [];
@@ -146,7 +154,7 @@ export function createSessionManager(
   }
 
   /**
-   * Execute a session (stubbed - will integrate with claude-code-agent)
+   * Execute a session with real claude-code-agent integration
    */
   async function executeSession(sessionId: string): Promise<void> {
     const session = sessions.get(sessionId);
@@ -160,38 +168,178 @@ export function createSessionManager(
     emitEvent(sessionId, createProgressEvent("session_started", sessionId));
 
     try {
-      // TODO: Integrate with actual claude-code-agent
-      // For now, simulate a session with thinking and message events
+      // If toolRegistry is available, use real ClaudeCodeToolAgent
+      if (toolRegistry !== undefined) {
+        // Create ClaudeCodeToolAgent with tool registry
+        const allowedToolNames = [...toolRegistry.getAllowedToolNames()];
+        const mcpServerConfig = toolRegistry.toMcpServerConfig();
 
-      // Simulate thinking
-      emitEvent(sessionId, createProgressEvent("thinking", sessionId));
+        const agent = new ClaudeCodeToolAgent({
+          cwd: session.request.options.projectPath,
+          mcpServers: {
+            "aynd-tools": mcpServerConfig as any,
+          },
+          allowedTools: allowedToolNames,
+          permissionMode: "bypassPermissions",
+        });
 
-      // Wait a bit to simulate processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+        session.claudeAgent = agent;
 
-      // Check if cancelled (session may have been cancelled while thinking)
-      const currentSession = sessions.get(sessionId);
-      if (currentSession === undefined || currentSession.state === "cancelled") {
-        return;
+        // Start session
+        const toolAgentSession = await agent.startSession({
+          prompt: session.fullPrompt,
+        });
+
+        session.toolAgentSession = toolAgentSession;
+
+        // Listen for events
+        toolAgentSession.on("message", (msg: unknown) => {
+          // Extract role and content from message
+          if (typeof msg === "object" && msg !== null && "type" in msg) {
+            const message = msg as { type?: string; content?: unknown };
+            const content =
+              typeof message.content === "string"
+                ? message.content
+                : JSON.stringify(message.content);
+            emitEvent(
+              sessionId,
+              createProgressEvent("message", sessionId, {
+                role: "assistant",
+                content,
+              }),
+            );
+          }
+        });
+
+        toolAgentSession.on("toolCall", (call: unknown) => {
+          // Extract tool name and input
+          if (typeof call === "object" && call !== null) {
+            const toolCall = call as {
+              name?: string;
+              input?: Record<string, unknown>;
+            };
+            const toolName =
+              typeof toolCall.name === "string" ? toolCall.name : "unknown";
+            const input =
+              typeof toolCall.input === "object" && toolCall.input !== null
+                ? toolCall.input
+                : {};
+            emitEvent(
+              sessionId,
+              createProgressEvent("tool_use", sessionId, {
+                toolName,
+                input,
+              }),
+            );
+          }
+        });
+
+        toolAgentSession.on("toolResult", (result: unknown) => {
+          // Extract tool result data
+          if (typeof result === "object" && result !== null) {
+            const toolResult = result as {
+              name?: string;
+              output?: unknown;
+              isError?: boolean;
+            };
+            const toolName =
+              typeof toolResult.name === "string" ? toolResult.name : "unknown";
+            const isError =
+              typeof toolResult.isError === "boolean"
+                ? toolResult.isError
+                : false;
+            emitEvent(
+              sessionId,
+              createProgressEvent("tool_result", sessionId, {
+                toolName,
+                output: toolResult.output,
+                isError,
+              }),
+            );
+          }
+        });
+
+        toolAgentSession.on("error", (err: unknown) => {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          emitEvent(
+            sessionId,
+            createProgressEvent("error", sessionId, {
+              message: errorMessage,
+            }),
+          );
+        });
+
+        // Iterate messages until completion
+        for await (const _msg of toolAgentSession.messages()) {
+          // Check if cancelled
+          const currentSession = sessions.get(sessionId);
+          if (
+            currentSession === undefined ||
+            currentSession.state === "cancelled"
+          ) {
+            break;
+          }
+        }
+
+        // Wait for completion
+        const sessionResult = await toolAgentSession.waitForCompletion();
+
+        // Mark as completed or failed
+        if (sessionResult.success) {
+          session.state = "completed";
+        } else {
+          session.state = "failed";
+          if (sessionResult.error !== undefined) {
+            emitEvent(
+              sessionId,
+              createProgressEvent("error", sessionId, {
+                message: sessionResult.error.message,
+              }),
+            );
+          }
+        }
+        session.completedAt = new Date();
+
+        // Clean up agent
+        await agent.close();
+
+        emitEvent(
+          sessionId,
+          createProgressEvent(
+            session.state === "completed" ? "completed" : "error",
+            sessionId,
+          ),
+        );
+      } else {
+        // Fallback to stubbed behavior if toolRegistry is undefined
+        emitEvent(sessionId, createProgressEvent("thinking", sessionId));
+
+        await new Promise((resolve) => setTimeout(resolve, 100));
+
+        const currentSession = sessions.get(sessionId);
+        if (
+          currentSession === undefined ||
+          currentSession.state === "cancelled"
+        ) {
+          return;
+        }
+
+        emitEvent(
+          sessionId,
+          createProgressEvent("message", sessionId, {
+            role: "assistant",
+            content:
+              "[AI Integration Stubbed] Tool registry not provided. The full prompt was:\n\n" +
+              session.fullPrompt.slice(0, 500) +
+              (session.fullPrompt.length > 500 ? "..." : ""),
+          }),
+        );
+
+        session.state = "completed";
+        session.completedAt = new Date();
+
+        emitEvent(sessionId, createProgressEvent("completed", sessionId));
       }
-
-      // Emit completion message
-      emitEvent(
-        sessionId,
-        createProgressEvent("message", sessionId, {
-          role: "assistant",
-          content:
-            "[AI Integration Stubbed] This is where the claude-code-agent response would appear. The full prompt was:\n\n" +
-            session.fullPrompt.slice(0, 500) +
-            (session.fullPrompt.length > 500 ? "..." : ""),
-        })
-      );
-
-      // Mark as completed
-      session.state = "completed";
-      session.completedAt = new Date();
-
-      emitEvent(sessionId, createProgressEvent("completed", sessionId));
     } catch (e) {
       session.state = "failed";
       session.completedAt = new Date();
@@ -201,7 +349,7 @@ export function createSessionManager(
         sessionId,
         createProgressEvent("error", sessionId, {
           message: errorMessage,
-        })
+        }),
       );
     } finally {
       runningCount--;
@@ -264,7 +412,7 @@ export function createSessionManager(
         if (queue.length >= config.maxQueueSize) {
           sessions.delete(sessionId);
           throw new Error(
-            `Queue is full (max ${config.maxQueueSize} sessions)`
+            `Queue is full (max ${config.maxQueueSize} sessions)`,
           );
         }
 
@@ -298,7 +446,12 @@ export function createSessionManager(
         queue.splice(queueIndex, 1);
       }
 
-      // Abort if running
+      // Cancel ToolAgentSession if available
+      if (session.toolAgentSession !== undefined) {
+        await session.toolAgentSession.cancel();
+      }
+
+      // Abort if running (fallback for old abort controller)
       if (session.abortController !== undefined) {
         session.abortController.abort();
       }
@@ -339,7 +492,7 @@ export function createSessionManager(
 
     subscribe(
       sessionId: string,
-      listener: (event: AIProgressEvent) => void
+      listener: (event: AIProgressEvent) => void,
     ): () => void {
       const session = sessions.get(sessionId);
       if (session === undefined) {

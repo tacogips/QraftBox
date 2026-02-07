@@ -25,6 +25,8 @@ import { createPromptRoutes } from "./prompts.js";
 import { createDiffRoutes } from "./diff.js";
 import { createFileRoutes as createFileRoutesImpl } from "./files.js";
 import { createStatusRoutes as createStatusRoutesImpl } from "./status.js";
+import { createToolRoutes } from "./tools.js";
+import type { AyndToolRegistry } from "../tools/registry.js";
 
 /**
  * Route group definition
@@ -44,6 +46,7 @@ export interface RouteGroup {
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
   readonly sessionManager: SessionManager;
+  readonly toolRegistry?: AyndToolRegistry | undefined;
   readonly configDir?: string | undefined;
 }
 
@@ -172,6 +175,15 @@ export function getNonContextRouteGroups(
         sessionManager: config.sessionManager,
       }),
     },
+    // Tool management routes - GET /api/tools
+    ...(config.toolRegistry !== undefined
+      ? [
+          {
+            prefix: "/tools",
+            routes: createToolRoutes(config.toolRegistry),
+          },
+        ]
+      : []),
   ];
 }
 
