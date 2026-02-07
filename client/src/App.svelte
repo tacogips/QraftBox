@@ -3,6 +3,7 @@
   import type { FileNode } from "./stores/files";
   import type { QueueStatus, FileReference } from "../../src/types/ai";
   import DiffView from "../components/DiffView.svelte";
+  import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
   import ClaudeSessionsScreen from "../components/claude-sessions/ClaudeSessionsScreen.svelte";
@@ -57,27 +58,175 @@
   );
 
   /**
-   * Build file tree from diff files
+   * Build a proper nested directory tree from diff files
    */
   function buildFileTree(files: DiffFile[]): FileNode {
     const root: FileNode = {
       name: "",
       path: "",
       isDirectory: true,
-      children: files.map((f) => ({
-        name: f.path.split("/").pop() ?? f.path,
-        path: f.path,
-        isDirectory: false,
-        status: f.status === "renamed" ? "modified" : f.status,
-      })),
+      children: [],
     };
+
+    for (const f of files) {
+      const segments = f.path.split("/");
+      let current = root;
+
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        if (seg === undefined || seg.length === 0) continue;
+
+        const segPath = segments.slice(0, i + 1).join("/");
+        const isLast = i === segments.length - 1;
+        const children = (current.children ?? []) as FileNode[];
+
+        const existing = children.find((c) => c.name === seg);
+        if (existing !== undefined) {
+          current = existing;
+        } else {
+          const newNode: FileNode = isLast
+            ? {
+                name: seg,
+                path: segPath,
+                isDirectory: false,
+                status: f.status === "renamed" ? "modified" : f.status,
+              }
+            : { name: seg, path: segPath, isDirectory: true, children: [] };
+          children.push(newNode);
+          (current as { children: FileNode[] }).children = children;
+          current = newNode;
+        }
+      }
+    }
+
+    sortTree(root);
     return root;
   }
 
   /**
-   * File tree derived from diff files
+   * Sort tree: directories first, then files, alphabetically
    */
-  const fileTree = $derived(buildFileTree(diffFiles));
+  function sortTree(node: FileNode): void {
+    if (!node.isDirectory || node.children === undefined) return;
+    const children = node.children as FileNode[];
+    children.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const c of children) {
+      sortTree(c);
+    }
+  }
+
+  /**
+   * File tree derived from diff files (used in "diff" mode)
+   */
+  const diffFileTree = $derived(buildFileTree(diffFiles));
+
+  /**
+   * All-files tree fetched from server
+   */
+  let allFilesTree = $state<FileNode | null>(null);
+  let allFilesLoading = $state(false);
+
+  /**
+   * Fetch all files tree from server
+   */
+  async function fetchAllFiles(ctxId: string): Promise<void> {
+    if (allFilesTree !== null) return;
+    allFilesLoading = true;
+    try {
+      const resp = await fetch(`/api/ctx/${ctxId}/files?mode=all`);
+      if (!resp.ok) throw new Error(`Files API error: ${resp.status}`);
+      const data = (await resp.json()) as { tree: ServerFileNode };
+      allFilesTree = convertServerTree(data.tree);
+    } catch (e) {
+      console.error("Failed to fetch all files:", e);
+    } finally {
+      allFilesLoading = false;
+    }
+  }
+
+  /**
+   * Server FileNode uses type: "file" | "directory" -- convert to client's isDirectory format
+   */
+  interface ServerFileNode {
+    name: string;
+    path: string;
+    type: "file" | "directory";
+    children?: ServerFileNode[];
+    status?: string;
+  }
+
+  function convertServerTree(node: ServerFileNode): FileNode {
+    const status =
+      node.status === "added" ||
+      node.status === "modified" ||
+      node.status === "deleted"
+        ? node.status
+        : undefined;
+    return {
+      name: node.name,
+      path: node.path,
+      isDirectory: node.type === "directory",
+      children: node.children?.map(convertServerTree),
+      status,
+    };
+  }
+
+  /**
+   * Active file tree based on mode
+   */
+  const fileTree = $derived(
+    fileTreeMode === "diff" ? diffFileTree : (allFilesTree ?? diffFileTree),
+  );
+
+  /**
+   * Whether the selected path has a diff entry
+   */
+  const selectedHasDiff = $derived(
+    selectedPath !== null && diffFiles.some((f) => f.path === selectedPath),
+  );
+
+  /**
+   * File content for non-diff files
+   */
+  let fileContent = $state<{
+    path: string;
+    content: string;
+    language: string;
+  } | null>(null);
+  let fileContentLoading = $state(false);
+
+  /**
+   * Fetch file content from server (for non-diff files)
+   */
+  async function fetchFileContent(
+    ctxId: string,
+    filePath: string,
+  ): Promise<void> {
+    fileContentLoading = true;
+    try {
+      const resp = await fetch(`/api/ctx/${ctxId}/files/file/${filePath}`);
+      if (!resp.ok) throw new Error(`File API error: ${resp.status}`);
+      const data = (await resp.json()) as {
+        path: string;
+        content: string;
+        language: string;
+      };
+      fileContent = {
+        path: data.path,
+        content: data.content,
+        language: data.language,
+      };
+    } catch (e) {
+      console.error("Failed to fetch file content:", e);
+      fileContent = null;
+    } finally {
+      fileContentLoading = false;
+    }
+  }
 
   /**
    * Diff stats
@@ -313,6 +462,20 @@
       window.removeEventListener("keydown", handleKeydown);
     };
   });
+
+  // Fetch file content when selecting a non-diff file
+  $effect(() => {
+    if (
+      selectedPath !== null &&
+      !selectedHasDiff &&
+      contextId !== null &&
+      fileTreeMode === "all"
+    ) {
+      void fetchFileContent(contextId, selectedPath);
+    } else {
+      fileContent = null;
+    }
+  });
 </script>
 
 <div class="flex flex-col h-screen bg-bg-primary text-text-primary">
@@ -462,19 +625,25 @@
               <div class="p-4 text-sm text-text-secondary">Loading files...</div>
             {:else if error !== null}
               <div class="p-4 text-sm text-red-600">{error}</div>
+            {:else if allFilesLoading && fileTreeMode === "all"}
+              <div class="p-4 text-sm text-text-secondary">Loading all files...</div>
             {:else if fileTree.children !== undefined && fileTree.children.length > 0}
               <FileTree
                 tree={fileTree}
                 mode={fileTreeMode}
                 {selectedPath}
                 onFileSelect={handleFileSelect}
+                changedCount={diffFiles.length}
                 onModeChange={(mode) => {
                   fileTreeMode = mode;
+                  if (mode === "all" && contextId !== null) {
+                    void fetchAllFiles(contextId);
+                  }
                 }}
               />
             {:else}
               <div class="p-4 text-sm text-text-secondary">
-                No changed files found
+                {fileTreeMode === "diff" ? "No changed files found" : "No files found"}
               </div>
             {/if}
           </aside>
@@ -508,13 +677,22 @@
               onCommentSubmit={handleInlineCommentSubmit}
             />
           </div>
+        {:else if fileContentLoading}
+          <div class="p-8 text-center text-text-secondary">Loading file...</div>
+        {:else if fileContent !== null}
+          <FileViewer
+            path={fileContent.path}
+            content={fileContent.content}
+            language={fileContent.language}
+            onCommentSubmit={handleInlineCommentSubmit}
+          />
         {:else if viewMode === "current-state"}
           <div class="p-8 text-center text-text-secondary">
             Current state view is under development
           </div>
         {:else}
           <div class="p-8 text-center text-text-secondary">
-            Select a file to view diff
+            Select a file to view
           </div>
         {/if}
       </main>

@@ -31,9 +31,14 @@
      * Callback when display mode changes
      */
     onModeChange: (mode: "diff" | "all") => void;
+
+    /**
+     * Number of changed files (always from diff, independent of tree)
+     */
+    changedCount?: number;
   }
 
-  const { tree, mode, selectedPath, onFileSelect, onModeChange }: Props =
+  const { tree, mode, selectedPath, onFileSelect, onModeChange, changedCount = undefined }: Props =
     $props();
 
   /**
@@ -164,43 +169,14 @@
   >
     <h2 class="text-lg font-semibold text-gray-900">Files</h2>
 
-    <div
-      class="mode-toggle flex gap-2"
-      role="group"
-      aria-label="File display mode"
+    <button
+      type="button"
+      class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 bg-gray-100 text-gray-700 hover:bg-gray-200"
+      onclick={() => onModeChange(mode === "diff" ? "all" : "diff")}
+      aria-label={mode === "diff" ? "Switch to all files" : "Switch to diff only"}
     >
-      <!-- Diff Only Button -->
-      <button
-        type="button"
-        class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] min-w-[44px] focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-        class:bg-blue-600={mode === "diff"}
-        class:text-white={mode === "diff"}
-        class:bg-gray-100={mode !== "diff"}
-        class:text-gray-700={mode !== "diff"}
-        class:hover:bg-gray-200={mode !== "diff"}
-        onclick={() => onModeChange("diff")}
-        aria-pressed={mode === "diff"}
-        aria-label="Show only changed files"
-      >
-        Diff Only ({fileCounts.changed})
-      </button>
-
-      <!-- All Files Button -->
-      <button
-        type="button"
-        class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] min-w-[44px] focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-        class:bg-blue-600={mode === "all"}
-        class:text-white={mode === "all"}
-        class:bg-gray-100={mode !== "all"}
-        class:text-gray-700={mode !== "all"}
-        class:hover:bg-gray-200={mode !== "all"}
-        onclick={() => onModeChange("all")}
-        aria-pressed={mode === "all"}
-        aria-label="Show all files"
-      >
-        All Files ({fileCounts.total})
-      </button>
-    </div>
+      {mode === "diff" ? `Diff (${changedCount ?? fileCounts.changed})` : "All"}
+    </button>
   </div>
 
   <!-- Tree Content -->
