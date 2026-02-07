@@ -80,7 +80,7 @@
   {#if onExpandContext !== undefined}
     <button
       onclick={handleExpandContext}
-      class="px-3 py-1.5 min-h-[32px] text-xs font-medium text-text-primary bg-bg-secondary border border-border-default rounded hover:bg-bg-hover active:bg-bg-pressed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      class="px-3 py-1.5 min-h-[32px] text-xs font-medium text-text-primary bg-bg-secondary border border-border-default rounded hover:bg-bg-hover active:bg-bg-pressed focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2"
       type="button"
       aria-label="Expand hidden context lines"
     >

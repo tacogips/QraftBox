@@ -50,17 +50,17 @@ function handleCarouselIndexChange(index: number): void {
 const statusBadge = $derived.by(() => {
   switch (session.state) {
     case "running":
-      return { text: "Running", color: "bg-blue-500", animate: true };
+      return { text: "Running", color: "bg-accent-emphasis", animate: true };
     case "queued":
-      return { text: "Queued", color: "bg-yellow-500", animate: false };
+      return { text: "Queued", color: "bg-attention-emphasis", animate: false };
     case "completed":
-      return { text: "Completed", color: "bg-green-500", animate: false };
+      return { text: "Completed", color: "bg-success-emphasis", animate: false };
     case "failed":
-      return { text: "Failed", color: "bg-red-500", animate: false };
+      return { text: "Failed", color: "bg-danger-emphasis", animate: false };
     case "cancelled":
-      return { text: "Cancelled", color: "bg-gray-500", animate: false };
+      return { text: "Cancelled", color: "bg-bg-emphasis", animate: false };
     default:
-      return { text: "Unknown", color: "bg-gray-500", animate: false };
+      return { text: "Unknown", color: "bg-bg-emphasis", animate: false };
   }
 });
 
@@ -91,7 +91,7 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
                  text-text-secondary hover:text-text-primary
                  hover:bg-bg-hover rounded-lg
                  transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Back to queue"
         >
           <svg
@@ -116,7 +116,7 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
                  text-xs font-medium text-white {statusBadge.color}"
         >
           {#if statusBadge.animate}
-            <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span class="w-1.5 h-1.5 rounded-full bg-bg-primary animate-pulse" />
           {/if}
           {statusBadge.text}
         </span>
@@ -132,7 +132,7 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
           type="button"
           onclick={() => onViewModeChange("chat")}
           class="px-3 py-1.5 text-sm rounded-md transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  {viewMode === 'chat'
                    ? 'bg-bg-secondary text-text-primary shadow-sm'
                    : 'text-text-secondary hover:text-text-primary'}"
@@ -161,7 +161,7 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
           type="button"
           onclick={() => onViewModeChange("carousel")}
           class="px-3 py-1.5 text-sm rounded-md transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  {viewMode === 'carousel'
                    ? 'bg-bg-secondary text-text-primary shadow-sm'
                    : 'text-text-secondary hover:text-text-primary'}"

@@ -55,7 +55,7 @@
          hover:bg-purple-700
          focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
          active:bg-purple-800
-         disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
+         disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
          transition-colors
          font-medium text-base"
   aria-label="Create Pull Request"

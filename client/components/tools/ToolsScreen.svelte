@@ -171,7 +171,7 @@ $effect(() => {
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded-lg
                transition-colors
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Back to previous screen"
       >
         <svg
@@ -200,10 +200,10 @@ $effect(() => {
       disabled={reloading}
       class="px-3 py-1.5 text-sm font-medium
              bg-bg-secondary hover:bg-bg-hover text-text-primary
-             border border-border-default hover:border-blue-500/30
+             border border-border-default hover:border-accent-muted
              disabled:opacity-50 disabled:cursor-not-allowed
              rounded-lg transition-colors
-             focus:outline-none focus:ring-2 focus:ring-blue-500
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis
              flex items-center gap-2"
       aria-label="Reload plugin tools from disk"
     >
@@ -265,7 +265,7 @@ $effect(() => {
   <!-- Reload success message -->
   {#if reloadMessage !== null}
     <div
-      class="mx-4 mt-3 p-3 rounded-lg border border-green-500/30 bg-green-500/10 text-green-400 text-sm"
+      class="mx-4 mt-3 p-3 rounded-lg border border-success-muted bg-success-subtle text-success-fg text-sm"
       role="status"
     >
       {reloadMessage}
@@ -275,7 +275,7 @@ $effect(() => {
   <!-- Reload error message -->
   {#if reloadError !== null}
     <div
-      class="mx-4 mt-3 p-3 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 text-sm"
+      class="mx-4 mt-3 p-3 rounded-lg border border-danger-muted bg-danger-subtle text-danger-fg text-sm"
       role="alert"
     >
       <div class="flex items-start gap-2">
@@ -283,7 +283,7 @@ $effect(() => {
         <button
           type="button"
           onclick={() => { reloadError = null; }}
-          class="p-1 rounded hover:bg-red-500/20 transition-colors shrink-0"
+          class="p-1 rounded hover:bg-danger-subtle transition-colors shrink-0"
           aria-label="Dismiss error"
         >
           <svg
@@ -316,7 +316,7 @@ $effect(() => {
         aria-live="polite"
       >
         <svg
-          class="animate-spin h-6 w-6 text-blue-400"
+          class="animate-spin h-6 w-6 text-accent-fg"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -351,7 +351,7 @@ $effect(() => {
           stroke-width="1.5"
           stroke-linecap="round"
           stroke-linejoin="round"
-          class="text-red-400 mb-4"
+          class="text-danger-fg mb-4"
           aria-hidden="true"
         >
           <circle cx="12" cy="12" r="10" />
@@ -366,7 +366,7 @@ $effect(() => {
                  bg-bg-secondary hover:bg-bg-hover text-text-primary
                  border border-border-default rounded-lg
                  transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         >
           Retry
         </button>
@@ -400,7 +400,7 @@ $effect(() => {
         {#each sortedTools as tool (tool.name)}
           <div
             class="tool-card rounded-lg border border-border-default bg-bg-secondary
-                   hover:border-blue-500/20 transition-colors"
+                   hover:border-accent-muted transition-colors"
             role="listitem"
           >
             <!-- Tool row (clickable) -->
@@ -408,7 +408,7 @@ $effect(() => {
               type="button"
               onclick={() => toggleExpand(tool.name)}
               class="w-full px-4 py-3 flex items-center gap-3 text-left
-                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-inset
                      rounded-lg"
               aria-expanded={expandedTool === tool.name}
             >
@@ -437,14 +437,14 @@ $effect(() => {
               {#if tool.source === "builtin"}
                 <span
                   class="px-2 py-0.5 text-xs rounded-full
-                         bg-neutral-600/30 text-text-secondary"
+                         bg-neutral-muted text-text-secondary"
                 >
                   builtin
                 </span>
               {:else}
                 <span
                   class="px-2 py-0.5 text-xs rounded-full
-                         bg-blue-600/30 text-blue-300"
+                         bg-accent-muted text-accent-fg"
                 >
                   plugin
                 </span>
@@ -497,7 +497,7 @@ $effect(() => {
                             <span class="font-mono text-text-primary shrink-0">{paramName}</span>
                             <span class="text-text-tertiary">({paramSchema.type})</span>
                             {#if tool.inputSchema.required?.includes(paramName)}
-                              <span class="text-xs text-red-400">required</span>
+                              <span class="text-xs text-danger-fg">required</span>
                             {/if}
                             {#if paramSchema.description !== undefined}
                               <span class="text-text-secondary">- {paramSchema.description}</span>

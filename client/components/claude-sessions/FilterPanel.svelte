@@ -127,8 +127,8 @@
       type="button"
       onclick={toggleExpanded}
       class="flex items-center gap-2 text-sm font-medium text-text-primary
-             hover:text-blue-400 transition-colors
-             focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+             hover:text-accent-fg transition-colors
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis rounded"
       aria-expanded={isExpanded}
       aria-controls="filter-panel-content"
     >
@@ -153,7 +153,7 @@
         <span
           class="inline-flex items-center justify-center px-1.5 py-0.5
                  text-[10px] font-bold rounded-full
-                 bg-blue-600 text-white"
+                 bg-accent-emphasis text-white"
           aria-label="Active filters"
         >
           {[
@@ -174,7 +174,7 @@
         onclick={onClearFilters}
         class="px-3 py-1.5 text-xs font-medium rounded-md
                bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-text-primary
-               focus:outline-none focus:ring-2 focus:ring-blue-500
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                transition-colors duration-150"
         aria-label="Clear all filters"
       >
@@ -203,8 +203,8 @@
               value="all"
               checked={sourceValue === "all"}
               onchange={handleSourceChange}
-              class="mr-2 w-4 h-4 text-blue-600
-                     focus:ring-2 focus:ring-blue-500"
+              class="mr-2 w-4 h-4 text-accent-fg
+                     focus:ring-2 focus:ring-accent-emphasis"
             />
             <span class="text-sm text-text-primary">All</span>
           </label>
@@ -215,8 +215,8 @@
               value="qraftbox"
               checked={sourceValue === "qraftbox"}
               onchange={handleSourceChange}
-              class="mr-2 w-4 h-4 text-blue-600
-                     focus:ring-2 focus:ring-blue-500"
+              class="mr-2 w-4 h-4 text-accent-fg
+                     focus:ring-2 focus:ring-accent-emphasis"
             />
             <span class="text-sm text-text-primary">QRAFTBOX</span>
           </label>
@@ -227,8 +227,8 @@
               value="claude-cli"
               checked={sourceValue === "claude-cli"}
               onchange={handleSourceChange}
-              class="mr-2 w-4 h-4 text-blue-600
-                     focus:ring-2 focus:ring-blue-500"
+              class="mr-2 w-4 h-4 text-accent-fg
+                     focus:ring-2 focus:ring-accent-emphasis"
             />
             <span class="text-sm text-text-primary">CLI</span>
           </label>
@@ -250,7 +250,7 @@
             onchange={handleWorkingDirectoryChange}
             class="w-full px-3 py-2 rounded-md text-sm
                    bg-bg-primary border border-bg-border text-text-primary
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent
                    transition-all duration-150"
             aria-label="Filter by project directory"
           >
@@ -281,7 +281,7 @@
           class="w-full px-3 py-2 rounded-md text-sm
                  bg-bg-primary border border-bg-border text-text-primary
                  placeholder-text-tertiary
-                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent
                  transition-all duration-150"
           aria-label="Filter by git branch"
           autocomplete="off"

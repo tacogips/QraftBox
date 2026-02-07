@@ -192,10 +192,10 @@ function handleInputMount(element: HTMLInputElement): void {
              bg-bg-primary text-text-primary
              border rounded
              {isValidRegex
-        ? 'border-border-default focus:border-blue-500'
-        : 'border-red-500'}
+        ? 'border-border-default focus:border-accent-emphasis'
+        : 'border-danger-emphasis'}
              placeholder:text-text-tertiary
-             focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis/50"
       aria-label="Search pattern (regex)"
       aria-invalid={!isValidRegex}
       aria-describedby={regexError !== null ? "regex-error" : undefined}
@@ -217,11 +217,11 @@ function handleInputMount(element: HTMLInputElement): void {
         onclick={() => handleScopeClick(option.value)}
         class="px-2 py-1.5 min-h-[36px] text-xs font-medium
                {scope === option.value
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
                border-r border-border-default last:border-r-0
                transition-colors duration-150
-               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
         aria-pressed={scope === option.value}
         title={option.title}
       >
@@ -236,9 +236,9 @@ function handleInputMount(element: HTMLInputElement): void {
            {loading
       ? 'text-text-tertiary'
       : !isValidRegex || error !== null
-        ? 'text-red-400'
+        ? 'text-danger-fg'
         : resultCount === 0 && query.length > 0
-          ? 'text-yellow-400'
+          ? 'text-attention-fg'
           : 'text-text-secondary'}"
   >
     {error ?? resultText}
@@ -255,7 +255,7 @@ function handleInputMount(element: HTMLInputElement): void {
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Previous result (Shift+F3)"
         title="Previous result"
       >
@@ -282,7 +282,7 @@ function handleInputMount(element: HTMLInputElement): void {
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Next result (F3)"
         title="Next result"
       >
@@ -311,7 +311,7 @@ function handleInputMount(element: HTMLInputElement): void {
     class="p-1.5 min-w-[32px] min-h-[32px]
            text-text-secondary hover:text-text-primary
            hover:bg-bg-hover rounded
-           focus:outline-none focus:ring-2 focus:ring-blue-500"
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
     aria-label="Close search (Escape)"
     title="Close"
   >

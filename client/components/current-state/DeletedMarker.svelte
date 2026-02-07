@@ -140,7 +140,7 @@ function handleKeydown(event: KeyboardEvent): void {
 
   <!-- Indicator column -->
   <div
-    class="w-8 flex-shrink-0 flex items-center justify-center text-red-400 border-r border-border-default"
+    class="w-8 flex-shrink-0 flex items-center justify-center text-danger-fg border-r border-border-default"
   >
     <span class="font-bold text-xs">-</span>
   </div>
@@ -149,14 +149,14 @@ function handleKeydown(event: KeyboardEvent): void {
   <div class="flex-1 relative py-[21px]">
     <!-- The thin red line -->
     <div
-      class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-red-500
+      class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-danger-emphasis
              {isHovered || isPressed ? 'h-[4px]' : ''}"
     ></div>
 
     <!-- Hover/focus hint -->
     <div
       class="absolute left-3 top-1/2 -translate-y-1/2 px-2 py-1
-             bg-red-900/80 text-red-200 text-xs rounded
+             bg-danger-subtle text-danger-fg text-xs rounded
              opacity-0 group-hover:opacity-100 group-focus:opacity-100
              transition-opacity duration-150 pointer-events-none
              whitespace-nowrap"

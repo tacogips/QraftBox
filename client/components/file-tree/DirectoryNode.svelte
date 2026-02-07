@@ -55,7 +55,7 @@
 <!-- Directory Node Button -->
 <button
   type="button"
-  class="directory-node w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
+  class="directory-node w-full text-left px-4 py-3 hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
   style="padding-left: {leftPadding}rem"
   onclick={onToggle}
   aria-label="{expanded ? 'Collapse' : 'Expand'} directory {node.name}"
@@ -63,7 +63,7 @@
 >
   <!-- Chevron Icon (expand/collapse indicator) -->
   <svg
-    class="chevron-icon w-4 h-4 text-gray-500 shrink-0 transition-transform duration-200 {chevronRotation}"
+    class="chevron-icon w-4 h-4 text-text-secondary shrink-0 transition-transform duration-200 {chevronRotation}"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -79,7 +79,7 @@
 
   <!-- Folder Icon -->
   <svg
-    class="folder-icon w-5 h-5 text-gray-400 shrink-0"
+    class="folder-icon w-5 h-5 text-text-tertiary shrink-0"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -105,14 +105,14 @@
   </svg>
 
   <!-- Directory Name -->
-  <span class="directory-name text-gray-900 truncate flex-1">
+  <span class="directory-name text-text-primary truncate flex-1">
     {node.name}
   </span>
 
   <!-- Change Indicator Dot (shown when directory contains changed files) -->
   {#if hasChangedChildren}
     <span
-      class="change-indicator w-2 h-2 rounded-full bg-blue-600 shrink-0"
+      class="change-indicator w-2 h-2 rounded-full bg-accent-emphasis shrink-0"
       aria-label="Contains changed files"
       title="Contains changed files"
     ></span>

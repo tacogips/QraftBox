@@ -162,16 +162,16 @@
 </script>
 
 <!-- File Tree Container -->
-<div class="file-tree flex flex-col h-full bg-white" role="tree">
+<div class="file-tree flex flex-col h-full bg-bg-secondary" role="tree">
   <!-- Mode Toggle Header -->
   <div
-    class="file-tree-header border-b border-gray-200 p-4 flex items-center justify-between"
+    class="file-tree-header border-b border-border-default p-4 flex items-center justify-between"
   >
-    <h2 class="text-lg font-semibold text-gray-900">Files</h2>
+    <h2 class="text-lg font-semibold text-text-primary">Files</h2>
 
     <button
       type="button"
-      class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 bg-gray-100 text-gray-700 hover:bg-gray-200"
+      class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 bg-bg-tertiary text-text-secondary hover:bg-bg-hover"
       onclick={() => onModeChange(mode === "diff" ? "all" : "diff")}
       aria-label={mode === "diff" ? "Switch to all files" : "Switch to diff only"}
     >
@@ -187,7 +187,7 @@
         class="empty-state flex flex-col items-center justify-center h-full p-8 text-center"
       >
         <svg
-          class="w-16 h-16 text-gray-300 mb-4"
+          class="w-16 h-16 text-text-tertiary mb-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -200,7 +200,7 @@
             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
           ></path>
         </svg>
-        <p class="text-gray-500 text-sm">No files to display</p>
+        <p class="text-text-secondary text-sm">No files to display</p>
       </div>
     {:else}
       <!-- Render Tree Nodes -->
@@ -222,14 +222,14 @@
     >
       <button
         type="button"
-        class="directory-button w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
+        class="directory-button w-full text-left px-4 py-3 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
         style="padding-left: {1 + depth * 1.5}rem"
         onclick={() => toggleDirectory(node.path)}
         aria-label="Toggle directory {node.name}"
       >
         <!-- Chevron Icon -->
         <svg
-          class="chevron w-4 h-4 text-gray-400 shrink-0 transition-transform"
+          class="chevron w-4 h-4 text-text-tertiary shrink-0 transition-transform"
           class:rotate-90={isExpanded(node.path)}
           fill="none"
           stroke="currentColor"
@@ -246,7 +246,7 @@
 
         <!-- Folder Icon -->
         <svg
-          class="folder-icon w-5 h-5 text-gray-400 shrink-0"
+          class="folder-icon w-5 h-5 text-text-tertiary shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -261,14 +261,14 @@
         </svg>
 
         <!-- Directory Name -->
-        <span class="directory-name text-gray-900 truncate flex-1">
+        <span class="directory-name text-text-primary truncate flex-1">
           {node.name}
         </span>
 
         <!-- Changed Indicator -->
         {#if hasChangedChildren(node)}
           <span
-            class="changed-indicator text-xs text-blue-600 shrink-0"
+            class="changed-indicator text-xs text-accent-fg shrink-0"
             aria-label="Contains changed files"
           >
             •
@@ -314,6 +314,6 @@
   }
 
   .directory-button:active {
-    background-color: rgb(243 244 246); /* gray-100 */
+    background-color: var(--color-bg-tertiary);
   }
 </style>

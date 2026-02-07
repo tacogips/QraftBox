@@ -146,7 +146,7 @@
   {:else}
     <!-- Render each change as an inline diff line -->
     {#each flattenedChanges as { change, index } (index)}
-      <div class="flex diff-line-row group/inlinerow {isInRange(change.oldLine, change.newLine) ? 'bg-blue-900/20' : ''}">
+      <div class="flex diff-line-row group/inlinerow {isInRange(change.oldLine, change.newLine) ? 'bg-accent-muted' : ''}">
         <!-- Old line number column -->
         <div
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
@@ -155,9 +155,9 @@
             <button
               type="button"
               class="absolute left-0 top-1 w-6 h-6 flex items-center justify-center
-                     rounded bg-blue-600 text-white text-xs font-bold
+                     rounded bg-accent-emphasis text-white text-xs font-bold
                      opacity-0 group-hover/inlinerow:opacity-100
-                     hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
+                     hover:bg-accent-fg transition-opacity z-10 cursor-pointer"
               onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine, e.shiftKey); }}
               aria-label="Add comment"
             >+</button>
@@ -194,10 +194,10 @@
         </div>
       </div>
       {#if isCommentLine(change.oldLine, change.newLine)}
-        <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
+        <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
           <textarea
             class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
-                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder={placeholder}
             bind:value={commentText}
             onkeydown={(e) => {
@@ -215,7 +215,7 @@
           <div class="flex items-center gap-2 mt-2">
             <button
               type="button"
-              class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500"
+              class="px-3 py-1 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg"
               onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
             >Submit</button>
             <button

@@ -111,7 +111,7 @@
     type="button"
     class="close-btn shrink-0 w-5 h-5 flex items-center justify-center
            rounded hover:bg-bg-tertiary focus:bg-bg-tertiary
-           focus:outline-none focus:ring-2 focus:ring-blue-500
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis
            transition-colors duration-150"
     onclick={handleClose}
     aria-label="Close tab {tab.name}"

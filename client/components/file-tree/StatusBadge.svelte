@@ -47,11 +47,11 @@ function getBadgeBackgroundClass(
 
   switch (status) {
     case "added":
-      return "bg-green-100 dark:bg-green-900";
+      return "bg-success-subtle";
     case "modified":
-      return "bg-yellow-100 dark:bg-yellow-900";
+      return "bg-attention-muted";
     case "deleted":
-      return "bg-red-100 dark:bg-red-900";
+      return "bg-danger-subtle";
     default: {
       const _exhaustive: never = status;
       throw new Error(`Unhandled status: ${_exhaustive}`);
@@ -71,11 +71,11 @@ function getBadgeTextClass(
 
   switch (status) {
     case "added":
-      return "text-green-800 dark:text-green-200";
+      return "text-success-fg";
     case "modified":
-      return "text-yellow-800 dark:text-yellow-200";
+      return "text-attention-fg";
     case "deleted":
-      return "text-red-800 dark:text-red-200";
+      return "text-danger-fg";
     default: {
       const _exhaustive: never = status;
       throw new Error(`Unhandled status: ${_exhaustive}`);

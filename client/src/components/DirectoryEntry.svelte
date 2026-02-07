@@ -87,12 +87,12 @@
   const iconColorClass = $derived.by(() => {
     if (entry.isDirectory) {
       if (entry.isGitRepo) {
-        return "text-blue-500";
+        return "text-accent-fg";
       } else {
-        return "text-yellow-500";
+        return "text-attention-fg";
       }
     } else {
-      return "text-gray-400";
+      return "text-text-tertiary";
     }
   });
 
@@ -119,7 +119,7 @@
          cursor-pointer
          transition-colors
          {selected
-    ? 'bg-blue-50 border-l-4 border-l-blue-600'
+    ? 'bg-accent-subtle border-l-4 border-l-blue-600'
     : 'border-l-4 border-l-transparent'}"
   onclick={handleClick}
   onkeydown={handleKeydown}
@@ -154,7 +154,7 @@
       {#if entry.isGitRepo && entry.isDirectory}
         <span
           class="px-2 py-0.5 text-xs font-medium
-                 bg-blue-100 text-blue-700 rounded
+                 bg-accent-subtle text-accent-fg rounded
                  flex-shrink-0"
           title="Git repository"
         >
@@ -166,7 +166,7 @@
       {#if entry.isHidden}
         <span
           class="px-2 py-0.5 text-xs font-medium
-                 bg-gray-100 text-gray-600 rounded
+                 bg-bg-secondary text-text-secondary rounded
                  flex-shrink-0"
           title="Hidden file"
         >

@@ -76,7 +76,7 @@
            bg-bg-secondary hover:bg-bg-hover
            text-text-secondary hover:text-text-primary
            transition-colors duration-150
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset"
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-inset"
     onclick={onNewTab}
     aria-label="Open new directory"
     title="Open new directory"

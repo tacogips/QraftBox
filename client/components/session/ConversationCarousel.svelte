@@ -197,7 +197,7 @@ $effect(() => {
                  hover:bg-bg-hover hover:text-text-primary
                  disabled:opacity-30 disabled:cursor-not-allowed
                  transition-all
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Previous message"
         >
           <svg
@@ -229,7 +229,7 @@ $effect(() => {
                  hover:bg-bg-hover hover:text-text-primary
                  disabled:opacity-30 disabled:cursor-not-allowed
                  transition-all
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Next message"
         >
           <svg
@@ -262,9 +262,9 @@ $effect(() => {
             type="button"
             onclick={() => goToIndex(index)}
             class="w-2.5 h-2.5 rounded-full transition-all
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
                    {index === currentIndex
-                     ? 'bg-blue-500 scale-110'
+                     ? 'bg-accent-emphasis scale-110'
                      : 'bg-text-quaternary hover:bg-text-tertiary'}"
             role="tab"
             aria-selected={index === currentIndex}

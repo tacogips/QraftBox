@@ -233,7 +233,7 @@
                text-text-secondary hover:text-text-primary
                hover:bg-bg-tertiary rounded-lg
                transition-colors
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Back to previous screen"
       >
         <svg
@@ -266,7 +266,7 @@
         aria-live="polite"
       >
         <svg
-          class="animate-spin h-8 w-8 text-blue-500 mb-4"
+          class="animate-spin h-8 w-8 text-accent-fg mb-4"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -292,7 +292,7 @@
       <!-- Error Banner -->
       {#if error !== null}
         <div
-          class="mb-4 p-4 rounded-lg border border-red-500/30 bg-red-500/10 text-red-400"
+          class="mb-4 p-4 rounded-lg border border-danger-muted bg-danger-subtle text-danger-fg"
           role="alert"
         >
           <div class="flex items-start gap-3">
@@ -301,7 +301,7 @@
             <button
               type="button"
               onclick={() => { error = null; }}
-              class="p-1 rounded hover:bg-red-500/20 transition-colors text-sm"
+              class="p-1 rounded hover:bg-danger-subtle transition-colors text-sm"
               aria-label="Dismiss error"
             >
               x
@@ -313,7 +313,7 @@
       <!-- Success Banner -->
       {#if successMessage !== null}
         <div
-          class="mb-4 p-4 rounded-lg border border-green-500/30 bg-green-500/10 text-green-400"
+          class="mb-4 p-4 rounded-lg border border-success-muted bg-success-subtle text-success-fg"
           role="status"
         >
           <div class="flex items-start gap-3">
@@ -321,7 +321,7 @@
             <button
               type="button"
               onclick={() => { successMessage = null; }}
-              class="p-1 rounded hover:bg-green-500/20 transition-colors text-sm"
+              class="p-1 rounded hover:bg-success-subtle transition-colors text-sm"
               aria-label="Dismiss message"
             >
               x
@@ -375,7 +375,7 @@
                     {/if}
                     {#if wt.locked}
                       <span
-                        class="px-2 py-0.5 text-xs rounded bg-yellow-500/20 text-yellow-400"
+                        class="px-2 py-0.5 text-xs rounded bg-attention-muted text-attention-fg"
                       >
                         locked
                       </span>
@@ -401,7 +401,7 @@
                         type="button"
                         disabled={deleting}
                         onclick={() => void handleDelete(wt.path)}
-                        class="px-2 py-1 rounded text-red-400 hover:bg-red-500/20
+                        class="px-2 py-1 rounded text-danger-fg hover:bg-danger-subtle
                                disabled:opacity-50 transition-colors"
                       >
                         {deleting ? "Removing..." : "Yes"}
@@ -419,9 +419,9 @@
                     <button
                       type="button"
                       onclick={() => { deletingPath = wt.path; }}
-                      class="px-2 py-1 rounded text-sm text-red-400
+                      class="px-2 py-1 rounded text-sm text-danger-fg
                              opacity-0 group-hover:opacity-100
-                             hover:bg-red-500/20 transition-all"
+                             hover:bg-danger-subtle transition-all"
                       aria-label="Remove worktree at {wt.path}"
                     >
                       Delete
@@ -448,7 +448,7 @@
             onclick={() => { showCreateForm = true; }}
             class="px-4 py-2 rounded-lg text-sm font-medium
                    bg-bg-secondary hover:bg-bg-tertiary text-text-primary
-                   border border-border-default hover:border-blue-500/30
+                   border border-border-default hover:border-accent-muted
                    transition-all"
           >
             New Worktree
@@ -462,7 +462,7 @@
             <!-- Create Error -->
             {#if createError !== null}
               <div
-                class="mb-4 p-3 rounded border border-red-500/30 bg-red-500/10 text-red-400 text-sm"
+                class="mb-4 p-3 rounded border border-danger-muted bg-danger-subtle text-danger-fg text-sm"
                 role="alert"
               >
                 {createError}
@@ -485,7 +485,7 @@
                   placeholder="feature/my-branch"
                   class="w-full px-3 py-2 text-sm rounded border border-border-default
                          bg-bg-primary text-text-primary
-                         focus:outline-none focus:ring-2 focus:ring-blue-500
+                         focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                          placeholder:text-text-tertiary"
                 />
               </div>
@@ -496,8 +496,8 @@
                   id="create-new-branch"
                   type="checkbox"
                   bind:checked={createNewBranch}
-                  class="rounded border-border-default text-blue-500
-                         focus:ring-blue-500"
+                  class="rounded border-border-default text-accent-fg
+                         focus:ring-accent-emphasis"
                 />
                 <label
                   for="create-new-branch"
@@ -523,7 +523,7 @@
                     placeholder="main"
                     class="w-full px-3 py-2 text-sm rounded border border-border-default
                            bg-bg-primary text-text-primary
-                           focus:outline-none focus:ring-2 focus:ring-blue-500
+                           focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                            placeholder:text-text-tertiary"
                   />
                 </div>
@@ -544,7 +544,7 @@
                   placeholder="Leave empty for default location"
                   class="w-full px-3 py-2 text-sm rounded border border-border-default
                          bg-bg-primary text-text-primary
-                         focus:outline-none focus:ring-2 focus:ring-blue-500
+                         focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                          placeholder:text-text-tertiary"
                 />
               </div>
@@ -556,7 +556,7 @@
                   disabled={creating || createBranch.trim().length === 0}
                   onclick={() => void handleCreate()}
                   class="px-4 py-2 rounded-lg text-sm font-medium
-                         bg-blue-600 hover:bg-blue-700 text-white
+                         bg-accent-emphasis hover:bg-accent-fg text-white
                          disabled:opacity-50 disabled:cursor-not-allowed
                          transition-colors"
                 >

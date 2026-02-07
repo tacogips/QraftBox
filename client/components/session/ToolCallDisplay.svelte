@@ -39,13 +39,13 @@ const MAX_OUTPUT_LENGTH = 500;
 const statusDisplay = $derived.by(() => {
   switch (toolCall.status) {
     case "pending":
-      return { icon: "clock", color: "text-yellow-400", label: "Pending" };
+      return { icon: "clock", color: "text-attention-fg", label: "Pending" };
     case "running":
-      return { icon: "loader", color: "text-blue-400", label: "Running" };
+      return { icon: "loader", color: "text-accent-fg", label: "Running" };
     case "completed":
-      return { icon: "check", color: "text-green-400", label: "Completed" };
+      return { icon: "check", color: "text-success-fg", label: "Completed" };
     case "failed":
-      return { icon: "x", color: "text-red-400", label: "Failed" };
+      return { icon: "x", color: "text-danger-fg", label: "Failed" };
     default:
       return { icon: "circle", color: "text-text-tertiary", label: "Unknown" };
   }
@@ -115,7 +115,7 @@ const duration = $derived.by(() => {
     onclick={toggle}
     class="w-full px-3 py-2 flex items-center justify-between
            hover:bg-bg-tertiary/50 transition-colors
-           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
     aria-expanded={expanded}
   >
     <div class="flex items-center gap-2">
@@ -274,9 +274,9 @@ const duration = $derived.by(() => {
       <!-- Error section (if failed) -->
       {#if toolCall.error !== undefined}
         <div class="p-3 pt-0">
-          <h4 class="text-xs font-semibold text-red-400 mb-1">Error</h4>
+          <h4 class="text-xs font-semibold text-danger-fg mb-1">Error</h4>
           <pre
-            class="text-xs font-mono text-red-300 bg-red-900/20
+            class="text-xs font-mono text-danger-fg bg-danger-subtle
                    rounded p-2 overflow-x-auto"
           >{toolCall.error}</pre>
         </div>

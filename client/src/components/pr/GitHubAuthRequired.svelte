@@ -60,13 +60,13 @@
 
     <!-- Auth Required Message -->
     <div class="text-center">
-      <h2 class="text-xl font-bold text-gray-900 mb-2">
+      <h2 class="text-xl font-bold text-text-primary mb-2">
         GitHub Authentication Required
       </h2>
-      <p class="text-base text-gray-700 mb-4">
+      <p class="text-base text-text-primary mb-4">
         To create pull requests, you need to authenticate with GitHub.
       </p>
-      <p class="text-sm text-gray-600">
+      <p class="text-sm text-text-secondary">
         You will be redirected to GitHub to authorize qraftbox.
       </p>
     </div>
@@ -102,7 +102,7 @@
     </button>
 
     <!-- Security Note -->
-    <p class="text-xs text-gray-500 text-center max-w-md">
+    <p class="text-xs text-text-secondary text-center max-w-md">
       We will only request permissions necessary for creating and managing pull
       requests. You can revoke access at any time in your GitHub settings.
     </p>

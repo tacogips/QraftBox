@@ -58,11 +58,11 @@
 
     switch (status) {
       case "added":
-        return "text-green-600";
+        return "text-success-fg";
       case "modified":
-        return "text-yellow-600";
+        return "text-attention-fg";
       case "deleted":
-        return "text-red-600";
+        return "text-danger-fg";
       default:
         return "";
     }
@@ -86,10 +86,10 @@
 <!-- File Node Button -->
 <button
   type="button"
-  class="file-node w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
-  class:bg-blue-50={selected}
+  class="file-node w-full text-left px-4 py-3 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
+  class:bg-accent-subtle={selected}
   class:border-l-4={selected}
-  class:border-blue-600={selected}
+  class:border-accent-emphasis={selected}
   style="padding-left: {leftPadding}rem"
   onclick={onSelect}
   aria-label="Select file {node.name}"
@@ -97,7 +97,7 @@
 >
   <!-- File Icon -->
   <svg
-    class="file-icon w-5 h-5 text-gray-400 shrink-0"
+    class="file-icon w-5 h-5 text-text-tertiary shrink-0"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -112,7 +112,7 @@
   </svg>
 
   <!-- File Name -->
-  <span class="file-name text-gray-900 truncate flex-1">
+  <span class="file-name text-text-primary truncate flex-1">
     {node.name}
   </span>
 
@@ -142,6 +142,6 @@
   }
 
   .file-node:active {
-    background-color: rgb(243 244 246); /* gray-100 */
+    background-color: var(--color-bg-tertiary);
   }
 </style>

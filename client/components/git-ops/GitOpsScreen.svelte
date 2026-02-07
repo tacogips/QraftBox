@@ -268,10 +268,10 @@
       </div>
     {:else if error !== null}
       <div class="p-8 text-center">
-        <p class="text-red-500 mb-4">{error}</p>
+        <p class="text-danger-fg mb-4">{error}</p>
         <button
           type="button"
-          class="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+          class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors"
           onclick={() => void loadAll()}
         >
           Retry
@@ -290,14 +290,14 @@
             class="mb-4 px-4 py-3 bg-bg-secondary border border-border-default rounded-lg"
           >
             <span class="text-sm text-text-secondary">Branch:</span>
-            <span class="ml-2 font-mono font-semibold text-blue-400">
+            <span class="ml-2 font-mono font-semibold text-accent-fg">
               {statusData.branch}
             </span>
           </div>
 
           {#if statusData.clean}
             <div
-              class="px-4 py-3 bg-bg-secondary border border-green-800 rounded-lg text-green-400 text-sm"
+              class="px-4 py-3 bg-bg-secondary border border-success-emphasis rounded-lg text-success-fg text-sm"
             >
               Working tree clean
             </div>
@@ -307,14 +307,14 @@
               <!-- Staged -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-green-600 transition-colors {statusData.staged.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-success-emphasis transition-colors {statusData.staged.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.staged.length > 0)
                     toggleSection("staged");
                 }}
                 disabled={statusData.staged.length === 0}
               >
-                <div class="text-2xl font-bold text-green-400">
+                <div class="text-2xl font-bold text-success-fg">
                   {statusData.staged.length}
                 </div>
                 <div class="text-xs text-text-secondary mt-1">Staged</div>
@@ -323,14 +323,14 @@
               <!-- Modified -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-yellow-600 transition-colors {statusData.modified.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-attention-fg transition-colors {statusData.modified.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.modified.length > 0)
                     toggleSection("modified");
                 }}
                 disabled={statusData.modified.length === 0}
               >
-                <div class="text-2xl font-bold text-yellow-400">
+                <div class="text-2xl font-bold text-attention-fg">
                   {statusData.modified.length}
                 </div>
                 <div class="text-xs text-text-secondary mt-1">Modified</div>
@@ -339,14 +339,14 @@
               <!-- Untracked -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-blue-600 transition-colors {statusData.untracked.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-accent-emphasis transition-colors {statusData.untracked.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.untracked.length > 0)
                     toggleSection("untracked");
                 }}
                 disabled={statusData.untracked.length === 0}
               >
-                <div class="text-2xl font-bold text-blue-400">
+                <div class="text-2xl font-bold text-accent-fg">
                   {statusData.untracked.length}
                 </div>
                 <div class="text-xs text-text-secondary mt-1">Untracked</div>
@@ -355,14 +355,14 @@
               <!-- Conflicts -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-red-600 transition-colors {statusData.conflicts.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-danger-emphasis transition-colors {statusData.conflicts.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.conflicts.length > 0)
                     toggleSection("conflicts");
                 }}
                 disabled={statusData.conflicts.length === 0}
               >
-                <div class="text-2xl font-bold text-red-400">
+                <div class="text-2xl font-bold text-danger-fg">
                   {statusData.conflicts.length}
                 </div>
                 <div class="text-xs text-text-secondary mt-1">Conflicts</div>
@@ -372,9 +372,9 @@
             <!-- Expandable file lists -->
             {#if expandedSections["staged"] && statusData.staged.length > 0}
               <div
-                class="mb-3 p-3 bg-bg-secondary border border-green-800 rounded-lg"
+                class="mb-3 p-3 bg-bg-secondary border border-success-emphasis rounded-lg"
               >
-                <h4 class="text-xs font-semibold text-green-400 mb-2">
+                <h4 class="text-xs font-semibold text-success-fg mb-2">
                   Staged Files
                 </h4>
                 <ul class="space-y-1">
@@ -389,9 +389,9 @@
 
             {#if expandedSections["modified"] && statusData.modified.length > 0}
               <div
-                class="mb-3 p-3 bg-bg-secondary border border-yellow-800 rounded-lg"
+                class="mb-3 p-3 bg-bg-secondary border border-attention-fg rounded-lg"
               >
-                <h4 class="text-xs font-semibold text-yellow-400 mb-2">
+                <h4 class="text-xs font-semibold text-attention-fg mb-2">
                   Modified Files
                 </h4>
                 <ul class="space-y-1">
@@ -406,9 +406,9 @@
 
             {#if expandedSections["untracked"] && statusData.untracked.length > 0}
               <div
-                class="mb-3 p-3 bg-bg-secondary border border-blue-800 rounded-lg"
+                class="mb-3 p-3 bg-bg-secondary border border-accent-emphasis rounded-lg"
               >
-                <h4 class="text-xs font-semibold text-blue-400 mb-2">
+                <h4 class="text-xs font-semibold text-accent-fg mb-2">
                   Untracked Files
                 </h4>
                 <ul class="space-y-1">
@@ -423,9 +423,9 @@
 
             {#if expandedSections["conflicts"] && statusData.conflicts.length > 0}
               <div
-                class="mb-3 p-3 bg-bg-secondary border border-red-800 rounded-lg"
+                class="mb-3 p-3 bg-bg-secondary border border-danger-emphasis rounded-lg"
               >
-                <h4 class="text-xs font-semibold text-red-400 mb-2">
+                <h4 class="text-xs font-semibold text-danger-fg mb-2">
                   Conflict Files
                 </h4>
                 <ul class="space-y-1">
@@ -449,7 +449,7 @@
 
             {#if commitResult !== null}
               <div
-                class="mb-4 px-4 py-3 rounded-lg text-sm {commitResult.success ? 'bg-green-900/30 border border-green-800 text-green-400' : 'bg-red-900/30 border border-red-800 text-red-400'}"
+                class="mb-4 px-4 py-3 rounded-lg text-sm {commitResult.success ? 'bg-success-muted border border-success-emphasis text-success-fg' : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
               >
                 {commitResult.message}
               </div>
@@ -458,7 +458,7 @@
             {#if !showCommitForm}
               <button
                 type="button"
-                class="px-4 py-2 text-sm bg-green-700 text-white rounded hover:bg-green-600 transition-colors"
+                class="px-4 py-2 text-sm bg-success-emphasis text-white rounded hover:bg-success-emphasis transition-colors"
                 onclick={() => {
                   showCommitForm = true;
                   commitResult = null;
@@ -471,7 +471,7 @@
                 class="p-4 bg-bg-secondary border border-border-default rounded-lg space-y-3"
               >
                 <textarea
-                  class="w-full h-32 px-3 py-2 bg-bg-primary border border-border-default rounded text-sm text-text-primary font-mono resize-y focus:outline-none focus:border-blue-500"
+                  class="w-full h-32 px-3 py-2 bg-bg-primary border border-border-default rounded text-sm text-text-primary font-mono resize-y focus:outline-none focus:border-accent-emphasis"
                   placeholder="Commit message..."
                   bind:value={commitMessage}
                   disabled={committing}
@@ -479,7 +479,7 @@
                 <div class="flex gap-2">
                   <button
                     type="button"
-                    class="px-4 py-2 text-sm bg-green-700 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="px-4 py-2 text-sm bg-success-emphasis text-white rounded hover:bg-success-emphasis transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     onclick={() => void handleCommit()}
                     disabled={committing || commitMessage.trim().length === 0}
                   >
@@ -532,7 +532,7 @@
                 <div class="flex items-center gap-1">
                   <span class="text-text-secondary">Ahead:</span>
                   <span
-                    class="font-mono font-semibold {pushStatusData.aheadCount > 0 ? 'text-green-400' : 'text-text-secondary'}"
+                    class="font-mono font-semibold {pushStatusData.aheadCount > 0 ? 'text-success-fg' : 'text-text-secondary'}"
                   >
                     {pushStatusData.aheadCount}
                   </span>
@@ -540,7 +540,7 @@
                 <div class="flex items-center gap-1">
                   <span class="text-text-secondary">Behind:</span>
                   <span
-                    class="font-mono font-semibold {pushStatusData.behindCount > 0 ? 'text-yellow-400' : 'text-text-secondary'}"
+                    class="font-mono font-semibold {pushStatusData.behindCount > 0 ? 'text-attention-fg' : 'text-text-secondary'}"
                   >
                     {pushStatusData.behindCount}
                   </span>
@@ -555,7 +555,7 @@
 
               {#if pushResult !== null}
                 <div
-                  class="px-4 py-3 rounded-lg text-sm {pushResult.success ? 'bg-green-900/30 border border-green-800 text-green-400' : 'bg-red-900/30 border border-red-800 text-red-400'}"
+                  class="px-4 py-3 rounded-lg text-sm {pushResult.success ? 'bg-success-muted border border-success-emphasis text-success-fg' : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
                 >
                   {pushResult.message}
                 </div>
@@ -564,7 +564,7 @@
               <!-- Push button -->
               <button
                 type="button"
-                class="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={() => void handlePush()}
                 disabled={!canPush || pushing}
               >
@@ -572,7 +572,7 @@
               </button>
 
               {#if pushStatusData.behindCount > 0}
-                <p class="text-xs text-yellow-400">
+                <p class="text-xs text-attention-fg">
                   Warning: Local branch is {pushStatusData.behindCount} commit(s)
                   behind remote. Consider pulling first.
                 </p>

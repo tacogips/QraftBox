@@ -124,7 +124,7 @@
     class="w-full pl-10 pr-10 py-2.5 rounded-lg
            bg-bg-secondary border border-bg-border
            text-text-primary placeholder-text-tertiary
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent
            transition-all duration-150"
     aria-label="Search sessions by prompt or summary"
     autocomplete="off"
@@ -140,7 +140,7 @@
              p-1.5 rounded-md
              text-text-tertiary hover:text-text-primary hover:bg-bg-hover
              transition-colors duration-150
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
       aria-label="Clear search"
       title="Clear search (Esc)"
     >

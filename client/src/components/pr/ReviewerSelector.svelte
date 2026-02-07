@@ -84,7 +84,7 @@
 </script>
 
 <div class="reviewer-selector">
-  <label class="block text-sm font-medium text-gray-700 mb-2">
+  <label class="block text-sm font-medium text-text-primary mb-2">
     Reviewers (optional)
   </label>
 
@@ -93,7 +93,7 @@
     class="selected-reviewers flex flex-wrap gap-2 mb-2 min-h-[44px] items-center"
   >
     {#if selected.length === 0}
-      <span class="text-sm text-gray-400">No reviewers selected</span>
+      <span class="text-sm text-text-tertiary">No reviewers selected</span>
     {:else}
       {#each selected as reviewer}
         <button
@@ -101,10 +101,10 @@
           onclick={() => removeReviewer(reviewer)}
           {disabled}
           class="reviewer-chip flex items-center gap-2 px-3 py-1.5 min-h-[36px]
-                 bg-green-100 text-green-800 border border-green-300
+                 bg-success-subtle text-success-fg border border-success-emphasis
                  rounded-full
-                 hover:bg-green-200
-                 focus:outline-none focus:ring-2 focus:ring-green-500
+                 hover:bg-success-subtle
+                 focus:outline-none focus:ring-2 focus:ring-success-emphasis
                  disabled:opacity-50 disabled:cursor-not-allowed
                  text-sm font-medium"
           aria-label="Remove reviewer {reviewer}"
@@ -139,19 +139,19 @@
       onclick={toggleDropdown}
       {disabled}
       class="add-reviewer-button w-full min-h-[44px] px-4 py-2
-             text-gray-700 bg-white border border-gray-300
+             text-text-primary bg-bg-primary border border-border-default
              rounded-lg
              flex items-center justify-between
-             hover:bg-gray-50
+             hover:bg-bg-secondary
              focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
-             disabled:bg-gray-100 disabled:cursor-not-allowed
+             disabled:bg-bg-secondary disabled:cursor-not-allowed
              text-base font-medium"
       aria-label="Add reviewers"
       aria-expanded={isDropdownOpen}
     >
       <span>Add Reviewers</span>
       <svg
-        class="w-5 h-5 text-gray-400 transition-transform {isDropdownOpen
+        class="w-5 h-5 text-text-tertiary transition-transform {isDropdownOpen
           ? 'rotate-180'
           : ''}"
         xmlns="http://www.w3.org/2000/svg"
@@ -169,10 +169,10 @@
     <!-- Dropdown List -->
     {#if isDropdownOpen}
       <div
-        class="reviewer-dropdown absolute z-10 mt-2 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+        class="reviewer-dropdown absolute z-10 mt-2 w-full bg-bg-primary border border-border-default rounded-lg shadow-lg max-h-48 overflow-y-auto"
       >
         {#if availableReviewers.length === 0}
-          <div class="p-4 text-sm text-gray-500 text-center">
+          <div class="p-4 text-sm text-text-secondary text-center">
             No reviewers available
           </div>
         {:else}
@@ -185,8 +185,8 @@
               }}
               class="reviewer-option w-full px-4 py-2 min-h-[44px]
                      text-left text-sm
-                     hover:bg-gray-100
-                     focus:outline-none focus:bg-gray-100
+                     hover:bg-bg-secondary
+                     focus:outline-none focus:bg-bg-secondary
                      flex items-center justify-between gap-3"
               aria-label="Toggle reviewer {reviewer}"
             >
@@ -219,7 +219,7 @@
     {/if}
   </div>
 
-  <p class="mt-1 text-xs text-gray-500">
+  <p class="mt-1 text-xs text-text-secondary">
     Select reviewers for this pull request
   </p>
 </div>

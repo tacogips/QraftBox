@@ -24,19 +24,19 @@
   <div class="flex flex-col items-center justify-center p-8 gap-4">
     <!-- Spinner -->
     <div
-      class="spinner w-12 h-12 border-4 border-gray-200 border-t-green-600 rounded-full animate-spin"
+      class="spinner w-12 h-12 border-4 border-border-default border-t-green-600 rounded-full animate-spin"
       role="status"
       aria-label="Loading"
     ></div>
 
     <!-- Progress Message -->
-    <p class="text-base text-gray-700 font-medium">{message}</p>
+    <p class="text-base text-text-primary font-medium">{message}</p>
 
     <!-- Loading Dots Animation -->
     <div class="loading-dots flex gap-1">
-      <span class="dot w-2 h-2 bg-green-600 rounded-full"></span>
-      <span class="dot w-2 h-2 bg-green-600 rounded-full"></span>
-      <span class="dot w-2 h-2 bg-green-600 rounded-full"></span>
+      <span class="dot w-2 h-2 bg-success-emphasis rounded-full"></span>
+      <span class="dot w-2 h-2 bg-success-emphasis rounded-full"></span>
+      <span class="dot w-2 h-2 bg-success-emphasis rounded-full"></span>
     </div>
   </div>
 </div>

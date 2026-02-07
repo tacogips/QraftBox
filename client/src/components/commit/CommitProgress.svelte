@@ -48,11 +48,11 @@
   const statusColorClass = $derived.by((): string => {
     switch (status) {
       case "preparing":
-        return "text-blue-600";
+        return "text-accent-fg";
       case "committing":
-        return "text-blue-700";
+        return "text-accent-fg";
       case "pushing":
-        return "text-blue-800";
+        return "text-accent-fg";
       default:
         const _exhaustive: never = status;
         throw new Error(`Unhandled status: ${_exhaustive}`);

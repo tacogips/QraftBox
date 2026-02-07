@@ -46,17 +46,17 @@ const {
 function getStatusColor(state: SessionState): string {
   switch (state) {
     case "running":
-      return "bg-blue-500";
+      return "bg-accent-emphasis";
     case "queued":
-      return "bg-yellow-500";
+      return "bg-attention-emphasis";
     case "completed":
-      return "bg-green-500";
+      return "bg-success-emphasis";
     case "failed":
-      return "bg-red-500";
+      return "bg-danger-emphasis";
     case "cancelled":
-      return "bg-gray-500";
+      return "bg-bg-emphasis";
     default:
-      return "bg-gray-500";
+      return "bg-bg-emphasis";
   }
 }
 
@@ -146,7 +146,7 @@ function handleActionClick(
 <div
   class="session-card group relative bg-bg-secondary border border-border-default
          rounded-lg overflow-hidden
-         hover:border-blue-500/50 hover:bg-bg-hover
+         hover:border-accent-emphasis/50 hover:bg-bg-hover
          transition-colors duration-150"
   role="article"
   aria-label={`Session: ${truncatePrompt(session.prompt, 50)}`}
@@ -156,7 +156,7 @@ function handleActionClick(
     type="button"
     onclick={onSelect}
     class="w-full p-4 min-h-[80px] text-left
-           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
   >
     <!-- Header row -->
     <div class="flex items-start justify-between gap-3 mb-2">
@@ -224,9 +224,9 @@ function handleActionClick(
         type="button"
         onclick={(e) => handleActionClick(e, onCancel)}
         class="p-2 min-w-[36px] min-h-[36px]
-               bg-red-600/20 text-red-400 hover:bg-red-600/30
+               bg-danger-emphasis/20 text-danger-fg hover:bg-danger-emphasis/30
                rounded transition-colors
-               focus:outline-none focus:ring-2 focus:ring-red-500"
+               focus:outline-none focus:ring-2 focus:ring-danger-emphasis"
         aria-label="Cancel session"
         title="Cancel"
       >
@@ -253,9 +253,9 @@ function handleActionClick(
           type="button"
           onclick={(e) => handleActionClick(e, onRunNow)}
           class="p-2 min-w-[36px] min-h-[36px]
-                 bg-green-600/20 text-green-400 hover:bg-green-600/30
+                 bg-success-emphasis/20 text-success-fg hover:bg-success-emphasis/30
                  rounded transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-green-500"
+                 focus:outline-none focus:ring-2 focus:ring-success-emphasis"
           aria-label="Run now"
           title="Run Now"
         >
@@ -280,9 +280,9 @@ function handleActionClick(
           type="button"
           onclick={(e) => handleActionClick(e, onCancel)}
           class="p-2 min-w-[36px] min-h-[36px]
-                 bg-yellow-600/20 text-yellow-400 hover:bg-yellow-600/30
+                 bg-attention-emphasis/20 text-attention-fg hover:bg-attention-emphasis/30
                  rounded transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                 focus:outline-none focus:ring-2 focus:ring-attention-emphasis"
           aria-label="Cancel"
           title="Cancel"
         >
@@ -310,9 +310,9 @@ function handleActionClick(
         type="button"
         onclick={(e) => handleActionClick(e, onRemove)}
         class="p-2 min-w-[36px] min-h-[36px]
-               bg-bg-tertiary text-text-tertiary hover:text-red-400 hover:bg-red-600/20
+               bg-bg-tertiary text-text-tertiary hover:text-danger-fg hover:bg-danger-emphasis/20
                rounded transition-colors
-               focus:outline-none focus:ring-2 focus:ring-red-500"
+               focus:outline-none focus:ring-2 focus:ring-danger-emphasis"
         aria-label="Remove"
         title="Remove"
       >

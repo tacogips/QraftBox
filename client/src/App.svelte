@@ -492,7 +492,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'diff'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("diff")}
       >
@@ -502,7 +502,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'commits'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("commits")}
       >
@@ -512,7 +512,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'sessions'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("sessions")}
       >
@@ -522,7 +522,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'queue'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("queue")}
       >
@@ -533,7 +533,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'git-ops'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("git-ops")}
       >
@@ -543,7 +543,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'worktree'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("worktree")}
       >
@@ -553,7 +553,7 @@
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
                {currentScreen === 'tools'
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
         onclick={() => navigateToScreen("tools")}
       >
@@ -568,7 +568,7 @@
           type="button"
           class="px-3 py-1 text-sm border border-border-default rounded transition-colors
                  {viewMode === 'side-by-side'
-            ? 'bg-blue-600 text-white border-blue-600'
+            ? 'bg-accent-emphasis text-white border-accent-emphasis'
             : 'hover:bg-bg-tertiary'}"
           onclick={() => setViewMode("side-by-side")}
         >
@@ -578,7 +578,7 @@
           type="button"
           class="px-3 py-1 text-sm border border-border-default rounded transition-colors
                  {viewMode === 'inline'
-            ? 'bg-blue-600 text-white border-blue-600'
+            ? 'bg-accent-emphasis text-white border-accent-emphasis'
             : 'hover:bg-bg-tertiary'}"
           onclick={() => setViewMode("inline")}
         >
@@ -588,7 +588,7 @@
           type="button"
           class="px-3 py-1 text-sm border border-border-default rounded transition-colors
                  {viewMode === 'current-state'
-            ? 'bg-blue-600 text-white border-blue-600'
+            ? 'bg-accent-emphasis text-white border-accent-emphasis'
             : 'hover:bg-bg-tertiary'}"
           onclick={() => setViewMode("current-state")}
         >
@@ -605,7 +605,7 @@
   >
     {#if projectPath}
       <div
-        class="py-2 px-4 text-sm border-b-2 border-blue-600 text-text-primary"
+        class="py-2 px-4 text-sm border-b-2 border-accent-emphasis text-text-primary"
       >
         {projectPath}
       </div>
@@ -624,7 +624,7 @@
             {#if loading}
               <div class="p-4 text-sm text-text-secondary">Loading files...</div>
             {:else if error !== null}
-              <div class="p-4 text-sm text-red-600">{error}</div>
+              <div class="p-4 text-sm text-danger-fg">{error}</div>
             {:else if allFilesLoading && fileTreeMode === "all"}
               <div class="p-4 text-sm text-text-secondary">Loading all files...</div>
             {:else if fileTree.children !== undefined && fileTree.children.length > 0}
@@ -668,7 +668,7 @@
         {#if loading}
           <div class="p-8 text-center text-text-secondary">Loading diff...</div>
         {:else if error !== null}
-          <div class="p-8 text-center text-red-600">{error}</div>
+          <div class="p-8 text-center text-danger-fg">{error}</div>
         {:else if selectedFile !== null && viewMode !== "current-state"}
           <div class="p-4">
             <DiffView
@@ -769,8 +769,8 @@
     <span>
       {stats.totalFiles} file{stats.totalFiles !== 1 ? "s" : ""} changed
     </span>
-    <span class="text-green-800">+{stats.additions}</span>
-    <span class="text-red-600">-{stats.deletions}</span>
+    <span class="text-success-fg">+{stats.additions}</span>
+    <span class="text-danger-fg">-{stats.deletions}</span>
     {#if contextId !== null}
       <span class="ml-auto text-text-tertiary">ctx: {contextId}</span>
     {/if}

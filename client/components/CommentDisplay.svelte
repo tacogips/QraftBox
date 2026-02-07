@@ -126,7 +126,7 @@ function handlePointerLeave(): void {
   <!-- Avatar -->
   <div
     class="flex-shrink-0 w-8 h-8 rounded-full
-           bg-blue-600 text-white text-xs font-medium
+           bg-accent-emphasis text-white text-xs font-medium
            flex items-center justify-center"
     aria-hidden="true"
   >
@@ -175,7 +175,7 @@ function handlePointerLeave(): void {
           class="px-2 py-1 min-h-[32px] text-xs text-text-secondary
                  hover:text-text-primary hover:bg-bg-hover
                  rounded transition-colors duration-150
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Reply to this comment"
         >
           Reply
@@ -190,7 +190,7 @@ function handlePointerLeave(): void {
           class="px-2 py-1 min-h-[32px] text-xs text-text-secondary
                  hover:text-text-primary hover:bg-bg-hover
                  rounded transition-colors duration-150
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Edit this comment"
         >
           Edit
@@ -202,10 +202,10 @@ function handlePointerLeave(): void {
         <button
           type="button"
           onclick={onDelete}
-          class="px-2 py-1 min-h-[32px] text-xs text-red-400
-                 hover:text-red-300 hover:bg-red-900/20
+          class="px-2 py-1 min-h-[32px] text-xs text-danger-fg
+                 hover:text-danger-fg hover:bg-danger-subtle
                  rounded transition-colors duration-150
-                 focus:outline-none focus:ring-2 focus:ring-red-500"
+                 focus:outline-none focus:ring-2 focus:ring-danger-emphasis"
           aria-label="Delete this comment"
         >
           Delete

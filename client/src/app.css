@@ -1,18 +1,73 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg-primary: #fff;
-  --color-bg-secondary: #f6f8fa;
-  --color-bg-tertiary: #f0f0f0;
-  --color-bg-hover: #e8e8e8;
-  --color-bg-pressed: #d0d0d0;
-  --color-bg-disabled: #f0f0f0;
-  --color-text-primary: #24292f;
-  --color-text-secondary: #57606a;
-  --color-text-tertiary: #8b949e;
-  --color-text-disabled: #8b949e;
-  --color-border-default: #d0d7de;
-  --color-bg-border: #d0d7de;
+  /* GitHub Dark Theme (Primer-based) */
+
+  /* Canvas / Background */
+  --color-bg-primary: #0d1117;
+  --color-bg-secondary: #151b23;
+  --color-bg-tertiary: #1c2128;
+  --color-bg-hover: #262c36;
+  --color-bg-pressed: #2a313c;
+  --color-bg-disabled: #212830;
+  --color-bg-inset: #010409;
+  --color-bg-emphasis: #3d444d;
+  --color-bg-overlay: #010409;
+
+  /* Text / Foreground */
+  --color-text-primary: #f0f6fc;
+  --color-text-secondary: #9198a1;
+  --color-text-tertiary: #656c76;
+  --color-text-disabled: #656c76;
+  --color-text-on-emphasis: #ffffff;
+
+  /* Border */
+  --color-border-default: #3d444d;
+  --color-border-muted: #3d444db3;
+  --color-border-emphasis: #656c76;
+
+  /* Accent (blue) */
+  --color-accent-fg: #4493f8;
+  --color-accent-emphasis: #1f6feb;
+  --color-accent-muted: #388bfd26;
+  --color-accent-subtle: #388bfd1a;
+
+  /* Success (green) */
+  --color-success-fg: #3fb950;
+  --color-success-emphasis: #238636;
+  --color-success-muted: #2ea04366;
+  --color-success-subtle: #2ea04326;
+
+  /* Danger (red) */
+  --color-danger-fg: #f85149;
+  --color-danger-emphasis: #da3633;
+  --color-danger-muted: #f8514966;
+  --color-danger-subtle: #f851491a;
+
+  /* Attention (yellow/warning) */
+  --color-attention-fg: #d29922;
+  --color-attention-emphasis: #9e6a03;
+  --color-attention-muted: #bb800966;
+
+  /* Neutral */
+  --color-neutral-emphasis: #656c76;
+  --color-neutral-muted: #656c7633;
+
+  /* Diff-specific */
+  --color-diff-add-bg: #2ea04326;
+  --color-diff-add-num: #3fb9504d;
+  --color-diff-add-word: #2ea04366;
+  --color-diff-del-bg: #f851491a;
+  --color-diff-del-num: #f851494d;
+  --color-diff-del-word: #f8514966;
+  --color-diff-hunk-bg: #0c2d6b;
+
+  /* Header */
+  --color-header-bg: #151b23f2;
+  --color-header-border: #656c76;
+
+  /* Selection highlight */
+  --color-selection-bg: #1f6febb3;
 }
 
 html,
@@ -21,4 +76,6 @@ body {
   padding: 0;
   height: 100%;
   overflow: hidden;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }

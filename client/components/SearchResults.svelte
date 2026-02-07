@@ -136,7 +136,7 @@ const groupedResults = $derived.by(() => {
         <span class="text-xs text-text-secondary">
           {results.length}{truncated ? "+" : ""} matches
           {#if truncated && totalMatches > results.length}
-            <span class="text-yellow-400"
+            <span class="text-attention-fg"
               >(showing {results.length} of {totalMatches})</span
             >
           {/if}
@@ -149,7 +149,7 @@ const groupedResults = $derived.by(() => {
       class="p-2 min-w-[44px] min-h-[44px]
              text-text-secondary hover:text-text-primary
              hover:bg-bg-hover rounded
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
       aria-label="Close results"
       title="Close"
     >
@@ -269,9 +269,9 @@ const groupedResults = $derived.by(() => {
             class="w-full px-3 py-2 min-h-[44px] text-left
                    border-b border-border-default last:border-b-0
                    {currentIndex === globalIndex
-              ? 'bg-blue-600/20 border-l-2 border-l-blue-500'
+              ? 'bg-accent-muted border-l-2 border-l-blue-500'
               : 'hover:bg-bg-hover'}
-                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
             role="option"
             aria-selected={currentIndex === globalIndex}
             data-selected={currentIndex === globalIndex}
@@ -323,7 +323,7 @@ const groupedResults = $derived.by(() => {
       <!-- Truncation warning -->
       {#if truncated}
         <div
-          class="px-3 py-4 text-center text-sm text-yellow-400 bg-yellow-500/10 border-t border-border-default"
+          class="px-3 py-4 text-center text-sm text-attention-fg bg-attention-emphasis/10 border-t border-border-default"
         >
           Results truncated. Refine your search for more specific results.
         </div>

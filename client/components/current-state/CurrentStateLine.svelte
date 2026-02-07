@@ -47,9 +47,9 @@ let longPressTimer: ReturnType<typeof setTimeout> | undefined =
 function getBackgroundClass(): string {
   switch (line.changeType) {
     case "added":
-      return "bg-green-900/30";
+      return "bg-diff-add-bg";
     case "modified":
-      return "bg-yellow-900/20";
+      return "bg-attention-muted";
     case "unchanged":
       return "bg-transparent";
     default:
@@ -83,9 +83,9 @@ function getIndicator(): string {
 function getIndicatorClass(): string {
   switch (line.changeType) {
     case "added":
-      return "text-green-400";
+      return "text-success-fg";
     case "modified":
-      return "text-yellow-400";
+      return "text-attention-fg";
     case "unchanged":
       return "text-text-secondary";
     default:
@@ -140,7 +140,7 @@ function handlePointerLeave(): void {
 
 <div
   class="flex min-h-[44px] font-mono text-sm cursor-pointer select-none {getBackgroundClass()} {selected
-    ? 'ring-2 ring-blue-500 ring-inset'
+    ? 'ring-2 ring-accent-emphasis ring-inset'
     : ''}"
   onclick={handleClick}
   onpointerdown={handlePointerDown}

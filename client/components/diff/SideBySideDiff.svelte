@@ -192,7 +192,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
         </div>
       {:else}
         {#each oldLines as { change, lineNumber }, index (index)}
-          <div class={isInRange("old", lineNumber) ? "bg-blue-900/20" : ""}>
+          <div class={isInRange("old", lineNumber) ? "bg-accent-muted" : ""}>
             <DiffLine
               {change}
               {lineNumber}
@@ -201,10 +201,10 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
             />
           </div>
           {#if commentLine !== undefined && commentLine.side === "old" && commentLine.endLine === lineNumber}
-            <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
+            <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
-                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
                 placeholder={placeholder}
                 bind:value={commentText}
                 onkeydown={(e) => {
@@ -222,7 +222,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
               <div class="flex items-center gap-2 mt-2">
                 <button
                   type="button"
-                  class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500"
+                  class="px-3 py-1 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg"
                   onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
                 >Submit</button>
                 <button
@@ -253,7 +253,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
         </div>
       {:else}
         {#each newLines as { change, lineNumber }, index (index)}
-          <div class={isInRange("new", lineNumber) ? "bg-blue-900/20" : ""}>
+          <div class={isInRange("new", lineNumber) ? "bg-accent-muted" : ""}>
             <DiffLine
               {change}
               {lineNumber}
@@ -262,10 +262,10 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
             />
           </div>
           {#if commentLine !== undefined && commentLine.side === "new" && commentLine.endLine === lineNumber}
-            <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
+            <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
-                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
                 placeholder={placeholder}
                 bind:value={commentText}
                 onkeydown={(e) => {
@@ -283,7 +283,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
               <div class="flex items-center gap-2 mt-2">
                 <button
                   type="button"
-                  class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500"
+                  class="px-3 py-1 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg"
                   onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
                 >Submit</button>
                 <button

@@ -32,7 +32,7 @@ let toolsExpanded = $state(false);
  * Get border color based on role
  */
 const borderColor = $derived(
-  turn.role === "user" ? "border-blue-500" : "border-green-500"
+  turn.role === "user" ? "border-accent-emphasis" : "border-success-emphasis"
 );
 
 /**
@@ -44,7 +44,7 @@ const roleText = $derived(turn.role === "user" ? "USER" : "ASSISTANT");
  * Get role text color
  */
 const roleTextColor = $derived(
-  turn.role === "user" ? "text-blue-400" : "text-green-400"
+  turn.role === "user" ? "text-accent-fg" : "text-success-fg"
 );
 
 /**
@@ -101,7 +101,7 @@ function toggleTools(): void {
         class="w-full px-4 py-2 flex items-center justify-between
                bg-bg-tertiary/30 hover:bg-bg-tertiary/50
                transition-colors
-               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
         aria-expanded={toolsExpanded}
         aria-controls="tool-calls-{turn.id}"
       >

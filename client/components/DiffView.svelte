@@ -172,7 +172,7 @@
     />
   {:else}
     <div
-      class="flex items-center justify-center flex-1 text-red-500 text-sm p-8"
+      class="flex items-center justify-center flex-1 text-danger-fg text-sm p-8"
     >
       <p>Unknown view mode: {mode}</p>
     </div>

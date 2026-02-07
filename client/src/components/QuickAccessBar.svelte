@@ -102,7 +102,7 @@
            text-text-primary bg-bg-tertiary
            border border-border-default rounded-lg
            hover:bg-bg-hover
-           focus:outline-none focus:ring-2 focus:ring-blue-500
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis
            transition-colors"
     title="Go to home directory"
   >
@@ -135,7 +135,7 @@
                text-text-primary bg-bg-tertiary
                border border-border-default rounded-lg
                hover:bg-bg-hover
-               focus:outline-none focus:ring-2 focus:ring-blue-500
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                transition-colors"
         aria-expanded={isRecentOpen}
         aria-haspopup="true"
@@ -209,7 +209,7 @@
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  class={recent.isGitRepo ? "text-blue-500" : "text-yellow-500"}
+                  class={recent.isGitRepo ? "text-accent-fg" : "text-attention-fg"}
                   aria-hidden="true"
                 >
                   <path
@@ -227,7 +227,7 @@
                   {#if recent.isGitRepo}
                     <span
                       class="px-1.5 py-0.5 text-xs font-medium
-                             bg-blue-100 text-blue-700 rounded
+                             bg-accent-subtle text-accent-fg rounded
                              flex-shrink-0"
                       title="Git repository"
                     >

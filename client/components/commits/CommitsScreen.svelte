@@ -218,15 +218,15 @@
   function statusClass(status: CommitFileChange["status"]): string {
     switch (status) {
       case "A":
-        return "text-green-700";
+        return "text-success-fg";
       case "D":
-        return "text-red-600";
+        return "text-danger-fg";
       case "M":
-        return "text-yellow-700";
+        return "text-attention-fg";
       case "R":
-        return "text-blue-700";
+        return "text-accent-fg";
       case "C":
-        return "text-purple-700";
+        return "text-accent-fg";
       default:
         return "text-text-secondary";
     }
@@ -258,7 +258,7 @@
   <div class="px-4 py-3 border-b border-border-default shrink-0">
     <input
       type="text"
-      class="w-full px-3 py-2 text-sm border border-border-default rounded bg-bg-primary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent"
+      class="w-full px-3 py-2 text-sm border border-border-default rounded bg-bg-primary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent"
       placeholder="Search commits by message, author, or hash..."
       value={searchInput}
       oninput={(e) => handleSearchInput(e.currentTarget.value)}
@@ -273,7 +273,7 @@
       <div class="flex items-center justify-center p-8 text-text-secondary">
         <div class="flex flex-col items-center gap-2">
           <div
-            class="w-6 h-6 border-2 border-border-default border-t-blue-600 rounded-full animate-spin"
+            class="w-6 h-6 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"
           ></div>
           <p class="text-sm">Loading commits...</p>
         </div>
@@ -282,10 +282,10 @@
       <!-- Error State -->
       <div class="flex items-center justify-center p-8">
         <div class="flex flex-col items-center gap-3 text-center">
-          <p class="text-sm text-red-600">{error}</p>
+          <p class="text-sm text-danger-fg">{error}</p>
           <button
             type="button"
-            class="px-4 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+            class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors"
             onclick={handleRetry}
           >
             Retry
@@ -318,7 +318,7 @@
             aria-expanded={isExpanded}
           >
             <div class="flex items-center gap-2 text-xs text-text-secondary">
-              <span class="font-mono text-blue-600"
+              <span class="font-mono text-accent-fg"
                 >{commit.shortHash || commit.hash.slice(0, 7)}</span
               >
               <span>{formatRelativeDate(commit.date)}</span>
@@ -337,12 +337,12 @@
                   class="flex items-center gap-2 py-3 text-sm text-text-secondary"
                 >
                   <div
-                    class="w-4 h-4 border-2 border-border-default border-t-blue-600 rounded-full animate-spin"
+                    class="w-4 h-4 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"
                   ></div>
                   Loading detail...
                 </div>
               {:else if detailError !== null}
-                <div class="py-3 text-sm text-red-600">{detailError}</div>
+                <div class="py-3 text-sm text-danger-fg">{detailError}</div>
               {:else if commitDetail !== null}
                 <!-- Full hash -->
                 <div class="py-3 space-y-3">
@@ -375,10 +375,10 @@
                         ? "s"
                         : ""} changed
                     </span>
-                    <span class="text-green-700"
+                    <span class="text-success-fg"
                       >+{commitDetail.stats.additions}</span
                     >
-                    <span class="text-red-600"
+                    <span class="text-danger-fg"
                       >-{commitDetail.stats.deletions}</span
                     >
                   </div>
@@ -406,12 +406,12 @@
                             >
                             <div class="flex items-center gap-2 ml-auto shrink-0">
                               {#if file.additions > 0}
-                                <span class="text-green-700"
+                                <span class="text-success-fg"
                                   >+{file.additions}</span
                                 >
                               {/if}
                               {#if file.deletions > 0}
-                                <span class="text-red-600"
+                                <span class="text-danger-fg"
                                   >-{file.deletions}</span
                                 >
                               {/if}
@@ -430,7 +430,7 @@
 
       <!-- Error banner (non-blocking, when we have some commits loaded) -->
       {#if error !== null && commits.length > 0}
-        <div class="px-4 py-2 text-sm text-red-600 bg-red-50">{error}</div>
+        <div class="px-4 py-2 text-sm text-danger-fg bg-danger-subtle">{error}</div>
       {/if}
 
       <!-- Load More -->

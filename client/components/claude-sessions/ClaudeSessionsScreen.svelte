@@ -168,7 +168,7 @@
                  text-text-secondary hover:text-text-primary
                  hover:bg-bg-hover rounded-lg
                  transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Back to previous screen"
         >
           <svg
@@ -219,8 +219,8 @@
   <!-- Error Banner -->
   {#if claudeSessionsStore.error}
     <div
-      class="error-banner mx-6 mt-4 p-4 rounded-lg border border-red-500/30
-             bg-red-500/10 text-red-400"
+      class="error-banner mx-6 mt-4 p-4 rounded-lg border border-danger-emphasis/30
+             bg-danger-emphasis/10 text-danger-fg"
       role="alert"
     >
       <div class="flex items-start gap-3">
@@ -248,7 +248,7 @@
         <button
           type="button"
           onclick={handleClearError}
-          class="p-1 rounded hover:bg-red-500/20 transition-colors"
+          class="p-1 rounded hover:bg-danger-emphasis/20 transition-colors"
           aria-label="Dismiss error"
         >
           <svg
@@ -281,7 +281,7 @@
         aria-live="polite"
       >
         <svg
-          class="animate-spin h-8 w-8 text-blue-500 mb-4"
+          class="animate-spin h-8 w-8 text-accent-fg mb-4"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -408,9 +408,9 @@
             disabled={claudeSessionsStore.isLoading}
             class="px-6 py-3 rounded-lg text-sm font-medium
                    bg-bg-secondary hover:bg-bg-hover text-text-primary
-                   border border-bg-border hover:border-blue-500/30
+                   border border-bg-border hover:border-accent-emphasis/30
                    disabled:opacity-50 disabled:cursor-not-allowed
-                   focus:outline-none focus:ring-2 focus:ring-blue-500
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                    transition-all duration-150"
             aria-label="Load more sessions"
           >

@@ -53,10 +53,10 @@ function handleKeydown(event: KeyboardEvent): void {
   type="button"
   class="line-comment-indicator relative inline-flex items-center justify-center
          min-w-[44px] min-h-[44px] p-1
-         text-blue-400 hover:text-blue-300 active:text-blue-200
-         hover:bg-blue-900/30 active:bg-blue-900/50
+         text-accent-fg hover:text-accent-fg active:text-accent-fg
+         hover:bg-accent-muted active:bg-accent-muted
          rounded transition-colors duration-150
-         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:ring-offset-bg-primary"
+         focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-1 focus:ring-offset-bg-primary"
   onclick={handleClick}
   onkeydown={handleKeydown}
   aria-label="{commentCount} comment{commentCount === 1 ? '' : 's'} on this line"
@@ -83,7 +83,7 @@ function handleKeydown(event: KeyboardEvent): void {
     class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1
            flex items-center justify-center
            text-[10px] font-bold text-white
-           bg-blue-500 rounded-full"
+           bg-accent-emphasis rounded-full"
   >
     {displayCount}
   </span>

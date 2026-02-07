@@ -49,9 +49,9 @@ let longPressTimer: ReturnType<typeof setTimeout> | undefined =
 function getBackgroundClass(type: DiffChangeType): string {
   switch (type) {
     case "add":
-      return "bg-green-900/30";
+      return "bg-diff-add-bg";
     case "delete":
-      return "bg-red-900/30";
+      return "bg-diff-del-bg";
     case "context":
       return "bg-transparent";
     default:
@@ -85,9 +85,9 @@ function getIndicator(type: DiffChangeType): string {
 function getIndicatorClass(type: DiffChangeType): string {
   switch (type) {
     case "add":
-      return "text-green-400";
+      return "text-success-fg";
     case "delete":
-      return "text-red-400";
+      return "text-danger-fg";
     case "context":
       return "text-text-secondary";
     default:
@@ -143,7 +143,7 @@ function handlePointerLeave(): void {
 <div
   class="diff-line-row flex min-h-[44px] font-mono text-sm select-none {getBackgroundClass(
     change.type,
-  )} {selected ? 'ring-2 ring-blue-500 ring-inset' : ''}"
+  )} {selected ? 'ring-2 ring-accent-emphasis ring-inset' : ''}"
   onpointerdown={handlePointerDown}
   onpointerup={handlePointerUp}
   onpointerleave={handlePointerLeave}
@@ -160,9 +160,9 @@ function handlePointerLeave(): void {
       <button
         type="button"
         class="comment-trigger absolute left-0 top-1 w-6 h-6 flex items-center justify-center
-               rounded bg-blue-600 text-white text-xs font-bold
+               rounded bg-accent-emphasis text-white text-xs font-bold
                opacity-0 group-hover/gutter:opacity-100
-               hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
+               hover:bg-accent-emphasis transition-opacity z-10 cursor-pointer"
         onclick={(e) => { e.stopPropagation(); onCommentClick?.(e.shiftKey); }}
         aria-label="Add comment on line {lineNumber}"
       >+</button>

@@ -70,9 +70,9 @@
     <button
       type="button"
       class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2"
-      class:bg-blue-600={mode === "diff"}
+      class:bg-accent-emphasis={mode === "diff"}
       class:text-white={mode === "diff"}
-      class:hover:bg-blue-700={mode === "diff"}
+      class:hover:bg-accent-emphasis={mode === "diff"}
       class:bg-transparent={mode !== "diff"}
       class:text-text-primary={mode !== "diff"}
       class:hover:bg-bg-hover={mode !== "diff"}
@@ -83,7 +83,7 @@
       <span>Diff Only</span>
       <span
         class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-blue-500={mode === "diff"}
+        class:bg-accent-emphasis={mode === "diff"}
         class:text-white={mode === "diff"}
         class:bg-bg-tertiary={mode !== "diff"}
         class:text-text-secondary={mode !== "diff"}
@@ -96,9 +96,9 @@
     <button
       type="button"
       class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2 border-l border-border-default"
-      class:bg-blue-600={mode === "all"}
+      class:bg-accent-emphasis={mode === "all"}
       class:text-white={mode === "all"}
-      class:hover:bg-blue-700={mode === "all"}
+      class:hover:bg-accent-emphasis={mode === "all"}
       class:bg-transparent={mode !== "all"}
       class:text-text-primary={mode !== "all"}
       class:hover:bg-bg-hover={mode !== "all"}
@@ -109,7 +109,7 @@
       <span>All Files</span>
       <span
         class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-blue-500={mode === "all"}
+        class:bg-accent-emphasis={mode === "all"}
         class:text-white={mode === "all"}
         class:bg-bg-tertiary={mode !== "all"}
         class:text-text-secondary={mode !== "all"}

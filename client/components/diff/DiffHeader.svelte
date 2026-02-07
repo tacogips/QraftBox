@@ -52,7 +52,7 @@
   function getButtonClass(mode: ViewMode): string {
     const baseClasses =
       "min-h-[44px] px-4 py-2 text-sm font-medium rounded-md transition-colors";
-    const activeClasses = "bg-blue-600 text-white";
+    const activeClasses = "bg-accent-emphasis text-white";
     const inactiveClasses =
       "bg-bg-secondary text-text-primary hover:bg-bg-tertiary";
 
@@ -102,10 +102,10 @@
 
     <!-- Middle: Stats -->
     <div class="flex items-center gap-4 flex-shrink-0">
-      <span class="text-sm font-medium text-green-600" aria-label="Additions">
+      <span class="text-sm font-medium text-success-fg" aria-label="Additions">
         +{file.additions}
       </span>
-      <span class="text-sm font-medium text-red-600" aria-label="Deletions">
+      <span class="text-sm font-medium text-danger-fg" aria-label="Deletions">
         -{file.deletions}
       </span>
     </div>

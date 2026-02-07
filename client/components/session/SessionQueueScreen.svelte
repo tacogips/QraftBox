@@ -115,7 +115,7 @@ async function handleClearCompleted(): Promise<void> {
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded-lg
                transition-colors
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Back to diff view"
       >
         <svg
@@ -146,10 +146,10 @@ async function handleClearCompleted(): Promise<void> {
           type="button"
           onclick={onBrowseAllSessions}
           class="px-3 py-1.5 text-sm
-                 text-text-secondary hover:text-blue-400
-                 hover:bg-blue-600/10 rounded-lg
+                 text-text-secondary hover:text-accent-fg
+                 hover:bg-accent-emphasis/10 rounded-lg
                  transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-blue-500
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  flex items-center gap-2"
           aria-label="Browse all Claude sessions"
         >
@@ -178,10 +178,10 @@ async function handleClearCompleted(): Promise<void> {
           type="button"
           onclick={() => void handleClearCompleted()}
           class="px-3 py-1.5 text-sm
-                 text-text-secondary hover:text-red-400
-                 hover:bg-red-600/10 rounded-lg
+                 text-text-secondary hover:text-danger-fg
+                 hover:bg-danger-emphasis/10 rounded-lg
                  transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-red-500"
+                 focus:outline-none focus:ring-2 focus:ring-danger-emphasis"
         >
           Clear Completed
         </button>
@@ -194,10 +194,10 @@ async function handleClearCompleted(): Promise<void> {
     <!-- Error message -->
     {#if queueStore.error !== null}
       <div
-        class="p-4 bg-red-600/10 border border-red-500/30 rounded-lg"
+        class="p-4 bg-danger-emphasis/10 border border-danger-emphasis/30 rounded-lg"
         role="alert"
       >
-        <p class="text-sm text-red-400">{queueStore.error}</p>
+        <p class="text-sm text-danger-fg">{queueStore.error}</p>
       </div>
     {/if}
 
@@ -205,7 +205,7 @@ async function handleClearCompleted(): Promise<void> {
     {#if queueStore.loading}
       <div class="flex items-center justify-center py-8">
         <svg
-          class="animate-spin h-6 w-6 text-blue-400"
+          class="animate-spin h-6 w-6 text-accent-fg"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
           viewBox="0 0 24 24"
@@ -235,7 +235,7 @@ async function handleClearCompleted(): Promise<void> {
             id="running-heading"
             class="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2"
           >
-            <span class="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span class="inline-block w-2 h-2 rounded-full bg-accent-emphasis animate-pulse" />
             Running ({queueStore.running.length})
           </h2>
           <div class="space-y-3">
@@ -257,7 +257,7 @@ async function handleClearCompleted(): Promise<void> {
             id="queued-heading"
             class="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2"
           >
-            <span class="inline-block w-2 h-2 rounded-full bg-yellow-500" />
+            <span class="inline-block w-2 h-2 rounded-full bg-attention-emphasis" />
             Queued ({queueStore.queued.length})
           </h2>
           <div class="space-y-3">
@@ -282,7 +282,7 @@ async function handleClearCompleted(): Promise<void> {
             id="completed-heading"
             class="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2"
           >
-            <span class="inline-block w-2 h-2 rounded-full bg-green-500" />
+            <span class="inline-block w-2 h-2 rounded-full bg-success-emphasis" />
             Completed ({queueStore.completed.length})
           </h2>
           <div class="space-y-3">

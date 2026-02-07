@@ -42,13 +42,13 @@
   <div class="flex flex-col items-center justify-center p-8 gap-4">
     <!-- Spinner -->
     <div
-      class="spinner w-12 h-12 border-4 border-gray-200 border-t-purple-600 rounded-full animate-spin"
+      class="spinner w-12 h-12 border-4 border-border-default border-t-purple-600 rounded-full animate-spin"
       role="status"
       aria-label="Loading"
     ></div>
 
     <!-- Progress Message -->
-    <p class="text-base text-gray-700 font-medium">{displayMessage}</p>
+    <p class="text-base text-text-primary font-medium">{displayMessage}</p>
 
     <!-- Stage Indicator -->
     <div class="stage-indicator flex gap-2">
@@ -57,18 +57,18 @@
         stage === 'creating' ||
         stage === 'done'
           ? 'bg-purple-600'
-          : 'bg-gray-300'}"
+          : 'bg-bg-tertiary'}"
       ></div>
       <div
         class="stage-dot w-2 h-2 rounded-full {stage === 'creating' ||
         stage === 'done'
           ? 'bg-purple-600'
-          : 'bg-gray-300'}"
+          : 'bg-bg-tertiary'}"
       ></div>
       <div
         class="stage-dot w-2 h-2 rounded-full {stage === 'done'
           ? 'bg-purple-600'
-          : 'bg-gray-300'}"
+          : 'bg-bg-tertiary'}"
       ></div>
     </div>
 

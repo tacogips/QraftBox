@@ -197,7 +197,7 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
         stroke-width="2"
         stroke-linecap="round"
         stroke-linejoin="round"
-        class="text-blue-400"
+        class="text-accent-fg"
         aria-hidden="true"
       >
         <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54" />
@@ -213,7 +213,7 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
       class="p-1.5 min-w-[32px] min-h-[32px]
              text-text-tertiary hover:text-text-primary
              hover:bg-bg-hover rounded
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
       aria-label="Close"
     >
       <svg
@@ -259,7 +259,7 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
              bg-bg-primary text-text-primary text-sm
              border border-border-default rounded
              placeholder:text-text-tertiary
-             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
              resize-y"
       aria-label="AI prompt"
     ></textarea>
@@ -283,18 +283,18 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
       {#each fileRefs as ref (ref.path)}
         <span
           class="inline-flex items-center gap-1 px-2 py-1
-                 bg-blue-600/20 text-blue-400 text-xs rounded"
+                 bg-accent-muted text-accent-fg text-xs rounded"
         >
           <span class="truncate max-w-[150px]">@{ref.path}</span>
           {#if ref.startLine !== undefined}
-            <span class="text-blue-300">
+            <span class="text-accent-fg">
               :L{ref.startLine}{ref.endLine !== ref.startLine ? `-L${ref.endLine}` : ""}
             </span>
           {/if}
           <button
             type="button"
             onclick={() => removeFileRef(ref.path)}
-            class="ml-1 hover:text-red-400"
+            class="ml-1 hover:text-danger-fg"
             aria-label="Remove reference"
           >
             <svg
@@ -331,11 +331,11 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
         onclick={() => (immediate = true)}
         class="px-3 py-1.5 min-h-[36px] text-xs font-medium
                {immediate
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
                border-r border-border-default
                transition-colors duration-150
-               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
         aria-pressed={immediate}
       >
         Run Now
@@ -345,10 +345,10 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
         onclick={() => (immediate = false)}
         class="px-3 py-1.5 min-h-[36px] text-xs font-medium
                {!immediate
-          ? 'bg-blue-600 text-white'
+          ? 'bg-accent-emphasis text-white'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
                transition-colors duration-150
-               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
         aria-pressed={!immediate}
       >
         Queue
@@ -361,11 +361,11 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
       onclick={handleSubmit}
       disabled={prompt.trim().length === 0}
       class="px-4 py-2 min-h-[44px]
-             bg-blue-600 hover:bg-blue-700
+             bg-accent-emphasis hover:bg-accent-emphasis
              text-white text-sm font-medium rounded
              disabled:opacity-50 disabled:cursor-not-allowed
              transition-colors duration-150
-             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-bg-secondary"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
     >
       Submit
     </button>
