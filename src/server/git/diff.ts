@@ -7,6 +7,7 @@
 
 import type { DiffFile, FileStatus, FileStatusCode } from "../../types/git.js";
 import { execGit } from "./executor.js";
+import { parseDiff } from "./parser.js";
 
 /**
  * Options for generating diffs
@@ -47,7 +48,7 @@ export async function getDiff(
   options?: DiffOptions | undefined,
 ): Promise<readonly DiffFile[]> {
   const contextLines = options?.contextLines ?? 3;
-  const args: string[] = ["diff", `-U${contextLines}`, "--numstat"];
+  const args: string[] = ["diff", `-U${contextLines}`];
 
   // Build ref arguments
   if (options?.base !== undefined && options?.target !== undefined) {
@@ -78,7 +79,6 @@ export async function getDiff(
       const stagedArgs: string[] = [
         "diff",
         `-U${contextLines}`,
-        "--numstat",
         "--cached",
       ];
 
@@ -87,7 +87,7 @@ export async function getDiff(
       }
 
       const stagedResult = await execGit(stagedArgs, { cwd: projectPath });
-      return parseGitDiff(stagedResult.stdout);
+      return parseDiff(stagedResult.stdout);
     }
 
     // Other fatal errors should be thrown
@@ -96,8 +96,8 @@ export async function getDiff(
     }
   }
 
-  // Parse the diff output using inline parser
-  return parseGitDiff(result.stdout);
+  // Parse the unified diff output using full parser
+  return parseDiff(result.stdout);
 }
 
 /**
@@ -234,74 +234,6 @@ export async function getChangedFiles(
 
     return parsePorcelainStatus(result.stdout);
   }
-}
-
-/**
- * Parse git diff --numstat output into DiffFile array
- *
- * This is a basic inline parser. It will be replaced by the full parser
- * from ./parser.ts once TASK-004 is completed.
- *
- * @param rawDiff - Raw git diff output
- * @returns Array of DiffFile objects
- */
-function parseGitDiff(rawDiff: string): readonly DiffFile[] {
-  if (rawDiff.trim().length === 0) {
-    return [];
-  }
-
-  const files: DiffFile[] = [];
-  const lines = rawDiff.split("\n");
-
-  for (const line of lines) {
-    if (line.trim().length === 0) {
-      continue;
-    }
-
-    // Parse numstat line: "additions\tdeletions\tfilename"
-    const match = line.match(/^(\d+|-)\s+(\d+|-)\s+(.+)$/);
-    if (match === null) {
-      continue;
-    }
-
-    const additionsStr = match[1];
-    const deletionsStr = match[2];
-    const path = match[3];
-
-    if (
-      additionsStr === undefined ||
-      deletionsStr === undefined ||
-      path === undefined
-    ) {
-      continue;
-    }
-
-    const additions = additionsStr === "-" ? 0 : parseInt(additionsStr, 10);
-    const deletions = deletionsStr === "-" ? 0 : parseInt(deletionsStr, 10);
-
-    // Determine status based on additions/deletions
-    let status: FileStatusCode = "modified";
-    const isBinary = additionsStr === "-" && deletionsStr === "-";
-
-    if (additions > 0 && deletions === 0) {
-      status = "added";
-    } else if (additions === 0 && deletions > 0) {
-      status = "deleted";
-    }
-
-    files.push({
-      path,
-      status,
-      oldPath: undefined,
-      additions,
-      deletions,
-      chunks: [], // TODO: Full chunk parsing in TASK-004
-      isBinary,
-      fileSize: undefined,
-    });
-  }
-
-  return files;
 }
 
 /**

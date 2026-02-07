@@ -73,14 +73,14 @@ test.describe("TS-E2E-01: App Startup", () => {
 
   test("E2E-01-02: initial page loads", async ({ page }) => {
     await page.goto("/");
-    // Wait for page to load; the #app div exists in HTML but may be
-    // empty if the Svelte client bundle has not been rebuilt
     await page.waitForLoadState("networkidle");
-    await screenshot(page, "01-app-initial-load");
 
-    // Verify HTML was served (the div exists even if empty)
     const appDiv = page.locator("#app");
+    await screenshot(page, "01-app-initial-load");
     await expect(appDiv).toBeAttached();
+    // Verify the app rendered content (not empty)
+    const appHTML = await appDiv.innerHTML();
+    expect(appHTML.length).toBeGreaterThan(0);
   });
 });
 

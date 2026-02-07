@@ -58,7 +58,7 @@ export interface DiffChunk {
  * A single line change within a diff chunk
  */
 export interface DiffChange {
-  readonly type: "add" | "del" | "normal";
+  readonly type: "add" | "delete" | "context";
   readonly oldLine?: number | undefined;
   readonly newLine?: number | undefined;
   readonly content: string;
