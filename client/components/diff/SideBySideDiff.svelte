@@ -19,10 +19,12 @@ import DiffLine from "./DiffLine.svelte";
 interface Props {
   chunks: readonly DiffChunk[];
   onLineSelect?: (side: "old" | "new", line: number) => void;
-  onCommentOpen?: (side: "old" | "new", line: number) => void;
+  onCommentOpen?: (side: "old" | "new", line: number, shiftKey: boolean) => void;
   onCommentSubmit?: (prompt: string, immediate: boolean) => void;
   onCommentCancel?: () => void;
-  commentLine?: { side: "old" | "new"; line: number } | undefined;
+  commentLine?: { side: "old" | "new"; startLine: number; endLine: number } | undefined;
+  placeholder?: string;
+  rangeLines?: readonly number[];
 }
 
 // Svelte 5 props syntax
@@ -33,6 +35,8 @@ let {
   onCommentSubmit = undefined,
   onCommentCancel = undefined,
   commentLine = undefined,
+  placeholder = "Ask AI about this line... (Ctrl+Enter to submit)",
+  rangeLines = [],
 }: Props = $props();
 
 let commentText = $state("");
@@ -149,19 +153,27 @@ function handleNewLineSelect(lineNumber: number): void {
 /**
  * Handle comment button click on old pane
  */
-function handleOldCommentOpen(lineNumber: number): void {
+function handleOldCommentOpen(lineNumber: number, shiftKey: boolean): void {
   if (onCommentOpen !== undefined) {
-    onCommentOpen("old", lineNumber);
+    onCommentOpen("old", lineNumber, shiftKey);
   }
 }
 
 /**
  * Handle comment button click on new pane
  */
-function handleNewCommentOpen(lineNumber: number): void {
+function handleNewCommentOpen(lineNumber: number, shiftKey: boolean): void {
   if (onCommentOpen !== undefined) {
-    onCommentOpen("new", lineNumber);
+    onCommentOpen("new", lineNumber, shiftKey);
   }
+}
+
+/**
+ * Check if a line number is in the highlighted range for a given side
+ */
+function isInRange(side: "old" | "new", lineNumber: number): boolean {
+  if (commentLine === undefined || commentLine.side !== side) return false;
+  return rangeLines.includes(lineNumber);
 }
 </script>
 
@@ -180,18 +192,20 @@ function handleNewCommentOpen(lineNumber: number): void {
         </div>
       {:else}
         {#each oldLines as { change, lineNumber }, index (index)}
-          <DiffLine
-            {change}
-            {lineNumber}
-            onSelect={() => handleOldLineSelect(lineNumber)}
-            onCommentClick={() => handleOldCommentOpen(lineNumber)}
-          />
-          {#if commentLine !== undefined && commentLine.side === "old" && commentLine.line === lineNumber}
+          <div class={isInRange("old", lineNumber) ? "bg-blue-900/20" : ""}>
+            <DiffLine
+              {change}
+              {lineNumber}
+              onSelect={() => handleOldLineSelect(lineNumber)}
+              onCommentClick={(shiftKey) => handleOldCommentOpen(lineNumber, shiftKey)}
+            />
+          </div>
+          {#if commentLine !== undefined && commentLine.side === "old" && commentLine.endLine === lineNumber}
             <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                        focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ask AI about this line... (Ctrl+Enter to submit)"
+                placeholder={placeholder}
                 bind:value={commentText}
                 onkeydown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
@@ -239,18 +253,20 @@ function handleNewCommentOpen(lineNumber: number): void {
         </div>
       {:else}
         {#each newLines as { change, lineNumber }, index (index)}
-          <DiffLine
-            {change}
-            {lineNumber}
-            onSelect={() => handleNewLineSelect(lineNumber)}
-            onCommentClick={() => handleNewCommentOpen(lineNumber)}
-          />
-          {#if commentLine !== undefined && commentLine.side === "new" && commentLine.line === lineNumber}
+          <div class={isInRange("new", lineNumber) ? "bg-blue-900/20" : ""}>
+            <DiffLine
+              {change}
+              {lineNumber}
+              onSelect={() => handleNewLineSelect(lineNumber)}
+              onCommentClick={(shiftKey) => handleNewCommentOpen(lineNumber, shiftKey)}
+            />
+          </div>
+          {#if commentLine !== undefined && commentLine.side === "new" && commentLine.endLine === lineNumber}
             <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                        focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Ask AI about this line... (Ctrl+Enter to submit)"
+                placeholder={placeholder}
                 bind:value={commentText}
                 onkeydown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {

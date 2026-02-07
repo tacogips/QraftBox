@@ -25,7 +25,7 @@ interface Props {
   selected?: boolean;
   onSelect?: () => void;
   onLongPress?: () => void;
-  onCommentClick?: () => void;
+  onCommentClick?: (shiftKey: boolean) => void;
 }
 
 // Svelte 5 props syntax
@@ -163,7 +163,7 @@ function handlePointerLeave(): void {
                rounded bg-blue-600 text-white text-xs font-bold
                opacity-0 group-hover/gutter:opacity-100
                hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
-        onclick={(e) => { e.stopPropagation(); onCommentClick?.(); }}
+        onclick={(e) => { e.stopPropagation(); onCommentClick?.(e.shiftKey); }}
         aria-label="Add comment on line {lineNumber}"
       >+</button>
     {/if}

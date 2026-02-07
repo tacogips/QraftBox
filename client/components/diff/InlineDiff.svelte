@@ -19,10 +19,12 @@
   interface Props {
     chunks: readonly DiffChunk[];
     onLineSelect?: (line: number, type: "old" | "new") => void;
-    onCommentOpen?: (line: number, type: "old" | "new") => void;
+    onCommentOpen?: (line: number, type: "old" | "new", shiftKey: boolean) => void;
     onCommentSubmit?: (prompt: string, immediate: boolean) => void;
     onCommentCancel?: () => void;
-    commentLine?: { line: number; type: "old" | "new" } | undefined;
+    commentLine?: { type: "old" | "new"; startLine: number; endLine: number } | undefined;
+    placeholder?: string;
+    rangeLines?: readonly number[];
   }
 
   let {
@@ -32,6 +34,8 @@
     onCommentSubmit = undefined,
     onCommentCancel = undefined,
     commentLine = undefined,
+    placeholder = "Ask AI about this line... (Ctrl+Enter to submit)",
+    rangeLines = [],
   }: Props = $props();
 
   let commentText = $state("");
@@ -90,25 +94,43 @@
   function handleCommentOpen(
     oldLine: number | undefined,
     newLine: number | undefined,
+    shiftKey: boolean,
   ): void {
     if (onCommentOpen === undefined) return;
     if (newLine !== undefined) {
-      onCommentOpen(newLine, "new");
+      onCommentOpen(newLine, "new", shiftKey);
     } else if (oldLine !== undefined) {
-      onCommentOpen(oldLine, "old");
+      onCommentOpen(oldLine, "old", shiftKey);
     }
   }
 
   /**
-   * Check if comment box should show after this line
+   * Check if comment box should show after this line (renders after endLine)
    */
   function isCommentLine(
     oldLine: number | undefined,
     newLine: number | undefined,
   ): boolean {
     if (commentLine === undefined) return false;
-    if (commentLine.type === "new" && newLine === commentLine.line) return true;
-    if (commentLine.type === "old" && oldLine === commentLine.line) return true;
+    if (commentLine.type === "new" && newLine === commentLine.endLine) return true;
+    if (commentLine.type === "old" && oldLine === commentLine.endLine) return true;
+    return false;
+  }
+
+  /**
+   * Check if a line is in the highlighted range
+   */
+  function isInRange(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+  ): boolean {
+    if (commentLine === undefined) return false;
+    if (commentLine.type === "new" && newLine !== undefined) {
+      return rangeLines.includes(newLine);
+    }
+    if (commentLine.type === "old" && oldLine !== undefined) {
+      return rangeLines.includes(oldLine);
+    }
     return false;
   }
 </script>
@@ -124,7 +146,7 @@
   {:else}
     <!-- Render each change as an inline diff line -->
     {#each flattenedChanges as { change, index } (index)}
-      <div class="flex diff-line-row group/inlinerow">
+      <div class="flex diff-line-row group/inlinerow {isInRange(change.oldLine, change.newLine) ? 'bg-blue-900/20' : ''}">
         <!-- Old line number column -->
         <div
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
@@ -136,7 +158,7 @@
                      rounded bg-blue-600 text-white text-xs font-bold
                      opacity-0 group-hover/inlinerow:opacity-100
                      hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
-              onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine); }}
+              onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine, e.shiftKey); }}
               aria-label="Add comment"
             >+</button>
           {/if}
@@ -176,7 +198,7 @@
           <textarea
             class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                    focus:outline-none focus:ring-2 focus:ring-blue-500"
-            placeholder="Ask AI about this line... (Ctrl+Enter to submit)"
+            placeholder={placeholder}
             bind:value={commentText}
             onkeydown={(e) => {
               if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {

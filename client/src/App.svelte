@@ -230,19 +230,21 @@
    * Submit AI prompt from inline comment box (GitHub-style)
    */
   async function handleInlineCommentSubmit(
-    line: number,
+    startLine: number,
+    endLine: number,
     side: "old" | "new",
+    filePath: string,
     prompt: string,
     immediate: boolean,
   ): Promise<void> {
-    if (contextId === null || selectedFile === null) return;
+    if (contextId === null) return;
     const body = {
       prompt,
       context: {
         primaryFile: {
-          path: selectedFile.path,
-          startLine: line,
-          endLine: line,
+          path: filePath,
+          startLine,
+          endLine,
           content: "",
         },
         references: [],
