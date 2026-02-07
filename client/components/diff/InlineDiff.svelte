@@ -19,9 +19,22 @@
   interface Props {
     chunks: readonly DiffChunk[];
     onLineSelect?: (line: number, type: "old" | "new") => void;
+    onCommentOpen?: (line: number, type: "old" | "new") => void;
+    onCommentSubmit?: (prompt: string, immediate: boolean) => void;
+    onCommentCancel?: () => void;
+    commentLine?: { line: number; type: "old" | "new" } | undefined;
   }
 
-  let { chunks, onLineSelect = undefined }: Props = $props();
+  let {
+    chunks,
+    onLineSelect = undefined,
+    onCommentOpen = undefined,
+    onCommentSubmit = undefined,
+    onCommentCancel = undefined,
+    commentLine = undefined,
+  }: Props = $props();
+
+  let commentText = $state("");
 
   /**
    * Flatten all changes from all chunks into a single list
@@ -70,6 +83,34 @@
       onLineSelect(oldLine, "old");
     }
   }
+
+  /**
+   * Handle comment button click
+   */
+  function handleCommentOpen(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+  ): void {
+    if (onCommentOpen === undefined) return;
+    if (newLine !== undefined) {
+      onCommentOpen(newLine, "new");
+    } else if (oldLine !== undefined) {
+      onCommentOpen(oldLine, "old");
+    }
+  }
+
+  /**
+   * Check if comment box should show after this line
+   */
+  function isCommentLine(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+  ): boolean {
+    if (commentLine === undefined) return false;
+    if (commentLine.type === "new" && newLine === commentLine.line) return true;
+    if (commentLine.type === "old" && oldLine === commentLine.line) return true;
+    return false;
+  }
 </script>
 
 <div class="w-full font-mono">
@@ -83,17 +124,27 @@
   {:else}
     <!-- Render each change as an inline diff line -->
     {#each flattenedChanges as { change, index } (index)}
-      <div class="flex">
+      <div class="flex diff-line-row group/inlinerow">
         <!-- Old line number column -->
         <div
-          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default"
+          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
         >
+          {#if onCommentOpen !== undefined}
+            <button
+              type="button"
+              class="absolute left-0 top-1 w-6 h-6 flex items-center justify-center
+                     rounded bg-blue-600 text-white text-xs font-bold
+                     opacity-0 group-hover/inlinerow:opacity-100
+                     hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
+              onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine); }}
+              aria-label="Add comment"
+            >+</button>
+          {/if}
           {#if change.oldLine !== undefined}
             <span class="pt-2 min-h-[44px] flex items-start"
               >{change.oldLine}</span
             >
           {:else}
-            <!-- Empty placeholder for added lines -->
             <span class="pt-2 min-h-[44px] flex items-start opacity-30">-</span>
           {/if}
         </div>
@@ -107,7 +158,6 @@
               >{change.newLine}</span
             >
           {:else}
-            <!-- Empty placeholder for deleted lines -->
             <span class="pt-2 min-h-[44px] flex items-start opacity-30">-</span>
           {/if}
         </div>
@@ -121,6 +171,40 @@
           />
         </div>
       </div>
+      {#if isCommentLine(change.oldLine, change.newLine)}
+        <div class="border-t-2 border-b-2 border-blue-500 bg-bg-secondary p-3">
+          <textarea
+            class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Ask AI about this line... (Ctrl+Enter to submit)"
+            bind:value={commentText}
+            onkeydown={(e) => {
+              if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
+                e.preventDefault();
+                onCommentSubmit(commentText, true);
+                commentText = "";
+              }
+              if (e.key === "Escape" && onCommentCancel !== undefined) {
+                onCommentCancel();
+                commentText = "";
+              }
+            }}
+          ></textarea>
+          <div class="flex items-center gap-2 mt-2">
+            <button
+              type="button"
+              class="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500"
+              onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
+            >Submit</button>
+            <button
+              type="button"
+              class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+              onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
+            >Cancel</button>
+            <span class="text-xs text-text-tertiary ml-auto">Ctrl+Enter to submit</span>
+          </div>
+        </div>
+      {/if}
     {/each}
   {/if}
 </div>

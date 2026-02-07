@@ -14,7 +14,7 @@
     }
   },
   "scripts": {
-    "dev": "bun run --watch src/main.ts -- --open",
+    "dev": "bun run --watch src/main.ts",
     "build": "bun build src/main.ts --outdir dist --target bun",
     "start": "bun run src/main.ts",
     "test": "vitest run",

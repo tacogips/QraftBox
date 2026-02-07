@@ -15,7 +15,19 @@ tasks:
       - bun install
 
   dev:
-    desc: Run in development mode with watch
+    desc: Run backend + client dev servers with hot reload
+    deps:
+      - dev:server
+      - dev:client
+
+  dev:server:
+    desc: Run backend server with watch
+    cmds:
+      - bun run --watch src/main.ts
+
+  dev:client:
+    desc: Run Vite dev server with HMR
+    dir: client
     cmds:
       - bun run dev
 

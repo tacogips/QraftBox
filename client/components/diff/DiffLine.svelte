@@ -25,6 +25,7 @@ interface Props {
   selected?: boolean;
   onSelect?: () => void;
   onLongPress?: () => void;
+  onCommentClick?: () => void;
 }
 
 // Svelte 5 props syntax
@@ -35,6 +36,7 @@ let {
   selected = false,
   onSelect = undefined,
   onLongPress = undefined,
+  onCommentClick = undefined,
 }: Props = $props();
 
 // State for long press detection
@@ -139,10 +141,9 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="flex min-h-[44px] font-mono text-sm cursor-pointer select-none {getBackgroundClass(
+  class="diff-line-row flex min-h-[44px] font-mono text-sm select-none {getBackgroundClass(
     change.type,
   )} {selected ? 'ring-2 ring-blue-500 ring-inset' : ''}"
-  onclick={handleClick}
   onpointerdown={handlePointerDown}
   onpointerup={handlePointerUp}
   onpointerleave={handlePointerLeave}
@@ -151,11 +152,22 @@ function handlePointerLeave(): void {
   aria-label="Diff line {lineNumber}: {change.content}"
   aria-selected={selected}
 >
-  <!-- Line Number Column -->
+  <!-- Line Number Column with comment "+" button -->
   <div
-    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default"
+    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default relative group/gutter"
   >
-    <span class="pt-2">{lineNumber}</span>
+    {#if onCommentClick !== undefined}
+      <button
+        type="button"
+        class="comment-trigger absolute left-0 top-1 w-6 h-6 flex items-center justify-center
+               rounded bg-blue-600 text-white text-xs font-bold
+               opacity-0 group-hover/gutter:opacity-100
+               hover:bg-blue-500 transition-opacity z-10 cursor-pointer"
+        onclick={(e) => { e.stopPropagation(); onCommentClick?.(); }}
+        aria-label="Add comment on line {lineNumber}"
+      >+</button>
+    {/if}
+    <span class="pt-2 cursor-pointer" onclick={handleClick}>{lineNumber}</span>
   </div>
 
   <!-- Indicator Column -->
@@ -168,7 +180,7 @@ function handlePointerLeave(): void {
   </div>
 
   <!-- Content Column -->
-  <div class="flex-1 px-3 py-2 overflow-x-auto">
+  <div class="flex-1 px-3 py-2 overflow-x-auto cursor-pointer" onclick={handleClick}>
     {#if highlighted !== undefined}
       <!-- Render syntax-highlighted HTML from Shiki -->
       {@html highlighted}
@@ -187,5 +199,10 @@ pre {
   line-height: inherit;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Show "+" button when hovering anywhere on the row */
+.diff-line-row:hover .comment-trigger {
+  opacity: 1;
 }
 </style>

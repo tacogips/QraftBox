@@ -8,21 +8,19 @@
    *
    * Main container component for displaying file diffs in different view modes.
    * Supports side-by-side (split) and inline (unified) diff views.
-   *
-   * Props:
-   * - file: The diff file to display
-   * - mode: Display mode ('side-by-side' or 'inline')
-   * - onLineSelect: Optional callback when a line is selected (receives line number)
-   * - highlightedLines: Optional array of line numbers to highlight
-   *
-   * Design: Container that delegates rendering to specialized diff components.
-   * Handles mode switching and line selection events. Touch-friendly with 44px targets.
+   * Supports GitHub-style inline comment boxes via gutter "+" button.
    */
+
+  interface CommentState {
+    side: "old" | "new";
+    line: number;
+  }
 
   interface Props {
     file: DiffFile;
     mode: "side-by-side" | "inline";
     onLineSelect?: (line: number) => void;
+    onCommentSubmit?: (line: number, side: "old" | "new", prompt: string, immediate: boolean) => void;
     highlightedLines?: readonly number[];
   }
 
@@ -31,8 +29,14 @@
     file,
     mode,
     onLineSelect = undefined,
+    onCommentSubmit = undefined,
     highlightedLines = undefined,
   }: Props = $props();
+
+  /**
+   * Active inline comment state
+   */
+  let activeComment = $state<CommentState | null>(null);
 
   /**
    * Check if a line number is highlighted
@@ -46,7 +50,6 @@
 
   /**
    * Handle line selection from side-by-side view
-   * Side-by-side provides side ('old' | 'new') and line number
    */
   function handleSideBySideLineSelect(side: "old" | "new", line: number): void {
     if (onLineSelect !== undefined) {
@@ -56,13 +59,61 @@
 
   /**
    * Handle line selection from inline view
-   * Inline provides line number and type ('old' | 'new')
    */
   function handleInlineLineSelect(line: number, type: "old" | "new"): void {
     if (onLineSelect !== undefined) {
       onLineSelect(line);
     }
   }
+
+  /**
+   * Handle comment open from side-by-side gutter "+"
+   */
+  function handleSideBySideCommentOpen(side: "old" | "new", line: number): void {
+    activeComment = { side, line };
+  }
+
+  /**
+   * Handle comment open from inline gutter "+"
+   */
+  function handleInlineCommentOpen(line: number, type: "old" | "new"): void {
+    activeComment = { side: type, line };
+  }
+
+  /**
+   * Handle comment submission
+   */
+  function handleCommentSubmit(prompt: string, immediate: boolean): void {
+    if (activeComment !== null && onCommentSubmit !== undefined) {
+      onCommentSubmit(activeComment.line, activeComment.side, prompt, immediate);
+    }
+    activeComment = null;
+  }
+
+  /**
+   * Handle comment cancel
+   */
+  function handleCommentCancel(): void {
+    activeComment = null;
+  }
+
+  /**
+   * Derive side-by-side comment line prop
+   */
+  const sbsCommentLine = $derived(
+    activeComment !== null
+      ? { side: activeComment.side, line: activeComment.line }
+      : undefined,
+  );
+
+  /**
+   * Derive inline comment line prop
+   */
+  const inlineCommentLine = $derived(
+    activeComment !== null
+      ? { line: activeComment.line, type: activeComment.side }
+      : undefined,
+  );
 </script>
 
 <div class="diff-view-container w-full h-full flex flex-col">
@@ -78,10 +129,21 @@
     <SideBySideDiff
       chunks={file.chunks}
       onLineSelect={handleSideBySideLineSelect}
+      onCommentOpen={handleSideBySideCommentOpen}
+      onCommentSubmit={handleCommentSubmit}
+      onCommentCancel={handleCommentCancel}
+      commentLine={sbsCommentLine}
     />
   {:else if mode === "inline"}
     <!-- Inline (unified) view -->
-    <InlineDiff chunks={file.chunks} onLineSelect={handleInlineLineSelect} />
+    <InlineDiff
+      chunks={file.chunks}
+      onLineSelect={handleInlineLineSelect}
+      onCommentOpen={handleInlineCommentOpen}
+      onCommentSubmit={handleCommentSubmit}
+      onCommentCancel={handleCommentCancel}
+      commentLine={inlineCommentLine}
+    />
   {:else}
     <!-- Exhaustive check for mode type -->
     <div

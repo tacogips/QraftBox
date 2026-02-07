@@ -7,6 +7,14 @@ export default defineConfig({
   resolve: {
     conditions: ["browser", "import", "module", "default"],
   },
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:7144",
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     outDir: "../dist/client",
     emptyOutDir: true,
