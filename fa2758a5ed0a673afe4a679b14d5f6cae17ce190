@@ -120,7 +120,7 @@
     "commitHash": "fa2758a5ed0a673afe4a679b14d5f6cae17ce190",
     "filePath": "file1.txt",
     "lineNumber": 1,
-    "body": "Workflow comment",
+    "body": "Updated workflow comment",
     "author": {
       "name": "tacogips",
       "email": "me@tacogips.me"
@@ -136,6 +136,7 @@
         },
         "createdAt": 1770448750394
       }
-    ]
+    ],
+    "updatedAt": 1770448750401
   }
 ]
