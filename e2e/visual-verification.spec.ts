@@ -12,7 +12,8 @@
 
 import { test, expect } from "@playwright/test";
 
-const SCREENSHOT_DIR = "e2e-screenshots";
+const E2E_RUN_DIR = process.env["E2E_RUN_DIR"] ?? "e2e-result/unknown";
+const SCREENSHOT_DIR = `${E2E_RUN_DIR}/screenshots`;
 
 /**
  * Helper to get contextId from the workspace API.

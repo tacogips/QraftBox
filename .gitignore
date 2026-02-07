@@ -42,8 +42,7 @@ npm-debug.log*
 coverage/
 
 # E2E test outputs
-e2e-screenshots/
-e2e-results/
+e2e-result/
 playwright-report/
 test-results/
 
