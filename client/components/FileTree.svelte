@@ -36,6 +36,11 @@
      * Number of changed files (always from diff, independent of tree)
      */
     changedCount?: number;
+
+    /**
+     * Context ID for fetching git status (uncommitted count)
+     */
+    contextId?: string | null;
   }
 
   const {
@@ -45,6 +50,7 @@
     onFileSelect,
     onModeChange,
     changedCount = undefined,
+    contextId = null,
   }: Props = $props();
 
   /**
@@ -66,6 +72,46 @@
    * Status dropdown open state
    */
   let statusDropdownOpen = $state(false);
+
+  /**
+   * Uncommitted file count from git status
+   */
+  let uncommittedCount = $state(0);
+
+  /**
+   * Fetch git status for uncommitted count
+   */
+  async function fetchUncommittedCount(): Promise<void> {
+    if (contextId === null || contextId === undefined) return;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/status`);
+      if (resp.ok) {
+        const data = (await resp.json()) as {
+          staged: readonly string[];
+          modified: readonly string[];
+          untracked: readonly string[];
+          conflicts: readonly string[];
+        };
+        uncommittedCount =
+          data.staged.length +
+          data.modified.length +
+          data.untracked.length +
+          data.conflicts.length;
+      }
+    } catch {
+      // Non-critical
+    }
+  }
+
+  $effect(() => {
+    void fetchUncommittedCount();
+    const intervalId = setInterval(() => {
+      void fetchUncommittedCount();
+    }, 30000);
+    return () => {
+      clearInterval(intervalId);
+    };
+  });
 
   /**
    * Toggle directory expansion
@@ -552,6 +598,17 @@
       {/each}
     {/if}
   </div>
+
+  <!-- Bottom Status Panel -->
+  {#if uncommittedCount > 0}
+    <div
+      class="shrink-0 h-6 border-t border-border-default flex items-center px-3 bg-bg-tertiary"
+    >
+      <span class="text-[11px] text-attention-fg font-medium">
+        {uncommittedCount} uncommitted
+      </span>
+    </div>
+  {/if}
 </div>
 
 <!-- Recursive Tree Node Snippet -->

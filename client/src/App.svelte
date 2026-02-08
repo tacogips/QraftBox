@@ -672,7 +672,7 @@
       </div>
     {/if}
     {#if contextId !== null}
-      <HeaderStatusBadges {contextId} diffFileCount={diffFiles.length} />
+      <HeaderStatusBadges {contextId} />
     {/if}
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
@@ -707,6 +707,7 @@
                 {selectedPath}
                 onFileSelect={handleFileSelect}
                 changedCount={diffFiles.length}
+                {contextId}
                 onModeChange={(mode) => {
                   fileTreeMode = mode;
                   if (mode === "all" && contextId !== null) {

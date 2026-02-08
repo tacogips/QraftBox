@@ -2,12 +2,11 @@
   /**
    * HeaderStatusBadges Component
    *
-   * Displays git status badges in the project header bar, showing branch name,
-   * diff file count, uncommitted file count, and PR number.
+   * Displays git status badges in the project header bar, showing branch name
+   * and PR number.
    *
    * Props:
    * - contextId: Context ID for API requests
-   * - diffFileCount: Number of diff files
    *
    * Design:
    * - Fetches status from GET /api/ctx/:contextId/status
@@ -19,10 +18,9 @@
 
   interface Props {
     contextId: string;
-    diffFileCount: number;
   }
 
-  const { contextId, diffFileCount }: Props = $props();
+  const { contextId }: Props = $props();
 
   /**
    * Status API response type
@@ -64,18 +62,6 @@
    * Branch name from status
    */
   const branchName = $derived(status?.branch ?? "");
-
-  /**
-   * Uncommitted file count (staged + modified + untracked + conflicts)
-   */
-  const uncommittedCount = $derived(
-    status !== null
-      ? status.staged.length +
-          status.modified.length +
-          status.untracked.length +
-          status.conflicts.length
-      : 0,
-  );
 
   /**
    * PR number and URL (only if PR exists and is open)
@@ -146,32 +132,7 @@
   {/if}
 
   <!-- Separator -->
-  {#if branchName.length > 0 && (diffFileCount > 0 || uncommittedCount > 0 || openPR !== null)}
-    <span class="text-border-default">|</span>
-  {/if}
-
-  <!-- Diff file count -->
-  {#if diffFileCount > 0}
-    <span class="text-xs text-text-secondary">
-      {diffFileCount}
-      {diffFileCount === 1 ? "file" : "files"}
-    </span>
-  {/if}
-
-  <!-- Separator -->
-  {#if diffFileCount > 0 && (uncommittedCount > 0 || openPR !== null)}
-    <span class="text-border-default">|</span>
-  {/if}
-
-  <!-- Uncommitted count -->
-  {#if uncommittedCount > 0}
-    <span class="text-xs text-attention-fg">
-      {uncommittedCount} uncommitted
-    </span>
-  {/if}
-
-  <!-- Separator -->
-  {#if uncommittedCount > 0 && openPR !== null}
+  {#if branchName.length > 0 && openPR !== null}
     <span class="text-border-default">|</span>
   {/if}
 
