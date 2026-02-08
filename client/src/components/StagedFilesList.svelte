@@ -53,7 +53,7 @@
       case "D":
         return "bg-danger-subtle text-danger-fg";
       case "R":
-        return "bg-purple-100 text-purple-700";
+        return "bg-done-muted text-done-fg";
       default:
         return "bg-bg-secondary text-text-primary";
     }

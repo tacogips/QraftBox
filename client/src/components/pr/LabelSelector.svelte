@@ -131,7 +131,7 @@
              rounded-lg
              flex items-center justify-between
              hover:bg-bg-secondary
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
              disabled:bg-bg-secondary disabled:cursor-not-allowed
              text-base font-medium"
       aria-label="Add labels"
@@ -181,7 +181,7 @@
               <span>{label}</span>
               {#if selected.includes(label)}
                 <svg
-                  class="w-5 h-5 text-purple-600"
+                  class="w-5 h-5 text-accent-fg"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"

@@ -38,13 +38,13 @@
 </script>
 
 <div
-  class="github-auth-required p-6 bg-amber-50 border border-amber-300 rounded-lg"
+  class="github-auth-required p-6 bg-attention-muted border border-attention-fg rounded-lg"
 >
   <div class="flex flex-col items-center gap-4">
     <!-- Warning Icon -->
     <div class="warning-icon-container">
       <svg
-        class="w-16 h-16 text-amber-600"
+        class="w-16 h-16 text-attention-fg"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
@@ -77,12 +77,12 @@
       onclick={handleAuthenticate}
       onkeydown={handleKeydown}
       class="authenticate-button min-h-[44px] px-8 py-3
-             text-white bg-purple-600
+             text-white bg-done-emphasis
              rounded-lg
              flex items-center gap-3
-             hover:bg-purple-700
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-             active:bg-purple-800
+             hover:opacity-90
+             focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+             active:opacity-80
              transition-colors
              font-medium text-base"
       aria-label="Authenticate with GitHub"

@@ -433,7 +433,7 @@
   }
 
   .option-toggle:hover {
-    background-color: #f9fafb;
+    background-color: var(--color-bg-secondary);
   }
 
   .toggle-checkbox {

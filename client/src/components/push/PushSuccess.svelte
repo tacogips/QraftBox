@@ -161,10 +161,10 @@
   }
 
   .push-details {
-    background-color: #f9fafb;
+    background-color: var(--color-bg-secondary);
     padding: 1rem;
     border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border-default);
   }
 
   .detail-row {

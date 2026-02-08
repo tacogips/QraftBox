@@ -66,7 +66,7 @@
       case "qraftbox":
         return "bg-accent-muted text-accent-fg border-accent-emphasis/30";
       case "claude-cli":
-        return "bg-purple-600/20 text-purple-400 border-purple-600/30";
+        return "bg-done-muted text-done-fg border-done-emphasis/30";
       default:
         return "bg-bg-emphasis/20 text-text-tertiary border-border-emphasis/30";
     }

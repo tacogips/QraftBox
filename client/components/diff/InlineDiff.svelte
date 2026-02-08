@@ -36,7 +36,7 @@
     onCommentSubmit = undefined,
     onCommentCancel = undefined,
     commentLine = undefined,
-    placeholder = "Ask AI about this line... (Ctrl+Enter to submit)",
+    placeholder = "Ask AI about this line...",
     rangeLines = [],
     oldHighlightMap = undefined,
     newHighlightMap = undefined,
@@ -230,7 +230,6 @@
               class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
               onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
             >Cancel</button>
-            <span class="text-xs text-text-tertiary ml-auto">Ctrl+Enter to submit</span>
           </div>
         </div>
       {/if}

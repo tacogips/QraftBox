@@ -173,9 +173,6 @@
               class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
               onclick={() => handleCommentCancel()}
             >Cancel</button>
-            <span class="text-xs text-text-tertiary ml-auto"
-              >Ctrl+Enter to submit</span
-            >
           </div>
         </div>
       {/if}

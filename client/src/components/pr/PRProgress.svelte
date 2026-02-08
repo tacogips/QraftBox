@@ -42,7 +42,7 @@
   <div class="flex flex-col items-center justify-center p-8 gap-4">
     <!-- Spinner -->
     <div
-      class="spinner w-12 h-12 border-4 border-border-default border-t-purple-600 rounded-full animate-spin"
+      class="spinner w-12 h-12 border-4 border-border-default border-t-done-fg rounded-full animate-spin"
       role="status"
       aria-label="Loading"
     ></div>
@@ -56,27 +56,27 @@
         class="stage-dot w-2 h-2 rounded-full {stage === 'preparing' ||
         stage === 'creating' ||
         stage === 'done'
-          ? 'bg-purple-600'
+          ? 'bg-done-emphasis'
           : 'bg-bg-tertiary'}"
       ></div>
       <div
         class="stage-dot w-2 h-2 rounded-full {stage === 'creating' ||
         stage === 'done'
-          ? 'bg-purple-600'
+          ? 'bg-done-emphasis'
           : 'bg-bg-tertiary'}"
       ></div>
       <div
         class="stage-dot w-2 h-2 rounded-full {stage === 'done'
-          ? 'bg-purple-600'
+          ? 'bg-done-emphasis'
           : 'bg-bg-tertiary'}"
       ></div>
     </div>
 
     <!-- Loading Dots Animation -->
     <div class="loading-dots flex gap-1">
-      <span class="dot w-2 h-2 bg-purple-600 rounded-full"></span>
-      <span class="dot w-2 h-2 bg-purple-600 rounded-full"></span>
-      <span class="dot w-2 h-2 bg-purple-600 rounded-full"></span>
+      <span class="dot w-2 h-2 bg-done-emphasis rounded-full"></span>
+      <span class="dot w-2 h-2 bg-done-emphasis rounded-full"></span>
+      <span class="dot w-2 h-2 bg-done-emphasis rounded-full"></span>
     </div>
   </div>
 </div>

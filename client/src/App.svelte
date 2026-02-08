@@ -132,6 +132,41 @@
   let allFilesLoading = $state(false);
 
   /**
+   * Map of file paths to their diff status
+   */
+  const diffStatusMap = $derived(
+    new Map(
+      diffFiles.map((f) => [
+        f.path,
+        f.status === "renamed" ? ("modified" as const) : f.status,
+      ]),
+    ),
+  );
+
+  /**
+   * Recursively annotate a tree with diff status from diffStatusMap
+   */
+  function annotateTreeWithStatus(
+    node: FileNode,
+    statusMap: Map<string, "added" | "modified" | "deleted">,
+  ): FileNode {
+    if (node.isDirectory && node.children) {
+      const annotatedChildren = node.children.map((child) =>
+        annotateTreeWithStatus(child, statusMap),
+      );
+      // Only create new object if children actually changed
+      const changed = annotatedChildren.some((c, i) => c !== node.children![i]);
+      return changed ? { ...node, children: annotatedChildren } : node;
+    }
+    // For files, set status from the map if available
+    const status = statusMap.get(node.path);
+    if (status !== undefined && node.status === undefined) {
+      return { ...node, status };
+    }
+    return node;
+  }
+
+  /**
    * Fetch all files tree from server
    */
   async function fetchAllFiles(ctxId: string): Promise<void> {
@@ -180,7 +215,11 @@
    * Active file tree based on mode
    */
   const fileTree = $derived(
-    fileTreeMode === "diff" ? diffFileTree : (allFilesTree ?? diffFileTree),
+    fileTreeMode === "diff"
+      ? diffFileTree
+      : allFilesTree !== null
+        ? annotateTreeWithStatus(allFilesTree, diffStatusMap)
+        : diffFileTree,
   );
 
   /**
@@ -449,7 +488,12 @@
       event.preventDefault();
       toggleSidebar();
     }
-    if (event.key === "a" && !event.ctrlKey && !event.metaKey && currentScreen === "diff") {
+    if (
+      event.key === "a" &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      currentScreen === "diff"
+    ) {
       event.preventDefault();
       aiPanelCollapsed = !aiPanelCollapsed;
     }
@@ -485,7 +529,6 @@
     class="h-14 border-b border-border-default flex items-center px-4 bg-bg-secondary gap-4"
   >
     <h1 class="text-lg font-semibold">QraftBox</h1>
-    <span class="text-sm text-text-secondary">Local Diff Viewer</span>
 
     <!-- Navigation -->
     <nav class="flex items-center gap-1 ml-4">
@@ -595,7 +638,6 @@
         >
           Current
         </button>
-
       {/if}
     </div>
   </header>
@@ -628,11 +670,15 @@
             class="w-64 border-r border-border-default bg-bg-secondary overflow-auto"
           >
             {#if loading}
-              <div class="p-4 text-sm text-text-secondary">Loading files...</div>
+              <div class="p-4 text-sm text-text-secondary">
+                Loading files...
+              </div>
             {:else if error !== null}
               <div class="p-4 text-sm text-danger-fg">{error}</div>
             {:else if allFilesLoading && fileTreeMode === "all"}
-              <div class="p-4 text-sm text-text-secondary">Loading all files...</div>
+              <div class="p-4 text-sm text-text-secondary">
+                Loading all files...
+              </div>
             {:else if fileTree.children !== undefined && fileTree.children.length > 0}
               <FileTree
                 tree={fileTree}
@@ -649,7 +695,9 @@
               />
             {:else}
               <div class="p-4 text-sm text-text-secondary">
-                {fileTreeMode === "diff" ? "No changed files found" : "No files found"}
+                {fileTreeMode === "diff"
+                  ? "No changed files found"
+                  : "No files found"}
               </div>
             {/if}
           </aside>
@@ -665,43 +713,63 @@
           aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
           title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
         >
-          <span class="text-xs leading-none">{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span>
+          <span class="text-xs leading-none"
+            >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
+          >
         </button>
       </div>
 
-      <!-- Content / Diff View -->
-      <main class="flex-1 overflow-auto bg-bg-primary">
-        {#if loading}
-          <div class="p-8 text-center text-text-secondary">Loading diff...</div>
-        {:else if error !== null}
-          <div class="p-8 text-center text-danger-fg">{error}</div>
-        {:else if selectedFile !== null && viewMode !== "current-state"}
-          <div class="p-4">
-            <DiffView
-              file={selectedFile}
-              mode={viewMode === "side-by-side" ? "side-by-side" : "inline"}
+      <!-- Content / Diff View + AI Panel -->
+      <div class="flex flex-col flex-1 min-w-0">
+        <main class="flex-1 overflow-auto bg-bg-primary">
+          {#if loading}
+            <div class="p-8 text-center text-text-secondary">
+              Loading diff...
+            </div>
+          {:else if error !== null}
+            <div class="p-8 text-center text-danger-fg">{error}</div>
+          {:else if selectedFile !== null && viewMode !== "current-state"}
+            <div class="p-4">
+              <DiffView
+                file={selectedFile}
+                mode={viewMode === "side-by-side" ? "side-by-side" : "inline"}
+                onCommentSubmit={handleInlineCommentSubmit}
+              />
+            </div>
+          {:else if fileContentLoading}
+            <div class="p-8 text-center text-text-secondary">
+              Loading file...
+            </div>
+          {:else if fileContent !== null}
+            <FileViewer
+              path={fileContent.path}
+              content={fileContent.content}
+              language={fileContent.language}
               onCommentSubmit={handleInlineCommentSubmit}
             />
-          </div>
-        {:else if fileContentLoading}
-          <div class="p-8 text-center text-text-secondary">Loading file...</div>
-        {:else if fileContent !== null}
-          <FileViewer
-            path={fileContent.path}
-            content={fileContent.content}
-            language={fileContent.language}
-            onCommentSubmit={handleInlineCommentSubmit}
-          />
-        {:else if viewMode === "current-state"}
-          <div class="p-8 text-center text-text-secondary">
-            Current state view is under development
-          </div>
-        {:else}
-          <div class="p-8 text-center text-text-secondary">
-            Select a file to view
-          </div>
-        {/if}
-      </main>
+          {:else if viewMode === "current-state"}
+            <div class="p-8 text-center text-text-secondary">
+              Current state view is under development
+            </div>
+          {:else}
+            <div class="p-8 text-center text-text-secondary">
+              Select a file to view
+            </div>
+          {/if}
+        </main>
+
+        <!-- AI Prompt Panel (below diff view, does not overlap sidebar) -->
+        <AIPromptPanel
+          collapsed={aiPanelCollapsed}
+          {queueStatus}
+          changedFiles={changedFilePaths}
+          allFiles={changedFilePaths}
+          onSubmit={handleAIPanelSubmit}
+          onToggle={() => {
+            aiPanelCollapsed = !aiPanelCollapsed;
+          }}
+        />
+      </div>
     {:else if currentScreen === "sessions"}
       <!-- Claude Sessions Screen -->
       <main class="flex-1 overflow-hidden">
@@ -722,10 +790,7 @@
       <!-- Commits Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <CommitsScreen
-            {contextId}
-            onBack={() => navigateToScreen("diff")}
-          />
+          <CommitsScreen {contextId} onBack={() => navigateToScreen("diff")} />
         {/if}
       </main>
     {:else if currentScreen === "github-ops"}
@@ -742,10 +807,7 @@
       <!-- Worktree Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <WorktreeScreen
-            {contextId}
-            onBack={() => navigateToScreen("diff")}
-          />
+          <WorktreeScreen {contextId} onBack={() => navigateToScreen("diff")} />
         {/if}
       </main>
     {:else if currentScreen === "tools"}
@@ -755,18 +817,6 @@
       </main>
     {/if}
   </div>
-
-  <!-- AI Prompt Panel (diff screen only) -->
-  {#if currentScreen === "diff"}
-    <AIPromptPanel
-      collapsed={aiPanelCollapsed}
-      {queueStatus}
-      changedFiles={changedFilePaths}
-      allFiles={changedFilePaths}
-      onSubmit={handleAIPanelSubmit}
-      onToggle={() => { aiPanelCollapsed = !aiPanelCollapsed; }}
-    />
-  {/if}
 
   <!-- Footer -->
   <footer

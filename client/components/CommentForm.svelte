@@ -156,9 +156,6 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
       aria-describedby="comment-hint"
       disabled={isSubmitting}
     ></textarea>
-    <span id="comment-hint" class="text-xs text-text-tertiary">
-      Tip: Ctrl+Enter to submit, Escape to cancel
-    </span>
   </div>
 
   <!-- Author Fields -->

@@ -240,7 +240,7 @@
               placeholder="Enter PR title (optional - AI will generate if empty)"
               disabled={status === "creating"}
               class="w-full px-4 py-2 min-h-[44px] border border-border-default rounded-lg
-                     focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
                      disabled:bg-bg-secondary disabled:cursor-not-allowed
                      text-base"
             />
@@ -261,7 +261,7 @@
               disabled={status === "creating"}
               rows="4"
               class="w-full px-4 py-2 border border-border-default rounded-lg
-                     focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
                      disabled:bg-bg-secondary disabled:cursor-not-allowed
                      text-base resize-vertical"
             ></textarea>
@@ -321,11 +321,11 @@
             type="button"
             onclick={handleSubmit}
             class="create-action-button flex-1 min-h-[44px] px-6 py-2
-                   text-white bg-purple-600
+                   text-white bg-done-emphasis
                    rounded-lg
-                   hover:bg-purple-700
-                   focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-                   active:bg-purple-800
+                   hover:opacity-90
+                   focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+                   active:opacity-80
                    disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
                    transition-colors
                    font-medium text-base"

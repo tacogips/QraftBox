@@ -28,7 +28,7 @@
     <!-- Success Icon -->
     <div class="success-icon-container">
       <svg
-        class="success-icon w-16 h-16 text-purple-600"
+        class="success-icon w-16 h-16 text-done-fg"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
@@ -49,7 +49,7 @@
     <div class="pr-details w-full space-y-2 text-sm">
       <div class="detail-row flex items-center justify-center gap-2">
         <svg
-          class="w-5 h-5 text-purple-600"
+          class="w-5 h-5 text-done-fg"
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           fill="currentColor"
@@ -75,11 +75,11 @@
       rel="noopener noreferrer"
       class="view-pr-button w-full min-h-[44px] px-6 py-3
              flex items-center justify-center gap-3
-             text-white bg-purple-600
+             text-white bg-done-emphasis
              rounded-lg
-             hover:bg-purple-700
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-             active:bg-purple-800
+             hover:opacity-90
+             focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+             active:opacity-80
              transition-colors
              font-medium text-base"
       aria-label="View Pull Request on GitHub"
@@ -150,9 +150,9 @@
   }
 
   .pr-details {
-    background-color: #f9fafb;
+    background-color: var(--color-bg-secondary);
     padding: 1rem;
     border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border-default);
   }
 </style>

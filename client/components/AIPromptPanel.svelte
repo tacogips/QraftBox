@@ -212,9 +212,9 @@ function setTextareaRef(element: HTMLTextAreaElement): void {
 <svelte:window on:keydown={handleGlobalKeydown} />
 
 <div
-  class="ai-prompt-panel fixed bottom-0 left-0 right-0 z-40
+  class="ai-prompt-panel shrink-0
          bg-bg-secondary border-t border-border-default
-         shadow-lg transition-all duration-300 ease-in-out
+         transition-all duration-300 ease-in-out
          {collapsed ? 'h-12' : 'h-64'}"
   role="region"
   aria-label="AI Prompt Panel"
@@ -412,16 +412,6 @@ function setTextareaRef(element: HTMLTextAreaElement): void {
         </div>
       </div>
 
-      <!-- Footer hint -->
-      <div class="mt-2 text-xs text-text-tertiary flex items-center justify-between">
-        <span>
-          <kbd class="px-1 py-0.5 bg-bg-tertiary rounded">Ctrl+Enter</kbd> to submit,
-          <kbd class="px-1 py-0.5 bg-bg-tertiary rounded">Esc</kbd> to collapse
-        </span>
-        <span>
-          Type <code class="px-1 bg-bg-tertiary rounded">@</code> to reference files
-        </span>
-      </div>
     </div>
   {/if}
 </div>
