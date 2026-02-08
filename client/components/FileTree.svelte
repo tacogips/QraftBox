@@ -47,6 +47,11 @@
   let expandedPaths = $state<Set<string>>(new Set());
 
   /**
+   * Filename filter text
+   */
+  let filterText = $state("");
+
+  /**
    * Toggle directory expansion
    */
   function toggleDirectory(path: string): void {
@@ -63,19 +68,59 @@
    * Check if a directory is expanded
    */
   function isExpanded(path: string): boolean {
+    if (filterText !== "") {
+      // When filter is active, auto-expand directories that contain matching files
+      return filterMatchPaths.has(path);
+    }
     return expandedPaths.has(path);
   }
 
   /**
-   * Filter tree based on mode (recursive)
-   * In 'diff' mode, only show files/directories with changes
+   * Check if a file node matches the filter (case-insensitive partial match on name)
+   */
+  function matchesFilter(node: FileNode): boolean {
+    if (filterText === "") return true;
+    const lower = filterText.toLowerCase();
+    return node.name.toLowerCase().includes(lower);
+  }
+
+  /**
+   * Collect directory paths that contain matching files (for auto-expand)
+   */
+  function collectMatchPaths(node: FileNode, ancestors: string[]): Set<string> {
+    const result = new Set<string>();
+    if (node.isDirectory && node.children) {
+      for (const child of node.children) {
+        const childResult = collectMatchPaths(child, [...ancestors, node.path]);
+        for (const p of childResult) {
+          result.add(p);
+        }
+      }
+      // If any descendant matched, mark this directory
+      if (result.size > 0) {
+        result.add(node.path);
+      }
+    } else {
+      if (matchesFilter(node)) {
+        // Mark all ancestor directories for expansion
+        for (const a of ancestors) {
+          result.add(a);
+        }
+        result.add(node.path);
+      }
+    }
+    return result;
+  }
+
+  const filterMatchPaths = $derived.by(() => {
+    if (filterText === "") return new Set<string>();
+    return collectMatchPaths(tree, []);
+  });
+
+  /**
+   * Filter tree based on mode and filename filter (recursive)
    */
   function filterTree(node: FileNode): FileNode | null {
-    if (mode === "all") {
-      return node;
-    }
-
-    // In 'diff' mode, show files with status or directories with changed children
     if (node.isDirectory) {
       if (!node.children) {
         return null;
@@ -94,8 +139,15 @@
         children: filteredChildren,
       };
     } else {
-      // Show files with status
-      return node.status !== undefined ? node : null;
+      // Apply mode filter
+      if (mode === "diff" && node.status === undefined) {
+        return null;
+      }
+      // Apply filename filter
+      if (filterText !== "" && !matchesFilter(node)) {
+        return null;
+      }
+      return node;
     }
   }
 
@@ -156,6 +208,25 @@
   const filteredTree = $derived.by(() => filterTree(tree));
 
   /**
+   * Count matching files in the filtered tree
+   */
+  const filterMatchCount = $derived.by(() => {
+    if (filterText === "") return 0;
+    function countFiles(node: FileNode | null): number {
+      if (node === null) return 0;
+      if (node.isDirectory && node.children) {
+        let sum = 0;
+        for (const child of node.children) {
+          sum += countFiles(filterTree(child));
+        }
+        return sum;
+      }
+      return 1;
+    }
+    return countFiles(filteredTree);
+  });
+
+  /**
    * Get file counts
    */
   const fileCounts = $derived.by(() => countFiles(tree));
@@ -177,6 +248,52 @@
     >
       {mode === "diff" ? `Diff (${changedCount ?? fileCounts.changed})` : "All"}
     </button>
+  </div>
+
+  <!-- Filename Filter -->
+  <div class="px-3 py-2 border-b border-border-default">
+    <div class="relative">
+      <svg
+        class="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        ></path>
+      </svg>
+      <input
+        type="text"
+        class="w-full pl-8 pr-8 py-1.5 text-sm bg-bg-primary text-text-primary border border-border-default rounded
+               placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-accent-emphasis"
+        placeholder="Filter files..."
+        bind:value={filterText}
+        onkeydown={(e) => { if (e.key === "Escape") { filterText = ""; } }}
+      />
+      {#if filterText !== ""}
+        <button
+          type="button"
+          class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center
+                 text-text-tertiary hover:text-text-primary rounded"
+          onclick={() => { filterText = ""; }}
+          aria-label="Clear filter"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      {/if}
+    </div>
+    {#if filterText !== ""}
+      <div class="mt-1 text-xs text-text-tertiary">
+        {filterMatchCount} match{filterMatchCount === 1 ? "" : "es"}
+      </div>
+    {/if}
   </div>
 
   <!-- Tree Content -->
