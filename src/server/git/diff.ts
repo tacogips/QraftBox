@@ -5,9 +5,15 @@
  * Uses execGit from ./executor.ts for git command execution.
  */
 
-import type { DiffFile, FileStatus, FileStatusCode } from "../../types/git.js";
+import type {
+  DiffFile,
+  DiffChunk,
+  DiffChange,
+  FileStatus,
+  FileStatusCode,
+} from "../../types/git.js";
 import { execGit } from "./executor.js";
-import { parseDiff } from "./parser.js";
+import { parseDiff, detectBinary } from "./parser.js";
 
 /**
  * Options for generating diffs
@@ -17,6 +23,146 @@ export interface DiffOptions {
   readonly target?: string | undefined;
   readonly paths?: readonly string[] | undefined;
   readonly contextLines?: number | undefined;
+}
+
+/**
+ * Maximum file size (in bytes) to read for untracked files.
+ * Files larger than this are treated as binary to avoid memory issues.
+ */
+const MAX_UNTRACKED_FILE_SIZE = 1024 * 1024; // 1MB
+
+/**
+ * Get DiffFile entries for untracked files in the working tree.
+ *
+ * Uses `git ls-files --others --exclude-standard` to find untracked files,
+ * then reads each file to construct synthetic diff entries showing the
+ * entire file content as additions (status: "added").
+ *
+ * @param projectPath - Path to git repository
+ * @param pathFilters - Optional path filters to limit results
+ * @returns Array of DiffFile objects for untracked files
+ */
+async function getUntrackedDiffFiles(
+  projectPath: string,
+  pathFilters?: readonly string[] | undefined,
+): Promise<readonly DiffFile[]> {
+  const lsArgs = ["ls-files", "--others", "--exclude-standard"];
+
+  if (pathFilters !== undefined && pathFilters.length > 0) {
+    lsArgs.push("--", ...pathFilters);
+  }
+
+  const lsResult = await execGit(lsArgs, { cwd: projectPath });
+
+  if (lsResult.exitCode !== 0 || lsResult.stdout.trim() === "") {
+    return [];
+  }
+
+  const untrackedPaths = lsResult.stdout
+    .trim()
+    .split("\n")
+    .filter((p) => p.length > 0);
+
+  const results: DiffFile[] = [];
+
+  for (const filePath of untrackedPaths) {
+    const fullPath = `${projectPath}/${filePath}`;
+
+    try {
+      const file = Bun.file(fullPath);
+      const size = file.size;
+
+      // Skip overly large files - treat as binary
+      if (size > MAX_UNTRACKED_FILE_SIZE) {
+        results.push({
+          path: filePath,
+          status: "added",
+          oldPath: undefined,
+          additions: 0,
+          deletions: 0,
+          chunks: [],
+          isBinary: true,
+          fileSize: size,
+        });
+        continue;
+      }
+
+      // Check if file is binary by reading a sample
+      const sample = await file.slice(0, 8192).arrayBuffer();
+      const sampleBytes = new Uint8Array(sample);
+      let isBinaryFile = false;
+      for (const byte of sampleBytes) {
+        if (byte === 0) {
+          isBinaryFile = true;
+          break;
+        }
+      }
+
+      if (isBinaryFile || detectBinary("", filePath)) {
+        results.push({
+          path: filePath,
+          status: "added",
+          oldPath: undefined,
+          additions: 0,
+          deletions: 0,
+          chunks: [],
+          isBinary: true,
+          fileSize: size,
+        });
+        continue;
+      }
+
+      // Read text content and build synthetic diff
+      const content = await file.text();
+      const lines = content.split("\n");
+
+      // Remove trailing empty line from split (file usually ends with newline)
+      if (lines.length > 0 && lines[lines.length - 1] === "") {
+        lines.pop();
+      }
+
+      const changes: DiffChange[] = lines.map((line, i) => ({
+        type: "add" as const,
+        oldLine: undefined,
+        newLine: i + 1,
+        content: line,
+      }));
+
+      const chunk: DiffChunk = {
+        oldStart: 0,
+        oldLines: 0,
+        newStart: 1,
+        newLines: lines.length,
+        header: `@@ -0,0 +1,${lines.length} @@`,
+        changes,
+      };
+
+      results.push({
+        path: filePath,
+        status: "added",
+        oldPath: undefined,
+        additions: lines.length,
+        deletions: 0,
+        chunks: [chunk],
+        isBinary: false,
+        fileSize: size,
+      });
+    } catch {
+      // Skip files that can't be read
+      results.push({
+        path: filePath,
+        status: "added",
+        oldPath: undefined,
+        additions: 0,
+        deletions: 0,
+        chunks: [],
+        isBinary: true,
+        fileSize: undefined,
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -97,7 +243,22 @@ export async function getDiff(
   }
 
   // Parse the unified diff output using full parser
-  return parseDiff(result.stdout);
+  const files = parseDiff(result.stdout);
+
+  // When comparing against working tree (no explicit target), also include untracked files.
+  // git diff HEAD doesn't show untracked files, so we need to fetch them separately.
+  const isWorkingTreeDiff = options?.target === undefined;
+  if (isWorkingTreeDiff) {
+    const untrackedFiles = await getUntrackedDiffFiles(
+      projectPath,
+      options?.paths,
+    );
+    if (untrackedFiles.length > 0) {
+      return [...files, ...untrackedFiles];
+    }
+  }
+
+  return files;
 }
 
 /**

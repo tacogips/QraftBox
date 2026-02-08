@@ -1,52 +1,55 @@
 <script lang="ts">
   /**
-   * ClaudeSessionsScreen Component
+   * HistorySessionsPanel Component
    *
-   * Main screen for browsing Claude Code sessions.
-   * Integrates filter panel, search, session list with grouping, and pagination.
+   * Merges completed QraftBox sessions with Claude CLI sessions into
+   * a single chronologically sorted list with date grouping,
+   * search, filtering, and pagination.
    *
    * Props:
-   * - onBack: Callback to navigate back to previous screen
+   * - completedSessions: Completed/failed/cancelled QraftBox sessions
+   * - onResumeSession: Callback for resuming claude-cli sessions
+   * - onSelectSession: Callback for viewing session details
    *
    * Features:
-   * - Session grouping by date (Today, Yesterday, Older)
-   * - Filter panel for source, project, branch
-   * - Search with debouncing
+   * - Merged chronological list from two data sources
+   * - Date grouping (Today, Yesterday, Older)
+   * - Search via SearchInput (reused from claude-sessions)
+   * - FilterPanel for source, project, branch (reused from claude-sessions)
+   * - UnifiedSessionCard for rendering each item
    * - Pagination with "Load More" button
-   * - Loading states and error handling
-   * - Responsive layout
-   *
-   * Design:
-   * - Header with title, back button, and search
-   * - Filter panel (collapsible)
-   * - Session list grouped by date
-   * - Pagination controls
-   * - Empty states
-   * - Error states
+   * - Loading and error states
+   * - "Clear Completed" button for QraftBox completed sessions
    */
 
   import { onMount } from "svelte";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
-  import type {
-    ExtendedSessionEntry,
-    SessionFilters,
-  } from "../../../src/types/claude-session";
-  import SearchInput from "./SearchInput.svelte";
-  import FilterPanel from "./FilterPanel.svelte";
-  import SessionCard from "./SessionCard.svelte";
+  import type { AISession } from "../../../src/types/ai";
+  import type { UnifiedSessionItem } from "../../src/types/unified-session";
+  import type { SessionFilters } from "../../../src/types/claude-session";
+  import SearchInput from "../claude-sessions/SearchInput.svelte";
+  import FilterPanel from "../claude-sessions/FilterPanel.svelte";
+  import UnifiedSessionCard from "./UnifiedSessionCard.svelte";
 
   interface Props {
-    onBack: () => void;
+    completedSessions: readonly AISession[];
+    onResumeSession: (sessionId: string) => void;
+    onSelectSession: (sessionId: string) => void;
+    onClearCompleted?: (() => void) | undefined;
   }
 
-  // Svelte 5 props syntax
-  const { onBack }: Props = $props();
+  const {
+    completedSessions,
+    onResumeSession,
+    onSelectSession,
+    onClearCompleted = undefined,
+  }: Props = $props();
 
   /**
-   * Get date grouping label for a session
+   * Get date group for a given date string
    */
-  function getDateGroup(modifiedDate: string): string {
-    const date = new Date(modifiedDate);
+  function getDateGroup(dateStr: string): "today" | "yesterday" | "older" {
+    const date = new Date(dateStr);
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
@@ -57,43 +60,99 @@
   }
 
   /**
-   * Group sessions by date
+   * Get sort date for a unified session item
+   */
+  function getSortDate(item: UnifiedSessionItem): string {
+    if (item.kind === "qraftbox") {
+      return item.session.completedAt ?? item.session.createdAt;
+    }
+    return item.session.modified;
+  }
+
+  /**
+   * Local search query state for filtering QraftBox sessions client-side
+   */
+  let localSearchQuery = $state("");
+
+  /**
+   * Merge completed QraftBox sessions with Claude CLI sessions
+   * and sort chronologically (most recent first)
+   */
+  const mergedSessions = $derived.by(() => {
+    const items: UnifiedSessionItem[] = [];
+
+    // Add QraftBox completed sessions, optionally filtered by local search
+    for (const s of completedSessions) {
+      if (localSearchQuery.length > 0) {
+        const query = localSearchQuery.toLowerCase();
+        const matchesPrompt = s.prompt.toLowerCase().includes(query);
+        if (!matchesPrompt) continue;
+      }
+      items.push({ kind: "qraftbox", session: s });
+    }
+
+    // Add Claude CLI sessions (already filtered server-side by the store)
+    for (const s of claudeSessionsStore.sessions) {
+      items.push({ kind: "claude-cli", session: s });
+    }
+
+    // Sort by most recent first
+    items.sort((a, b) => {
+      const dateA = getSortDate(a);
+      const dateB = getSortDate(b);
+      return new Date(dateB).getTime() - new Date(dateA).getTime();
+    });
+
+    return items;
+  });
+
+  /**
+   * Group merged sessions by date
    */
   const groupedSessions = $derived.by(() => {
     const groups: {
-      today: ExtendedSessionEntry[];
-      yesterday: ExtendedSessionEntry[];
-      older: ExtendedSessionEntry[];
+      today: UnifiedSessionItem[];
+      yesterday: UnifiedSessionItem[];
+      older: UnifiedSessionItem[];
     } = {
       today: [],
       yesterday: [],
       older: [],
     };
 
-    for (const session of claudeSessionsStore.sessions) {
-      const group = getDateGroup(session.modified);
-      groups[group].push(session);
+    for (const item of mergedSessions) {
+      const dateStr = getSortDate(item);
+      const group = getDateGroup(dateStr);
+      groups[group].push(item);
     }
 
     return groups;
   });
 
   /**
-   * Whether there are any sessions
+   * Whether there are any sessions to display
    */
-  const hasSessions = $derived(claudeSessionsStore.sessions.length > 0);
+  const hasSessions = $derived(mergedSessions.length > 0);
 
   /**
-   * Whether more sessions can be loaded
+   * Whether more Claude CLI sessions can be loaded
    */
   const hasMore = $derived(
-    claudeSessionsStore.sessions.length < claudeSessionsStore.total
+    claudeSessionsStore.sessions.length < claudeSessionsStore.total,
+  );
+
+  /**
+   * Total session count for display
+   */
+  const totalCount = $derived(
+    completedSessions.length + claudeSessionsStore.total,
   );
 
   /**
    * Handle search input
    */
   function handleSearch(query: string): void {
+    localSearchQuery = query;
     claudeSessionsStore.setFilters({ searchQuery: query || undefined });
   }
 
@@ -108,21 +167,8 @@
    * Handle clear all filters
    */
   function handleClearFilters(): void {
+    localSearchQuery = "";
     claudeSessionsStore.clearFilters();
-  }
-
-  /**
-   * Handle resume session
-   */
-  async function handleResumeSession(sessionId: string): Promise<void> {
-    try {
-      const result = await claudeSessionsStore.resumeSession(sessionId);
-      // TODO: Navigate to session or show success message
-      console.log("Session resumed:", result);
-    } catch (error) {
-      // Error already handled in store
-      console.error("Failed to resume session:", error);
-    }
   }
 
   /**
@@ -140,6 +186,16 @@
   }
 
   /**
+   * Get a unique key for each unified session item
+   */
+  function getItemKey(item: UnifiedSessionItem): string {
+    if (item.kind === "qraftbox") {
+      return `qb-${item.session.id}`;
+    }
+    return `cli-${item.session.sessionId}`;
+  }
+
+  /**
    * Load initial data on mount
    */
   onMount(async () => {
@@ -148,57 +204,38 @@
   });
 </script>
 
-<!-- Main Screen Container -->
+<!-- History Sessions Panel -->
 <div
-  class="claude-sessions-screen flex flex-col h-full bg-bg-primary"
-  role="main"
-  aria-label="Claude sessions browser"
+  class="history-sessions-panel flex flex-col h-full"
+  role="region"
+  aria-label="Session history"
 >
-  <!-- Header -->
-  <header
-    class="screen-header px-6 py-4 border-b border-bg-border bg-bg-secondary"
-  >
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <!-- Back button -->
-        <button
-          type="button"
-          onclick={onBack}
-          class="p-2 min-w-[44px] min-h-[44px]
-                 text-text-secondary hover:text-text-primary
-                 hover:bg-bg-hover rounded-lg
-                 transition-colors
-                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-          aria-label="Back to previous screen"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
-        </button>
-
-        <h1 class="text-2xl font-bold text-text-primary">Claude Sessions</h1>
-      </div>
-
-      <!-- Total Count -->
+  <!-- Search and Count Header -->
+  <div class="px-6 py-4 border-b border-bg-border bg-bg-secondary">
+    <div class="flex items-center justify-between mb-3">
       <div class="text-sm text-text-tertiary">
-        {#if claudeSessionsStore.total > 0}
-          {claudeSessionsStore.total} session{claudeSessionsStore.total !== 1 ? "s" : ""}
-          {#if claudeSessionsStore.sessions.length !== claudeSessionsStore.total}
-            (showing {claudeSessionsStore.sessions.length})
+        {#if totalCount > 0}
+          {totalCount} session{totalCount !== 1 ? "s" : ""}
+          {#if mergedSessions.length !== totalCount}
+            (showing {mergedSessions.length})
           {/if}
         {/if}
       </div>
+
+      <!-- Clear Completed Button -->
+      {#if completedSessions.length > 0 && onClearCompleted !== undefined}
+        <button
+          type="button"
+          onclick={onClearCompleted}
+          class="px-3 py-1.5 text-xs font-medium rounded-md
+                 bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-danger-fg
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                 transition-colors duration-150"
+          aria-label="Clear completed QraftBox sessions"
+        >
+          Clear Completed
+        </button>
+      {/if}
     </div>
 
     <!-- Search Bar -->
@@ -206,7 +243,7 @@
       value={claudeSessionsStore.filters.searchQuery ?? ""}
       onSearch={handleSearch}
     />
-  </header>
+  </div>
 
   <!-- Filter Panel -->
   <FilterPanel
@@ -331,7 +368,7 @@
           {#if claudeSessionsStore.filters.searchQuery || claudeSessionsStore.filters.source || claudeSessionsStore.filters.branch || claudeSessionsStore.filters.workingDirectoryPrefix}
             Try adjusting your filters or search query.
           {:else}
-            No Claude Code sessions available yet.
+            No completed sessions yet.
           {/if}
         </p>
       </div>
@@ -340,18 +377,19 @@
       <div class="session-list space-y-6" role="list">
         <!-- Today -->
         {#if groupedSessions.today.length > 0}
-          <section aria-labelledby="today-heading">
+          <section aria-labelledby="history-today-heading">
             <h2
-              id="today-heading"
+              id="history-today-heading"
               class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3"
             >
               Today
             </h2>
             <div class="space-y-3">
-              {#each groupedSessions.today as session (session.sessionId)}
-                <SessionCard
-                  {session}
-                  onResume={handleResumeSession}
+              {#each groupedSessions.today as item (getItemKey(item))}
+                <UnifiedSessionCard
+                  {item}
+                  {onResumeSession}
+                  {onSelectSession}
                 />
               {/each}
             </div>
@@ -360,18 +398,19 @@
 
         <!-- Yesterday -->
         {#if groupedSessions.yesterday.length > 0}
-          <section aria-labelledby="yesterday-heading">
+          <section aria-labelledby="history-yesterday-heading">
             <h2
-              id="yesterday-heading"
+              id="history-yesterday-heading"
               class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3"
             >
               Yesterday
             </h2>
             <div class="space-y-3">
-              {#each groupedSessions.yesterday as session (session.sessionId)}
-                <SessionCard
-                  {session}
-                  onResume={handleResumeSession}
+              {#each groupedSessions.yesterday as item (getItemKey(item))}
+                <UnifiedSessionCard
+                  {item}
+                  {onResumeSession}
+                  {onSelectSession}
                 />
               {/each}
             </div>
@@ -380,18 +419,19 @@
 
         <!-- Older -->
         {#if groupedSessions.older.length > 0}
-          <section aria-labelledby="older-heading">
+          <section aria-labelledby="history-older-heading">
             <h2
-              id="older-heading"
+              id="history-older-heading"
               class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3"
             >
               Older
             </h2>
             <div class="space-y-3">
-              {#each groupedSessions.older as session (session.sessionId)}
-                <SessionCard
-                  {session}
-                  onResume={handleResumeSession}
+              {#each groupedSessions.older as item (getItemKey(item))}
+                <UnifiedSessionCard
+                  {item}
+                  {onResumeSession}
+                  {onSelectSession}
                 />
               {/each}
             </div>

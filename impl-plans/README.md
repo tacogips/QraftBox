@@ -86,6 +86,7 @@ Large features are split into multiple related plans with cross-references.
 | 29-branch-switching | 11 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-07 |
 | 30-git-xnotes | 12 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-07 |
 | 31-binary-large-files | 12 | Ready | design-local-diff-viewer.md#binary-and-large-file-handling | 2026-02-07 |
+| 33-unified-sessions | 13 | Ready | design-unified-sessions.md | 2026-02-08 |
 
 **Next Phase**: Phase 11 is ready to start. Plans 25 and 26 can be executed in parallel (no dependencies). Plans 27, 28, 29 depend on 25 and/or 26.
 
@@ -124,6 +125,7 @@ Plans whose source files were never created (identified by audit). Replaced by P
 | 22-ai-pr | 2026-02-06 | design-ai-commit.md |
 | 23-git-worktree | 2026-02-06 | design-git-worktree.md |
 | 24-claude-session-browser | 2026-02-06 | design-claude-session-browser.md |
+| 33-unified-sessions | - | design-unified-sessions.md |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -147,6 +149,7 @@ Only plans from eligible phases should be read to minimize context loading.
 | 10 | COMPLETED | Claude Session Browser | Phase 4 |
 | 11 | READY | Foundation Rebuild - Server, Git Core, Routes, File Watcher, Branch Switching | - |
 | 12 | BLOCKED | Comments & Binary Files - git-xnotes, binary/large file handling | Phase 11 |
+| 13 | READY | Unified Sessions - Merge Queue and Sessions tabs | Phase 4, 10 |
 
 ### Phase to Plans Mapping
 
@@ -200,6 +203,9 @@ PHASE_TO_PLANS = {
   12: [
     "30-git-xnotes.md",           # READY (deps: 26, 27)
     "31-binary-large-files.md"    # READY (deps: 26, 27)
+  ],
+  13: [
+    "33-unified-sessions.md"     # READY (deps: 13-session-queue, 24-claude-session-browser)
   ]
 }
 ```

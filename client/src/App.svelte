@@ -6,8 +6,7 @@
   import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
-  import ClaudeSessionsScreen from "../components/claude-sessions/ClaudeSessionsScreen.svelte";
-  import SessionQueueScreen from "../components/session/SessionQueueScreen.svelte";
+  import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
   import HeaderStatusBadges from "../components/HeaderStatusBadges.svelte";
@@ -22,7 +21,6 @@
     | "diff"
     | "commits"
     | "sessions"
-    | "queue"
     | "worktree"
     | "tools";
 
@@ -568,16 +566,6 @@
       >
         Sessions
       </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-               {currentScreen === 'queue'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("queue")}
-      >
-        Queue
-      </button>
       <span class="w-px h-5 bg-border-default mx-1"></span>
       <button
         type="button"
@@ -850,20 +838,9 @@
         />
       </div>
     {:else if currentScreen === "sessions"}
-      <!-- Claude Sessions Screen -->
+      <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
-        <ClaudeSessionsScreen onBack={() => navigateToScreen("diff")} />
-      </main>
-    {:else if currentScreen === "queue"}
-      <!-- Session Queue Screen -->
-      <main class="flex-1 overflow-hidden">
-        <SessionQueueScreen
-          onBack={() => navigateToScreen("diff")}
-          onSelectSession={(id) => {
-            console.log("Selected session:", id);
-          }}
-          onBrowseAllSessions={() => navigateToScreen("sessions")}
-        />
+        <UnifiedSessionsScreen onBack={() => navigateToScreen("diff")} />
       </main>
     {:else if currentScreen === "commits"}
       <!-- Commits Screen -->
