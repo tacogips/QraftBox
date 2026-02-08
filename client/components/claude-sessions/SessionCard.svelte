@@ -11,7 +11,7 @@
    * - onView: Callback when view button is clicked (optional)
    *
    * Design:
-   * - Source badge (QRAFTBOX/CLI) with distinct colors
+   * - Source badge (QraftBox/CLI) with distinct colors
    * - First prompt as title (truncated)
    * - Metadata: project path, branch, message count
    * - Relative timestamps
@@ -78,7 +78,7 @@
   const sourceBadgeText = $derived.by(() => {
     switch (session.source) {
       case "qraftbox":
-        return "QRAFTBOX";
+        return "QraftBox";
       case "claude-cli":
         return "CLI";
       default:

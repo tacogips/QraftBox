@@ -56,7 +56,7 @@ function handleClaudeView(sessionId: string): void {
                bg-accent-muted text-accent-fg border border-accent-emphasis/30"
         aria-label="Session source: QraftBox"
       >
-        QRAFTBOX
+        QraftBox
       </span>
     </div>
     <QraftBoxSessionCard

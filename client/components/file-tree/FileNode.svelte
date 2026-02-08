@@ -69,6 +69,26 @@
   }
 
   /**
+   * Get background class for the entire file-node row based on diff status
+   */
+  function getStatusBackgroundClass(
+    status: "added" | "modified" | "deleted" | undefined,
+  ): string {
+    if (status === undefined) return "";
+
+    switch (status) {
+      case "added":
+        return "status-added";
+      case "modified":
+        return "status-modified";
+      case "deleted":
+        return "status-deleted";
+      default:
+        return "";
+    }
+  }
+
+  /**
    * Calculate left padding based on depth
    * Includes offset for no chevron (directory nodes have chevron, files don't)
    */
@@ -86,8 +106,8 @@
 <!-- File Node Button -->
 <button
   type="button"
-  class="file-node w-full text-left px-4 py-3 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
-  class:bg-accent-subtle={selected}
+  class="file-node w-full text-left px-4 py-3 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2 {getStatusBackgroundClass(node.status)}"
+  class:bg-accent-subtle={selected && !node.status}
   class:border-l-4={selected}
   class:border-accent-emphasis={selected}
   style="padding-left: {leftPadding}rem"
@@ -141,7 +161,39 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .file-node:active {
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):hover {
     background-color: var(--color-bg-tertiary);
+  }
+
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):active {
+    background-color: var(--color-bg-tertiary);
+  }
+
+  /* Status-based background colors for diff file nodes */
+  .file-node.status-added {
+    background-color: var(--color-diff-add-bg);
+  }
+
+  .file-node.status-added:hover,
+  .file-node.status-added:active {
+    background-color: var(--color-diff-add-word);
+  }
+
+  .file-node.status-modified {
+    background-color: var(--color-attention-muted);
+  }
+
+  .file-node.status-modified:hover,
+  .file-node.status-modified:active {
+    background-color: var(--color-attention-emphasis);
+  }
+
+  .file-node.status-deleted {
+    background-color: var(--color-diff-del-bg);
+  }
+
+  .file-node.status-deleted:hover,
+  .file-node.status-deleted:active {
+    background-color: var(--color-diff-del-word);
   }
 </style>
