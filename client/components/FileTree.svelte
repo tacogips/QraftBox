@@ -127,6 +127,37 @@
   }
 
   /**
+   * Collect all directory paths from a tree node (recursive)
+   */
+  function collectDirectoryPaths(node: FileNode): string[] {
+    const paths: string[] = [];
+    if (node.isDirectory && node.children) {
+      if (node.path !== "") {
+        paths.push(node.path);
+      }
+      for (const child of node.children) {
+        paths.push(...collectDirectoryPaths(child));
+      }
+    }
+    return paths;
+  }
+
+  /**
+   * Expand all directories in the current tree
+   */
+  function expandAll(): void {
+    const source = filteredTree ?? tree;
+    expandedPaths = new Set(collectDirectoryPaths(source));
+  }
+
+  /**
+   * Collapse all directories
+   */
+  function collapseAll(): void {
+    expandedPaths = new Set();
+  }
+
+  /**
    * Check if a directory is expanded
    */
   function isExpanded(path: string): boolean {
@@ -600,15 +631,41 @@
   </div>
 
   <!-- Bottom Status Panel -->
-  {#if uncommittedCount > 0}
-    <div
-      class="shrink-0 h-6 border-t border-border-default flex items-center px-3 bg-bg-tertiary"
-    >
+  <div
+    class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1"
+  >
+    {#if uncommittedCount > 0}
       <span class="text-[11px] text-attention-fg font-medium">
         {uncommittedCount} uncommitted
       </span>
+    {/if}
+    <div class="ml-auto flex items-center">
+      <!-- Expand All -->
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
+        onclick={expandAll}
+        title="Expand all"
+        aria-label="Expand all directories"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" />
+        </svg>
+      </button>
+      <!-- Collapse All -->
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
+        onclick={collapseAll}
+        title="Collapse all"
+        aria-label="Collapse all directories"
+      >
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z" />
+        </svg>
+      </button>
     </div>
-  {/if}
+  </div>
 </div>
 
 <!-- Recursive Tree Node Snippet -->
