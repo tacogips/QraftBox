@@ -1,6 +1,7 @@
 <script lang="ts">
 import type { DiffChunk } from "../../src/types/diff";
 import DiffLine from "./DiffLine.svelte";
+import SplitButton from "../common/SplitButton.svelte";
 
 /**
  * SideBySideDiff Component
@@ -27,6 +28,7 @@ interface Props {
   rangeLines?: readonly number[];
   oldHighlightMap?: Map<number, string>;
   newHighlightMap?: Map<number, string>;
+  filePath?: string;
 }
 
 // Svelte 5 props syntax
@@ -41,9 +43,23 @@ let {
   rangeLines = [],
   oldHighlightMap = undefined,
   newHighlightMap = undefined,
+  filePath = undefined,
 }: Props = $props();
 
 let commentText = $state("");
+
+/**
+ * Get line context display
+ */
+const lineContext = $derived.by(() => {
+  if (commentLine === undefined) return "";
+  if (filePath === undefined) return "";
+  const lineInfo =
+    commentLine.startLine === commentLine.endLine
+      ? `L${commentLine.startLine}`
+      : `L${commentLine.startLine}-L${commentLine.endLine}`;
+  return `${filePath}:${lineInfo}`;
+});
 
 /**
  * Scroll position state for synchronization
@@ -210,7 +226,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                        focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-                placeholder={placeholder}
+                placeholder="Ask AI about this code..."
                 bind:value={commentText}
                 onkeydown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
@@ -224,18 +240,24 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
                   }
                 }}
               ></textarea>
-              <div class="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  class="px-3 py-1 text-sm bg-success-emphasis text-white rounded hover:brightness-110"
-                  onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
-                >Submit</button>
-                <button
-                  type="button"
-                  class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-                  onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
-                >Cancel</button>
-
+              <div class="flex items-center justify-between mt-2">
+                <!-- Left side: File and line info -->
+                <div class="text-xs text-text-tertiary font-mono">
+                  {lineContext}
+                </div>
+                <!-- Right side: Buttons -->
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                    onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
+                  >Cancel</button>
+                  <SplitButton
+                    disabled={commentText.trim().length === 0}
+                    onPrimaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, false); commentText = ""; } }}
+                    onSecondaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
+                  />
+                </div>
               </div>
             </div>
           {/if}
@@ -272,7 +294,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
               <textarea
                 class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                        focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-                placeholder={placeholder}
+                placeholder="Ask AI about this code..."
                 bind:value={commentText}
                 onkeydown={(e) => {
                   if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
@@ -286,17 +308,24 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
                   }
                 }}
               ></textarea>
-              <div class="flex items-center gap-2 mt-2">
-                <button
-                  type="button"
-                  class="px-3 py-1 text-sm bg-success-emphasis text-white rounded hover:brightness-110"
-                  onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
-                >Submit</button>
-                <button
-                  type="button"
-                  class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-                  onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
-                >Cancel</button>
+              <div class="flex items-center justify-between mt-2">
+                <!-- Left side: File and line info -->
+                <div class="text-xs text-text-tertiary font-mono">
+                  {lineContext}
+                </div>
+                <!-- Right side: Buttons -->
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                    onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
+                  >Cancel</button>
+                  <SplitButton
+                    disabled={commentText.trim().length === 0}
+                    onPrimaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, false); commentText = ""; } }}
+                    onSecondaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
+                  />
+                </div>
               </div>
             </div>
           {/if}

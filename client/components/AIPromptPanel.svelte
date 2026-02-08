@@ -345,29 +345,7 @@
   <!-- Collapsed single-line input bar -->
   {#if collapsed}
     <div class="h-14 px-4 flex items-center gap-3">
-      <!-- AI Icon -->
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="text-accent-fg shrink-0"
-        aria-hidden="true"
-      >
-        <path
-          d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"
-        />
-        <path
-          d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"
-        />
-      </svg>
-
-      <!-- Expand/collapse chevron (left of input) -->
+      <!-- Expand button (replaces AI icon position) -->
       <button
         type="button"
         onclick={onToggle}
@@ -516,27 +494,6 @@
       class="h-12 px-4 flex items-center justify-between border-b border-border-default"
     >
       <div class="flex items-center gap-3">
-        <!-- AI Icon -->
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="18"
-          height="18"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="text-accent-fg"
-          aria-hidden="true"
-        >
-          <path
-            d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"
-          />
-          <path
-            d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"
-          />
-        </svg>
         <span class="text-sm font-medium text-text-primary"> AI Prompt </span>
         <kbd
           class="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-tertiary rounded"

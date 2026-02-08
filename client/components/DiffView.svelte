@@ -216,6 +216,7 @@
       rangeLines={commentRangeLines}
       {oldHighlightMap}
       {newHighlightMap}
+      filePath={file.path}
     />
   {:else if mode === "inline"}
     <InlineDiff
@@ -229,6 +230,7 @@
       rangeLines={commentRangeLines}
       {oldHighlightMap}
       {newHighlightMap}
+      filePath={file.path}
     />
   {:else}
     <div
