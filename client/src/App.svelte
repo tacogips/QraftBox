@@ -13,6 +13,7 @@
   import HeaderStatusBadges from "../components/HeaderStatusBadges.svelte";
   import WorktreeScreen from "../components/worktree/WorktreeScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
+  import CurrentStateView from "../components/CurrentStateView.svelte";
 
   /**
    * Screen type for navigation
@@ -599,7 +600,6 @@
         Tools
       </button>
     </nav>
-
   </header>
 
   <!-- Tab Bar -->
@@ -691,7 +691,13 @@
             </div>
           {:else if error !== null}
             <div class="p-8 text-center text-danger-fg">{error}</div>
-          {:else if selectedFile !== null && viewMode !== "current-state"}
+          {:else if selectedFile !== null && viewMode === "current-state"}
+            <!-- Current State View -->
+            <div class="p-4">
+              <CurrentStateView file={selectedFile} />
+            </div>
+          {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
+            <!-- Diff View (side-by-side or inline) -->
             <div class="p-4">
               <DiffView
                 file={selectedFile}
@@ -704,16 +710,13 @@
               Loading file...
             </div>
           {:else if fileContent !== null}
+            <!-- File Viewer (for non-diff files in all-files mode) -->
             <FileViewer
               path={fileContent.path}
               content={fileContent.content}
               language={fileContent.language}
               onCommentSubmit={handleInlineCommentSubmit}
             />
-          {:else if viewMode === "current-state"}
-            <div class="p-8 text-center text-text-secondary">
-              Current state view is under development
-            </div>
           {:else}
             <div class="p-8 text-center text-text-secondary">
               Select a file to view
@@ -747,8 +750,24 @@
               title="Side by Side"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="2" width="6" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
-                <rect x="9" y="2" width="6" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
+                <rect
+                  x="1"
+                  y="2"
+                  width="6"
+                  height="12"
+                  rx="1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+                <rect
+                  x="9"
+                  y="2"
+                  width="6"
+                  height="12"
+                  rx="1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
               </svg>
             </button>
             <!-- Inline icon: stacked lines (unified diff) -->
@@ -762,10 +781,39 @@
               title="Inline"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
-                <line x1="4" y1="5.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1.2" />
-                <line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" />
-                <line x1="4" y1="10.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1.2" />
+                <rect
+                  x="1"
+                  y="2"
+                  width="14"
+                  height="12"
+                  rx="1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="4"
+                  y1="5.5"
+                  x2="12"
+                  y2="5.5"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="4"
+                  y1="8"
+                  x2="12"
+                  y2="8"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="4"
+                  y1="10.5"
+                  x2="10"
+                  y2="10.5"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
               </svg>
             </button>
             <!-- Current icon: single document -->
@@ -779,7 +827,11 @@
               title="Current"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z" stroke="currentColor" stroke-width="1.5" />
+                <path
+                  d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
               </svg>
             </button>
           </div>
@@ -834,5 +886,4 @@
       </main>
     {/if}
   </div>
-
 </div>
