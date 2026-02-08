@@ -70,11 +70,10 @@
     <button
       type="button"
       class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2"
-      class:bg-accent-emphasis={mode === "diff"}
-      class:text-white={mode === "diff"}
-      class:hover:bg-accent-emphasis={mode === "diff"}
+      class:bg-bg-emphasis={mode === "diff"}
+      class:text-text-on-emphasis={mode === "diff"}
       class:bg-transparent={mode !== "diff"}
-      class:text-text-primary={mode !== "diff"}
+      class:text-text-secondary={mode !== "diff"}
       class:hover:bg-bg-hover={mode !== "diff"}
       onclick={handleDiffClick}
       aria-label="Show only files with changes"
@@ -83,8 +82,8 @@
       <span>Diff Only</span>
       <span
         class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-accent-emphasis={mode === "diff"}
-        class:text-white={mode === "diff"}
+        class:bg-neutral-muted={mode === "diff"}
+        class:text-text-on-emphasis={mode === "diff"}
         class:bg-bg-tertiary={mode !== "diff"}
         class:text-text-secondary={mode !== "diff"}
       >
@@ -96,11 +95,10 @@
     <button
       type="button"
       class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2 border-l border-border-default"
-      class:bg-accent-emphasis={mode === "all"}
-      class:text-white={mode === "all"}
-      class:hover:bg-accent-emphasis={mode === "all"}
+      class:bg-bg-emphasis={mode === "all"}
+      class:text-text-on-emphasis={mode === "all"}
       class:bg-transparent={mode !== "all"}
-      class:text-text-primary={mode !== "all"}
+      class:text-text-secondary={mode !== "all"}
       class:hover:bg-bg-hover={mode !== "all"}
       onclick={handleAllClick}
       aria-label="Show all files"
@@ -109,8 +107,8 @@
       <span>All Files</span>
       <span
         class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-accent-emphasis={mode === "all"}
-        class:text-white={mode === "all"}
+        class:bg-neutral-muted={mode === "all"}
+        class:text-text-on-emphasis={mode === "all"}
         class:bg-bg-tertiary={mode !== "all"}
         class:text-text-secondary={mode !== "all"}
       >

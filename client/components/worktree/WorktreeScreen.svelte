@@ -556,7 +556,7 @@
                   disabled={creating || createBranch.trim().length === 0}
                   onclick={() => void handleCreate()}
                   class="px-4 py-2 rounded-lg text-sm font-medium
-                         bg-accent-emphasis hover:bg-accent-fg text-white
+                         bg-success-emphasis hover:brightness-110 text-white
                          disabled:opacity-50 disabled:cursor-not-allowed
                          transition-colors"
                 >

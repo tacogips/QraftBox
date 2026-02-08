@@ -50,7 +50,7 @@
              border border-border-default rounded-lg
              bg-bg-primary
              appearance-none
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
              disabled:bg-bg-secondary disabled:cursor-not-allowed
              text-base font-medium text-text-primary
              pr-10"

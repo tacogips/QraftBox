@@ -12,6 +12,7 @@ import { createErrorHandler } from "./errors";
 import { createStaticMiddleware, createSPAFallback } from "./static";
 import { mountAllRoutes } from "./routes/index";
 import { createSessionManager } from "./ai/session-manager";
+import { createPromptStore } from "./prompts/prompt-store";
 import { join } from "path";
 
 /**
@@ -81,9 +82,11 @@ export function createServer(options: ServerOptions): Hono {
 
   // Mount all API routes (workspace, browse, context-scoped routes)
   const sessionManager = createSessionManager();
+  const promptStore = createPromptStore();
   mountAllRoutes(app, {
     contextManager: options.contextManager,
     sessionManager,
+    promptStore,
   });
 
   // Static file serving and SPA fallback

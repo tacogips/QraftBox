@@ -227,12 +227,12 @@
         onclick={handleCommit}
         disabled={isCommitDisabled()}
         class="px-6 py-3 min-h-[52px] min-w-[120px]
-               text-white bg-accent-emphasis
+               text-white bg-success-emphasis
                rounded-lg
-               hover:bg-accent-emphasis
+               hover:brightness-110
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
-               font-medium transition-colors
+               focus:outline-none focus:ring-2 focus:ring-success-emphasis
+               font-medium transition-all
                flex items-center justify-center gap-2"
       >
         <svg

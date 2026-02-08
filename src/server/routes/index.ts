@@ -26,7 +26,9 @@ import { createDiffRoutes } from "./diff.js";
 import { createFileRoutes as createFileRoutesImpl } from "./files.js";
 import { createStatusRoutes as createStatusRoutesImpl } from "./status.js";
 import { createToolRoutes } from "./tools.js";
+import { createLocalPromptRoutes } from "./local-prompts.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import type { PromptStore } from "../../types/local-prompt.js";
 
 /**
  * Route group definition
@@ -46,6 +48,7 @@ export interface RouteGroup {
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
   readonly sessionManager: SessionManager;
+  readonly promptStore?: PromptStore | undefined;
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
 }
@@ -175,6 +178,18 @@ export function getNonContextRouteGroups(
         sessionManager: config.sessionManager,
       }),
     },
+    // Local prompt management routes - /api/prompts
+    ...(config.promptStore !== undefined
+      ? [
+          {
+            prefix: "/prompts",
+            routes: createLocalPromptRoutes({
+              promptStore: config.promptStore,
+              sessionManager: config.sessionManager,
+            }),
+          },
+        ]
+      : []),
     // Tool management routes - GET /api/tools
     ...(config.toolRegistry !== undefined
       ? [

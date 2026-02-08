@@ -216,7 +216,7 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
       disabled={!canSubmit}
       class="px-4 py-2 min-h-[44px] text-sm font-medium
              {canSubmit
-        ? 'bg-accent-emphasis text-white hover:bg-accent-emphasis active:bg-accent-emphasis'
+        ? 'bg-success-emphasis text-white hover:brightness-110 active:brightness-90'
         : 'bg-bg-disabled text-text-disabled cursor-not-allowed'}
              rounded transition-colors duration-150
              focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-1"

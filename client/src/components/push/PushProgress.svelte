@@ -24,7 +24,7 @@
   <div class="flex flex-col items-center justify-center p-8 gap-4">
     <!-- Spinner -->
     <div
-      class="spinner w-12 h-12 border-4 border-border-default border-t-green-600 rounded-full animate-spin"
+      class="spinner w-12 h-12 border-4 border-border-default border-t-success-emphasis rounded-full animate-spin"
       role="status"
       aria-label="Loading"
     ></div>

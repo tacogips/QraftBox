@@ -285,7 +285,7 @@
           <p class="text-sm text-danger-fg">{error}</p>
           <button
             type="button"
-            class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors"
+            class="px-4 py-2 text-sm bg-bg-tertiary text-text-primary border border-border-default rounded hover:bg-bg-hover transition-colors"
             onclick={handleRetry}
           >
             Retry

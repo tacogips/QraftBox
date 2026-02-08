@@ -109,6 +109,18 @@ tasks:
       - bunx playwright --version
       - ls "$PLAYWRIGHT_BROWSERS_PATH" 2>/dev/null || echo "Browsers not found. Run 'nix develop' first."
 
+  restart:
+    desc: Restart dev server on port 7155 (kill existing, start fresh)
+    vars:
+      PORT: '{{.PORT | default "7155"}}'
+    cmds:
+      - |
+        for pid in $(ss -tlnp 2>/dev/null | grep ':{{.PORT}} ' | grep -oP 'pid=\K[0-9]+'); do
+          kill "$pid" 2>/dev/null && echo "Killed PID $pid"
+        done
+        sleep 1
+      - bun run src/main.ts --port {{.PORT}}
+
   ci:
     desc: Run all CI checks
     cmds:

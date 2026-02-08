@@ -52,9 +52,9 @@
   function getButtonClass(mode: ViewMode): string {
     const baseClasses =
       "min-h-[44px] px-4 py-2 text-sm font-medium rounded-md transition-colors";
-    const activeClasses = "bg-accent-emphasis text-white";
+    const activeClasses = "bg-bg-emphasis text-text-on-emphasis";
     const inactiveClasses =
-      "bg-bg-secondary text-text-primary hover:bg-bg-tertiary";
+      "bg-bg-secondary text-text-secondary hover:bg-bg-hover";
 
     if (mode === viewMode) {
       return `${baseClasses} ${activeClasses}`;

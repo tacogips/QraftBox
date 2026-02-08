@@ -253,7 +253,7 @@
       type="button"
       onclick={handleResume}
       class="flex-1 px-3 py-2 rounded-md text-sm font-medium
-             bg-accent-emphasis hover:bg-accent-emphasis text-white
+             bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default
              focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 focus:ring-offset-bg-primary
              transition-colors duration-150"
       aria-label={`Resume session: ${truncate(session.firstPrompt, 50)}`}

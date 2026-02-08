@@ -32,12 +32,20 @@
 
   // Operation state
   let operating = $state(false);
-  let operationMessage = $state<{ success: boolean; text: string } | null>(null);
+  let operationMessage = $state<{ success: boolean; text: string } | null>(
+    null,
+  );
 
   // PR info for "Open PR in Browser"
   let currentPRUrl = $state<string | null>(null);
   let prNumber = $state<number | null>(null);
   let prLoading = $state(false);
+  let prCanCreate = $state(false);
+  let prBaseBranch = $state("");
+  let prAvailableBranches = $state<string[]>([]);
+  let showCreatePR = $state(false);
+  let selectedCreateBaseBranch = $state("");
+  let creatingPR = $state(false);
 
   /**
    * Calculate dropdown position from the 3-dot button
@@ -75,7 +83,11 @@
         const data = (await resp.json()) as {
           status: {
             hasPR: boolean;
-            pr: { url: string; number: number } | null;
+            pr: { url: string; number: number; state: string } | null;
+            canCreatePR: boolean;
+            baseBranch: string;
+            availableBaseBranches: string[];
+            reason?: string;
           };
         };
         if (data.status.hasPR && data.status.pr !== null) {
@@ -85,6 +97,10 @@
           currentPRUrl = null;
           prNumber = null;
         }
+        prCanCreate = data.status.canCreatePR;
+        prBaseBranch = data.status.baseBranch;
+        prAvailableBranches = data.status.availableBaseBranches;
+        selectedCreateBaseBranch = data.status.baseBranch;
       }
     } catch {
       // Silently ignore - PR status is non-critical
@@ -132,8 +148,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          prompt:
-            "Please push the current branch to the remote repository.",
+          prompt: "Please push the current branch to the remote repository.",
           context: {
             references: [],
           },
@@ -267,6 +282,48 @@
   }
 
   /**
+   * Create a new PR
+   */
+  async function handleCreatePR(): Promise<void> {
+    if (selectedCreateBaseBranch === "") return;
+    creatingPR = true;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/pr/${contextId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          promptTemplateId: "default",
+          baseBranch: selectedCreateBaseBranch,
+        }),
+      });
+      if (!resp.ok) {
+        const errData = (await resp.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(
+          errData !== null && errData.error !== undefined
+            ? errData.error
+            : `Create PR failed: ${resp.status}`,
+        );
+      }
+      operationMessage = {
+        success: true,
+        text: "PR creation initiated via AI",
+      };
+      showCreatePR = false;
+      menuOpen = false;
+      await fetchPRStatus();
+    } catch (e) {
+      operationMessage = {
+        success: false,
+        text: e instanceof Error ? e.message : "Create PR failed",
+      };
+    } finally {
+      creatingPR = false;
+    }
+  }
+
+  /**
    * Merge the current PR
    */
   async function handleMergePR(): Promise<void> {
@@ -394,8 +451,7 @@
         : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction =
-          customPromptAction === "commit" ? null : "commit";
+        customPromptAction = customPromptAction === "commit" ? null : "commit";
         customPromptText = "";
       }}
       disabled={operating}
@@ -437,8 +493,7 @@
              {customPromptAction === 'push' ? 'bg-bg-tertiary' : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction =
-          customPromptAction === "push" ? null : "push";
+        customPromptAction = customPromptAction === "push" ? null : "push";
         customPromptText = "";
       }}
       disabled={operating}
@@ -461,12 +516,68 @@
         ></textarea>
         <button
           type="button"
-          class="mt-1 px-3 py-1 text-xs bg-accent-emphasis text-white rounded
-                 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
+                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={() => void handleCustomPromptSubmit()}
           disabled={operating}
         >
           {operating ? "Running..." : "Push"}
+        </button>
+      </div>
+    {/if}
+
+    <!-- Separator -->
+    <div class="border-t border-border-default"></div>
+
+    <!-- Create PR -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             {prCanCreate && prNumber === null
+        ? 'text-text-primary'
+        : 'text-text-tertiary cursor-not-allowed'}
+             {showCreatePR ? 'bg-bg-tertiary' : ''}"
+      onclick={(e) => {
+        e.stopPropagation();
+        showCreatePR = !showCreatePR;
+      }}
+      disabled={!prCanCreate || prNumber !== null || prLoading}
+    >
+      Create PR
+      {#if prNumber !== null}
+        <span class="text-xs text-text-tertiary ml-1">(PR exists)</span>
+      {:else if !prCanCreate && !prLoading}
+        <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
+      {/if}
+    </button>
+
+    {#if showCreatePR && prCanCreate}
+      <div
+        class="px-3 py-2 border-t border-border-default bg-bg-primary"
+        role="presentation"
+      >
+        <div class="flex items-center gap-2 mb-2">
+          <label for="create-pr-base" class="text-xs text-text-secondary"
+            >Base:</label
+          >
+          <select
+            id="create-pr-base"
+            class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
+            bind:value={selectedCreateBaseBranch}
+          >
+            {#each prAvailableBranches as branch}
+              <option value={branch}>{branch}</option>
+            {/each}
+          </select>
+        </div>
+        <button
+          type="button"
+          class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => void handleCreatePR()}
+          disabled={creatingPR || selectedCreateBaseBranch === ""}
+        >
+          {creatingPR ? "Creating..." : "Create PR"}
         </button>
       </div>
     {/if}

@@ -271,7 +271,7 @@
         <p class="text-danger-fg mb-4">{error}</p>
         <button
           type="button"
-          class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors"
+          class="px-4 py-2 text-sm bg-bg-tertiary text-text-primary border border-border-default rounded hover:bg-bg-hover transition-colors"
           onclick={() => void loadAll()}
         >
           Retry
@@ -564,7 +564,7 @@
               <!-- Push button -->
               <button
                 type="button"
-                class="px-4 py-2 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-4 py-2 text-sm bg-success-emphasis text-white rounded hover:brightness-110 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={() => void handlePush()}
                 disabled={!canPush || pushing}
               >

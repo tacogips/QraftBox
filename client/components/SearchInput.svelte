@@ -217,7 +217,7 @@ function handleInputMount(element: HTMLInputElement): void {
         onclick={() => handleScopeClick(option.value)}
         class="px-2 py-1.5 min-h-[36px] text-xs font-medium
                {scope === option.value
-          ? 'bg-accent-emphasis text-white'
+          ? 'bg-bg-emphasis text-text-on-emphasis'
           : 'bg-bg-tertiary text-text-secondary hover:bg-bg-hover'}
                border-r border-border-default last:border-r-0
                transition-colors duration-150

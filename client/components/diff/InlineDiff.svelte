@@ -222,7 +222,7 @@
           <div class="flex items-center gap-2 mt-2">
             <button
               type="button"
-              class="px-3 py-1 text-sm bg-accent-emphasis text-white rounded hover:bg-accent-fg"
+              class="px-3 py-1 text-sm bg-success-emphasis text-white rounded hover:brightness-110"
               onclick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
             >Submit</button>
             <button

@@ -52,13 +52,13 @@
   {disabled}
   class="commit-button px-6 py-2 min-h-[44px]
          flex items-center justify-center gap-3
-         text-white bg-accent-emphasis
+         text-white bg-success-emphasis
          rounded-lg
-         hover:bg-accent-emphasis
-         focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
-         active:bg-accent-emphasis
+         hover:brightness-110
+         focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2
+         active:brightness-90
          disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
-         transition-colors
+         transition-all
          font-medium text-base"
   aria-label={stagedCount > 0
     ? `Commit ${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`
@@ -74,7 +74,7 @@
       class="staged-count-badge px-2 py-0.5 min-w-[24px]
              flex items-center justify-center
              text-xs font-bold
-             bg-accent-emphasis text-white rounded-full"
+             bg-success-fg/30 text-white rounded-full"
       aria-label={`${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}
     >
       {stagedCount}

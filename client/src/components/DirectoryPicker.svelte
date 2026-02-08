@@ -441,11 +441,11 @@
           onclick={handleSelect}
           disabled={selectedPath === null}
           class="px-6 py-3 min-h-[52px] min-w-[100px]
-                 text-white bg-accent-emphasis
+                 text-white bg-success-emphasis
                  rounded-lg
-                 hover:bg-accent-emphasis
+                 hover:brightness-110
                  disabled:opacity-50 disabled:cursor-not-allowed
-                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                 focus:outline-none focus:ring-2 focus:ring-success-emphasis
                  font-medium transition-colors"
         >
           Select

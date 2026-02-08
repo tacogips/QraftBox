@@ -9,8 +9,8 @@
   import ClaudeSessionsScreen from "../components/claude-sessions/ClaudeSessionsScreen.svelte";
   import SessionQueueScreen from "../components/session/SessionQueueScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
-  import GitHubOpsScreen from "../components/github-ops/GitHubOpsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
+  import HeaderStatusBadges from "../components/HeaderStatusBadges.svelte";
   import WorktreeScreen from "../components/worktree/WorktreeScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
 
@@ -22,7 +22,6 @@
     | "commits"
     | "sessions"
     | "queue"
-    | "github-ops"
     | "worktree"
     | "tools";
 
@@ -394,20 +393,23 @@
         references: refs,
         diffSummary: undefined,
       },
-      options: {
-        projectPath: projectPath,
-        sessionMode: "new" as const,
-        immediate,
-      },
+      projectPath: projectPath,
     };
     try {
-      const resp = await fetch("/api/ai/prompt", {
+      const resp = await fetch("/api/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
         console.error("AI prompt error:", resp.status);
+      } else if (immediate) {
+        const data = (await resp.json()) as { prompt: { id: string } };
+        await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ immediate: true }),
+        });
       }
       void fetchQueueStatus();
     } catch (e) {
@@ -439,20 +441,23 @@
         references: [],
         diffSummary: undefined,
       },
-      options: {
-        projectPath: projectPath,
-        sessionMode: "new" as const,
-        immediate,
-      },
+      projectPath: projectPath,
     };
     try {
-      const resp = await fetch("/api/ai/prompt", {
+      const resp = await fetch("/api/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!resp.ok) {
         console.error("AI prompt error:", resp.status);
+      } else if (immediate) {
+        const data = (await resp.json()) as { prompt: { id: string } };
+        await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ immediate: true }),
+        });
       }
       void fetchQueueStatus();
     } catch (e) {
@@ -530,75 +535,65 @@
   >
     <h1 class="text-lg font-semibold">QraftBox</h1>
 
-    <!-- Navigation -->
-    <nav class="flex items-center gap-1 ml-4">
+    <!-- Navigation (GitHub UnderlineNav style) -->
+    <nav class="flex items-center gap-0 ml-4 h-full">
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'diff'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("diff")}
       >
         Diff
       </button>
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'commits'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("commits")}
       >
         Commits
       </button>
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'sessions'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("sessions")}
       >
         Sessions
       </button>
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'queue'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("queue")}
       >
         Queue
       </button>
-      <span class="w-px h-5 bg-border-default"></span>
+      <span class="w-px h-5 bg-border-default mx-1"></span>
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
-               {currentScreen === 'github-ops'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
-        onclick={() => navigateToScreen("github-ops")}
-      >
-        GitHub Ops
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'worktree'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("worktree")}
       >
         Worktree
       </button>
       <button
         type="button"
-        class="px-3 py-1.5 text-sm rounded transition-colors
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'tools'
-          ? 'bg-accent-emphasis text-white'
-          : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("tools")}
       >
         Tools
@@ -608,36 +603,40 @@
     <div class="flex items-center gap-2 ml-auto">
       <!-- View Mode Toggle (only visible on diff screen) -->
       {#if currentScreen === "diff"}
-        <button
-          type="button"
-          class="px-3 py-1 text-sm border border-border-default rounded transition-colors
-                 {viewMode === 'side-by-side'
-            ? 'bg-accent-emphasis text-white border-accent-emphasis'
-            : 'hover:bg-bg-tertiary'}"
-          onclick={() => setViewMode("side-by-side")}
+        <div
+          class="flex items-center border border-border-default rounded-md overflow-hidden"
         >
-          Side by Side
-        </button>
-        <button
-          type="button"
-          class="px-3 py-1 text-sm border border-border-default rounded transition-colors
-                 {viewMode === 'inline'
-            ? 'bg-accent-emphasis text-white border-accent-emphasis'
-            : 'hover:bg-bg-tertiary'}"
-          onclick={() => setViewMode("inline")}
-        >
-          Inline
-        </button>
-        <button
-          type="button"
-          class="px-3 py-1 text-sm border border-border-default rounded transition-colors
-                 {viewMode === 'current-state'
-            ? 'bg-accent-emphasis text-white border-accent-emphasis'
-            : 'hover:bg-bg-tertiary'}"
-          onclick={() => setViewMode("current-state")}
-        >
-          Current
-        </button>
+          <button
+            type="button"
+            class="px-3 py-1 text-sm transition-colors
+                   {viewMode === 'side-by-side'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => setViewMode("side-by-side")}
+          >
+            Side by Side
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1 text-sm border-l border-border-default transition-colors
+                   {viewMode === 'inline'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => setViewMode("inline")}
+          >
+            Inline
+          </button>
+          <button
+            type="button"
+            class="px-3 py-1 text-sm border-l border-border-default transition-colors
+                   {viewMode === 'current-state'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => setViewMode("current-state")}
+          >
+            Current
+          </button>
+        </div>
       {/if}
     </div>
   </header>
@@ -652,6 +651,9 @@
       >
         {projectPath}
       </div>
+    {/if}
+    {#if contextId !== null}
+      <HeaderStatusBadges {contextId} diffFileCount={diffFiles.length} />
     {/if}
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
@@ -791,16 +793,6 @@
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
           <CommitsScreen {contextId} onBack={() => navigateToScreen("diff")} />
-        {/if}
-      </main>
-    {:else if currentScreen === "github-ops"}
-      <!-- GitHub Operations Screen -->
-      <main class="flex-1 overflow-hidden">
-        {#if contextId !== null}
-          <GitHubOpsScreen
-            {contextId}
-            onBack={() => navigateToScreen("diff")}
-          />
         {/if}
       </main>
     {:else if currentScreen === "worktree"}
