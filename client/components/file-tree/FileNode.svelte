@@ -24,9 +24,14 @@
      * Callback when the file is selected
      */
     onSelect: () => void;
+
+    /**
+     * Callback to view full file content (for files with diffs)
+     */
+    onViewFullFile?: () => void;
   }
 
-  const { node, depth, selected, onSelect }: Props = $props();
+  const { node, depth, selected, onSelect, onViewFullFile = undefined }: Props = $props();
 
   /**
    * Get status badge text based on file status
@@ -106,7 +111,7 @@
 <!-- File Node Button -->
 <button
   type="button"
-  class="file-node w-full text-left px-4 py-3 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2 {getStatusBackgroundClass(node.status)}"
+  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(node.status)}"
   class:bg-accent-subtle={selected && !node.status}
   class:border-l-4={selected}
   class:border-accent-emphasis={selected}
@@ -135,6 +140,23 @@
   <span class="file-name text-text-primary truncate flex-1">
     {node.name}
   </span>
+
+  <!-- View Full File Button (for files with diff status) -->
+  {#if node.status !== undefined && onViewFullFile !== undefined}
+    <button
+      type="button"
+      class="view-full-btn shrink-0 w-5 h-5 flex items-center justify-center
+             rounded text-text-tertiary opacity-0 group-hover/filenode:opacity-100
+             hover:text-text-primary hover:bg-bg-tertiary transition-opacity"
+      onclick={(e) => { e.stopPropagation(); onViewFullFile?.(); }}
+      aria-label="View full file {node.name}"
+      title="View full file"
+    >
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75z"/>
+      </svg>
+    </button>
+  {/if}
 
   <!-- Status Badge -->
   {#if node.status !== undefined}

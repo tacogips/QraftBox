@@ -5,10 +5,10 @@
  * Provides methods for listing projects, sessions, and detecting session sources.
  */
 
-import { readdir, readFile } from 'fs/promises';
-import { join } from 'path';
-import { homedir } from 'os';
-import { existsSync } from 'fs';
+import { readdir, readFile } from "fs/promises";
+import { join } from "path";
+import { homedir } from "os";
+import { existsSync } from "fs";
 import type {
   ClaudeSessionIndex,
   ClaudeSessionEntry,
@@ -16,11 +16,14 @@ import type {
   SessionSource,
   SessionListResponse,
   ProjectInfo,
-} from '../../types/claude-session';
-import { isClaudeSessionIndex, isClaudeSessionEntry } from '../../types/claude-session';
-import { SessionRegistry } from './session-registry';
+} from "../../types/claude-session";
+import {
+  isClaudeSessionIndex,
+  isClaudeSessionEntry,
+} from "../../types/claude-session";
+import { SessionRegistry } from "./session-registry";
 
-const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /**
  * Options for listing sessions
@@ -44,9 +47,9 @@ export interface ListSessionsOptions {
   /** Pagination limit */
   limit?: number;
   /** Sort field */
-  sortBy?: 'modified' | 'created';
+  sortBy?: "modified" | "created";
   /** Sort order */
-  sortOrder?: 'asc' | 'desc';
+  sortOrder?: "asc" | "desc";
 }
 
 /**
@@ -77,7 +80,11 @@ export class ClaudeSessionReader {
         continue;
       }
 
-      const indexPath = join(this.projectsDir, entry.name, 'sessions-index.json');
+      const indexPath = join(
+        this.projectsDir,
+        entry.name,
+        "sessions-index.json",
+      );
 
       try {
         const index = await this.readSessionIndex(indexPath);
@@ -100,18 +107,26 @@ export class ClaudeSessionReader {
   /**
    * List sessions with filtering and pagination
    */
-  async listSessions(options: ListSessionsOptions = {}): Promise<SessionListResponse> {
+  async listSessions(
+    options: ListSessionsOptions = {},
+  ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
     const projects = await this.listProjects();
 
     // Filter projects by working directory prefix if specified
     const filteredProjects = options.workingDirectoryPrefix
-      ? projects.filter(p => p.path.startsWith(options.workingDirectoryPrefix!))
+      ? projects.filter((p) =>
+          p.path.startsWith(options.workingDirectoryPrefix!),
+        )
       : projects;
 
     // Read sessions from filtered projects
     for (const project of filteredProjects) {
-      const indexPath = join(this.projectsDir, project.encoded, 'sessions-index.json');
+      const indexPath = join(
+        this.projectsDir,
+        project.encoded,
+        "sessions-index.json",
+      );
 
       try {
         const index = await this.readSessionIndex(indexPath);
@@ -136,8 +151,8 @@ export class ClaudeSessionReader {
 
     // Sort sessions
     allSessions.sort((a, b) => {
-      const field = options.sortBy ?? 'modified';
-      const order = options.sortOrder === 'asc' ? 1 : -1;
+      const field = options.sortBy ?? "modified";
+      const order = options.sortOrder === "asc" ? 1 : -1;
       const aTime = new Date(a[field]).getTime();
       const bTime = new Date(b[field]).getTime();
       return order * (aTime - bTime);
@@ -163,11 +178,15 @@ export class ClaudeSessionReader {
     const projects = await this.listProjects();
 
     for (const project of projects) {
-      const indexPath = join(this.projectsDir, project.encoded, 'sessions-index.json');
+      const indexPath = join(
+        this.projectsDir,
+        project.encoded,
+        "sessions-index.json",
+      );
 
       try {
         const index = await this.readSessionIndex(indexPath);
-        const entry = index.entries.find(e => e.sessionId === sessionId);
+        const entry = index.entries.find((e) => e.sessionId === sessionId);
 
         if (entry) {
           return {
@@ -193,7 +212,7 @@ export class ClaudeSessionReader {
       throw new Error(`Session index not found: ${path}`);
     }
 
-    const content = await readFile(path, 'utf-8');
+    const content = await readFile(path, "utf-8");
     const parsed: unknown = JSON.parse(content);
 
     // Validate structure
@@ -214,25 +233,29 @@ export class ClaudeSessionReader {
   /**
    * Detect session source (qraftbox, claude-cli, or unknown)
    */
-  private async detectSource(entry: ClaudeSessionEntry): Promise<SessionSource> {
+  private async detectSource(
+    entry: ClaudeSessionEntry,
+  ): Promise<SessionSource> {
     // Primary detection: Check qraftbox session registry
-    const isQraftBox = await this.sessionRegistry.isQraftBoxSession(entry.sessionId);
+    const isQraftBox = await this.sessionRegistry.isQraftBoxSession(
+      entry.sessionId,
+    );
     if (isQraftBox) {
-      return 'qraftbox';
+      return "qraftbox";
     }
 
     // Fallback detection: Pattern matching for qraftbox context markers
     const prompt = entry.firstPrompt.toLowerCase();
     if (
-      prompt.includes('[qraftbox-context]') ||
-      prompt.includes('context from qraftbox:') ||
-      prompt.includes('qraftbox session')
+      prompt.includes("[qraftbox-context]") ||
+      prompt.includes("context from qraftbox:") ||
+      prompt.includes("qraftbox session")
     ) {
-      return 'qraftbox';
+      return "qraftbox";
     }
 
     // Default to claude-cli for sessions without qraftbox markers
-    return 'claude-cli';
+    return "claude-cli";
   }
 
   /**
@@ -240,7 +263,7 @@ export class ClaudeSessionReader {
    */
   private matchesFilters(
     session: ExtendedSessionEntry,
-    options: ListSessionsOptions
+    options: ListSessionsOptions,
   ): boolean {
     // Source filter
     if (options.source !== undefined && session.source !== options.source) {
@@ -255,8 +278,12 @@ export class ClaudeSessionReader {
     // Search filter (case-insensitive)
     if (options.search !== undefined) {
       const searchLower = options.search.toLowerCase();
-      const matchesPrompt = session.firstPrompt.toLowerCase().includes(searchLower);
-      const matchesSummary = session.summary.toLowerCase().includes(searchLower);
+      const matchesPrompt = session.firstPrompt
+        .toLowerCase()
+        .includes(searchLower);
+      const matchesSummary = session.summary
+        .toLowerCase()
+        .includes(searchLower);
 
       if (!matchesPrompt && !matchesSummary) {
         return false;
@@ -286,6 +313,62 @@ export class ClaudeSessionReader {
   }
 
   /**
+   * Read transcript events from a session JSONL file
+   *
+   * @param sessionId - Session ID to read transcript from
+   * @param offset - Number of events to skip (default: 0)
+   * @param limit - Maximum number of events to return (default: 100)
+   * @returns Array of transcript events with pagination metadata
+   */
+  async readTranscript(
+    sessionId: string,
+    offset: number = 0,
+    limit: number = 100,
+  ): Promise<{ events: TranscriptEvent[]; total: number } | null> {
+    const session = await this.getSession(sessionId);
+    if (session === null) {
+      return null;
+    }
+
+    const jsonlPath = session.fullPath;
+    if (!existsSync(jsonlPath)) {
+      throw new Error(`Transcript file not found: ${jsonlPath}`);
+    }
+
+    const content = await readFile(jsonlPath, "utf-8");
+    const lines = content.split("\n").filter((line) => line.trim().length > 0);
+
+    const events: TranscriptEvent[] = [];
+    for (const line of lines) {
+      try {
+        const parsed: unknown = JSON.parse(line);
+        if (typeof parsed === "object" && parsed !== null) {
+          const obj = parsed as Record<string, unknown>;
+          events.push({
+            type: typeof obj["type"] === "string" ? obj["type"] : "unknown",
+            uuid: typeof obj["uuid"] === "string" ? obj["uuid"] : undefined,
+            timestamp:
+              typeof obj["timestamp"] === "string"
+                ? obj["timestamp"]
+                : undefined,
+            content: obj["content"],
+            raw: parsed as object,
+          });
+        }
+      } catch (error: unknown) {
+        // Skip malformed lines
+        continue;
+      }
+    }
+
+    // Apply pagination
+    const total = events.length;
+    const paginated = events.slice(offset, offset + limit);
+
+    return { events: paginated, total };
+  }
+
+  /**
    * Get the latest modification timestamp from session entries
    */
   private getLatestModified(entries: ClaudeSessionEntry[]): string {
@@ -301,4 +384,15 @@ export class ClaudeSessionReader {
 
     return latest.modified;
   }
+}
+
+/**
+ * Transcript event structure (simplified)
+ */
+export interface TranscriptEvent {
+  readonly type: string;
+  readonly uuid?: string | undefined;
+  readonly timestamp?: string | undefined;
+  readonly content?: unknown;
+  readonly raw: object;
 }

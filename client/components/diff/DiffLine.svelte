@@ -141,7 +141,7 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="diff-line-row flex min-h-[44px] font-mono text-sm select-none {getBackgroundClass(
+  class="diff-line-row flex font-mono text-sm select-none {getBackgroundClass(
     change.type,
   )} {selected ? 'ring-2 ring-accent-emphasis ring-inset' : ''}"
   onpointerdown={handlePointerDown}
@@ -167,7 +167,7 @@ function handlePointerLeave(): void {
         aria-label="Add comment on line {lineNumber}"
       >+</button>
     {/if}
-    <span class="pt-2 cursor-pointer" onclick={handleClick}>{lineNumber}</span>
+    <span class="pt-1 min-h-[28px] flex items-start cursor-pointer" onclick={handleClick}>{lineNumber}</span>
   </div>
 
   <!-- Indicator Column -->
@@ -176,11 +176,11 @@ function handlePointerLeave(): void {
       change.type,
     )} border-r border-border-default"
   >
-    <span class="pt-2 font-bold">{getIndicator(change.type)}</span>
+    <span class="pt-1 font-bold">{getIndicator(change.type)}</span>
   </div>
 
   <!-- Content Column -->
-  <div class="flex-1 px-3 py-2 overflow-x-auto cursor-pointer" onclick={handleClick}>
+  <div class="flex-1 px-3 py-1 overflow-x-auto cursor-pointer" onclick={handleClick}>
     {#if highlighted !== undefined}
       <!-- Render syntax-highlighted HTML from Shiki -->
       <span class="highlighted-line">{@html highlighted}</span>

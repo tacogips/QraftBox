@@ -25,8 +25,8 @@
   import { onMount } from "svelte";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import type { AISession } from "../../../src/types/ai";
+  import type { ExtendedSessionEntry, ProjectInfo, SessionFilters } from "../../../src/types/claude-session";
   import type { UnifiedSessionItem } from "../../src/types/unified-session";
-  import type { SessionFilters } from "../../../src/types/claude-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
   import FilterPanel from "../claude-sessions/FilterPanel.svelte";
   import UnifiedSessionCard from "./UnifiedSessionCard.svelte";
@@ -36,6 +36,7 @@
     onResumeSession: (sessionId: string) => void;
     onSelectSession: (sessionId: string) => void;
     onClearCompleted?: (() => void) | undefined;
+    onCountChange?: ((count: number) => void) | undefined;
   }
 
   const {
@@ -43,7 +44,33 @@
     onResumeSession,
     onSelectSession,
     onClearCompleted = undefined,
+    onCountChange = undefined,
   }: Props = $props();
+
+  /**
+   * Reactive snapshots of store state.
+   * The claudeSessionsStore is a plain JS object - Svelte 5 $derived
+   * cannot track property changes. We use $state variables that get
+   * updated after each store operation.
+   */
+  let cliSessions = $state<readonly ExtendedSessionEntry[]>([]);
+  let cliTotal = $state(0);
+  let cliProjects = $state<readonly ProjectInfo[]>([]);
+  let cliIsLoading = $state(false);
+  let cliError = $state<string | null>(null);
+  let cliFilters = $state<SessionFilters>({});
+
+  /**
+   * Sync reactive state from the store
+   */
+  function syncFromStore(): void {
+    cliSessions = claudeSessionsStore.sessions;
+    cliTotal = claudeSessionsStore.total;
+    cliProjects = claudeSessionsStore.projects;
+    cliIsLoading = claudeSessionsStore.isLoading;
+    cliError = claudeSessionsStore.error;
+    cliFilters = claudeSessionsStore.filters;
+  }
 
   /**
    * Get date group for a given date string
@@ -92,7 +119,7 @@
     }
 
     // Add Claude CLI sessions (already filtered server-side by the store)
-    for (const s of claudeSessionsStore.sessions) {
+    for (const s of cliSessions) {
       items.push({ kind: "claude-cli", session: s });
     }
 
@@ -138,15 +165,24 @@
    * Whether more Claude CLI sessions can be loaded
    */
   const hasMore = $derived(
-    claudeSessionsStore.sessions.length < claudeSessionsStore.total,
+    cliSessions.length < cliTotal,
   );
 
   /**
    * Total session count for display
    */
   const totalCount = $derived(
-    completedSessions.length + claudeSessionsStore.total,
+    completedSessions.length + cliTotal,
   );
+
+  /**
+   * Notify parent when total count changes
+   */
+  $effect(() => {
+    if (onCountChange !== undefined) {
+      onCountChange(totalCount);
+    }
+  });
 
   /**
    * Handle search input
@@ -154,6 +190,8 @@
   function handleSearch(query: string): void {
     localSearchQuery = query;
     claudeSessionsStore.setFilters({ searchQuery: query || undefined });
+    // setFilters triggers fetchSessions internally; sync after a tick
+    setTimeout(syncFromStore, 100);
   }
 
   /**
@@ -161,6 +199,7 @@
    */
   function handleFilterChange(filters: Partial<SessionFilters>): void {
     claudeSessionsStore.setFilters(filters);
+    setTimeout(syncFromStore, 100);
   }
 
   /**
@@ -169,13 +208,16 @@
   function handleClearFilters(): void {
     localSearchQuery = "";
     claudeSessionsStore.clearFilters();
+    setTimeout(syncFromStore, 100);
   }
 
   /**
    * Handle load more
    */
   async function handleLoadMore(): Promise<void> {
+    cliIsLoading = true;
     await claudeSessionsStore.loadMore();
+    syncFromStore();
   }
 
   /**
@@ -183,6 +225,7 @@
    */
   function handleClearError(): void {
     claudeSessionsStore.clearError();
+    syncFromStore();
   }
 
   /**
@@ -200,7 +243,9 @@
    */
   onMount(async () => {
     await claudeSessionsStore.fetchProjects();
+    syncFromStore();
     await claudeSessionsStore.fetchSessions();
+    syncFromStore();
   });
 </script>
 
@@ -240,21 +285,21 @@
 
     <!-- Search Bar -->
     <SearchInput
-      value={claudeSessionsStore.filters.searchQuery ?? ""}
+      value={cliFilters.searchQuery ?? ""}
       onSearch={handleSearch}
     />
   </div>
 
   <!-- Filter Panel -->
   <FilterPanel
-    filters={claudeSessionsStore.filters}
-    projects={claudeSessionsStore.projects}
+    filters={cliFilters}
+    projects={cliProjects}
     onFilterChange={handleFilterChange}
     onClearFilters={handleClearFilters}
   />
 
   <!-- Error Banner -->
-  {#if claudeSessionsStore.error}
+  {#if cliError}
     <div
       class="error-banner mx-6 mt-4 p-4 rounded-lg border border-danger-emphasis/30
              bg-danger-emphasis/10 text-danger-fg"
@@ -280,7 +325,7 @@
         </svg>
         <div class="flex-1">
           <p class="font-medium">Error Loading Sessions</p>
-          <p class="text-sm mt-1">{claudeSessionsStore.error}</p>
+          <p class="text-sm mt-1">{cliError}</p>
         </div>
         <button
           type="button"
@@ -310,7 +355,7 @@
 
   <!-- Content Area -->
   <div class="content-area flex-1 overflow-y-auto px-6 py-4">
-    {#if claudeSessionsStore.isLoading && !hasSessions}
+    {#if cliIsLoading && !hasSessions}
       <!-- Loading State -->
       <div
         class="loading-state flex flex-col items-center justify-center h-64"
@@ -365,7 +410,7 @@
         </svg>
         <p class="text-text-secondary text-lg mb-2">No sessions found</p>
         <p class="text-text-tertiary text-sm">
-          {#if claudeSessionsStore.filters.searchQuery || claudeSessionsStore.filters.source || claudeSessionsStore.filters.branch || claudeSessionsStore.filters.workingDirectoryPrefix}
+          {#if cliFilters.searchQuery || cliFilters.source || cliFilters.branch || cliFilters.workingDirectoryPrefix}
             Try adjusting your filters or search query.
           {:else}
             No completed sessions yet.
@@ -445,7 +490,7 @@
           <button
             type="button"
             onclick={handleLoadMore}
-            disabled={claudeSessionsStore.isLoading}
+            disabled={cliIsLoading}
             class="px-6 py-3 rounded-lg text-sm font-medium
                    bg-bg-secondary hover:bg-bg-hover text-text-primary
                    border border-bg-border hover:border-accent-emphasis/30
@@ -454,7 +499,7 @@
                    transition-all duration-150"
             aria-label="Load more sessions"
           >
-            {#if claudeSessionsStore.isLoading}
+            {#if cliIsLoading}
               <span class="flex items-center gap-2">
                 <svg
                   class="animate-spin h-4 w-4"

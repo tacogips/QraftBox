@@ -105,6 +105,11 @@ export interface ClaudeSessionsActions {
   resumeSession(sessionId: string, prompt?: string): Promise<{ sessionId: string; status: string }>;
 
   /**
+   * Set context ID for API routing
+   */
+  setContextId(contextId: string): void;
+
+  /**
    * Reset store to initial state
    */
   reset(): void;
@@ -133,6 +138,11 @@ function createInitialState(): ClaudeSessionsState {
     error: null,
   };
 }
+
+/**
+ * Context ID for routing claude-sessions API calls through context-scoped endpoints
+ */
+let storeContextId: string | null = null;
 
 /**
  * Initial claude sessions store state
@@ -222,18 +232,26 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
     },
 
     // Actions
+    setContextId(contextId: string): void {
+      storeContextId = contextId;
+    },
+
     async fetchProjects(): Promise<void> {
+      if (storeContextId === null) {
+        updateState({ error: 'Context ID not set', isLoading: false });
+        return;
+      }
       updateState({ isLoading: true, error: null });
 
       try {
-        const response = await fetch('/api/claude/projects');
+        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/projects`);
         if (!response.ok) {
           throw new Error(`Failed to load projects: ${response.statusText}`);
         }
 
-        const data = (await response.json()) as { projects: ProjectInfo[] };
+        const data = (await response.json()) as ProjectInfo[];
         updateState({
-          projects: data.projects,
+          projects: data,
           isLoading: false,
         });
       } catch (e) {
@@ -254,8 +272,12 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       updateState({ isLoading: true, error: null });
 
       try {
+        if (storeContextId === null) {
+          updateState({ error: 'Context ID not set', isLoading: false });
+          return;
+        }
         const params = buildQueryParams();
-        const response = await fetch(`/api/claude/sessions?${params.toString()}`);
+        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`);
 
         if (!response.ok) {
           throw new Error(`Failed to load sessions: ${response.statusText}`);
@@ -337,7 +359,10 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       updateState({ isLoading: true, error: null });
 
       try {
-        const response = await fetch(`/api/claude/sessions/${sessionId}/resume`, {
+        if (storeContextId === null) {
+          throw new Error('Context ID not set');
+        }
+        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/sessions/${sessionId}/resume`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ prompt }),

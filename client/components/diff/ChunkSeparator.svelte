@@ -62,7 +62,7 @@
 </script>
 
 <div
-  class="flex items-center min-h-[44px] px-4 py-2 bg-bg-tertiary border-y border-border-default"
+  class="flex items-center min-h-[28px] px-4 py-1 bg-bg-tertiary border-y border-border-default"
   role="separator"
   aria-label="Diff chunk: {formatChunkHeader()}"
 >

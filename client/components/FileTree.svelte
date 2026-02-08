@@ -36,6 +36,11 @@
      * Number of changed files (always from diff, independent of tree)
      */
     changedCount?: number;
+
+    /**
+     * Callback to view full file content (for diff files)
+     */
+    onViewFullFile?: (path: string) => void;
   }
 
   const {
@@ -45,6 +50,7 @@
     onFileSelect,
     onModeChange,
     changedCount = undefined,
+    onViewFullFile = undefined,
   }: Props = $props();
 
   /**
@@ -633,6 +639,9 @@
       {depth}
       selected={selectedPath === node.path}
       onSelect={() => onFileSelect(node.path)}
+      onViewFullFile={node.status !== undefined && onViewFullFile !== undefined
+        ? () => onViewFullFile?.(node.path)
+        : undefined}
     />
   {/if}
 {/snippet}

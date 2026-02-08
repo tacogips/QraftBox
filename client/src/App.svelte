@@ -909,7 +909,12 @@
     {:else if currentScreen === "sessions"}
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
-        <UnifiedSessionsScreen onBack={() => navigateToScreen("diff")} />
+        {#if contextId !== null}
+          <UnifiedSessionsScreen
+            {contextId}
+            onBack={() => navigateToScreen("diff")}
+          />
+        {/if}
       </main>
     {:else if currentScreen === "commits"}
       <!-- Commits Screen -->

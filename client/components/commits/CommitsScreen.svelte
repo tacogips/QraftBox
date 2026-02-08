@@ -5,6 +5,8 @@
     CommitLogResponse,
     CommitFileChange,
   } from "../../../src/types/commit";
+  import type { DiffFile, DiffChunk } from "../../src/types/diff";
+  import InlineDiff from "../diff/InlineDiff.svelte";
 
   interface Props {
     contextId: string;
@@ -38,6 +40,16 @@
   let commitDetail = $state<CommitDetail | null>(null);
   let loadingDetail = $state(false);
   let detailError = $state<string | null>(null);
+
+  /**
+   * File diff expansion state
+   */
+  let expandedFilePath = $state<string | null>(null);
+  let fileDiffChunks = $state<readonly DiffChunk[]>([]);
+  let loadingFileDiff = $state(false);
+  let fileDiffError = $state<string | null>(null);
+  // Cache parsed diff files per commit hash
+  let diffCache = $state<Map<string, readonly DiffFile[]>>(new Map());
 
   /**
    * Debounce search input
@@ -127,12 +139,16 @@
       expandedHash = null;
       commitDetail = null;
       detailError = null;
+      expandedFilePath = null;
+      fileDiffChunks = [];
       return;
     }
 
     expandedHash = hash;
     commitDetail = null;
     detailError = null;
+    expandedFilePath = null;
+    fileDiffChunks = [];
     loadingDetail = true;
 
     try {
@@ -151,6 +167,55 @@
         e instanceof Error ? e.message : "Failed to load commit detail";
     } finally {
       loadingDetail = false;
+    }
+  }
+
+  /**
+   * Toggle file diff inline display
+   */
+  async function toggleFileDiff(filePath: string): Promise<void> {
+    if (expandedFilePath === filePath) {
+      expandedFilePath = null;
+      fileDiffChunks = [];
+      fileDiffError = null;
+      return;
+    }
+
+    expandedFilePath = filePath;
+    fileDiffChunks = [];
+    fileDiffError = null;
+
+    if (expandedHash === null) return;
+
+    // Check cache first
+    const cached = diffCache.get(expandedHash);
+    if (cached !== undefined) {
+      const diffFile = cached.find((f) => f.path === filePath);
+      fileDiffChunks = diffFile?.chunks ?? [];
+      return;
+    }
+
+    // Fetch and cache the full commit diff
+    loadingFileDiff = true;
+    try {
+      const resp = await fetch(
+        `/api/ctx/${contextId}/commits/${expandedHash}/diff`,
+      );
+      if (!resp.ok) {
+        throw new Error(`Failed to load diff (${resp.status})`);
+      }
+      const data = (await resp.json()) as { files: DiffFile[] };
+      const newCache = new Map(diffCache);
+      newCache.set(expandedHash, data.files);
+      diffCache = newCache;
+
+      const diffFile = data.files.find((f) => f.path === filePath);
+      fileDiffChunks = diffFile?.chunks ?? [];
+    } catch (e) {
+      fileDiffError =
+        e instanceof Error ? e.message : "Failed to load file diff";
+    } finally {
+      loadingFileDiff = false;
     }
   }
 
@@ -259,7 +324,7 @@
     <input
       type="text"
       class="w-full px-3 py-2 text-sm border border-border-default rounded bg-bg-primary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent"
-      placeholder="Search commits by message, author, or hash..."
+      placeholder="Search by message, author, or hash prefix (4+ chars)..."
       value={searchInput}
       oninput={(e) => handleSearchInput(e.currentTarget.value)}
       aria-label="Search commits"
@@ -395,27 +460,50 @@
                         class="bg-bg-primary rounded border border-border-default divide-y divide-border-default"
                       >
                         {#each commitDetail.files as file (file.path)}
-                          <div
-                            class="flex items-center gap-2 px-3 py-2 text-xs"
-                          >
-                            <span class="font-medium {statusClass(file.status)}"
-                              >{statusLabel(file.status)}</span
+                          {@const isFileExpanded = expandedFilePath === file.path}
+                          <div>
+                            <button
+                              type="button"
+                              class="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-bg-tertiary transition-colors cursor-pointer"
+                              onclick={() => void toggleFileDiff(file.path)}
+                              aria-expanded={isFileExpanded}
                             >
-                            <span class="font-mono text-text-primary truncate"
-                              >{file.path}</span
-                            >
-                            <div class="flex items-center gap-2 ml-auto shrink-0">
-                              {#if file.additions > 0}
-                                <span class="text-success-fg"
-                                  >+{file.additions}</span
-                                >
-                              {/if}
-                              {#if file.deletions > 0}
-                                <span class="text-danger-fg"
-                                  >-{file.deletions}</span
-                                >
-                              {/if}
-                            </div>
+                              <span class="text-text-secondary shrink-0">{isFileExpanded ? "v" : ">"}</span>
+                              <span class="font-medium {statusClass(file.status)}"
+                                >{statusLabel(file.status)}</span
+                              >
+                              <span class="font-mono text-text-primary truncate text-left"
+                                >{file.path}</span
+                              >
+                              <div class="flex items-center gap-2 ml-auto shrink-0">
+                                {#if file.additions > 0}
+                                  <span class="text-success-fg"
+                                    >+{file.additions}</span
+                                  >
+                                {/if}
+                                {#if file.deletions > 0}
+                                  <span class="text-danger-fg"
+                                    >-{file.deletions}</span
+                                  >
+                                {/if}
+                              </div>
+                            </button>
+                            {#if isFileExpanded}
+                              <div class="border-t border-border-default bg-bg-primary overflow-x-auto text-xs">
+                                {#if loadingFileDiff}
+                                  <div class="flex items-center gap-2 p-3 text-text-secondary">
+                                    <div class="w-3 h-3 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"></div>
+                                    Loading diff...
+                                  </div>
+                                {:else if fileDiffError !== null}
+                                  <div class="p-3 text-danger-fg">{fileDiffError}</div>
+                                {:else if fileDiffChunks.length === 0}
+                                  <div class="p-3 text-text-secondary">No diff available (binary file or empty change)</div>
+                                {:else}
+                                  <InlineDiff chunks={fileDiffChunks} />
+                                {/if}
+                              </div>
+                            {/if}
                           </div>
                         {/each}
                       </div>

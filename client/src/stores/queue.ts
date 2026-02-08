@@ -177,10 +177,7 @@ export function createQueueStore(): QueueStore {
   /**
    * Update a session in place
    */
-  function updateSession(
-    id: string,
-    updates: Partial<AISession>
-  ): void {
+  function updateSession(id: string, updates: Partial<AISession>): void {
     // Check running
     const runningIndex = state.running.findIndex((s) => s.id === id);
     if (runningIndex !== -1) {
@@ -282,14 +279,30 @@ export function createQueueStore(): QueueStore {
       updateState({ loading: true, error: null });
 
       try {
-        // TODO: Replace with actual API call
-        // const response = await fetch("/api/ai/sessions");
-        // if (!response.ok) throw new Error("Failed to load sessions");
-        // const data = await response.json();
-        // const sessions = data.sessions as AISession[];
+        const response = await fetch("/api/ai/sessions");
+        if (!response.ok) {
+          throw new Error(`Failed to load sessions: ${response.statusText}`);
+        }
 
-        // Stubbed - return empty lists
-        const sessions: AISession[] = [];
+        const data = (await response.json()) as {
+          sessions: {
+            id: string;
+            state: string;
+            prompt: string;
+            createdAt: string;
+            startedAt?: string | undefined;
+            completedAt?: string | undefined;
+            context: unknown;
+          }[];
+        };
+
+        // Convert AISessionInfo to AISession by adding empty turns
+        const sessions: AISession[] = data.sessions.map((info) => ({
+          ...info,
+          state: info.state as AISession["state"],
+          context: info.context as AISession["context"],
+          turns: [],
+        }));
 
         // Categorize by state
         const running: AISession[] = [];
@@ -331,11 +344,12 @@ export function createQueueStore(): QueueStore {
 
     async cancelSession(id: string): Promise<void> {
       try {
-        // TODO: Replace with actual API call
-        // const response = await fetch(`/api/ai/sessions/${id}/cancel`, {
-        //   method: "POST",
-        // });
-        // if (!response.ok) throw new Error("Failed to cancel session");
+        const response = await fetch(`/api/ai/sessions/${id}/cancel`, {
+          method: "POST",
+        });
+        if (!response.ok) {
+          throw new Error(`Failed to cancel session: ${response.statusText}`);
+        }
 
         moveSession(id, "cancelled");
       } catch (e) {
@@ -388,7 +402,7 @@ export function createQueueStore(): QueueStore {
       const newQueued = state.queued.filter((s) => s.id !== id);
       const clampedPosition = Math.max(
         0,
-        Math.min(newPosition, newQueued.length)
+        Math.min(newPosition, newQueued.length),
       );
       newQueued.splice(clampedPosition, 0, session);
 

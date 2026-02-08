@@ -19,6 +19,7 @@ import {
   getCommitFiles,
   GitError,
 } from "../git/commit-log";
+import { parseDiff } from "../git/parser";
 
 /**
  * Server context provided to routes
@@ -212,8 +213,9 @@ export function createCommitRoutes(context: ServerContext): Hono {
         return c.json(errorResponse, isNotFound ? 404 : 500);
       }
 
-      // Return diff as plain text
-      return c.text(stdout);
+      // Return parsed diff as JSON
+      const files = parseDiff(stdout);
+      return c.json({ files });
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to retrieve commit diff";
