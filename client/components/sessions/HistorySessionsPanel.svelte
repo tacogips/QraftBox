@@ -25,13 +25,19 @@
   import { onMount } from "svelte";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import type { AISession } from "../../../src/types/ai";
-  import type { ExtendedSessionEntry, ProjectInfo, SessionFilters } from "../../../src/types/claude-session";
+  import type {
+    ExtendedSessionEntry,
+    ProjectInfo,
+    SessionFilters,
+  } from "../../../src/types/claude-session";
   import type { UnifiedSessionItem } from "../../src/types/unified-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
   import FilterPanel from "../claude-sessions/FilterPanel.svelte";
   import UnifiedSessionCard from "./UnifiedSessionCard.svelte";
+  import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
 
   interface Props {
+    contextId: string;
     completedSessions: readonly AISession[];
     onResumeSession: (sessionId: string) => void;
     onSelectSession: (sessionId: string) => void;
@@ -40,12 +46,18 @@
   }
 
   const {
+    contextId,
     completedSessions,
     onResumeSession,
     onSelectSession,
     onClearCompleted = undefined,
     onCountChange = undefined,
   }: Props = $props();
+
+  /**
+   * Expanded session IDs for accordion
+   */
+  let expandedSessionIds = $state<Set<string>>(new Set());
 
   /**
    * Reactive snapshots of store state.
@@ -164,16 +176,12 @@
   /**
    * Whether more Claude CLI sessions can be loaded
    */
-  const hasMore = $derived(
-    cliSessions.length < cliTotal,
-  );
+  const hasMore = $derived(cliSessions.length < cliTotal);
 
   /**
    * Total session count for display
    */
-  const totalCount = $derived(
-    completedSessions.length + cliTotal,
-  );
+  const totalCount = $derived(completedSessions.length + cliTotal);
 
   /**
    * Notify parent when total count changes
@@ -239,6 +247,38 @@
   }
 
   /**
+   * Toggle session expansion in accordion
+   */
+  function toggleSessionExpansion(sessionId: string): void {
+    const newSet = new Set(expandedSessionIds);
+    if (newSet.has(sessionId)) {
+      newSet.delete(sessionId);
+    } else {
+      newSet.add(sessionId);
+    }
+    expandedSessionIds = newSet;
+  }
+
+  /**
+   * Get relative time string (e.g., "2 hours ago", "yesterday")
+   */
+  function getRelativeTime(isoDate: string): string {
+    const date = new Date(isoDate);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays === 1) return "yesterday";
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return `${Math.floor(diffDays / 7)}w ago`;
+  }
+
+  /**
    * Load initial data on mount
    */
   onMount(async () => {
@@ -284,10 +324,7 @@
     </div>
 
     <!-- Search Bar -->
-    <SearchInput
-      value={cliFilters.searchQuery ?? ""}
-      onSearch={handleSearch}
-    />
+    <SearchInput value={cliFilters.searchQuery ?? ""} onSearch={handleSearch} />
   </div>
 
   <!-- Filter Panel -->
@@ -431,11 +468,92 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.today as item (getItemKey(item))}
-                <UnifiedSessionCard
-                  {item}
-                  {onResumeSession}
-                  {onSelectSession}
-                />
+                {@const itemId =
+                  item.kind === "qraftbox"
+                    ? item.session.id
+                    : item.session.sessionId}
+                {@const isExpanded = expandedSessionIds.has(itemId)}
+
+                <!-- Accordion Row -->
+                <div
+                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
+                    ? 'border-accent-emphasis/40'
+                    : ''}"
+                >
+                  <!-- Header Row (clickable) -->
+                  <button
+                    type="button"
+                    onclick={() => toggleSessionExpansion(itemId)}
+                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
+                  >
+                    <!-- Expand/Collapse chevron -->
+                    <svg
+                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
+                        ? 'rotate-90'
+                        : ''}"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
+                      />
+                    </svg>
+
+                    <!-- Source badge -->
+                    <span
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
+                      'qraftbox'
+                        ? 'bg-accent-muted text-accent-fg'
+                        : 'bg-bg-tertiary text-text-secondary'}"
+                    >
+                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
+                    </span>
+
+                    <!-- Title (first prompt) -->
+                    <span class="flex-1 text-sm text-text-primary truncate">
+                      {item.kind === "qraftbox"
+                        ? item.session.prompt
+                        : item.session.firstPrompt}
+                    </span>
+
+                    <!-- Message count -->
+                    {#if item.kind === "claude-cli"}
+                      <span class="text-xs text-text-tertiary shrink-0">
+                        {item.session.messageCount} msgs
+                      </span>
+                    {/if}
+
+                    <!-- Relative time -->
+                    <span class="text-xs text-text-tertiary shrink-0">
+                      {getRelativeTime(getSortDate(item))}
+                    </span>
+                  </button>
+
+                  <!-- Expanded Content -->
+                  {#if isExpanded}
+                    <div class="border-t border-border-default">
+                      <!-- Resume button row -->
+                      <div
+                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
+                      >
+                        <button
+                          type="button"
+                          onclick={() => onResumeSession(itemId)}
+                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                        >
+                          Resume
+                        </button>
+                        {#if item.kind === "claude-cli" && item.session.summary}
+                          <span class="text-xs text-text-secondary truncate"
+                            >{item.session.summary}</span
+                          >
+                        {/if}
+                      </div>
+                      <!-- Inline Transcript -->
+                      <SessionTranscriptInline sessionId={itemId} {contextId} />
+                    </div>
+                  {/if}
+                </div>
               {/each}
             </div>
           </section>
@@ -452,11 +570,92 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.yesterday as item (getItemKey(item))}
-                <UnifiedSessionCard
-                  {item}
-                  {onResumeSession}
-                  {onSelectSession}
-                />
+                {@const itemId =
+                  item.kind === "qraftbox"
+                    ? item.session.id
+                    : item.session.sessionId}
+                {@const isExpanded = expandedSessionIds.has(itemId)}
+
+                <!-- Accordion Row -->
+                <div
+                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
+                    ? 'border-accent-emphasis/40'
+                    : ''}"
+                >
+                  <!-- Header Row (clickable) -->
+                  <button
+                    type="button"
+                    onclick={() => toggleSessionExpansion(itemId)}
+                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
+                  >
+                    <!-- Expand/Collapse chevron -->
+                    <svg
+                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
+                        ? 'rotate-90'
+                        : ''}"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
+                      />
+                    </svg>
+
+                    <!-- Source badge -->
+                    <span
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
+                      'qraftbox'
+                        ? 'bg-accent-muted text-accent-fg'
+                        : 'bg-bg-tertiary text-text-secondary'}"
+                    >
+                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
+                    </span>
+
+                    <!-- Title (first prompt) -->
+                    <span class="flex-1 text-sm text-text-primary truncate">
+                      {item.kind === "qraftbox"
+                        ? item.session.prompt
+                        : item.session.firstPrompt}
+                    </span>
+
+                    <!-- Message count -->
+                    {#if item.kind === "claude-cli"}
+                      <span class="text-xs text-text-tertiary shrink-0">
+                        {item.session.messageCount} msgs
+                      </span>
+                    {/if}
+
+                    <!-- Relative time -->
+                    <span class="text-xs text-text-tertiary shrink-0">
+                      {getRelativeTime(getSortDate(item))}
+                    </span>
+                  </button>
+
+                  <!-- Expanded Content -->
+                  {#if isExpanded}
+                    <div class="border-t border-border-default">
+                      <!-- Resume button row -->
+                      <div
+                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
+                      >
+                        <button
+                          type="button"
+                          onclick={() => onResumeSession(itemId)}
+                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                        >
+                          Resume
+                        </button>
+                        {#if item.kind === "claude-cli" && item.session.summary}
+                          <span class="text-xs text-text-secondary truncate"
+                            >{item.session.summary}</span
+                          >
+                        {/if}
+                      </div>
+                      <!-- Inline Transcript -->
+                      <SessionTranscriptInline sessionId={itemId} {contextId} />
+                    </div>
+                  {/if}
+                </div>
               {/each}
             </div>
           </section>
@@ -473,11 +672,92 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.older as item (getItemKey(item))}
-                <UnifiedSessionCard
-                  {item}
-                  {onResumeSession}
-                  {onSelectSession}
-                />
+                {@const itemId =
+                  item.kind === "qraftbox"
+                    ? item.session.id
+                    : item.session.sessionId}
+                {@const isExpanded = expandedSessionIds.has(itemId)}
+
+                <!-- Accordion Row -->
+                <div
+                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
+                    ? 'border-accent-emphasis/40'
+                    : ''}"
+                >
+                  <!-- Header Row (clickable) -->
+                  <button
+                    type="button"
+                    onclick={() => toggleSessionExpansion(itemId)}
+                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
+                  >
+                    <!-- Expand/Collapse chevron -->
+                    <svg
+                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
+                        ? 'rotate-90'
+                        : ''}"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
+                      />
+                    </svg>
+
+                    <!-- Source badge -->
+                    <span
+                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
+                      'qraftbox'
+                        ? 'bg-accent-muted text-accent-fg'
+                        : 'bg-bg-tertiary text-text-secondary'}"
+                    >
+                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
+                    </span>
+
+                    <!-- Title (first prompt) -->
+                    <span class="flex-1 text-sm text-text-primary truncate">
+                      {item.kind === "qraftbox"
+                        ? item.session.prompt
+                        : item.session.firstPrompt}
+                    </span>
+
+                    <!-- Message count -->
+                    {#if item.kind === "claude-cli"}
+                      <span class="text-xs text-text-tertiary shrink-0">
+                        {item.session.messageCount} msgs
+                      </span>
+                    {/if}
+
+                    <!-- Relative time -->
+                    <span class="text-xs text-text-tertiary shrink-0">
+                      {getRelativeTime(getSortDate(item))}
+                    </span>
+                  </button>
+
+                  <!-- Expanded Content -->
+                  {#if isExpanded}
+                    <div class="border-t border-border-default">
+                      <!-- Resume button row -->
+                      <div
+                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
+                      >
+                        <button
+                          type="button"
+                          onclick={() => onResumeSession(itemId)}
+                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                        >
+                          Resume
+                        </button>
+                        {#if item.kind === "claude-cli" && item.session.summary}
+                          <span class="text-xs text-text-secondary truncate"
+                            >{item.session.summary}</span
+                          >
+                        {/if}
+                      </div>
+                      <!-- Inline Transcript -->
+                      <SessionTranscriptInline sessionId={itemId} {contextId} />
+                    </div>
+                  {/if}
+                </div>
               {/each}
             </div>
           </section>

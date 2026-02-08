@@ -15,7 +15,6 @@
   import SubTabNav from "./SubTabNav.svelte";
   import ActiveSessionsPanel from "./ActiveSessionsPanel.svelte";
   import HistorySessionsPanel from "./HistorySessionsPanel.svelte";
-  import SessionTranscriptViewer from "./SessionTranscriptViewer.svelte";
 
   interface Props {
     contextId: string;
@@ -24,12 +23,6 @@
   }
 
   const { contextId, projectPath, onBack }: Props = $props();
-
-  /**
-   * Selected session state for transcript viewing
-   */
-  let selectedSessionId = $state<string | null>(null);
-  let selectedSessionTitle = $state<string>("");
 
   /**
    * Queue store instance
@@ -130,35 +123,6 @@
   }
 
   /**
-   * Handle select session in history (view transcript)
-   */
-  function handleHistorySelectSession(sessionId: string): void {
-    // Look up the session title from Claude CLI sessions or QraftBox completed sessions
-    const cliSession = claudeSessionsStore.sessions.find(
-      (s) => s.sessionId === sessionId,
-    );
-    if (cliSession !== undefined) {
-      selectedSessionTitle =
-        cliSession.summary || cliSession.firstPrompt.slice(0, 80) || sessionId;
-    } else {
-      const qbSession = queueStore.completed.find((s) => s.id === sessionId);
-      selectedSessionTitle =
-        qbSession !== undefined
-          ? qbSession.prompt.slice(0, 80) || sessionId
-          : sessionId;
-    }
-    selectedSessionId = sessionId;
-  }
-
-  /**
-   * Handle back from transcript view to session list
-   */
-  function handleTranscriptBack(): void {
-    selectedSessionId = null;
-    selectedSessionTitle = "";
-  }
-
-  /**
    * Handle clear completed
    */
   async function handleClearCompleted(): Promise<void> {
@@ -170,86 +134,77 @@
   }
 </script>
 
-{#if selectedSessionId !== null}
-  <!-- Transcript Viewer -->
-  <SessionTranscriptViewer
-    sessionId={selectedSessionId}
-    sessionTitle={selectedSessionTitle}
-    {contextId}
-    onBack={handleTranscriptBack}
-  />
-{:else}
-  <div
-    class="flex flex-col h-full bg-bg-primary"
-    role="main"
-    aria-label="Sessions"
-  >
-    <!-- Header -->
-    <header
-      class="flex items-center gap-3 px-4 py-3
+<div
+  class="flex flex-col h-full bg-bg-primary"
+  role="main"
+  aria-label="Sessions"
+>
+  <!-- Header -->
+  <header
+    class="flex items-center gap-3 px-4 py-3
              bg-bg-secondary border-b border-border-default"
-    >
-      <!-- Back button -->
-      <button
-        type="button"
-        onclick={onBack}
-        class="p-2 min-w-[44px] min-h-[44px]
+  >
+    <!-- Back button -->
+    <button
+      type="button"
+      onclick={onBack}
+      class="p-2 min-w-[44px] min-h-[44px]
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded-lg
                transition-colors
                focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-        aria-label="Back to diff view"
+      aria-label="Back to diff view"
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
+        <polyline points="15 18 9 12 15 6" />
+      </svg>
+    </button>
 
-      <h1 class="text-lg font-semibold text-text-primary">Sessions</h1>
-    </header>
+    <h1 class="text-lg font-semibold text-text-primary">Sessions</h1>
+  </header>
 
-    <!-- Sub-tab navigation -->
-    <SubTabNav
-      activeTab={effectiveTab}
-      onTabChange={(tab) => (currentSubTab = tab)}
-      runningCount={queueStore.running.length}
-      queuedCount={queueStore.queued.length}
-      {historyCount}
-    />
+  <!-- Sub-tab navigation -->
+  <SubTabNav
+    activeTab={effectiveTab}
+    onTabChange={(tab) => (currentSubTab = tab)}
+    runningCount={queueStore.running.length}
+    queuedCount={queueStore.queued.length}
+    {historyCount}
+  />
 
-    <!-- Content based on sub-tab -->
-    <div class="flex-1 overflow-y-auto">
-      {#if effectiveTab === "active"}
-        <div class="px-4 py-4">
-          <ActiveSessionsPanel
-            running={queueStore.running}
-            queued={queueStore.queued}
-            onSelectSession={handleSelectSession}
-            onCancelSession={(id) => void handleCancelSession(id)}
-            onRunNow={(id) => void handleRunNow(id)}
-            onRemoveFromQueue={(id) => void handleRemoveFromQueue(id)}
-          />
-        </div>
-      {:else}
-        <HistorySessionsPanel
-          completedSessions={queueStore.completed}
-          onResumeSession={handleResumeSession}
-          onSelectSession={handleHistorySelectSession}
-          onClearCompleted={handleClearCompleted}
-          onCountChange={(count) => (historyCount = count)}
+  <!-- Content based on sub-tab -->
+  <div class="flex-1 overflow-y-auto">
+    {#if effectiveTab === "active"}
+      <div class="px-4 py-4">
+        <ActiveSessionsPanel
+          running={queueStore.running}
+          queued={queueStore.queued}
+          onSelectSession={handleSelectSession}
+          onCancelSession={(id) => void handleCancelSession(id)}
+          onRunNow={(id) => void handleRunNow(id)}
+          onRemoveFromQueue={(id) => void handleRemoveFromQueue(id)}
         />
-      {/if}
-    </div>
+      </div>
+    {:else}
+      <HistorySessionsPanel
+        {contextId}
+        completedSessions={queueStore.completed}
+        onResumeSession={handleResumeSession}
+        onSelectSession={() => {}}
+        onClearCompleted={handleClearCompleted}
+        onCountChange={(count) => (historyCount = count)}
+      />
+    {/if}
   </div>
-{/if}
+</div>
