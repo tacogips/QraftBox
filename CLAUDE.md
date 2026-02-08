@@ -194,6 +194,39 @@ Key features:
 
 **TypeScript Configuration**: This project uses maximum TypeScript strictness. See `tsconfig.json` for the complete strict configuration.
 
+### Verify-Fix Cycle (MANDATORY for UI-related changes)
+
+After `check-and-test-after-modify` passes for UI-related changes, the main conversation MUST perform a browser verification step using `agent-browser`, then loop if errors are found:
+
+```
+ts-coding (implement)
+    |
+    v
+check-and-test-after-modify (typecheck + unit tests)
+    |
+    v
+Browser Verify (agent-browser: open, snapshot, screenshot)
+    |
+    +-- UI looks correct --> Done (or proceed to ts-review)
+    |
+    +-- UI has issues --> ts-coding (fix) --> check-and-test --> Browser Verify (loop)
+```
+
+**Browser verification commands** (run by main conversation, not subagent):
+```bash
+agent-browser open http://localhost:7155
+agent-browser snapshot -i          # Agent inspects DOM structure
+agent-browser screenshot --full    # Capture visual state
+agent-browser get text @e1         # Check specific content
+agent-browser close
+```
+
+**When to apply**: Any change that affects client-side rendering, layout, components, CSS, or API responses consumed by the UI. Skip for pure backend/library changes with no UI impact.
+
+**Cycle limit**: Maximum 3 verify-fix iterations. If issues persist after 3 cycles, document remaining issues and report to user.
+
+**Full TDD workflow**: See `.claude/skills/e2e-tdd/SKILL.md` for comprehensive TDD workflow with Playwright + agent-browser.
+
 ## Design Documentation
 
 **IMPORTANT**: When creating design documents, you (the LLM model) MUST follow the design-doc skill.

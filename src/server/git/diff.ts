@@ -32,6 +32,80 @@ export interface DiffOptions {
 const MAX_UNTRACKED_FILE_SIZE = 1024 * 1024; // 1MB
 
 /**
+ * Automatically detect the appropriate diff base for feature branches.
+ *
+ * When on a feature branch (not main/master), returns the merge-base
+ * with the parent branch to show all branch changes. On main/master
+ * or when detection fails, returns undefined to keep default behavior.
+ *
+ * Logic:
+ * - Get current branch name via `git rev-parse --abbrev-ref HEAD`
+ * - If on main or master, return undefined (show working tree changes only)
+ * - Otherwise, try to find merge-base with main, then master
+ * - Return merge-base commit hash or undefined if detection fails
+ *
+ * @param projectPath - Path to git repository
+ * @returns Promise resolving to base commit hash or undefined
+ *
+ * @example
+ * ```typescript
+ * const base = await detectDefaultDiffBase('/path/to/repo');
+ * if (base !== undefined) {
+ *   // On feature branch - base is merge-base with main/master
+ *   const diff = await getDiff(projectPath, { base });
+ * } else {
+ *   // On main/master or detection failed - show working tree changes
+ *   const diff = await getDiff(projectPath);
+ * }
+ * ```
+ */
+export async function detectDefaultDiffBase(
+  projectPath: string,
+): Promise<string | undefined> {
+  try {
+    // Get current branch name
+    const branchResult = await execGit(["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (branchResult.exitCode !== 0) {
+      return undefined;
+    }
+
+    const currentBranch = branchResult.stdout.trim();
+
+    // If on main or master, return undefined (show working tree changes only)
+    if (currentBranch === "main" || currentBranch === "master") {
+      return undefined;
+    }
+
+    // Try to find merge-base with main first
+    const mainResult = await execGit(["merge-base", "main", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (mainResult.exitCode === 0) {
+      return mainResult.stdout.trim();
+    }
+
+    // If main doesn't exist, try master
+    const masterResult = await execGit(["merge-base", "master", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (masterResult.exitCode === 0) {
+      return masterResult.stdout.trim();
+    }
+
+    // Neither main nor master exists, return undefined
+    return undefined;
+  } catch {
+    // Any errors should be handled gracefully
+    return undefined;
+  }
+}
+
+/**
  * Get DiffFile entries for untracked files in the working tree.
  *
  * Uses `git ls-files --others --exclude-standard` to find untracked files,
@@ -222,11 +296,7 @@ export async function getDiff(
       result.stderr.includes("bad revision 'HEAD'")
     ) {
       // For repositories with no commits, use --cached to show staged files
-      const stagedArgs: string[] = [
-        "diff",
-        `-U${contextLines}`,
-        "--cached",
-      ];
+      const stagedArgs: string[] = ["diff", `-U${contextLines}`, "--cached"];
 
       if (options?.paths !== undefined && options.paths.length > 0) {
         stagedArgs.push("--", ...options.paths);

@@ -10,6 +10,11 @@ import type { CLIConfig, SyncMode } from "../types/index";
 import { loadConfig, validateConfig } from "./config";
 import { createContextManager } from "../server/workspace/context-manager";
 import { createServer, startServer } from "../server/index";
+import { createWebSocketManager } from "../server/websocket/index.js";
+import { createFileWatcher } from "../server/watcher/index.js";
+import type { FileWatcher } from "../server/watcher/index.js";
+import { createWatcherBroadcaster } from "../server/watcher/broadcast.js";
+import type { WatcherBroadcaster } from "../server/watcher/broadcast.js";
 
 /**
  * Parse command-line arguments into CLIConfig
@@ -194,16 +199,18 @@ export function setupShutdownHandlers(cleanup: () => Promise<void>): void {
  * Orchestrates the startup sequence:
  * 1. Parse command-line arguments
  * 2. Load configuration
- * 3. Start server
- * 4. Setup shutdown handlers
- * 5. Open browser if requested
- *
- * This is a placeholder implementation that will be wired up once
- * other modules (config, server) are implemented.
+ * 3. Create WebSocket manager for real-time updates
+ * 4. Start server with WebSocket support
+ * 5. Start file watcher if enabled
+ * 6. Setup shutdown handlers
+ * 7. Open browser if requested
  *
  * @returns Promise that resolves when startup is complete
  */
 export async function main(): Promise<void> {
+  let watcher: FileWatcher | undefined = undefined;
+  let broadcaster: WatcherBroadcaster | undefined = undefined;
+
   try {
     // Parse CLI arguments
     const cliConfig = parseArgs(process.argv);
@@ -227,16 +234,36 @@ export async function main(): Promise<void> {
     const contextManager = createContextManager();
     await contextManager.createContext(config.projectPath);
 
-    // Create and start the HTTP server
-    const app = createServer({ config, contextManager });
-    const server = startServer(app, config);
+    // Create WebSocket manager for realtime updates
+    const wsManager = createWebSocketManager();
 
-    console.log(
-      `Server started on http://${server.hostname}:${server.port}`,
-    );
+    // Create and start the HTTP server with WebSocket support
+    const app = createServer({ config, contextManager });
+    const server = startServer(app, config, wsManager);
+
+    console.log(`Server started on http://${server.hostname}:${server.port}`);
+
+    // Start file watcher for realtime updates
+    if (config.watch) {
+      watcher = createFileWatcher(config.projectPath);
+      broadcaster = createWatcherBroadcaster(watcher, wsManager);
+      broadcaster.start();
+      await watcher.start();
+      console.log(
+        `File watching: enabled (WebSocket at ws://${server.hostname}:${server.port}/ws)`,
+      );
+    }
 
     // Setup graceful shutdown
     setupShutdownHandlers(async () => {
+      // Stop watcher if active
+      if (watcher !== undefined) {
+        await watcher.stop();
+      }
+      if (broadcaster !== undefined) {
+        broadcaster.stop();
+      }
+      wsManager.close();
       server.stop();
     });
 

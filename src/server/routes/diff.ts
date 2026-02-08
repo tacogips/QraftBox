@@ -8,7 +8,11 @@
 import { Hono } from "hono";
 import type { DiffFile } from "../../types/git.js";
 import type { ServerContext } from "../../types/index.js";
-import { getDiff, getFileDiff, type DiffOptions } from "../git/diff.js";
+import {
+  getDiff,
+  getFileDiff,
+  type DiffOptions,
+} from "../git/diff.js";
 
 /**
  * Error response format
@@ -111,6 +115,8 @@ export function createDiffRoutes(
     }
 
     // Build diff options
+    // Default: git diff HEAD (uncommitted changes only)
+    // Pass ?base=merge-base explicitly for full branch diff
     const diffOptions: DiffOptions = {
       base: base ?? undefined,
       target: target ?? undefined,

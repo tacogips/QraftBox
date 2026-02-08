@@ -80,6 +80,11 @@ Step 4: Execute Tasks (ts-coding)
 Step 5: Run Tests (check-and-test-after-modify)
     |
     v
+Step 5.5: Browser Verify (for UI-affecting tasks, max 3 loops)
+    |       Uses agent-browser: open, snapshot, screenshot, close
+    |       If UI issues found: fix -> re-test -> re-verify
+    |
+    v
 Step 6: Review Cycle (ts-review, max 3 iterations)
     |
     +-- APPROVED --> Step 7: Update Plan
@@ -129,7 +134,38 @@ After each task implementation:
    - Invoke ts-coding to fix
    - Re-run tests
    - Repeat until tests pass or max attempts reached
-3. If tests pass: proceed to Step 6 (review)
+3. If tests pass: proceed to Step 5.5 (browser verify)
+
+## Step 5.5: Browser Verify (UI-affecting tasks)
+
+**Applies to**: Tasks that affect client-side rendering, components, CSS, layout, or API responses consumed by the UI. **Skip** for pure backend/library tasks with no UI impact.
+
+After tests pass, run browser verification using `agent-browser`:
+
+```bash
+# Start server if not running
+# (Playwright webServer auto-starts, or manually: bun run src/main.ts --port 7155 &)
+
+agent-browser open http://localhost:7155
+agent-browser snapshot -i                # Inspect DOM for interactive elements
+agent-browser click @eN                  # Navigate to area affected by change
+agent-browser wait --load networkidle
+agent-browser snapshot -i                # Re-inspect after navigation
+agent-browser screenshot --full          # Capture visual state
+agent-browser get text @eN               # Verify specific content
+agent-browser close
+```
+
+**If UI issues are found** (max 3 loops):
+1. Invoke ts-coding to fix the UI issue
+2. Rebuild client if needed: `cd client && bun run build`
+3. Re-run check-and-test-after-modify
+4. Re-run browser verify
+5. If still broken after 3 loops: document remaining UI issues in progress log and proceed
+
+**If UI looks correct**: proceed to Step 6 (review)
+
+**Reference**: See `.claude/skills/e2e-tdd/SKILL.md` for detailed verification patterns.
 
 ## Step 6: Review Cycle
 

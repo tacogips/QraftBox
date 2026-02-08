@@ -17,12 +17,7 @@
   /**
    * Screen type for navigation
    */
-  type ScreenType =
-    | "diff"
-    | "commits"
-    | "sessions"
-    | "worktree"
-    | "tools";
+  type ScreenType = "diff" | "commits" | "sessions" | "worktree" | "tools";
 
   /**
    * Application state
@@ -503,12 +498,86 @@
     }
   }
 
+  /**
+   * WebSocket connection for realtime file change updates
+   */
+  let ws: WebSocket | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let refetchTimer: ReturnType<typeof setTimeout> | null = null;
+  let reconnectDelay = 1000;
+
+  /**
+   * Connect to WebSocket for realtime updates
+   */
+  function connectWebSocket(): void {
+    if (ws !== null && ws.readyState <= WebSocket.OPEN) return;
+
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+    ws.onopen = () => {
+      reconnectDelay = 1000; // Reset backoff on successful connection
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data) as { event: string; data: unknown };
+        if (msg.event === "file-change" && contextId !== null) {
+          // Debounce refetch: wait 500ms after last event
+          if (refetchTimer !== null) clearTimeout(refetchTimer);
+          refetchTimer = setTimeout(() => {
+            if (contextId !== null) {
+              void fetchDiff(contextId);
+            }
+            refetchTimer = null;
+          }, 500);
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    ws.onclose = () => {
+      ws = null;
+      // Auto-reconnect with exponential backoff
+      reconnectTimer = setTimeout(() => {
+        reconnectDelay = Math.min(reconnectDelay * 2, 10000);
+        connectWebSocket();
+      }, reconnectDelay);
+    };
+
+    ws.onerror = () => {
+      // onclose will fire after onerror, which handles reconnection
+    };
+  }
+
+  /**
+   * Disconnect WebSocket
+   */
+  function disconnectWebSocket(): void {
+    if (reconnectTimer !== null) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (refetchTimer !== null) {
+      clearTimeout(refetchTimer);
+      refetchTimer = null;
+    }
+    if (ws !== null) {
+      ws.onclose = null; // Prevent reconnect on intentional close
+      ws.close();
+      ws = null;
+    }
+  }
+
   // Initialize on mount
   $effect(() => {
     void init();
+    connectWebSocket();
     window.addEventListener("keydown", handleKeydown);
     return () => {
       window.removeEventListener("keydown", handleKeydown);
+      disconnectWebSocket();
     };
   });
 

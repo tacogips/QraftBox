@@ -38,8 +38,14 @@
     changedCount?: number;
   }
 
-  const { tree, mode, selectedPath, onFileSelect, onModeChange, changedCount = undefined }: Props =
-    $props();
+  const {
+    tree,
+    mode,
+    selectedPath,
+    onFileSelect,
+    onModeChange,
+    changedCount = undefined,
+  }: Props = $props();
 
   /**
    * Track expanded directories (path -> expanded state)
@@ -50,6 +56,16 @@
    * Filename filter text
    */
   let filterText = $state("");
+
+  /**
+   * Status filter (null means no status filter)
+   */
+  let statusFilter = $state<"added" | "modified" | "deleted" | null>(null);
+
+  /**
+   * Status dropdown open state
+   */
+  let statusDropdownOpen = $state(false);
 
   /**
    * Toggle directory expansion
@@ -143,6 +159,10 @@
       if (mode === "diff" && node.status === undefined) {
         return null;
       }
+      // Apply status filter
+      if (statusFilter !== null && node.status !== statusFilter) {
+        return null;
+      }
       // Apply filename filter
       if (filterText !== "" && !matchesFilter(node)) {
         return null;
@@ -230,35 +250,215 @@
    * Get file counts
    */
   const fileCounts = $derived.by(() => countFiles(tree));
+
+  /**
+   * Calculate status counts from the tree
+   */
+  const statusCounts = $derived.by(() => {
+    let added = 0;
+    let modified = 0;
+    let deleted = 0;
+    function traverse(n: FileNode): void {
+      if (n.isDirectory && n.children) {
+        for (const child of n.children) {
+          traverse(child);
+        }
+      } else {
+        if (n.status === "added") {
+          added++;
+        } else if (n.status === "modified") {
+          modified++;
+        } else if (n.status === "deleted") {
+          deleted++;
+        }
+      }
+    }
+    traverse(tree);
+    return { added, modified, deleted };
+  });
+
+  /**
+   * Click outside handler to close dropdown
+   */
+  $effect(() => {
+    if (!statusDropdownOpen) return;
+
+    function handleClickOutside(event: MouseEvent): void {
+      const target = event.target as HTMLElement;
+      if (!target.closest(".status-filter-container")) {
+        statusDropdownOpen = false;
+      }
+    }
+
+    document.addEventListener("click", handleClickOutside);
+
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+  });
 </script>
 
 <!-- File Tree Container -->
 <div class="file-tree flex flex-col h-full bg-bg-secondary" role="tree">
   <!-- Filter Bar with Mode Toggle -->
-  <div class="px-2 py-1.5 border-b border-border-default flex items-center gap-1.5">
-    <!-- Mode Toggle (single button) -->
-    <button
-      type="button"
-      class="mode-toggle-btn"
-      class:mode-toggle-btn--diff={mode === "diff"}
-      onclick={() => onModeChange(mode === "diff" ? "all" : "diff")}
-      aria-label={mode === "diff" ? `Diff only (${changedCount ?? fileCounts.changed} changed) - click for all` : `All files - click for diff only`}
-      title={mode === "diff" ? `Diff (${changedCount ?? fileCounts.changed})` : "All"}
-    >
-      {#if mode === "diff"}
-        <!-- Diff icon: file with +/- -->
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75zM8 7.25a.75.75 0 01.75.75v1.25H10a.75.75 0 010 1.5H8.75V12a.75.75 0 01-1.5 0v-1.25H6a.75.75 0 010-1.5h1.25V8A.75.75 0 018 7.25zM6 4.25a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5a.75.75 0 01-.75-.75z"/>
-        </svg>
-        <span class="mode-toggle-label">{changedCount ?? fileCounts.changed}</span>
-      {:else}
-        <!-- All files icon: list -->
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M2 2.75A.75.75 0 012.75 2h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 2.75zm0 5A.75.75 0 012.75 7h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 7.75zM2.75 12h10.5a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5z"/>
-        </svg>
-        <span class="mode-toggle-label">All</span>
+  <div
+    class="px-2 py-1.5 border-b border-border-default flex items-center gap-1.5"
+  >
+    <!-- Mode Toggle (split button) -->
+    <div class="status-filter-container relative flex-shrink-0">
+      <div class="flex items-center">
+        <button
+          type="button"
+          class="mode-toggle-btn"
+          class:mode-toggle-btn--diff={mode === "diff"}
+          class:mode-toggle-btn--filtered={statusFilter !== null}
+          onclick={() => onModeChange(mode === "diff" ? "all" : "diff")}
+          aria-label={mode === "diff"
+            ? `Diff only (${changedCount ?? fileCounts.changed} changed) - click for all`
+            : `All files - click for diff only`}
+          title={mode === "diff"
+            ? `Diff (${changedCount ?? fileCounts.changed})`
+            : "All"}
+        >
+          {#if mode === "diff"}
+            <!-- Diff icon: file with +/- -->
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75zM8 7.25a.75.75 0 01.75.75v1.25H10a.75.75 0 010 1.5H8.75V12a.75.75 0 01-1.5 0v-1.25H6a.75.75 0 010-1.5h1.25V8A.75.75 0 018 7.25zM6 4.25a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5a.75.75 0 01-.75-.75z"
+              />
+            </svg>
+            <span class="mode-toggle-label">
+              {#if statusFilter === "added"}
+                <span class="text-success-fg">+{statusCounts.added}</span>
+              {:else if statusFilter === "modified"}
+                <span class="text-attention-fg">M{statusCounts.modified}</span>
+              {:else if statusFilter === "deleted"}
+                <span class="text-danger-fg">-{statusCounts.deleted}</span>
+              {:else}
+                {changedCount ?? fileCounts.changed}
+              {/if}
+            </span>
+          {:else}
+            <!-- All files icon: list -->
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M2 2.75A.75.75 0 012.75 2h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 2.75zm0 5A.75.75 0 012.75 7h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 7.75zM2.75 12h10.5a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5z"
+              />
+            </svg>
+            <span class="mode-toggle-label">All</span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          class="status-filter-arrow"
+          class:status-filter-arrow--open={statusDropdownOpen}
+          class:status-filter-arrow--filtered={statusFilter !== null}
+          onclick={() => (statusDropdownOpen = !statusDropdownOpen)}
+          aria-label="Filter by status"
+          aria-expanded={statusDropdownOpen}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M4.427 7.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 7H4.604a.25.25 0 00-.177.427z"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Status Filter Dropdown -->
+      {#if statusDropdownOpen}
+        <div class="status-filter-dropdown">
+          <button
+            type="button"
+            class="status-filter-option"
+            class:status-filter-option--active={statusFilter === null}
+            onclick={() => {
+              statusFilter = null;
+              statusDropdownOpen = false;
+            }}
+          >
+            <span class="status-filter-option-check">
+              {#if statusFilter === null}✓{/if}
+            </span>
+            <span class="status-filter-option-label">All</span>
+            <span class="status-filter-option-count">{fileCounts.changed}</span>
+          </button>
+          <button
+            type="button"
+            class="status-filter-option"
+            class:status-filter-option--active={statusFilter === "added"}
+            onclick={() => {
+              statusFilter = "added";
+              statusDropdownOpen = false;
+            }}
+          >
+            <span class="status-filter-option-check">
+              {#if statusFilter === "added"}✓{/if}
+            </span>
+            <span class="status-filter-option-label text-success-fg"
+              >Added (+)</span
+            >
+            <span class="status-filter-option-count">{statusCounts.added}</span>
+          </button>
+          <button
+            type="button"
+            class="status-filter-option"
+            class:status-filter-option--active={statusFilter === "modified"}
+            onclick={() => {
+              statusFilter = "modified";
+              statusDropdownOpen = false;
+            }}
+          >
+            <span class="status-filter-option-check">
+              {#if statusFilter === "modified"}✓{/if}
+            </span>
+            <span class="status-filter-option-label text-attention-fg"
+              >Modified (M)</span
+            >
+            <span class="status-filter-option-count"
+              >{statusCounts.modified}</span
+            >
+          </button>
+          <button
+            type="button"
+            class="status-filter-option"
+            class:status-filter-option--active={statusFilter === "deleted"}
+            onclick={() => {
+              statusFilter = "deleted";
+              statusDropdownOpen = false;
+            }}
+          >
+            <span class="status-filter-option-check">
+              {#if statusFilter === "deleted"}✓{/if}
+            </span>
+            <span class="status-filter-option-label text-danger-fg"
+              >Deleted (-)</span
+            >
+            <span class="status-filter-option-count"
+              >{statusCounts.deleted}</span
+            >
+          </button>
+        </div>
       {/if}
-    </button>
+    </div>
 
     <!-- Filter Input -->
     <div class="relative flex-1">
@@ -282,24 +482,43 @@
                placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-accent-emphasis"
         placeholder="Filter files..."
         bind:value={filterText}
-        onkeydown={(e) => { if (e.key === "Escape") { filterText = ""; } }}
+        onkeydown={(e) => {
+          if (e.key === "Escape") {
+            filterText = "";
+          }
+        }}
       />
       {#if filterText !== ""}
         <button
           type="button"
           class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center
                  text-text-tertiary hover:text-text-primary rounded"
-          onclick={() => { filterText = ""; }}
+          onclick={() => {
+            filterText = "";
+          }}
           aria-label="Clear filter"
         >
-          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          <svg
+            class="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            ></path>
           </svg>
         </button>
       {/if}
     </div>
     {#if filterText !== ""}
-      <span class="text-[10px] text-text-tertiary whitespace-nowrap">{filterMatchCount}</span>
+      <span class="text-[10px] text-text-tertiary whitespace-nowrap"
+        >{filterMatchCount}</span
+      >
     {/if}
   </div>
 
@@ -481,5 +700,116 @@
     font-size: 11px;
     font-weight: 600;
     line-height: 1;
+  }
+
+  .mode-toggle-btn--filtered {
+    border-right: none;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  /* Status filter container */
+  .status-filter-container {
+    position: relative;
+  }
+
+  /* Status filter arrow button */
+  .status-filter-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 24px;
+    width: 18px;
+    padding: 0;
+    border: 1px solid var(--color-border-muted);
+    border-left: none;
+    border-top-right-radius: 4px;
+    border-bottom-right-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+  }
+
+  .status-filter-arrow:hover {
+    background-color: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .status-filter-arrow:focus-visible {
+    outline: 2px solid var(--color-accent-fg);
+    outline-offset: -1px;
+    z-index: 1;
+  }
+
+  .status-filter-arrow--open {
+    background-color: var(--color-bg-hover);
+  }
+
+  .status-filter-arrow--filtered {
+    border-color: var(--color-accent-muted);
+    color: var(--color-accent-fg);
+  }
+
+  /* Status filter dropdown */
+  .status-filter-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    z-index: 100;
+    min-width: 180px;
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border-default);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+  }
+
+  /* Status filter option */
+  .status-filter-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    background-color: transparent;
+    border: none;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.15s ease;
+    text-align: left;
+    font-size: 13px;
+  }
+
+  .status-filter-option:hover {
+    background-color: var(--color-bg-hover);
+  }
+
+  .status-filter-option--active {
+    background-color: var(--color-bg-tertiary);
+  }
+
+  .status-filter-option-check {
+    width: 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-accent-fg);
+  }
+
+  .status-filter-option-label {
+    flex: 1;
+  }
+
+  .status-filter-option-count {
+    color: var(--color-text-tertiary);
+    font-size: 11px;
+    font-weight: 600;
   }
 </style>

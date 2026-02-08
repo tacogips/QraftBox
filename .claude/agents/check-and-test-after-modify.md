@@ -357,3 +357,19 @@ Output:
 - Follow TypeScript testing conventions
 - Use appropriate testing strategies per module
 - Check for Taskfile targets for project-specific commands
+
+## Next Step After This Agent (For Calling Agent)
+
+**NOTE TO CALLING AGENT**: After this agent reports success (all tests pass), the calling agent SHOULD perform browser verification for UI-affecting changes using `agent-browser`:
+
+```
+check-and-test-after-modify (this agent) --> PASS
+    |
+    v
+Browser Verify (main conversation runs agent-browser)
+    |
+    +-- UI correct --> Proceed to ts-review or done
+    +-- UI issues --> Fix -> re-test -> re-verify (max 3 loops)
+```
+
+See `.claude/skills/e2e-tdd/SKILL.md` and CLAUDE.md "Verify-Fix Cycle" section for details.

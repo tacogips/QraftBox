@@ -8,6 +8,8 @@
 import { Hono } from "hono";
 import type { CLIConfig } from "../types/index";
 import type { ContextManager } from "./workspace/context-manager";
+import type { ServerWebSocket } from "bun";
+import type { WebSocketManager } from "./websocket/index";
 import { createErrorHandler } from "./errors";
 import { createStaticMiddleware, createSPAFallback } from "./static";
 import { mountAllRoutes } from "./routes/index";
@@ -104,13 +106,62 @@ export function createServer(options: ServerOptions): Hono {
  * Start HTTP server
  *
  * Starts the Bun HTTP server with the provided Hono app, binding to the
- * host and port specified in config.
+ * host and port specified in config. Optionally configures WebSocket support
+ * for real-time file change notifications.
+ *
+ * When wsManager is provided, the server handles WebSocket upgrade requests
+ * at the `/ws` endpoint and routes WebSocket events to the manager.
  *
  * @param app - Hono app instance
  * @param config - CLI configuration
+ * @param wsManager - Optional WebSocket manager for real-time updates
  * @returns Server instance with port, hostname, and stop function
  */
-export function startServer(app: Hono, config: CLIConfig): Server {
+export function startServer(
+  app: Hono,
+  config: CLIConfig,
+  wsManager?: WebSocketManager | undefined,
+): Server {
+  if (wsManager !== undefined) {
+    // Capture wsManager in a const for use inside handlers
+    const manager = wsManager;
+
+    const server = Bun.serve({
+      fetch(req: Request, server: import("bun").Server): Response | Promise<Response> | undefined {
+        const url = new URL(req.url);
+        if (url.pathname === "/ws") {
+          if (server.upgrade(req)) {
+            return undefined;
+          }
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+        return app.fetch(req, server);
+      },
+      websocket: {
+        open(ws: ServerWebSocket<unknown>): void {
+          manager.handleOpen(ws);
+        },
+        close(ws: ServerWebSocket<unknown>): void {
+          manager.handleClose(ws);
+        },
+        message(ws: ServerWebSocket<unknown>, message: string | Buffer): void {
+          manager.handleMessage(ws, message);
+        },
+      },
+      port: config.port,
+      hostname: config.host,
+    });
+
+    return {
+      port: server.port,
+      hostname: server.hostname,
+      stop(): void {
+        server.stop();
+      },
+    };
+  }
+
+  // HTTP-only server (no WebSocket)
   const server = Bun.serve({
     fetch: app.fetch,
     port: config.port,
