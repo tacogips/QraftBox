@@ -234,27 +234,36 @@
 
 <!-- File Tree Container -->
 <div class="file-tree flex flex-col h-full bg-bg-secondary" role="tree">
-  <!-- Mode Toggle Header -->
-  <div
-    class="file-tree-header border-b border-border-default p-4 flex items-center justify-between"
-  >
-    <h2 class="text-lg font-semibold text-text-primary">Files</h2>
-
+  <!-- Filter Bar with Mode Toggle -->
+  <div class="px-2 py-1.5 border-b border-border-default flex items-center gap-1.5">
+    <!-- Mode Toggle (single button) -->
     <button
       type="button"
-      class="px-3 py-2 text-sm font-medium rounded-md transition-colors min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 bg-bg-tertiary text-text-secondary hover:bg-bg-hover"
+      class="mode-toggle-btn"
+      class:mode-toggle-btn--diff={mode === "diff"}
       onclick={() => onModeChange(mode === "diff" ? "all" : "diff")}
-      aria-label={mode === "diff" ? "Switch to all files" : "Switch to diff only"}
+      aria-label={mode === "diff" ? `Diff only (${changedCount ?? fileCounts.changed} changed) - click for all` : `All files - click for diff only`}
+      title={mode === "diff" ? `Diff (${changedCount ?? fileCounts.changed})` : "All"}
     >
-      {mode === "diff" ? `Diff (${changedCount ?? fileCounts.changed})` : "All"}
+      {#if mode === "diff"}
+        <!-- Diff icon: file with +/- -->
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M2 1.75C2 .784 2.784 0 3.75 0h5.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0112.25 16h-8.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h8.5a.25.25 0 00.25-.25V4.664a.25.25 0 00-.073-.177l-2.914-2.914a.25.25 0 00-.177-.073H3.75zM8 7.25a.75.75 0 01.75.75v1.25H10a.75.75 0 010 1.5H8.75V12a.75.75 0 01-1.5 0v-1.25H6a.75.75 0 010-1.5h1.25V8A.75.75 0 018 7.25zM6 4.25a.75.75 0 01.75-.75h2.5a.75.75 0 010 1.5h-2.5a.75.75 0 01-.75-.75z"/>
+        </svg>
+        <span class="mode-toggle-label">{changedCount ?? fileCounts.changed}</span>
+      {:else}
+        <!-- All files icon: list -->
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+          <path d="M2 2.75A.75.75 0 012.75 2h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 2.75zm0 5A.75.75 0 012.75 7h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 7.75zM2.75 12h10.5a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5z"/>
+        </svg>
+        <span class="mode-toggle-label">All</span>
+      {/if}
     </button>
-  </div>
 
-  <!-- Filename Filter -->
-  <div class="px-3 py-2 border-b border-border-default">
-    <div class="relative">
+    <!-- Filter Input -->
+    <div class="relative flex-1">
       <svg
-        class="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary pointer-events-none"
+        class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none"
         fill="none"
         stroke="currentColor"
         viewBox="0 0 24 24"
@@ -269,7 +278,7 @@
       </svg>
       <input
         type="text"
-        class="w-full pl-8 pr-8 py-1.5 text-sm bg-bg-primary text-text-primary border border-border-default rounded
+        class="w-full pl-7 pr-7 py-1 text-xs bg-bg-primary text-text-primary border border-border-default rounded
                placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-accent-emphasis"
         placeholder="Filter files..."
         bind:value={filterText}
@@ -278,21 +287,19 @@
       {#if filterText !== ""}
         <button
           type="button"
-          class="absolute right-1.5 top-1/2 -translate-y-1/2 w-5 h-5 flex items-center justify-center
+          class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center
                  text-text-tertiary hover:text-text-primary rounded"
           onclick={() => { filterText = ""; }}
           aria-label="Clear filter"
         >
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
           </svg>
         </button>
       {/if}
     </div>
     {#if filterText !== ""}
-      <div class="mt-1 text-xs text-text-tertiary">
-        {filterMatchCount} match{filterMatchCount === 1 ? "" : "es"}
-      </div>
+      <span class="text-[10px] text-text-tertiary whitespace-nowrap">{filterMatchCount}</span>
     {/if}
   </div>
 
@@ -412,12 +419,6 @@
 {/snippet}
 
 <style>
-  /**
-   * File tree styling
-   * - Touch-friendly 48px minimum heights for interactive elements
-   * - Clear visual feedback on hover/focus
-   * - Smooth transitions for expand/collapse
-   */
   .file-tree {
     -webkit-tap-highlight-color: transparent;
   }
@@ -432,5 +433,53 @@
 
   .directory-button:active {
     background-color: var(--color-bg-tertiary);
+  }
+
+  /* Single toggle button */
+  .mode-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--color-border-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      border-color 0.15s ease;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+  }
+
+  .mode-toggle-btn:hover {
+    background-color: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .mode-toggle-btn--diff {
+    border-color: var(--color-accent-muted);
+    color: var(--color-accent-fg);
+  }
+
+  .mode-toggle-btn--diff:hover {
+    color: var(--color-accent-fg);
+  }
+
+  .mode-toggle-btn:focus-visible {
+    outline: 2px solid var(--color-accent-fg);
+    outline-offset: -1px;
+    z-index: 1;
+  }
+
+  .mode-toggle-label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
   }
 </style>

@@ -3,53 +3,30 @@
    * ModeToggle Component
    *
    * Allows switching between "Diff Only" and "All Files" view modes.
-   * Displays file counts for each mode and provides touch-friendly buttons.
+   * Uses Primer SegmentedControl pattern: raised pill on inset trough.
    *
    * Props:
    * - mode: Current mode ('diff' or 'all')
    * - changedCount: Number of files with changes
    * - totalCount: Total number of files
    * - onChange: Callback when mode changes
-   *
-   * Design: Touch-friendly with 44px minimum tap targets, segmented button group appearance
    */
 
   interface Props {
-    /**
-     * Current view mode
-     */
     mode: "diff" | "all";
-
-    /**
-     * Number of files with changes
-     */
     changedCount: number;
-
-    /**
-     * Total number of files
-     */
     totalCount: number;
-
-    /**
-     * Callback when mode changes
-     */
     onChange: (mode: "diff" | "all") => void;
   }
 
   const { mode, changedCount, totalCount, onChange }: Props = $props();
 
-  /**
-   * Handle Diff Only button click
-   */
   function handleDiffClick(): void {
     if (mode !== "diff") {
       onChange("diff");
     }
   }
 
-  /**
-   * Handle All Files button click
-   */
   function handleAllClick(): void {
     if (mode !== "all") {
       onChange("all");
@@ -57,60 +34,41 @@
   }
 </script>
 
-<!-- Mode Toggle Container -->
 <div
-  class="mode-toggle p-4 border-b border-border-default"
+  class="p-4 border-b border-border-default"
   role="group"
   aria-label="View mode toggle"
 >
-  <div
-    class="flex gap-0 rounded-lg overflow-hidden border border-border-default bg-bg-secondary"
-  >
-    <!-- Diff Only Button -->
+  <div class="segmented-control">
     <button
       type="button"
-      class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2"
-      class:bg-bg-emphasis={mode === "diff"}
-      class:text-text-on-emphasis={mode === "diff"}
-      class:bg-transparent={mode !== "diff"}
-      class:text-text-secondary={mode !== "diff"}
-      class:hover:bg-bg-hover={mode !== "diff"}
+      class="segmented-control-item"
+      class:segmented-control-item--active={mode === "diff"}
       onclick={handleDiffClick}
       aria-label="Show only files with changes"
       aria-pressed={mode === "diff"}
     >
       <span>Diff Only</span>
       <span
-        class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-neutral-muted={mode === "diff"}
-        class:text-text-on-emphasis={mode === "diff"}
-        class:bg-bg-tertiary={mode !== "diff"}
-        class:text-text-secondary={mode !== "diff"}
+        class="segmented-control-badge"
+        class:segmented-control-badge--active={mode === "diff"}
       >
         {changedCount}
       </span>
     </button>
 
-    <!-- All Files Button -->
     <button
       type="button"
-      class="flex-1 px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px] flex items-center justify-center gap-2 border-l border-border-default"
-      class:bg-bg-emphasis={mode === "all"}
-      class:text-text-on-emphasis={mode === "all"}
-      class:bg-transparent={mode !== "all"}
-      class:text-text-secondary={mode !== "all"}
-      class:hover:bg-bg-hover={mode !== "all"}
+      class="segmented-control-item"
+      class:segmented-control-item--active={mode === "all"}
       onclick={handleAllClick}
       aria-label="Show all files"
       aria-pressed={mode === "all"}
     >
       <span>All Files</span>
       <span
-        class="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px]"
-        class:bg-neutral-muted={mode === "all"}
-        class:text-text-on-emphasis={mode === "all"}
-        class:bg-bg-tertiary={mode !== "all"}
-        class:text-text-secondary={mode !== "all"}
+        class="segmented-control-badge"
+        class:segmented-control-badge--active={mode === "all"}
       >
         {totalCount}
       </span>
@@ -119,26 +77,74 @@
 </div>
 
 <style>
-  /**
- * Mode toggle styling
- * - Segmented button group appearance
- * - Touch-friendly 44px minimum height
- * - Clear active/inactive states
- * - Smooth transitions
- */
-  .mode-toggle button {
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
+  .segmented-control {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-muted);
+    background-color: var(--color-bg-inset);
   }
 
-  .mode-toggle button:focus-visible {
+  .segmented-control-item {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 6px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+    background-color: transparent;
+    color: var(--color-text-secondary);
+  }
+
+  .segmented-control-item:hover:not(.segmented-control-item--active) {
+    background-color: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .segmented-control-item--active {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-segmented-active);
+  }
+
+  .segmented-control-item:focus-visible {
     outline: 2px solid var(--color-accent-fg);
     outline-offset: -2px;
     z-index: 1;
   }
 
-  .mode-toggle button:active {
+  .segmented-control-item:active {
     transform: scale(0.98);
+  }
+
+  .segmented-control-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 500;
+    background-color: var(--color-neutral-muted);
+    color: var(--color-text-secondary);
+  }
+
+  .segmented-control-badge--active {
+    background-color: var(--color-neutral-emphasis);
+    color: var(--color-text-on-emphasis);
   }
 </style>

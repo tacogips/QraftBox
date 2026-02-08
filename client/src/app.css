@@ -73,6 +73,9 @@
 
   /* Selection highlight */
   --color-selection-bg: #1f6febb3;
+
+  /* Segmented Control */
+  --shadow-segmented-active: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 html,
