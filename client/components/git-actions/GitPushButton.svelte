@@ -5,7 +5,7 @@
    * Displays a "Git Push" button and a 3-dot menu in the project root panel.
    * - "Git Push" button: runs AI commit prompt then push prompt sequentially.
    * - 3-dot menu: Commit with custom prompt, Push with custom prompt,
-   *   Open current PR in Browser, Merge PR.
+   *   Fetch, Merge, Create PR, Open current PR in Browser, Merge PR.
    *
    * The dropdown uses position:fixed and is rendered via <svelte:body>
    * to escape any overflow clipping from parent containers.
@@ -20,7 +20,9 @@
 
   // Menu state
   let menuOpen = $state(false);
-  let customPromptAction = $state<"commit" | "push" | null>(null);
+  let customPromptAction = $state<
+    "commit" | "push" | "fetch" | "merge" | null
+  >(null);
   let customPromptText = $state("");
 
   // Dropdown position (fixed, viewport-relative)
@@ -228,11 +230,22 @@
           prompt.length > 0
             ? `Please commit the changes with the following instructions: ${prompt}`
             : "Please commit all staged changes with an appropriate commit message. If there are no staged changes, stage all modified and untracked files first, then commit.";
-      } else {
+      } else if (action === "push") {
         actionPrompt =
           prompt.length > 0
             ? `Please push the current branch with the following instructions: ${prompt}`
             : "Please push the current branch to the remote repository.";
+      } else if (action === "fetch") {
+        actionPrompt =
+          prompt.length > 0
+            ? `Please run git fetch with the following instructions: ${prompt}`
+            : "Please run git fetch to update all remote tracking branches.";
+      } else {
+        // merge
+        actionPrompt =
+          prompt.length > 0
+            ? `Please run git merge with the following instructions: ${prompt}`
+            : "Please merge the upstream tracking branch into the current branch.";
       }
 
       const resp = await fetch("/api/ai/prompt", {
@@ -254,9 +267,17 @@
         throw new Error(`${action} prompt failed: ${resp.status}`);
       }
 
+      const actionLabel =
+        action === "commit"
+          ? "Commit"
+          : action === "push"
+            ? "Push"
+            : action === "fetch"
+              ? "Fetch"
+              : "Merge";
       operationMessage = {
         success: true,
-        text: `${action === "commit" ? "Commit" : "Push"} prompt submitted`,
+        text: `${actionLabel} prompt submitted`,
       };
       customPromptAction = null;
       customPromptText = "";
@@ -522,6 +543,90 @@
           disabled={operating}
         >
           {operating ? "Running..." : "Push"}
+        </button>
+      </div>
+    {/if}
+
+    <!-- Fetch with custom prompt -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             text-text-primary border-t border-border-default
+             {customPromptAction === 'fetch' ? 'bg-bg-tertiary' : ''}"
+      onclick={(e) => {
+        e.stopPropagation();
+        customPromptAction = customPromptAction === "fetch" ? null : "fetch";
+        customPromptText = "";
+      }}
+      disabled={operating}
+    >
+      Fetch
+    </button>
+
+    {#if customPromptAction === "fetch"}
+      <div
+        class="px-3 py-2 border-t border-border-default bg-bg-primary"
+        role="presentation"
+      >
+        <textarea
+          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
+                 rounded text-text-primary font-mono resize-y
+                 focus:outline-none focus:border-accent-emphasis"
+          placeholder="Enter fetch instructions (e.g. specific remote)..."
+          bind:value={customPromptText}
+          disabled={operating}
+        ></textarea>
+        <button
+          type="button"
+          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
+                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => void handleCustomPromptSubmit()}
+          disabled={operating}
+        >
+          {operating ? "Running..." : "Fetch"}
+        </button>
+      </div>
+    {/if}
+
+    <!-- Merge with custom prompt -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             text-text-primary border-t border-border-default
+             {customPromptAction === 'merge' ? 'bg-bg-tertiary' : ''}"
+      onclick={(e) => {
+        e.stopPropagation();
+        customPromptAction = customPromptAction === "merge" ? null : "merge";
+        customPromptText = "";
+      }}
+      disabled={operating}
+    >
+      Merge
+    </button>
+
+    {#if customPromptAction === "merge"}
+      <div
+        class="px-3 py-2 border-t border-border-default bg-bg-primary"
+        role="presentation"
+      >
+        <textarea
+          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
+                 rounded text-text-primary font-mono resize-y
+                 focus:outline-none focus:border-accent-emphasis"
+          placeholder="Enter merge instructions (e.g. branch name, --no-ff)..."
+          bind:value={customPromptText}
+          disabled={operating}
+        ></textarea>
+        <button
+          type="button"
+          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
+                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => void handleCustomPromptSubmit()}
+          disabled={operating}
+        >
+          {operating ? "Running..." : "Merge"}
         </button>
       </div>
     {/if}
