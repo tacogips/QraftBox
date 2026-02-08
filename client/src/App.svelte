@@ -600,45 +600,6 @@
       </button>
     </nav>
 
-    <div class="flex items-center gap-2 ml-auto">
-      <!-- View Mode Toggle (only visible on diff screen) -->
-      {#if currentScreen === "diff"}
-        <div
-          class="flex items-center border border-border-default rounded-md overflow-hidden"
-        >
-          <button
-            type="button"
-            class="px-3 py-1 text-sm transition-colors
-                   {viewMode === 'side-by-side'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => setViewMode("side-by-side")}
-          >
-            Side by Side
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1 text-sm border-l border-border-default transition-colors
-                   {viewMode === 'inline'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => setViewMode("inline")}
-          >
-            Inline
-          </button>
-          <button
-            type="button"
-            class="px-3 py-1 text-sm border-l border-border-default transition-colors
-                   {viewMode === 'current-state'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => setViewMode("current-state")}
-          >
-            Current
-          </button>
-        </div>
-      {/if}
-    </div>
   </header>
 
   <!-- Tab Bar -->
@@ -760,7 +721,71 @@
           {/if}
         </main>
 
-        <!-- AI Prompt Panel (below diff view, does not overlap sidebar) -->
+        <!-- Diff Stats + View Mode Panel (between viewer and AI panel) -->
+        <div
+          class="shrink-0 h-8 border-t border-border-default flex items-center px-4 bg-bg-secondary text-xs text-text-secondary gap-4"
+        >
+          <span>
+            {stats.totalFiles} file{stats.totalFiles !== 1 ? "s" : ""} changed
+          </span>
+          <span class="text-success-fg">+{stats.additions}</span>
+          <span class="text-danger-fg">-{stats.deletions}</span>
+          {#if contextId !== null}
+            <span class="text-text-tertiary">ctx: {contextId}</span>
+          {/if}
+          <div
+            class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
+          >
+            <!-- Side by Side icon: two vertical columns -->
+            <button
+              type="button"
+              class="p-1 transition-colors
+                     {viewMode === 'side-by-side'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => setViewMode("side-by-side")}
+              title="Side by Side"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2" width="6" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
+                <rect x="9" y="2" width="6" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+            </button>
+            <!-- Inline icon: stacked lines (unified diff) -->
+            <button
+              type="button"
+              class="p-1 border-l border-border-default transition-colors
+                     {viewMode === 'inline'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => setViewMode("inline")}
+              title="Inline"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect x="1" y="2" width="14" height="12" rx="1" stroke="currentColor" stroke-width="1.5" />
+                <line x1="4" y1="5.5" x2="12" y2="5.5" stroke="currentColor" stroke-width="1.2" />
+                <line x1="4" y1="8" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" />
+                <line x1="4" y1="10.5" x2="10" y2="10.5" stroke="currentColor" stroke-width="1.2" />
+              </svg>
+            </button>
+            <!-- Current icon: single document -->
+            <button
+              type="button"
+              class="p-1 border-l border-border-default transition-colors
+                     {viewMode === 'current-state'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => setViewMode("current-state")}
+              title="Current"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
         <AIPromptPanel
           collapsed={aiPanelCollapsed}
           {queueStatus}
@@ -810,17 +835,4 @@
     {/if}
   </div>
 
-  <!-- Footer -->
-  <footer
-    class="h-8 border-t border-border-default flex items-center px-4 bg-bg-secondary text-xs text-text-secondary gap-4"
-  >
-    <span>
-      {stats.totalFiles} file{stats.totalFiles !== 1 ? "s" : ""} changed
-    </span>
-    <span class="text-success-fg">+{stats.additions}</span>
-    <span class="text-danger-fg">-{stats.deletions}</span>
-    {#if contextId !== null}
-      <span class="ml-auto text-text-tertiary">ctx: {contextId}</span>
-    {/if}
-  </footer>
 </div>
