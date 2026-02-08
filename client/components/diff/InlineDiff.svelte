@@ -155,7 +155,7 @@
   }
 </script>
 
-<div class="w-full font-mono">
+<div class="w-full font-mono text-xs leading-5">
   {#if flattenedChanges.length === 0}
     <!-- Empty state when no changes exist -->
     <div
@@ -183,11 +183,11 @@
             >+</button>
           {/if}
           {#if change.oldLine !== undefined}
-            <span class="pt-1 min-h-[28px] flex items-start"
+            <span class="leading-5"
               >{change.oldLine}</span
             >
           {:else}
-            <span class="pt-1 min-h-[28px] flex items-start opacity-30">-</span>
+            <span class="leading-5 opacity-30">-</span>
           {/if}
         </div>
 
@@ -196,11 +196,11 @@
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default"
         >
           {#if change.newLine !== undefined}
-            <span class="pt-1 min-h-[28px] flex items-start"
+            <span class="leading-5"
               >{change.newLine}</span
             >
           {:else}
-            <span class="pt-1 min-h-[28px] flex items-start opacity-30">-</span>
+            <span class="leading-5 opacity-30">-</span>
           {/if}
         </div>
 

@@ -70,7 +70,7 @@ function handleKeydown(event: KeyboardEvent): void {
 >
   <!-- Header with collapse button -->
   <div
-    class="flex items-center justify-between px-3 py-2 min-h-[44px] bg-danger-subtle border-b border-danger-emphasis"
+    class="flex items-center justify-between px-3 py-1 min-h-[28px] bg-danger-subtle border-b border-danger-emphasis"
   >
     <div class="flex items-center gap-2 text-sm">
       <span class="text-danger-fg font-medium">
@@ -116,24 +116,24 @@ function handleKeydown(event: KeyboardEvent): void {
   <div class="deleted-lines">
     {#each block.lines as lineContent, index}
       <div
-        class="flex min-h-[36px] font-mono text-sm bg-danger-subtle border-b border-danger-emphasis last:border-b-0"
+        class="flex font-mono text-xs leading-5 bg-danger-subtle border-b border-danger-emphasis last:border-b-0"
       >
         <!-- Original line number -->
         <div
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-danger-fg/60 border-r border-danger-emphasis"
         >
-          <span class="pt-2">{getLineNumber(index)}</span>
+          <span>{getLineNumber(index)}</span>
         </div>
 
         <!-- Delete indicator -->
         <div
           class="w-8 flex-shrink-0 flex items-start justify-center text-danger-fg border-r border-danger-emphasis"
         >
-          <span class="pt-2 font-bold">-</span>
+          <span class="font-bold">-</span>
         </div>
 
         <!-- Content -->
-        <div class="flex-1 px-3 py-2 text-danger-fg overflow-x-auto">
+        <div class="flex-1 px-2 text-danger-fg overflow-x-auto">
           {#if highlightedLines !== undefined && highlightedLines[index] !== undefined}
             <!-- Render syntax-highlighted HTML from Shiki -->
             <span class="highlighted-line">{@html highlightedLines[index]}</span>

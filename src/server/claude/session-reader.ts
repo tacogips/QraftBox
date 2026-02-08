@@ -5,7 +5,7 @@
  * Provides methods for listing projects, sessions, and detecting session sources.
  */
 
-import { readdir, readFile } from "fs/promises";
+import { readdir, readFile, stat } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync } from "fs";
@@ -80,13 +80,11 @@ export class ClaudeSessionReader {
         continue;
       }
 
-      const indexPath = join(
-        this.projectsDir,
-        entry.name,
-        "sessions-index.json",
-      );
+      const projectDir = join(this.projectsDir, entry.name);
+      const indexPath = join(projectDir, "sessions-index.json");
 
       try {
+        // Try reading sessions-index.json first
         const index = await this.readSessionIndex(indexPath);
         projects.push({
           path: index.originalPath,
@@ -95,9 +93,19 @@ export class ClaudeSessionReader {
           lastModified: this.getLatestModified(index.entries),
         });
       } catch (error: unknown) {
-        // Skip projects without valid index or with read errors
-        // Silently continue to allow partial results
-        continue;
+        // If index doesn't exist, try building from JSONL files
+        try {
+          const projectInfo = await this.buildProjectFromJsonl(
+            projectDir,
+            entry.name,
+          );
+          if (projectInfo !== null) {
+            projects.push(projectInfo);
+          }
+        } catch (buildError: unknown) {
+          // Skip projects that can't be processed either way
+          continue;
+        }
       }
     }
 
@@ -122,13 +130,11 @@ export class ClaudeSessionReader {
 
     // Read sessions from filtered projects
     for (const project of filteredProjects) {
-      const indexPath = join(
-        this.projectsDir,
-        project.encoded,
-        "sessions-index.json",
-      );
+      const projectDir = join(this.projectsDir, project.encoded);
+      const indexPath = join(projectDir, "sessions-index.json");
 
       try {
+        // Try reading from sessions-index.json first
         const index = await this.readSessionIndex(indexPath);
 
         for (const entry of index.entries) {
@@ -144,8 +150,29 @@ export class ClaudeSessionReader {
           }
         }
       } catch (error: unknown) {
-        // Skip projects with corrupted indices
-        continue;
+        // If index doesn't exist, build entries from JSONL files
+        try {
+          const entries = await this.buildEntriesFromJsonlFiles(
+            projectDir,
+            project.encoded,
+          );
+
+          for (const entry of entries) {
+            const extended: ExtendedSessionEntry = {
+              ...entry,
+              source: await this.detectSource(entry),
+              projectEncoded: project.encoded,
+            };
+
+            // Apply additional filters
+            if (this.matchesFilters(extended, options)) {
+              allSessions.push(extended);
+            }
+          }
+        } catch (buildError: unknown) {
+          // Skip projects that can't be processed
+          continue;
+        }
       }
     }
 
@@ -178,13 +205,11 @@ export class ClaudeSessionReader {
     const projects = await this.listProjects();
 
     for (const project of projects) {
-      const indexPath = join(
-        this.projectsDir,
-        project.encoded,
-        "sessions-index.json",
-      );
+      const projectDir = join(this.projectsDir, project.encoded);
+      const indexPath = join(projectDir, "sessions-index.json");
 
       try {
+        // Try reading from sessions-index.json first
         const index = await this.readSessionIndex(indexPath);
         const entry = index.entries.find((e) => e.sessionId === sessionId);
 
@@ -196,8 +221,25 @@ export class ClaudeSessionReader {
           };
         }
       } catch (error: unknown) {
-        // Skip projects with errors
-        continue;
+        // If index doesn't exist, build entries from JSONL files
+        try {
+          const entries = await this.buildEntriesFromJsonlFiles(
+            projectDir,
+            project.encoded,
+          );
+          const entry = entries.find((e) => e.sessionId === sessionId);
+
+          if (entry) {
+            return {
+              ...entry,
+              source: await this.detectSource(entry),
+              projectEncoded: project.encoded,
+            };
+          }
+        } catch (buildError: unknown) {
+          // Skip projects that can't be processed
+          continue;
+        }
       }
     }
 
@@ -228,6 +270,276 @@ export class ClaudeSessionReader {
     }
 
     return parsed;
+  }
+
+  /**
+   * Build project info from JSONL files when sessions-index.json is missing
+   */
+  private async buildProjectFromJsonl(
+    projectDir: string,
+    encodedName: string,
+  ): Promise<ProjectInfo | null> {
+    const dirEntries = await readdir(projectDir, { withFileTypes: true });
+    const jsonlFiles = dirEntries.filter(
+      (e) => e.isFile() && e.name.endsWith(".jsonl"),
+    );
+
+    if (jsonlFiles.length === 0) {
+      return null;
+    }
+
+    // Decode project path
+    const decodedPath = this.decodeProjectPath(encodedName);
+
+    // Get most recent mtime from JSONL files
+    let latestMtime = 0;
+    for (const file of jsonlFiles) {
+      const filePath = join(projectDir, file.name);
+      const fileStat = await stat(filePath);
+      const mtime = fileStat.mtimeMs;
+      if (mtime > latestMtime) {
+        latestMtime = mtime;
+      }
+    }
+
+    return {
+      path: decodedPath,
+      encoded: encodedName,
+      sessionCount: jsonlFiles.length,
+      lastModified: new Date(latestMtime).toISOString(),
+    };
+  }
+
+  /**
+   * Decode encoded project path (e.g., "-g-gits-tacogips-QraftBox" -> "/g/gits/tacogips/QraftBox")
+   */
+  private decodeProjectPath(encoded: string): string {
+    // Encoded format: leading `-` then path separators also `-`
+    // e.g., `-g-gits-tacogips-QraftBox` -> `/g/gits/tacogips/QraftBox`
+    const decoded = encoded.replace(/-/g, "/");
+
+    // Validate: check if decoded path exists as a directory
+    // Use existsSync which is synchronous and safe for this use case
+    if (existsSync(decoded)) {
+      return decoded;
+    }
+
+    // Fallback: return the encoded string if path doesn't exist
+    // This handles edge cases where directory names contain hyphens
+    return encoded;
+  }
+
+  /**
+   * Build session entries from JSONL files when sessions-index.json is missing
+   */
+  private async buildEntriesFromJsonlFiles(
+    projectDir: string,
+    encodedName: string,
+  ): Promise<ClaudeSessionEntry[]> {
+    const dirEntries = await readdir(projectDir, { withFileTypes: true });
+    const jsonlFiles = dirEntries.filter(
+      (e) => e.isFile() && e.name.endsWith(".jsonl"),
+    );
+
+    const entries: ClaudeSessionEntry[] = [];
+    const decodedPath = this.decodeProjectPath(encodedName);
+
+    for (const file of jsonlFiles) {
+      const sessionId = file.name.replace(".jsonl", "");
+      const fullPath = join(projectDir, file.name);
+
+      try {
+        const entry = await this.buildEntryFromJsonl(
+          fullPath,
+          sessionId,
+          decodedPath,
+        );
+        if (entry !== null) {
+          entries.push(entry);
+        }
+      } catch (error: unknown) {
+        // Skip files that can't be parsed
+        continue;
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Build a single session entry from a JSONL file
+   */
+  private async buildEntryFromJsonl(
+    jsonlPath: string,
+    sessionId: string,
+    projectPath: string,
+  ): Promise<ClaudeSessionEntry | null> {
+    const fileStat = await stat(jsonlPath);
+    const fileSize = fileStat.size;
+
+    // Skip files larger than 10MB to avoid memory issues
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (fileSize > MAX_FILE_SIZE) {
+      // For large files, use minimal metadata
+      return {
+        sessionId,
+        fullPath: jsonlPath,
+        fileMtime: fileStat.mtimeMs,
+        firstPrompt: "(Large session - content not indexed)",
+        summary: "",
+        messageCount: 0,
+        created: new Date(fileStat.birthtimeMs).toISOString(),
+        modified: new Date(fileStat.mtimeMs).toISOString(),
+        gitBranch: "",
+        projectPath,
+        isSidechain: false,
+      };
+    }
+
+    // Read the file content
+    const content = await readFile(jsonlPath, "utf-8");
+    const lines = content.split("\n").filter((line) => line.trim().length > 0);
+
+    if (lines.length === 0) {
+      return null;
+    }
+
+    // Parse first line to get session metadata
+    let firstPrompt = "";
+    let gitBranch = "";
+    let isSidechain = false;
+    let created = new Date(fileStat.birthtimeMs).toISOString();
+
+    const firstLine = lines[0];
+    if (firstLine !== undefined) {
+      try {
+        const firstEvent: unknown = JSON.parse(firstLine);
+        if (typeof firstEvent === "object" && firstEvent !== null) {
+          const obj = firstEvent as Record<string, unknown>;
+
+          // Extract timestamp
+          if (typeof obj["timestamp"] === "string") {
+            created = obj["timestamp"];
+          }
+
+          // Extract git branch
+          if (typeof obj["gitBranch"] === "string") {
+            gitBranch = obj["gitBranch"];
+          }
+
+          // Extract isSidechain
+          if (typeof obj["isSidechain"] === "boolean") {
+            isSidechain = obj["isSidechain"];
+          }
+
+          // Extract first user message
+          if (obj["type"] === "user" && typeof obj["message"] === "object") {
+            const message = obj["message"] as Record<string, unknown>;
+            if (typeof message["content"] === "string") {
+              firstPrompt = message["content"];
+            } else if (Array.isArray(message["content"])) {
+              // Handle array content (e.g., text blocks)
+              const textBlocks = message["content"].filter(
+                (block: unknown) =>
+                  typeof block === "object" &&
+                  block !== null &&
+                  (block as Record<string, unknown>)["type"] === "text",
+              );
+              if (textBlocks.length > 0) {
+                const firstBlock = textBlocks[0] as Record<string, unknown>;
+                if (typeof firstBlock["text"] === "string") {
+                  firstPrompt = firstBlock["text"];
+                }
+              }
+            }
+          }
+        }
+      } catch (error: unknown) {
+        // Skip parse errors for first line
+      }
+    }
+
+    // If first line wasn't a user message, search for the first user event
+    if (firstPrompt === "") {
+      for (const line of lines) {
+        try {
+          const event: unknown = JSON.parse(line);
+          if (typeof event === "object" && event !== null) {
+            const obj = event as Record<string, unknown>;
+            if (obj["type"] === "user" && typeof obj["message"] === "object") {
+              const message = obj["message"] as Record<string, unknown>;
+              if (typeof message["content"] === "string") {
+                firstPrompt = message["content"];
+                break;
+              } else if (Array.isArray(message["content"])) {
+                const textBlocks = message["content"].filter(
+                  (block: unknown) =>
+                    typeof block === "object" &&
+                    block !== null &&
+                    (block as Record<string, unknown>)["type"] === "text",
+                );
+                if (textBlocks.length > 0) {
+                  const firstBlock = textBlocks[0] as Record<string, unknown>;
+                  if (typeof firstBlock["text"] === "string") {
+                    firstPrompt = firstBlock["text"];
+                    break;
+                  }
+                }
+              }
+            }
+          }
+        } catch (error: unknown) {
+          // Skip parse errors
+          continue;
+        }
+      }
+    }
+
+    // Parse last lines to find summary
+    let summary = "";
+    let modified = new Date(fileStat.mtimeMs).toISOString();
+
+    // Search last 20 lines for summary event
+    const lastLines = lines.slice(Math.max(0, lines.length - 20));
+    for (let i = lastLines.length - 1; i >= 0; i--) {
+      const line = lastLines[i];
+      if (line === undefined) continue;
+
+      try {
+        const event: unknown = JSON.parse(line);
+        if (typeof event === "object" && event !== null) {
+          const obj = event as Record<string, unknown>;
+
+          // Update modified timestamp from last event
+          if (typeof obj["timestamp"] === "string") {
+            modified = obj["timestamp"];
+          }
+
+          // Look for summary event
+          if (obj["type"] === "summary" && typeof obj["summary"] === "string") {
+            summary = obj["summary"];
+            break;
+          }
+        }
+      } catch (error: unknown) {
+        // Skip parse errors
+        continue;
+      }
+    }
+
+    return {
+      sessionId,
+      fullPath: jsonlPath,
+      fileMtime: fileStat.mtimeMs,
+      firstPrompt: firstPrompt || "(No user prompt found)",
+      summary,
+      messageCount: lines.length,
+      created,
+      modified,
+      gitBranch,
+      projectPath,
+      isSidechain,
+    };
   }
 
   /**

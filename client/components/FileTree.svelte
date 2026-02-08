@@ -36,11 +36,6 @@
      * Number of changed files (always from diff, independent of tree)
      */
     changedCount?: number;
-
-    /**
-     * Callback to view full file content (for diff files)
-     */
-    onViewFullFile?: (path: string) => void;
   }
 
   const {
@@ -50,7 +45,6 @@
     onFileSelect,
     onModeChange,
     changedCount = undefined,
-    onViewFullFile = undefined,
   }: Props = $props();
 
   /**
@@ -571,14 +565,14 @@
     >
       <button
         type="button"
-        class="directory-button w-full text-left px-4 py-3 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
+        class="directory-button w-full text-left px-4 py-1 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5"
         style="padding-left: {1 + depth * 1.5}rem"
         onclick={() => toggleDirectory(node.path)}
         aria-label="Toggle directory {node.name}"
       >
         <!-- Chevron Icon -->
         <svg
-          class="chevron w-4 h-4 text-text-tertiary shrink-0 transition-transform"
+          class="chevron w-3 h-3 text-text-tertiary shrink-0 transition-transform"
           class:rotate-90={isExpanded(node.path)}
           fill="none"
           stroke="currentColor"
@@ -595,7 +589,7 @@
 
         <!-- Folder Icon -->
         <svg
-          class="folder-icon w-5 h-5 text-text-tertiary shrink-0"
+          class="folder-icon w-3.5 h-3.5 text-text-tertiary shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -610,7 +604,7 @@
         </svg>
 
         <!-- Directory Name -->
-        <span class="directory-name text-text-primary truncate flex-1">
+        <span class="directory-name text-text-primary text-xs truncate flex-1">
           {node.name}
         </span>
 
@@ -639,9 +633,6 @@
       {depth}
       selected={selectedPath === node.path}
       onSelect={() => onFileSelect(node.path)}
-      onViewFullFile={node.status !== undefined && onViewFullFile !== undefined
-        ? () => onViewFullFile?.(node.path)
-        : undefined}
     />
   {/if}
 {/snippet}

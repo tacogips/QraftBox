@@ -6,7 +6,7 @@ export type DiffStatus = "added" | "modified" | "deleted" | "renamed";
 
 export type DiffChangeType = "add" | "delete" | "context";
 
-export type ViewMode = "side-by-side" | "inline" | "current-state";
+export type ViewMode = "side-by-side" | "inline" | "current-state" | "full-file";
 
 /**
  * Represents a single change line in a diff chunk

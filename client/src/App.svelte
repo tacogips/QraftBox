@@ -581,15 +581,16 @@
     };
   });
 
-  // Fetch file content when selecting a non-diff file
+  // Fetch file content when selecting a non-diff file OR when full-file mode is active
   $effect(() => {
-    if (
-      selectedPath !== null &&
-      !selectedHasDiff &&
-      contextId !== null &&
-      fileTreeMode === "all"
-    ) {
-      void fetchFileContent(contextId, selectedPath);
+    if (selectedPath !== null && contextId !== null) {
+      if (viewMode === "full-file") {
+        void fetchFileContent(contextId, selectedPath);
+      } else if (!selectedHasDiff && fileTreeMode === "all") {
+        void fetchFileContent(contextId, selectedPath);
+      } else {
+        fileContent = null;
+      }
     } else {
       fileContent = null;
     }
@@ -762,6 +763,18 @@
                 onCommentSubmit={handleInlineCommentSubmit}
               />
             </div>
+          {:else if viewMode === "full-file" && fileContentLoading}
+            <div class="p-8 text-center text-text-secondary">
+              Loading file...
+            </div>
+          {:else if viewMode === "full-file" && fileContent !== null}
+            <!-- Full File Viewer (for diff files viewed as full content) -->
+            <FileViewer
+              path={fileContent.path}
+              content={fileContent.content}
+              language={fileContent.language}
+              onCommentSubmit={handleInlineCommentSubmit}
+            />
           {:else if fileContentLoading}
             <div class="p-8 text-center text-text-secondary">
               Loading file...
@@ -891,6 +904,48 @@
                 />
               </svg>
             </button>
+            <!-- Full File icon: document with lines -->
+            <button
+              type="button"
+              class="p-1 border-l border-border-default transition-colors
+                     {viewMode === 'full-file'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => setViewMode("full-file")}
+              title="Full File"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="5.5"
+                  y1="6"
+                  x2="11"
+                  y2="6"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="5.5"
+                  y1="8.5"
+                  x2="11"
+                  y2="8.5"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="5.5"
+                  y1="11"
+                  x2="9"
+                  y2="11"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -912,6 +967,7 @@
         {#if contextId !== null}
           <UnifiedSessionsScreen
             {contextId}
+            {projectPath}
             onBack={() => navigateToScreen("diff")}
           />
         {/if}

@@ -19,10 +19,11 @@
 
   interface Props {
     contextId: string;
+    projectPath: string;
     onBack: () => void;
   }
 
-  const { contextId, onBack }: Props = $props();
+  const { contextId, projectPath, onBack }: Props = $props();
 
   /**
    * Selected session state for transcript viewing
@@ -36,11 +37,16 @@
   const queueStore = createQueueStore();
 
   /**
-   * Set context ID on the claude sessions store synchronously
+   * Set context ID and initial project filter on the claude sessions store synchronously
    * (must happen before child components mount and call fetchSessions)
    */
   if (contextId.length > 0) {
     claudeSessionsStore.setContextId(contextId);
+  }
+  if (projectPath.length > 0) {
+    claudeSessionsStore.setInitialFilters({
+      workingDirectoryPrefix: projectPath,
+    });
   }
 
   /**

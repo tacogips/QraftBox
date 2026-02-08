@@ -62,13 +62,13 @@
 </script>
 
 <div
-  class="flex items-center min-h-[28px] px-4 py-1 bg-bg-tertiary border-y border-border-default"
+  class="flex items-center px-4 py-0.5 bg-bg-tertiary border-y border-border-default"
   role="separator"
   aria-label="Diff chunk: {formatChunkHeader()}"
 >
   <!-- Chunk Header -->
   <div class="flex-1 flex items-center gap-3">
-    <span class="font-mono text-sm text-text-secondary font-medium">
+    <span class="font-mono text-xs text-text-secondary font-medium">
       {formatChunkHeader()}
     </span>
     <span class="text-xs text-text-tertiary">

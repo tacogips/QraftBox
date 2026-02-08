@@ -10,7 +10,7 @@ import type {
   SessionFilters,
   SessionListResponse,
   ProjectInfo,
-} from '../../../src/types/claude-session';
+} from "../../../src/types/claude-session";
 
 /**
  * Claude sessions store state
@@ -85,6 +85,11 @@ export interface ClaudeSessionsActions {
   setFilters(filters: Partial<SessionFilters>): void;
 
   /**
+   * Set initial filters without triggering a fetch
+   */
+  setInitialFilters(filters: Partial<SessionFilters>): void;
+
+  /**
    * Clear all filters
    */
   clearFilters(): void;
@@ -102,7 +107,10 @@ export interface ClaudeSessionsActions {
   /**
    * Resume a session with optional follow-up prompt
    */
-  resumeSession(sessionId: string, prompt?: string): Promise<{ sessionId: string; status: string }>;
+  resumeSession(
+    sessionId: string,
+    prompt?: string,
+  ): Promise<{ sessionId: string; status: string }>;
 
   /**
    * Set context ID for API routing
@@ -147,7 +155,8 @@ let storeContextId: string | null = null;
 /**
  * Initial claude sessions store state
  */
-export const initialClaudeSessionsState: ClaudeSessionsState = createInitialState();
+export const initialClaudeSessionsState: ClaudeSessionsState =
+  createInitialState();
 
 /**
  * Create a claude sessions store instance
@@ -178,28 +187,31 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
     const params = new URLSearchParams();
 
     if (state.filters.workingDirectoryPrefix !== undefined) {
-      params.set('workingDirectoryPrefix', state.filters.workingDirectoryPrefix);
+      params.set(
+        "workingDirectoryPrefix",
+        state.filters.workingDirectoryPrefix,
+      );
     }
     if (state.filters.source !== undefined) {
-      params.set('source', state.filters.source);
+      params.set("source", state.filters.source);
     }
     if (state.filters.branch !== undefined) {
-      params.set('branch', state.filters.branch);
+      params.set("branch", state.filters.branch);
     }
     if (state.filters.searchQuery !== undefined) {
-      params.set('search', state.filters.searchQuery);
+      params.set("search", state.filters.searchQuery);
     }
     if (state.filters.dateRange?.from !== undefined) {
-      params.set('dateFrom', state.filters.dateRange.from);
+      params.set("dateFrom", state.filters.dateRange.from);
     }
     if (state.filters.dateRange?.to !== undefined) {
-      params.set('dateTo', state.filters.dateRange.to);
+      params.set("dateTo", state.filters.dateRange.to);
     }
 
-    params.set('offset', String(state.pagination.offset));
-    params.set('limit', String(state.pagination.limit));
-    params.set('sortBy', 'modified');
-    params.set('sortOrder', 'desc');
+    params.set("offset", String(state.pagination.offset));
+    params.set("limit", String(state.pagination.limit));
+    params.set("sortBy", "modified");
+    params.set("sortOrder", "desc");
 
     return params;
   }
@@ -238,13 +250,15 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
 
     async fetchProjects(): Promise<void> {
       if (storeContextId === null) {
-        updateState({ error: 'Context ID not set', isLoading: false });
+        updateState({ error: "Context ID not set", isLoading: false });
         return;
       }
       updateState({ isLoading: true, error: null });
 
       try {
-        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/projects`);
+        const response = await fetch(
+          `/api/ctx/${storeContextId}/claude-sessions/projects`,
+        );
         if (!response.ok) {
           throw new Error(`Failed to load projects: ${response.statusText}`);
         }
@@ -256,7 +270,7 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
         });
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to load projects';
+          e instanceof Error ? e.message : "Failed to load projects";
         updateState({ error: errorMessage, isLoading: false });
       }
     },
@@ -273,11 +287,13 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
 
       try {
         if (storeContextId === null) {
-          updateState({ error: 'Context ID not set', isLoading: false });
+          updateState({ error: "Context ID not set", isLoading: false });
           return;
         }
         const params = buildQueryParams();
-        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`);
+        const response = await fetch(
+          `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
+        );
 
         if (!response.ok) {
           throw new Error(`Failed to load sessions: ${response.statusText}`);
@@ -295,7 +311,7 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
         });
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to load sessions';
+          e instanceof Error ? e.message : "Failed to load sessions";
         updateState({ error: errorMessage, isLoading: false });
       }
     },
@@ -332,6 +348,33 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       this.fetchSessions();
     },
 
+    setInitialFilters(filters: Partial<SessionFilters>): void {
+      const newFilters = { ...state.filters };
+
+      if (filters.workingDirectoryPrefix !== undefined) {
+        newFilters.workingDirectoryPrefix = filters.workingDirectoryPrefix;
+      }
+      if (filters.source !== undefined) {
+        newFilters.source = filters.source;
+      }
+      if (filters.branch !== undefined) {
+        newFilters.branch = filters.branch;
+      }
+      if (filters.searchQuery !== undefined) {
+        newFilters.searchQuery = filters.searchQuery;
+      }
+      if (filters.dateRange !== undefined) {
+        newFilters.dateRange = filters.dateRange;
+      }
+
+      updateState({
+        filters: newFilters,
+        pagination: { ...state.pagination, offset: 0 },
+      });
+
+      // Does NOT trigger fetchSessions - caller must explicitly fetch
+    },
+
     clearFilters(): void {
       updateState({
         filters: {},
@@ -355,29 +398,38 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       await this.fetchSessions();
     },
 
-    async resumeSession(sessionId: string, prompt?: string): Promise<{ sessionId: string; status: string }> {
+    async resumeSession(
+      sessionId: string,
+      prompt?: string,
+    ): Promise<{ sessionId: string; status: string }> {
       updateState({ isLoading: true, error: null });
 
       try {
         if (storeContextId === null) {
-          throw new Error('Context ID not set');
+          throw new Error("Context ID not set");
         }
-        const response = await fetch(`/api/ctx/${storeContextId}/claude-sessions/sessions/${sessionId}/resume`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt }),
-        });
+        const response = await fetch(
+          `/api/ctx/${storeContextId}/claude-sessions/sessions/${sessionId}/resume`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ prompt }),
+          },
+        );
 
         if (!response.ok) {
           throw new Error(`Failed to resume session: ${response.statusText}`);
         }
 
-        const data = (await response.json()) as { sessionId: string; status: string };
+        const data = (await response.json()) as {
+          sessionId: string;
+          status: string;
+        };
         updateState({ isLoading: false });
         return data;
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to resume session';
+          e instanceof Error ? e.message : "Failed to resume session";
         updateState({ error: errorMessage, isLoading: false });
         throw e;
       }

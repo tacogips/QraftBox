@@ -95,7 +95,7 @@
   });
 </script>
 
-<div class="file-viewer w-full h-full overflow-auto font-mono text-sm">
+<div class="file-viewer w-full h-full overflow-auto font-mono text-xs leading-5">
   {#if lines.length === 0}
     <div
       class="flex items-center justify-center py-12 text-text-secondary text-sm"
@@ -109,7 +109,7 @@
       <div class="flex group/line {inRange ? 'bg-accent-muted' : ''}">
         <!-- Line number gutter with "+" button -->
         <div
-          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
+          class="w-12 flex-shrink-0 px-1 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
         >
           {#if onCommentSubmit !== undefined}
             <button
@@ -125,13 +125,13 @@
               aria-label="Add comment on line {lineNumber}"
             >+</button>
           {/if}
-          <span class="pt-2 min-h-[28px] flex items-start select-none"
+          <span class="select-none"
             >{lineNumber}</span
           >
         </div>
 
         <!-- Line content -->
-        <div class="flex-1 px-3 py-1 overflow-x-auto">
+        <div class="flex-1 px-2 overflow-x-auto">
           {#if highlightedHtml[index] !== undefined}
             <span class="highlighted-line">{@html highlightedHtml[index]}</span>
           {:else}

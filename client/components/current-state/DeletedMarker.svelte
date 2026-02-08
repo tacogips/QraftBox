@@ -115,7 +115,7 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <div
-  class="deleted-marker relative min-h-[44px] flex items-center cursor-pointer
+  class="deleted-marker relative min-h-[28px] flex items-center cursor-pointer
          group transition-all duration-150"
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -146,7 +146,7 @@ function handleKeydown(event: KeyboardEvent): void {
   </div>
 
   <!-- Red line indicator and hint -->
-  <div class="flex-1 relative py-[21px]">
+  <div class="flex-1 relative py-[13px]">
     <!-- The thin red line -->
     <div
       class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-danger-emphasis
