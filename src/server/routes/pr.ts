@@ -596,6 +596,92 @@ export function createPRRoutes(
   });
 
   /**
+   * POST /api/ctx/:contextId/pr/:prNumber/merge
+   *
+   * Merge a pull request.
+   *
+   * Path parameters:
+   * - contextId: Context ID for the repository
+   * - prNumber: Pull request number
+   *
+   * Request body:
+   * - mergeMethod: "merge" | "squash" | "rebase" (optional, defaults to "merge")
+   *
+   * Returns:
+   * - merged: Boolean indicating if merge was successful
+   * - message: Merge result message
+   *
+   * Error cases:
+   * - 400: Invalid PR number, no repository info
+   * - 404: Context not found
+   * - 500: Failed to merge PR
+   */
+  app.post("/:contextId/:prNumber/merge", async (c) => {
+    const contextId = c.req.param("contextId") as ContextId;
+    const prNumberStr = c.req.param("prNumber");
+
+    // Parse PR number
+    const prNumber = parseInt(prNumberStr ?? "", 10);
+    if (isNaN(prNumber) || prNumber <= 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Invalid PR number",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Get context from manager
+    const context = contextManager.getContext(contextId);
+    if (context === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Context not found: ${contextId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    // Parse request body
+    let requestBody: { mergeMethod?: "merge" | "squash" | "rebase" } = {};
+    try {
+      requestBody = (await c.req.json()) as typeof requestBody;
+    } catch {
+      // Use defaults if no body provided
+    }
+
+    const mergeMethod = requestBody.mergeMethod ?? "merge";
+
+    try {
+      // Get repository info
+      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      if (repoInfo === null) {
+        const errorResponse: ErrorResponse = {
+          error: "No GitHub repository information available",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Merge PR via PR service
+      const result = await prService.mergePR(
+        repoInfo.owner,
+        repoInfo.name,
+        prNumber,
+        mergeMethod,
+      );
+
+      return c.json(result);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to merge PR";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
    * POST /api/ctx/:contextId/pr/:prNumber/reviewers
    *
    * Request reviewers for a pull request.

@@ -48,7 +48,7 @@
     </div>
   {:else}
     <div class="commits-container max-h-[300px] overflow-y-auto">
-      <ul class="divide-y divide-gray-200">
+      <ul class="divide-y divide-border-default">
         {#each commits as commit (commit.hash)}
           <li class="commit-item p-3 hover:bg-bg-secondary transition-colors">
             <div class="flex items-start gap-3">
@@ -99,7 +99,7 @@
 
   .commits-container {
     scrollbar-width: thin;
-    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+    scrollbar-color: var(--color-border-default) transparent;
   }
 
   .commits-container::-webkit-scrollbar {
@@ -111,12 +111,12 @@
   }
 
   .commits-container::-webkit-scrollbar-thumb {
-    background-color: rgba(156, 163, 175, 0.5);
+    background-color: var(--color-border-default);
     border-radius: 3px;
   }
 
   .commits-container::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(156, 163, 175, 0.7);
+    background-color: var(--color-border-emphasis);
   }
 
   .commit-item {

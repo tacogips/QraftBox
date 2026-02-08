@@ -136,7 +136,7 @@ function handleKeydown(event: KeyboardEvent): void {
         <div class="flex-1 px-3 py-2 text-danger-fg overflow-x-auto">
           {#if highlightedLines !== undefined && highlightedLines[index] !== undefined}
             <!-- Render syntax-highlighted HTML from Shiki -->
-            {@html highlightedLines[index]}
+            <span class="highlighted-line">{@html highlightedLines[index]}</span>
           {:else}
             <!-- Plain text fallback -->
             <pre class="m-0 p-0">{lineContent}</pre>
@@ -153,6 +153,11 @@ pre {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.highlighted-line {
   white-space: pre-wrap;
   word-break: break-word;
 }

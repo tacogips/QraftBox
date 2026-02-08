@@ -218,7 +218,7 @@
   }
 
   .quick-action-item:focus-visible {
-    outline: 2px solid rgb(37 99 235); /* blue-600 */
+    outline: 2px solid var(--color-accent-fg);
     outline-offset: -2px;
   }
 

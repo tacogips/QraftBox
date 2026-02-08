@@ -269,7 +269,7 @@ const groupedResults = $derived.by(() => {
             class="w-full px-3 py-2 min-h-[44px] text-left
                    border-b border-border-default last:border-b-0
                    {currentIndex === globalIndex
-              ? 'bg-accent-muted border-l-2 border-l-blue-500'
+              ? 'bg-accent-muted border-l-2 border-l-accent-fg'
               : 'hover:bg-bg-hover'}
                    focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
             role="option"

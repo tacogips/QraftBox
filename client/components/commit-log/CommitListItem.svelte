@@ -105,7 +105,7 @@
   }
 
   .commit-item:active {
-    background-color: rgb(243 244 246); /* gray-100 */
+    background-color: var(--color-bg-pressed);
   }
 
   .commit-hash {

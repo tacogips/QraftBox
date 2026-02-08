@@ -165,7 +165,7 @@
           >
             <div class="flex flex-col items-center gap-2">
               <div
-                class="spinner w-8 h-8 border-4 border-border-default border-t-blue-600 rounded-full animate-spin"
+                class="spinner w-8 h-8 border-4 border-border-default border-t-accent-fg rounded-full animate-spin"
                 aria-hidden="true"
               ></div>
               <p class="text-sm">Loading commits...</p>
@@ -277,7 +277,7 @@
 
   .commit-list {
     scrollbar-width: thin;
-    scrollbar-color: rgb(209 213 219) transparent;
+    scrollbar-color: var(--color-border-default) transparent;
   }
 
   .commit-list::-webkit-scrollbar {
@@ -289,12 +289,12 @@
   }
 
   .commit-list::-webkit-scrollbar-thumb {
-    background-color: rgb(209 213 219);
+    background-color: var(--color-border-default);
     border-radius: 4px;
   }
 
   .commit-list::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(156 163 175);
+    background-color: var(--color-border-emphasis);
   }
 
   @keyframes spin {

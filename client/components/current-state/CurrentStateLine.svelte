@@ -169,7 +169,7 @@ function handlePointerLeave(): void {
   <div class="flex-1 px-3 py-2 overflow-x-auto">
     {#if highlighted !== undefined}
       <!-- Render syntax-highlighted HTML from Shiki -->
-      {@html highlighted}
+      <span class="highlighted-line">{@html highlighted}</span>
     {:else}
       <!-- Plain text fallback -->
       <pre class="m-0 p-0">{line.content}</pre>
@@ -183,6 +183,11 @@ pre {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.highlighted-line {
   white-space: pre-wrap;
   word-break: break-word;
 }

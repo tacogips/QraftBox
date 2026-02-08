@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { highlightLines } from "../src/lib/highlighter";
+
   /**
    * FileViewer Component
    *
-   * Displays plain file content with line numbers and AI comment support.
-   * Used when a file has no diff changes but the user still wants to view
-   * and annotate it. Supports shift+click range selection like DiffView.
+   * Displays file content with syntax highlighting, line numbers,
+   * and AI comment support. Used when a file has no diff changes
+   * but the user still wants to view and annotate it.
+   * Supports shift+click range selection like DiffView.
    */
 
   interface CommentRange {
@@ -31,8 +34,17 @@
 
   let activeComment = $state<CommentRange | null>(null);
   let commentText = $state("");
+  let highlightedHtml = $state<string[]>([]);
 
   const lines = $derived(content.split("\n"));
+
+  $effect(() => {
+    const currentContent = content;
+    const currentPath = path;
+    void highlightLines(currentContent, currentPath).then((result) => {
+      highlightedHtml = result;
+    });
+  });
 
   function handleCommentOpen(lineNumber: number, shiftKey: boolean): void {
     if (shiftKey && activeComment !== null) {
@@ -120,7 +132,11 @@
 
         <!-- Line content -->
         <div class="flex-1 px-3 py-1 overflow-x-auto">
-          <pre class="m-0 p-0">{line}</pre>
+          {#if highlightedHtml[index] !== undefined}
+            <span class="highlighted-line">{@html highlightedHtml[index]}</span>
+          {:else}
+            <pre class="m-0 p-0">{line}</pre>
+          {/if}
         </div>
       </div>
 
@@ -172,6 +188,11 @@
     font-family: inherit;
     font-size: inherit;
     line-height: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .highlighted-line {
     white-space: pre-wrap;
     word-break: break-word;
   }

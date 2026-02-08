@@ -25,6 +25,8 @@ interface Props {
   commentLine?: { side: "old" | "new"; startLine: number; endLine: number } | undefined;
   placeholder?: string;
   rangeLines?: readonly number[];
+  oldHighlightMap?: Map<number, string>;
+  newHighlightMap?: Map<number, string>;
 }
 
 // Svelte 5 props syntax
@@ -37,6 +39,8 @@ let {
   commentLine = undefined,
   placeholder = "Ask AI about this line... (Ctrl+Enter to submit)",
   rangeLines = [],
+  oldHighlightMap = undefined,
+  newHighlightMap = undefined,
 }: Props = $props();
 
 let commentText = $state("");
@@ -196,6 +200,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
             <DiffLine
               {change}
               {lineNumber}
+              highlighted={oldHighlightMap?.get(lineNumber)}
               onSelect={() => handleOldLineSelect(lineNumber)}
               onCommentClick={(shiftKey) => handleOldCommentOpen(lineNumber, shiftKey)}
             />
@@ -257,6 +262,7 @@ function isInRange(side: "old" | "new", lineNumber: number): boolean {
             <DiffLine
               {change}
               {lineNumber}
+              highlighted={newHighlightMap?.get(lineNumber)}
               onSelect={() => handleNewLineSelect(lineNumber)}
               onCommentClick={(shiftKey) => handleNewCommentOpen(lineNumber, shiftKey)}
             />

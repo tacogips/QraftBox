@@ -119,7 +119,7 @@
          cursor-pointer
          transition-colors
          {selected
-    ? 'bg-accent-subtle border-l-4 border-l-blue-600'
+    ? 'bg-accent-subtle border-l-4 border-l-accent-fg'
     : 'border-l-4 border-l-transparent'}"
   onclick={handleClick}
   onkeydown={handleKeydown}
@@ -222,11 +222,11 @@
   }
 
   .directory-entry:focus {
-    outline: 2px solid rgb(59 130 246);
+    outline: 2px solid var(--color-accent-fg);
     outline-offset: -2px;
   }
 
   .directory-entry:active {
-    background-color: rgb(243 244 246);
+    background-color: var(--color-bg-pressed);
   }
 </style>

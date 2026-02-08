@@ -79,6 +79,16 @@ export interface PRService {
     prNumber: number,
     reviewers: string[],
   ): Promise<void>;
+
+  /**
+   * Merge a pull request
+   */
+  mergePR(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    mergeMethod?: "merge" | "squash" | "rebase",
+  ): Promise<{ merged: boolean; message: string }>;
 }
 
 /**
@@ -341,6 +351,25 @@ export function createPRService(options: PRServiceOptions = {}): PRService {
         pull_number: prNumber,
         reviewers,
       });
+    },
+
+    async mergePR(
+      owner: string,
+      repo: string,
+      prNumber: number,
+      mergeMethod: "merge" | "squash" | "rebase" = "merge",
+    ): Promise<{ merged: boolean; message: string }> {
+      const client = await getClient();
+      const { data } = await client.rest.pulls.merge({
+        owner,
+        repo,
+        pull_number: prNumber,
+        merge_method: mergeMethod,
+      });
+      return {
+        merged: data.merged,
+        message: data.message,
+      };
     },
   };
 }

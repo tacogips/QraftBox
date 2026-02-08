@@ -9,7 +9,8 @@
   import ClaudeSessionsScreen from "../components/claude-sessions/ClaudeSessionsScreen.svelte";
   import SessionQueueScreen from "../components/session/SessionQueueScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
-  import GitOpsScreen from "../components/git-ops/GitOpsScreen.svelte";
+  import GitHubOpsScreen from "../components/github-ops/GitHubOpsScreen.svelte";
+  import GitPushButton from "../components/git-actions/GitPushButton.svelte";
   import WorktreeScreen from "../components/worktree/WorktreeScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
 
@@ -21,7 +22,7 @@
     | "commits"
     | "sessions"
     | "queue"
-    | "git-ops"
+    | "github-ops"
     | "worktree"
     | "tools";
 
@@ -532,12 +533,12 @@
       <button
         type="button"
         class="px-3 py-1.5 text-sm rounded transition-colors
-               {currentScreen === 'git-ops'
+               {currentScreen === 'github-ops'
           ? 'bg-accent-emphasis text-white'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
-        onclick={() => navigateToScreen("git-ops")}
+        onclick={() => navigateToScreen("github-ops")}
       >
-        Git Ops
+        GitHub Ops
       </button>
       <button
         type="button"
@@ -601,7 +602,7 @@
 
   <!-- Tab Bar -->
   <div
-    class="flex bg-bg-secondary border-b border-border-default px-2 overflow-x-auto"
+    class="flex items-center bg-bg-secondary border-b border-border-default px-2 overflow-x-auto"
   >
     {#if projectPath}
       <div
@@ -610,6 +611,11 @@
         {projectPath}
       </div>
     {/if}
+    <div class="ml-auto py-1 px-2">
+      {#if contextId !== null}
+        <GitPushButton {contextId} {projectPath} />
+      {/if}
+    </div>
   </div>
 
   <!-- Main Area -->
@@ -722,11 +728,11 @@
           />
         {/if}
       </main>
-    {:else if currentScreen === "git-ops"}
-      <!-- Git Operations Screen -->
+    {:else if currentScreen === "github-ops"}
+      <!-- GitHub Operations Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <GitOpsScreen
+          <GitHubOpsScreen
             {contextId}
             onBack={() => navigateToScreen("diff")}
           />

@@ -66,6 +66,11 @@
   --color-header-bg: #151b23f2;
   --color-header-border: #656c76;
 
+  /* Done / Merged (purple) */
+  --color-done-fg: #a371f7;
+  --color-done-emphasis: #8957e5;
+  --color-done-muted: #8957e566;
+
   /* Selection highlight */
   --color-selection-bg: #1f6febb3;
 }

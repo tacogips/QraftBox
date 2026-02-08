@@ -2,6 +2,7 @@
   import type { DiffFile, ViewMode } from "../src/types/diff";
   import SideBySideDiff from "./diff/SideBySideDiff.svelte";
   import InlineDiff from "./diff/InlineDiff.svelte";
+  import { highlightLines } from "../src/lib/highlighter";
 
   /**
    * DiffView Container Component
@@ -40,6 +41,61 @@
   }: Props = $props();
 
   let activeComment = $state<CommentRange | null>(null);
+
+  /**
+   * Syntax highlighting maps: line number -> highlighted HTML string
+   */
+  let oldHighlightMap = $state<Map<number, string>>(new Map());
+  let newHighlightMap = $state<Map<number, string>>(new Map());
+
+  $effect(() => {
+    const oldEntries: { lineNumber: number; content: string }[] = [];
+    const newEntries: { lineNumber: number; content: string }[] = [];
+
+    for (const chunk of file.chunks) {
+      for (const change of chunk.changes) {
+        if (change.type === "delete" || change.type === "context") {
+          if (change.oldLine !== undefined) {
+            oldEntries.push({ lineNumber: change.oldLine, content: change.content });
+          }
+        }
+        if (change.type === "add" || change.type === "context") {
+          if (change.newLine !== undefined) {
+            newEntries.push({ lineNumber: change.newLine, content: change.content });
+          }
+        }
+      }
+    }
+
+    const oldCode = oldEntries.map((e) => e.content).join("\n");
+    const newCode = newEntries.map((e) => e.content).join("\n");
+    const filePath = file.path;
+
+    void Promise.all([
+      highlightLines(oldCode, filePath),
+      highlightLines(newCode, filePath),
+    ]).then(([oldHtml, newHtml]) => {
+      const oMap = new Map<number, string>();
+      for (let i = 0; i < oldEntries.length; i++) {
+        const entry = oldEntries[i];
+        const html = oldHtml[i];
+        if (entry !== undefined && html !== undefined) {
+          oMap.set(entry.lineNumber, html);
+        }
+      }
+      oldHighlightMap = oMap;
+
+      const nMap = new Map<number, string>();
+      for (let i = 0; i < newEntries.length; i++) {
+        const entry = newEntries[i];
+        const html = newHtml[i];
+        if (entry !== undefined && html !== undefined) {
+          nMap.set(entry.lineNumber, html);
+        }
+      }
+      newHighlightMap = nMap;
+    });
+  });
 
   function handleSideBySideLineSelect(side: "old" | "new", line: number): void {
     if (onLineSelect !== undefined) {
@@ -158,6 +214,8 @@
       commentLine={sbsCommentLine}
       placeholder={commentPlaceholder}
       rangeLines={commentRangeLines}
+      {oldHighlightMap}
+      {newHighlightMap}
     />
   {:else if mode === "inline"}
     <InlineDiff
@@ -169,6 +227,8 @@
       commentLine={inlineCommentLine}
       placeholder={commentPlaceholder}
       rangeLines={commentRangeLines}
+      {oldHighlightMap}
+      {newHighlightMap}
     />
   {:else}
     <div

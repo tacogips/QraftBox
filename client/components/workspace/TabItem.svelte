@@ -50,7 +50,7 @@
   class="tab-item relative flex items-center gap-2 px-4 h-12
          border-r border-bg-border
          {active
-    ? 'bg-bg-primary text-text-primary border-b-2 border-b-blue-500'
+    ? 'bg-bg-primary text-text-primary border-b-2 border-b-accent-fg'
     : 'bg-bg-secondary text-text-secondary hover:bg-bg-hover'}
          transition-colors duration-150 cursor-pointer
          min-w-[120px] max-w-[200px] shrink-0"

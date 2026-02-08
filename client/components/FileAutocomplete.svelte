@@ -254,7 +254,7 @@ function handleItemClick(index: number): void {
         onclick={() => handleItemClick(index)}
         class="w-full px-3 py-3 min-h-[48px] text-left flex items-center gap-3
                {index === selectedIndex
-          ? 'bg-accent-muted border-l-2 border-l-blue-500'
+          ? 'bg-accent-muted border-l-2 border-l-accent-fg'
           : 'hover:bg-bg-hover'}
                border-b border-border-default last:border-b-0
                focus:outline-none"

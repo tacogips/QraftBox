@@ -179,6 +179,7 @@ function createMockPRService(): PRService {
     ),
     addLabels: mock(() => Promise.resolve()),
     requestReviewers: mock(() => Promise.resolve()),
+    mergePR: mock(() => Promise.resolve({ merged: true, message: "Merged" })),
   };
 }
 

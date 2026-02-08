@@ -25,6 +25,8 @@
     commentLine?: { type: "old" | "new"; startLine: number; endLine: number } | undefined;
     placeholder?: string;
     rangeLines?: readonly number[];
+    oldHighlightMap?: Map<number, string>;
+    newHighlightMap?: Map<number, string>;
   }
 
   let {
@@ -36,6 +38,8 @@
     commentLine = undefined,
     placeholder = "Ask AI about this line... (Ctrl+Enter to submit)",
     rangeLines = [],
+    oldHighlightMap = undefined,
+    newHighlightMap = undefined,
   }: Props = $props();
 
   let commentText = $state("");
@@ -189,6 +193,9 @@
           <DiffLine
             {change}
             lineNumber={change.newLine ?? change.oldLine ?? index + 1}
+            highlighted={change.type === "delete"
+              ? oldHighlightMap?.get(change.oldLine ?? 0)
+              : newHighlightMap?.get(change.newLine ?? 0)}
             onSelect={() => handleLineSelect(change.oldLine, change.newLine)}
           />
         </div>

@@ -172,7 +172,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .deleted-marker:focus-visible {
-  outline: 2px solid rgb(59 130 246);
+  outline: 2px solid var(--color-accent-fg);
   outline-offset: -2px;
 }
 </style>
