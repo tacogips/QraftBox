@@ -105,6 +105,11 @@
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
   let sessionStreams = new Map<string, EventSource>();
 
+  // Session selection/mode state used by SessionToolbar and CurrentSessionPanel
+  let selectedCliSessionId = $state<string | null>(null);
+  let currentCliSessionId = $state<string | null>(null);
+  let isNewSessionMode = $state(false);
+
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
   let isDispatchingNext = false;
@@ -956,6 +961,15 @@
   }
 
   /**
+   * Open Sessions screen from AI prompt panel.
+   */
+  function handleSearchSession(): void {
+    navigateToScreen("sessions");
+    void fetchActiveSessions();
+    void fetchQueueStatus();
+  }
+
+  /**
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
@@ -1592,6 +1606,8 @@
         <!-- Session Toolbar (new session + search session) -->
         <SessionToolbar
           {contextId}
+          {projectPath}
+          excludeSessionId={currentCliSessionId}
           onNewSession={handleNewSession}
           onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
         />
@@ -1599,12 +1615,18 @@
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
           {contextId}
+          {projectPath}
           running={runningSessions}
           queued={queuedSessions}
           recentlyCompleted={recentlyCompletedSessions}
           {pendingPrompts}
+          {selectedCliSessionId}
+          newSessionMode={isNewSessionMode}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
           onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+          onCurrentSessionChange={(sessionId) => {
+            currentCliSessionId = sessionId;
+          }}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
