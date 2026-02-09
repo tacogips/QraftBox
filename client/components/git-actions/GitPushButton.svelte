@@ -411,7 +411,7 @@
       >
         <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
       </svg>
-      Committing...
+      AI generating...
     {:else}
       Commit
     {/if}
