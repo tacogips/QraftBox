@@ -97,7 +97,10 @@ export interface PushRoutesDependencies {
     cwd: string,
     options?: PushOptions,
   ) => Promise<PushPromptContext>;
-  readonly executePush: (cwd: string, options: PushOptions) => Promise<PushResult>;
+  readonly executePush: (
+    cwd: string,
+    options: PushOptions,
+  ) => Promise<PushResult>;
   readonly previewPush: (
     context: PushPromptContext,
     promptId: string,

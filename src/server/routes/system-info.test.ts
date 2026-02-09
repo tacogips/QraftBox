@@ -10,7 +10,10 @@ describe("System Info Routes", () => {
   let app: ReturnType<typeof createSystemInfoRoutes>;
 
   beforeAll(() => {
-    app = createSystemInfoRoutes();
+    app = createSystemInfoRoutes({
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
+    });
   });
 
   describe("GET /", () => {
@@ -24,6 +27,7 @@ describe("System Info Routes", () => {
       // Verify response structure
       expect(body).toHaveProperty("git");
       expect(body).toHaveProperty("claudeCode");
+      expect(body).toHaveProperty("models");
 
       // Verify git version info structure
       expect(body.git).toHaveProperty("version");
@@ -32,6 +36,12 @@ describe("System Info Routes", () => {
       // Verify claudeCode version info structure
       expect(body.claudeCode).toHaveProperty("version");
       expect(body.claudeCode).toHaveProperty("error");
+
+      // Verify model config structure
+      expect(body.models).toHaveProperty("promptModel");
+      expect(body.models).toHaveProperty("assistantModel");
+      expect(body.models.promptModel).toBe("claude-opus-4-6");
+      expect(body.models.assistantModel).toBe("claude-opus-4-6");
 
       // Git should be available (version OR error, not both)
       const gitHasVersion = body.git.version !== null;

@@ -93,6 +93,8 @@ export function parseArgs(args: string[]): CLIConfig {
     syncMode,
     ai: options["ai"] ?? true,
     projectPath,
+    promptModel: options["promptModel"] ?? "claude-opus-4-6",
+    assistantModel: options["assistantModel"] ?? "claude-opus-4-6",
   };
 }
 

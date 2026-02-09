@@ -32,11 +32,13 @@
 
   interface Props {
     contextId: string | null;
+    projectPath: string;
+    excludeSessionId?: string | null;
     onNewSession: () => void;
     onResumeSession: (sessionId: string) => void;
   }
 
-  const { contextId, onNewSession, onResumeSession }: Props = $props();
+  const { contextId, projectPath = "", excludeSessionId = null, onNewSession, onResumeSession }: Props = $props();
 
   /**
    * Popup visibility state
@@ -127,6 +129,10 @@
         sortOrder: "desc",
       });
 
+      if (projectPath.length > 0) {
+        params.set("workingDirectoryPrefix", projectPath);
+      }
+
       if (query.length > 0) {
         params.set("searchQuery", query);
       }
@@ -144,7 +150,9 @@
         sessions: SessionEntry[];
         total: number;
       };
-      sessions = data.sessions;
+      sessions = excludeSessionId !== null
+        ? data.sessions.filter((s) => s.sessionId !== excludeSessionId)
+        : data.sessions;
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";

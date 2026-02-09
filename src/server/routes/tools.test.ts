@@ -43,7 +43,8 @@ function createMockRegistry(tools: RegisteredToolInfo[]): QraftBoxToolRegistry {
       version: "1.0.0",
       tools: [],
     }),
-    getAllowedToolNames: () => tools.map((t) => `mcp__qraftbox-tools__${t.name}`),
+    getAllowedToolNames: () =>
+      tools.map((t) => `mcp__qraftbox-tools__${t.name}`),
     _setReloadResult: (result: ToolRegistrationResult) => {
       reloadResult = result;
     },

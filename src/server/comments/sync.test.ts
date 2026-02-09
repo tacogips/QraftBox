@@ -214,7 +214,9 @@ describe("Sync Manager", () => {
         );
 
         expect(remoteCheckResult.exitCode).toBe(0);
-        expect(remoteCheckResult.stdout).toContain("refs/notes/qraftbox-comments");
+        expect(remoteCheckResult.stdout).toContain(
+          "refs/notes/qraftbox-comments",
+        );
       } finally {
         await rm(remoteDir, { recursive: true, force: true });
       }

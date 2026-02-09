@@ -12,16 +12,21 @@
   interface Props {
     contextId: string;
     currentBranch: string;
-    hasUncommittedChanges: boolean;
   }
 
-  const { contextId, currentBranch, hasUncommittedChanges }: Props = $props();
+  const { contextId, currentBranch }: Props = $props();
 
   interface CheckoutResponse {
     readonly success: boolean;
     readonly previousBranch: string;
     readonly currentBranch: string;
     readonly stashCreated?: string | undefined;
+    readonly error?: string | undefined;
+  }
+
+  interface CreateResponse {
+    readonly success: boolean;
+    readonly branch: string;
     readonly error?: string | undefined;
   }
 
@@ -88,9 +93,6 @@
    * Checkout a branch (called when a branch is selected in the panel)
    */
   async function checkout(branch: { name: string }): Promise<void> {
-    if (hasUncommittedChanges) {
-      return;
-    }
     if (branch.name === currentBranch) {
       return;
     }
@@ -118,6 +120,33 @@
       errorMessage = "Checkout failed";
     } finally {
       checkingOut = false;
+    }
+  }
+
+  /**
+   * Create a new branch via API
+   */
+  async function createNewBranch(branchName: string): Promise<void> {
+    errorMessage = null;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/branches/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: branchName }),
+      });
+      const data = (await resp.json()) as CreateResponse;
+      if (data.success) {
+        successMessage = `Created branch '${data.branch}'`;
+        setTimeout(() => {
+          close();
+          successMessage = null;
+          window.location.reload();
+        }, 800);
+      } else {
+        errorMessage = data.error ?? "Branch creation failed";
+      }
+    } catch {
+      errorMessage = "Branch creation failed";
     }
   }
 
@@ -197,12 +226,10 @@
       {contextId}
       {currentBranch}
       headerText="Switch branches"
-      warningMessage={hasUncommittedChanges
-        ? "Uncommitted changes -- checkout disabled"
-        : undefined}
       onSelect={(branch) => void checkout(branch)}
       disableCurrentBranch={false}
       selectedBranch={currentBranch}
+      onCreateBranch={(name) => void createNewBranch(name)}
     />
   </div>
 {/if}

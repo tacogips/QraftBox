@@ -296,16 +296,13 @@ export function createHttpHandler(config: HttpHandlerConfig): ToolHandler {
   ): Promise<ToolResult> => {
     try {
       // Interpolate URL with encodeURIComponent for parameter values
-      let url = config.url.replace(
-        /\{\{(\w+)\}\}/g,
-        (_, paramName: string) => {
-          const value = args[paramName];
-          if (value === null || value === undefined) {
-            throw new Error(`Missing required parameter: ${paramName}`);
-          }
-          return encodeURIComponent(String(value));
-        },
-      );
+      let url = config.url.replace(/\{\{(\w+)\}\}/g, (_, paramName: string) => {
+        const value = args[paramName];
+        if (value === null || value === undefined) {
+          throw new Error(`Missing required parameter: ${paramName}`);
+        }
+        return encodeURIComponent(String(value));
+      });
 
       // Validate URL scheme
       if (!url.startsWith("http://") && !url.startsWith("https://")) {

@@ -348,7 +348,7 @@ export interface ValidationResult {
  * Validate an AI prompt request
  */
 export function validateAIPromptRequest(
-  request: AIPromptRequest
+  request: AIPromptRequest,
 ): ValidationResult {
   // Validate prompt
   if (!request.prompt || request.prompt.trim().length === 0) {

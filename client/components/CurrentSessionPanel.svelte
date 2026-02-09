@@ -33,20 +33,27 @@
 
   interface Props {
     contextId: string | null;
+    projectPath: string;
     running: readonly AISession[];
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
     pendingPrompts: readonly LocalPrompt[];
+    selectedCliSessionId: string | null;
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
   }
 
-  const { contextId, running, queued, recentlyCompleted, pendingPrompts, onCancelSession, onResumeSession }: Props = $props();
+  const { contextId, projectPath, running, queued, recentlyCompleted, pendingPrompts, selectedCliSessionId, onCancelSession, onResumeSession }: Props = $props();
 
   /**
    * Most recent CLI session (shown when nothing else is active)
    */
   let recentCliSession = $state<ExtendedSessionEntry | null>(null);
+
+  /**
+   * Whether a CLI session is being loaded (after Resume click)
+   */
+  let cliSessionLoading = $state(false);
 
   /**
    * Expansion states
@@ -100,16 +107,17 @@
    * Whether the panel has anything to show
    */
   const hasContent = $derived(
-    isRunning || queueCount > 0 || completedSession !== null || recentCliSession !== null,
+    isRunning || queueCount > 0 || completedSession !== null || cliSessionLoading || recentCliSession !== null,
   );
 
   /**
    * What kind of session to display in the main card.
-   * Priority: running > completed (recent QraftBox) > cli
+   * Priority: running > completed (recent QraftBox) > loading > cli
    */
   const displayMode = $derived.by(() => {
     if (isRunning) return "running" as const;
     if (completedSession !== null) return "completed" as const;
+    if (cliSessionLoading) return "loading" as const;
     if (recentCliSession !== null) return "cli" as const;
     return "none" as const;
   });
@@ -195,6 +203,28 @@
     }
   }
 
+  /**
+   * Fetch a specific CLI session by ID
+   */
+  async function fetchCliSessionById(sessionId: string): Promise<void> {
+    if (contextId === null) return;
+    cliSessionLoading = true;
+    try {
+      const resp = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}`,
+      );
+      if (!resp.ok) return;
+      const session = (await resp.json()) as ExtendedSessionEntry;
+      recentCliSession = session;
+      // Reset summary when switching sessions
+      sessionSummary = null;
+    } catch {
+      // Silently ignore
+    } finally {
+      cliSessionLoading = false;
+    }
+  }
+
   async function fetchRecentCliSession(): Promise<void> {
     if (contextId === null) return;
     try {
@@ -204,6 +234,9 @@
         sortBy: "modified",
         sortOrder: "desc",
       });
+      if (projectPath.length > 0) {
+        params.set("workingDirectoryPrefix", projectPath);
+      }
       const resp = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
       );
@@ -242,7 +275,10 @@
   }
 
   $effect(() => {
-    if (contextId !== null) {
+    if (contextId === null) return;
+    if (selectedCliSessionId !== null) {
+      void fetchCliSessionById(selectedCliSessionId);
+    } else {
       void fetchRecentCliSession();
     }
   });
@@ -365,19 +401,21 @@
                        {completedSession?.state === 'failed' ? 'bg-danger-subtle text-danger-fg' : 'bg-success-muted text-success-fg'}">
             {completedSession?.state === "failed" ? "Failed" : "Done"}
           </span>
-        {:else}
-          <!-- Resume button (always visible for CLI, no expand needed) -->
-          <button
-            type="button"
-            onclick={(e: MouseEvent) => { e.stopPropagation(); if (recentCliSession !== null) { onResumeSession(recentCliSession.sessionId); } }}
-            class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
-                   bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
-                   border border-accent-emphasis/30 hover:border-accent-emphasis/60
-                   transition-colors"
-            title="Resume this session"
+        {:else if displayMode === "loading"}
+          <!-- Loading spinner -->
+          <svg
+            class="animate-spin h-3.5 w-3.5 text-text-tertiary shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
           >
-            Resume
-          </button>
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary">
+            Loading
+          </span>
+        {:else}
           <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary">
             CLI
           </span>
@@ -385,7 +423,7 @@
 
         <!-- Title -->
         <span class="flex-1 text-xs text-text-primary truncate">
-          {truncateText(displayTitle)}
+          {displayMode === "loading" ? "Loading session..." : truncateText(displayTitle)}
         </span>
 
         {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}

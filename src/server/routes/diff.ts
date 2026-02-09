@@ -8,11 +8,7 @@
 import { Hono } from "hono";
 import type { DiffFile } from "../../types/git.js";
 import type { ServerContext } from "../../types/index.js";
-import {
-  getDiff,
-  getFileDiff,
-  type DiffOptions,
-} from "../git/diff.js";
+import { getDiff, getFileDiff, type DiffOptions } from "../git/diff.js";
 
 /**
  * Error response format

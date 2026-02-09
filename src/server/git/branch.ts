@@ -9,10 +9,13 @@ import type {
   BranchInfo,
   BranchCheckoutRequest,
   BranchCheckoutResponse,
+  BranchCreateRequest,
+  BranchCreateResponse,
 } from "../../types/branch.js";
 import {
   createCheckoutSuccess,
   createCheckoutFailure,
+  isValidBranchName,
 } from "../../types/branch.js";
 import { execGit } from "./executor.js";
 
@@ -544,4 +547,64 @@ export async function getAheadBehind(
   const ahead = parseInt(parts[1] ?? "0", 10);
 
   return { ahead, behind };
+}
+
+/**
+ * Create a new git branch
+ *
+ * Uses `git checkout -b <branchName> [startPoint]` to create and switch to a new branch.
+ *
+ * @param projectPath - Path to git repository
+ * @param request - Create request with branch name and optional start point
+ * @returns Promise resolving to BranchCreateResponse
+ */
+export async function createBranch(
+  projectPath: string,
+  request: BranchCreateRequest,
+): Promise<BranchCreateResponse> {
+  // Validate branch name
+  if (!isValidBranchName(request.branch)) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: "Invalid branch name",
+    };
+  }
+
+  // Check if branch already exists
+  const checkResult = await execGit(["rev-parse", "--verify", request.branch], {
+    cwd: projectPath,
+  });
+
+  if (checkResult.exitCode === 0) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: `Branch '${request.branch}' already exists`,
+    };
+  }
+
+  // Build create command
+  const createArgs = ["checkout", "-b", request.branch];
+  if (
+    request.startPoint !== undefined &&
+    request.startPoint.trim().length > 0
+  ) {
+    createArgs.push(request.startPoint);
+  }
+
+  const createResult = await execGit(createArgs, { cwd: projectPath });
+
+  if (createResult.exitCode !== 0) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: `Failed to create branch: ${createResult.stderr}`,
+    };
+  }
+
+  return {
+    success: true,
+    branch: request.branch,
+  };
 }

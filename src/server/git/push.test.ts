@@ -40,7 +40,9 @@ async function gitExec(
  */
 beforeAll(async () => {
   // Create temporary directories
-  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-push-test-"));
+  testRepoPath = await fs.mkdtemp(
+    path.join(os.tmpdir(), "qraftbox-push-test-"),
+  );
   remoteRepoPath = await fs.mkdtemp(
     path.join(os.tmpdir(), "qraftbox-push-remote-"),
   );

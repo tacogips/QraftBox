@@ -54,9 +54,7 @@ const mockTab: WorkspaceTab = {
 };
 
 // Mock ContextManager
-function createMockContextManager(
-  hasContext: boolean = true,
-): ContextManager {
+function createMockContextManager(hasContext: boolean = true): ContextManager {
   return {
     getContext: mock(() => (hasContext ? mockTab : undefined)),
     createContext: mock(async () => mockTab),
@@ -89,13 +87,13 @@ function createMockAuth(
 // Mock GitHubService
 function createMockService(hasRepo: boolean = true): GitHubService {
   return {
-    getClient: mock(async () => ({} as Octokit)),
+    getClient: mock(async () => ({}) as Octokit),
     getRepo: mock(async () => (hasRepo ? mockRepoInfo : null)),
     getDefaultBranch: mock(async () => "main"),
     getBranches: mock(async () => ["main", "develop"]),
     getLabels: mock(async () => [] as Label[]),
     getCollaborators: mock(async () => [] as Collaborator[]),
-    compareBranches: mock(async () => ({} as BranchComparison)),
+    compareBranches: mock(async () => ({}) as BranchComparison),
   };
 }
 
@@ -164,7 +162,9 @@ describe("GET /api/github/auth", () => {
       isAuthenticated: mock(async () => {
         throw new Error("Auth check failed");
       }),
-      getAuthMethod: mock(async (): Promise<"env" | "gh-cli" | "none"> => "none"),
+      getAuthMethod: mock(
+        async (): Promise<"env" | "gh-cli" | "none"> => "none",
+      ),
       getUser: mock(async () => null),
     };
     const service = createMockService();
@@ -217,7 +217,9 @@ describe("GET /api/github/user", () => {
     const auth: GitHubAuth = {
       getToken: mock(async () => "token"),
       isAuthenticated: mock(async () => true),
-      getAuthMethod: mock(async (): Promise<"env" | "gh-cli" | "none"> => "env"),
+      getAuthMethod: mock(
+        async (): Promise<"env" | "gh-cli" | "none"> => "env",
+      ),
       getUser: mock(async () => {
         throw new Error("User fetch failed");
       }),
@@ -261,9 +263,7 @@ describe("GET /api/ctx/:id/github/repo", () => {
     });
 
     // Verify getRepoFromRemote was called with correct path
-    expect(mockGetRepoFromRemote).toHaveBeenCalledWith(
-      mockTab.repositoryRoot,
-    );
+    expect(mockGetRepoFromRemote).toHaveBeenCalledWith(mockTab.repositoryRoot);
 
     // Verify service.getRepo was called with correct owner/repo
     expect(service.getRepo).toHaveBeenCalledWith("octocat", "Hello-World");
@@ -328,7 +328,7 @@ describe("GET /api/ctx/:id/github/repo", () => {
     const contextManager = createMockContextManager(true);
     const auth = createMockAuth(true);
     const service: GitHubService = {
-      getClient: mock(async () => ({} as Octokit)),
+      getClient: mock(async () => ({}) as Octokit),
       getRepo: mock(async () => {
         throw new Error("API error");
       }),
@@ -336,7 +336,7 @@ describe("GET /api/ctx/:id/github/repo", () => {
       getBranches: mock(async () => []),
       getLabels: mock(async () => []),
       getCollaborators: mock(async () => []),
-      compareBranches: mock(async () => ({} as BranchComparison)),
+      compareBranches: mock(async () => ({}) as BranchComparison),
     };
 
     const mockGetRepoFromRemote = mock(async () => ({

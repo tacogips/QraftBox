@@ -7,7 +7,11 @@
 
 import { Hono } from "hono";
 import { $ } from "bun";
-import type { SystemInfo, VersionInfo } from "../../types/system-info.js";
+import type {
+  SystemInfo,
+  VersionInfo,
+  ModelConfig,
+} from "../../types/system-info.js";
 
 /**
  * Error response format
@@ -99,19 +103,21 @@ async function getClaudeCodeVersion(): Promise<VersionInfo> {
  * Routes:
  * - GET /api/system-info - Get system information including tool versions
  *
+ * @param modelConfig - Model configuration for AI operations
  * @returns Hono app with system info routes mounted
  */
-export function createSystemInfoRoutes(): Hono {
+export function createSystemInfoRoutes(modelConfig: ModelConfig): Hono {
   const app = new Hono();
 
   /**
    * GET /api/system-info
    *
-   * Get system information including versions of installed tools.
+   * Get system information including versions of installed tools and model configuration.
    *
    * Returns:
    * - git: Git version information (version string or error)
    * - claudeCode: Claude Code version information (version string or error)
+   * - models: Model configuration (promptModel and assistantModel)
    */
   app.get("/", async (c) => {
     try {
@@ -124,6 +130,7 @@ export function createSystemInfoRoutes(): Hono {
       const response: SystemInfo = {
         git,
         claudeCode,
+        models: modelConfig,
       };
 
       return c.json(response);

@@ -96,6 +96,10 @@ export function createServer(options: ServerOptions): Hono {
     contextManager: options.contextManager,
     sessionManager,
     promptStore,
+    modelConfig: {
+      promptModel: options.config.promptModel,
+      assistantModel: options.config.assistantModel,
+    },
   });
 
   // Static file serving and SPA fallback

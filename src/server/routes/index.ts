@@ -32,6 +32,7 @@ import type { PromptStore } from "../../types/local-prompt.js";
 import { createGitActionsRoutes } from "./git-actions.js";
 import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
+import type { ModelConfig } from "../../types/system-info.js";
 
 /**
  * Route group definition
@@ -54,6 +55,7 @@ export interface MountRoutesConfig {
   readonly promptStore?: PromptStore | undefined;
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
+  readonly modelConfig?: ModelConfig | undefined;
 }
 
 /**
@@ -216,7 +218,12 @@ export function getNonContextRouteGroups(
     // System info routes - GET /api/system-info
     {
       prefix: "/system-info",
-      routes: createSystemInfoRoutes(),
+      routes: createSystemInfoRoutes(
+        config.modelConfig ?? {
+          promptModel: "claude-opus-4-6",
+          assistantModel: "claude-opus-4-6",
+        },
+      ),
     },
   ];
 }

@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
-  import type { QueueStatus, FileReference, AISession } from "../../src/types/ai";
+  import type {
+    QueueStatus,
+    FileReference,
+    AISession,
+  } from "../../src/types/ai";
   import type { LocalPrompt } from "../../src/types/local-prompt";
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
@@ -17,7 +21,6 @@
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import CurrentStateView from "../components/CurrentStateView.svelte";
-  import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   /**
    * Screen type for navigation
@@ -70,7 +73,11 @@
       const stored = localStorage.getItem("qraftbox-sidebar-width");
       if (stored !== null) {
         const w = Number(stored);
-        if (!Number.isNaN(w) && w >= SIDEBAR_MIN_WIDTH && w <= SIDEBAR_MAX_WIDTH) {
+        if (
+          !Number.isNaN(w) &&
+          w >= SIDEBAR_MIN_WIDTH &&
+          w <= SIDEBAR_MAX_WIDTH
+        ) {
           return w;
         }
       }
@@ -87,7 +94,6 @@
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
   let pathCopied = $state(false);
-  let mergeDialogOpen = $state(false);
 
   // AI prompt state
   let aiPanelCollapsed = $state(true);
@@ -103,6 +109,9 @@
   let queuedSessions = $state<AISession[]>([]);
   let recentlyCompletedSessions = $state<AISession[]>([]);
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Selected CLI session ID (when user picks a session from search)
+  let selectedCliSessionId = $state<string | null>(null);
 
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
@@ -435,12 +444,18 @@
   }
 
   function narrowSidebar(): void {
-    sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth - SIDEBAR_WIDTH_STEP);
+    sidebarWidth = Math.max(
+      SIDEBAR_MIN_WIDTH,
+      sidebarWidth - SIDEBAR_WIDTH_STEP,
+    );
     saveSidebarWidth(sidebarWidth);
   }
 
   function widenSidebar(): void {
-    sidebarWidth = Math.min(SIDEBAR_MAX_WIDTH, sidebarWidth + SIDEBAR_WIDTH_STEP);
+    sidebarWidth = Math.min(
+      SIDEBAR_MAX_WIDTH,
+      sidebarWidth + SIDEBAR_WIDTH_STEP,
+    );
     saveSidebarWidth(sidebarWidth);
   }
 
@@ -482,7 +497,11 @@
       id: optimisticId,
       prompt,
       description: "",
-      context: { primaryFile: undefined, references: [...refs], diffSummary: undefined },
+      context: {
+        primaryFile: undefined,
+        references: [...refs],
+        diffSummary: undefined,
+      },
       projectPath,
       status: "pending",
       sessionId: null,
@@ -526,15 +545,20 @@
 
       // 4. If nothing is running/queued in session manager, dispatch immediately
       if (runningSessions.length === 0 && queuedSessions.length === 0) {
-        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ immediate: true }),
-        });
+        const dispatchResp = await fetch(
+          `/api/prompts/${data.prompt.id}/dispatch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ immediate: true }),
+          },
+        );
 
         if (dispatchResp.ok) {
           // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
+          pendingPrompts = pendingPrompts.filter(
+            (p) => p.id !== data.prompt.id,
+          );
         }
       }
       // If something is running, prompt stays in pending queue - autoDispatchNext handles it
@@ -668,7 +692,11 @@
       void fetchQueueStatus();
 
       // Auto-dispatch next pending prompt if nothing is running
-      if (running.length === 0 && queued.length === 0 && pendingPrompts.length > 0) {
+      if (
+        running.length === 0 &&
+        queued.length === 0 &&
+        pendingPrompts.length > 0
+      ) {
         void autoDispatchNext();
       }
     } catch {
@@ -755,7 +783,12 @@
 
   // Re-evaluate polling when state changes
   $effect(() => {
-    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length, recentlyCompletedSessions.length];
+    const _deps = [
+      runningSessions.length,
+      queuedSessions.length,
+      pendingPrompts.length,
+      recentlyCompletedSessions.length,
+    ];
     manageSessionPolling();
   });
 
@@ -787,10 +820,15 @@
   }
 
   /**
-   * Resume a Claude CLI session from CurrentSessionPanel
+   * Resume a Claude CLI session from CurrentSessionPanel or SessionToolbar search.
+   * Sets selectedCliSessionId so CurrentSessionPanel displays the chosen session.
    */
   async function handleResumeCliSession(sessionId: string): Promise<void> {
     if (contextId === null) return;
+
+    // Immediately switch the displayed CLI session
+    selectedCliSessionId = sessionId;
+
     try {
       const resp = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/resume`,
@@ -1064,17 +1102,6 @@
           >
             System Info
           </button>
-          <div class="border-t border-border-default my-1"></div>
-          <button
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary transition-colors"
-            onclick={() => {
-              mergeDialogOpen = true;
-              headerMenuOpen = false;
-            }}
-          >
-            Merge
-          </button>
         </div>
       {/if}
     </div>
@@ -1172,7 +1199,11 @@
     <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
-        <GitPushButton {contextId} {projectPath} onSuccess={() => void fetchDiff(contextId)} />
+        <GitPushButton
+          {contextId}
+          {projectPath}
+          onSuccess={() => void fetchDiff(contextId)}
+        />
       {/if}
     </div>
   </div>
@@ -1451,19 +1482,25 @@
         <!-- Session Toolbar (new session + search session) -->
         <SessionToolbar
           {contextId}
+          {projectPath}
+          excludeSessionId={selectedCliSessionId}
           onNewSession={handleNewSession}
-          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+          onResumeSession={(sessionId) =>
+            void handleResumeCliSession(sessionId)}
         />
 
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
           {contextId}
+          {projectPath}
           running={runningSessions}
           queued={queuedSessions}
           recentlyCompleted={recentlyCompletedSessions}
           {pendingPrompts}
+          {selectedCliSessionId}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
-          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+          onResumeSession={(sessionId) =>
+            void handleResumeCliSession(sessionId)}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
@@ -1489,7 +1526,11 @@
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
+          <UnifiedSessionsScreen
+            {contextId}
+            {projectPath}
+            onResumeToChanges={handleResumeToChanges}
+          />
         {/if}
       </main>
     {:else if currentScreen === "worktree"}
@@ -1511,14 +1552,4 @@
       </main>
     {/if}
   </div>
-
-  <!-- Merge Branch Dialog -->
-  {#if mergeDialogOpen && contextId !== null}
-    <MergeBranchDialog
-      {contextId}
-      onClose={() => {
-        mergeDialogOpen = false;
-      }}
-    />
-  {/if}
 </div>

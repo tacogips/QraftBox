@@ -6,10 +6,7 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type {
-  AIPromptRequest,
-  AIProgressEvent,
-} from "../../types/ai";
+import type { AIPromptRequest, AIProgressEvent } from "../../types/ai";
 import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
 
@@ -178,7 +175,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
             resolveWait();
             resolveWait = null;
           }
-        }
+        },
       );
 
       try {
@@ -244,8 +241,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to cancel session";
-      const isNotFound =
-        e instanceof Error && e.message.includes("not found");
+      const isNotFound = e instanceof Error && e.message.includes("not found");
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: isNotFound ? 404 : 500,

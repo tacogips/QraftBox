@@ -10,22 +10,24 @@ import type { CreatePRParams, UpdatePRParams } from "../../types/pr";
 /**
  * Create mock PR response
  */
-function createMockPRResponse(overrides: Partial<{
-  number: number;
-  title: string;
-  body: string | null;
-  state: string;
-  html_url: string;
-  base: { ref: string };
-  head: { ref: string };
-  draft: boolean;
-  labels: Array<{ name: string }>;
-  requested_reviewers: Array<{ login: string }>;
-  assignees: Array<{ login: string }>;
-  created_at: string;
-  updated_at: string;
-  merged_at: string | null;
-}> = {}) {
+function createMockPRResponse(
+  overrides: Partial<{
+    number: number;
+    title: string;
+    body: string | null;
+    state: string;
+    html_url: string;
+    base: { ref: string };
+    head: { ref: string };
+    draft: boolean;
+    labels: Array<{ name: string }>;
+    requested_reviewers: Array<{ login: string }>;
+    assignees: Array<{ login: string }>;
+    created_at: string;
+    updated_at: string;
+    merged_at: string | null;
+  }> = {},
+) {
   return {
     number: 123,
     title: "Test PR",

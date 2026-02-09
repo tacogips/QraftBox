@@ -94,8 +94,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       const offsetStr = c.req.query("offset");
       const search = c.req.query("search");
 
-      const limit =
-        limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
+      const limit = limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
       const offset =
         offsetStr !== undefined ? parseInt(offsetStr, 10) : undefined;
 
@@ -209,7 +208,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       const id = c.req.param("id");
       const body = await c.req
         .json<DispatchPromptOptions>()
-        .catch(() => ({} as DispatchPromptOptions));
+        .catch(() => ({}) as DispatchPromptOptions);
 
       const prompt = await config.promptStore.get(id);
       if (prompt === null) {
