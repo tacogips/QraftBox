@@ -117,15 +117,24 @@
     }
   }
 
+  /** Track whether panel has been initialized */
+  let panelInitialized = $state(false);
+
   /**
-   * Initialize: fetch status then branch list
+   * Fetch status on mount
    */
   $effect(() => {
-    void fetchStatus().then(() => {
-      requestAnimationFrame(() => {
-        branchListPanel?.initialize();
-      });
-    });
+    void fetchStatus();
+  });
+
+  /**
+   * Initialize branch list panel once it's mounted (after statusLoading becomes false)
+   */
+  $effect(() => {
+    if (!statusLoading && branchListPanel !== undefined && !panelInitialized) {
+      panelInitialized = true;
+      branchListPanel.initialize();
+    }
   });
 </script>
 
