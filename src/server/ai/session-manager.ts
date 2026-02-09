@@ -196,23 +196,47 @@ export function createSessionManager(
 
         session.toolAgentSession = toolAgentSession;
 
+        // Session started
+
         // Listen for events
         toolAgentSession.on("message", (msg: unknown) => {
           // Extract role and content from message
+          // CLI stream-json format: { type: "assistant", message: { role: "assistant", content: [{type:"text",text:"..."}] } }
           if (typeof msg === "object" && msg !== null && "type" in msg) {
-            const message = msg as { type?: string; content?: unknown };
-            const content =
-              typeof message.content === "string"
-                ? message.content
-                : JSON.stringify(message.content);
-            session.lastAssistantMessage = content;
-            emitEvent(
-              sessionId,
-              createProgressEvent("message", sessionId, {
-                role: "assistant",
-                content,
-              }),
-            );
+            const rawMsg = msg as { type?: string; message?: { role?: string; content?: unknown }; content?: unknown };
+            const msgType = rawMsg.type;
+
+            // Only capture assistant messages for lastAssistantMessage
+            if (msgType !== "assistant") return;
+
+            // Extract text content from CLI message format
+            let content: string | undefined;
+            const nestedContent = rawMsg.message?.content;
+            if (typeof nestedContent === "string") {
+              content = nestedContent;
+            } else if (Array.isArray(nestedContent)) {
+              // Content blocks: [{ type: "text", text: "..." }, ...]
+              const textParts: string[] = [];
+              for (const block of nestedContent) {
+                if (typeof block === "object" && block !== null && "text" in block && typeof (block as { text: unknown }).text === "string") {
+                  textParts.push((block as { text: string }).text);
+                }
+              }
+              content = textParts.join("\n");
+            } else if (typeof rawMsg.content === "string") {
+              content = rawMsg.content;
+            }
+
+            if (content !== undefined && content.length > 0) {
+              session.lastAssistantMessage = content;
+              emitEvent(
+                sessionId,
+                createProgressEvent("message", sessionId, {
+                  role: "assistant",
+                  content,
+                }),
+              );
+            }
           }
         });
 
@@ -275,7 +299,9 @@ export function createSessionManager(
         });
 
         // Iterate messages until completion
+        let msgCount = 0;
         for await (const _msg of toolAgentSession.messages()) {
+          msgCount++;
           // Check if cancelled
           const currentSession = sessions.get(sessionId);
           if (

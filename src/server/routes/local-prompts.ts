@@ -71,7 +71,9 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       const prompt = await config.promptStore.create({
         prompt: body.prompt,
-        context: body.context ?? { references: [] },
+        context: body.context !== undefined && body.context !== null
+          ? { ...body.context, references: body.context.references ?? [] }
+          : { references: [] },
         projectPath: body.projectPath ?? "",
       });
 

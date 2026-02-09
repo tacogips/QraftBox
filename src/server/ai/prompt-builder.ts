@@ -294,11 +294,12 @@ export function formatContext(context: AIPromptContext): string {
   }
 
   // File references
-  if (context.references.length > 0) {
+  const references = context.references ?? [];
+  if (references.length > 0) {
     sections.push("## Referenced Files");
     sections.push("");
 
-    for (const ref of context.references) {
+    for (const ref of references) {
       sections.push(formatFileReference(ref));
       sections.push("");
     }
