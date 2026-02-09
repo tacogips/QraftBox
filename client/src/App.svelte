@@ -1,11 +1,12 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
-  import type { QueueStatus, FileReference } from "../../src/types/ai";
+  import type { QueueStatus, FileReference, AISession } from "../../src/types/ai";
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
+  import CurrentSessionPanel from "../components/CurrentSessionPanel.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
@@ -14,6 +15,7 @@
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import CurrentStateView from "../components/CurrentStateView.svelte";
+  import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   /**
    * Screen type for navigation
@@ -61,6 +63,7 @@
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
   let pathCopied = $state(false);
+  let mergeDialogOpen = $state(false);
 
   // AI prompt state
   let aiPanelCollapsed = $state(true);
@@ -70,6 +73,11 @@
     runningSessionIds: [],
     totalCount: 0,
   });
+
+  // Running/queued sessions for CurrentSessionPanel
+  let runningSessions = $state<AISession[]>([]);
+  let queuedSessions = $state<AISession[]>([]);
+  let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * Currently selected diff file
@@ -359,6 +367,7 @@
       contextId = ctxId;
       await fetchDiff(ctxId);
       void fetchQueueStatus();
+      void fetchActiveSessions();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load";
       console.error("Init error:", e);
@@ -439,6 +448,7 @@
         });
       }
       void fetchQueueStatus();
+      void fetchActiveSessions();
     } catch (e) {
       console.error("AI prompt submit error:", e);
     }
@@ -487,6 +497,7 @@
         });
       }
       void fetchQueueStatus();
+      void fetchActiveSessions();
     } catch (e) {
       console.error("AI prompt submit error:", e);
     }
@@ -504,6 +515,95 @@
     } catch {
       // Silently ignore - queue status is non-critical
     }
+  }
+
+  /**
+   * Fetch running/queued AI sessions for the CurrentSessionPanel
+   */
+  async function fetchActiveSessions(): Promise<void> {
+    try {
+      const resp = await fetch("/api/ai/sessions");
+      if (!resp.ok) return;
+      const data = (await resp.json()) as {
+        sessions: {
+          id: string;
+          state: string;
+          prompt: string;
+          createdAt: string;
+          startedAt?: string | undefined;
+          completedAt?: string | undefined;
+          context: unknown;
+          currentActivity?: string | undefined;
+        }[];
+      };
+
+      const running: AISession[] = [];
+      const queued: AISession[] = [];
+
+      for (const info of data.sessions) {
+        const session: AISession = {
+          ...info,
+          state: info.state as AISession["state"],
+          context: info.context as AISession["context"],
+          turns: [],
+          currentActivity: info.currentActivity,
+        };
+        if (session.state === "running") {
+          running.push(session);
+        } else if (session.state === "queued") {
+          queued.push(session);
+        }
+      }
+
+      runningSessions = running;
+      queuedSessions = queued;
+
+      // Start/stop polling based on whether there are active sessions
+      manageSessionPolling(running.length > 0 || queued.length > 0);
+    } catch {
+      // Silently ignore
+    }
+  }
+
+  /**
+   * Manage polling interval for active sessions
+   */
+  function manageSessionPolling(hasActive: boolean): void {
+    if (hasActive && sessionPollTimer === null) {
+      sessionPollTimer = setInterval(() => {
+        void fetchActiveSessions();
+      }, 3000);
+    } else if (!hasActive && sessionPollTimer !== null) {
+      clearInterval(sessionPollTimer);
+      sessionPollTimer = null;
+    }
+  }
+
+  /**
+   * Cancel a running/queued session from the CurrentSessionPanel
+   */
+  async function handleCancelActiveSession(sessionId: string): Promise<void> {
+    try {
+      const resp = await fetch(`/api/ai/sessions/${sessionId}/cancel`, {
+        method: "POST",
+      });
+      if (resp.ok) {
+        runningSessions = runningSessions.filter((s) => s.id !== sessionId);
+        queuedSessions = queuedSessions.filter((s) => s.id !== sessionId);
+        void fetchQueueStatus();
+      }
+    } catch (e) {
+      console.error("Failed to cancel session:", e);
+    }
+  }
+
+  /**
+   * Handle resume from Sessions screen: navigate to Changes and refresh sessions
+   */
+  function handleResumeToChanges(): void {
+    navigateToScreen("diff");
+    void fetchActiveSessions();
+    void fetchQueueStatus();
   }
 
   /**
@@ -664,6 +764,10 @@
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("hashchange", handleHashChange);
       disconnectWebSocket();
+      if (sessionPollTimer !== null) {
+        clearInterval(sessionPollTimer);
+        sessionPollTimer = null;
+      }
     };
   });
 
@@ -747,6 +851,17 @@
             }}
           >
             System Info
+          </button>
+          <div class="border-t border-border-default my-1"></div>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary transition-colors"
+            onclick={() => {
+              mergeDialogOpen = true;
+              headerMenuOpen = false;
+            }}
+          >
+            Merge
           </button>
         </div>
       {/if}
@@ -1116,6 +1231,13 @@
           </div>
         </div>
 
+        <!-- Current Session Panel (above AI panel) -->
+        <CurrentSessionPanel
+          running={runningSessions}
+          queued={queuedSessions}
+          onCancelSession={(id) => void handleCancelActiveSession(id)}
+        />
+
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
         <AIPromptPanel
           collapsed={aiPanelCollapsed}
@@ -1132,7 +1254,7 @@
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <UnifiedSessionsScreen {contextId} {projectPath} />
+          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
         {/if}
       </main>
     {:else if currentScreen === "commits"}
@@ -1161,4 +1283,14 @@
       </main>
     {/if}
   </div>
+
+  <!-- Merge Branch Dialog -->
+  {#if mergeDialogOpen && contextId !== null}
+    <MergeBranchDialog
+      {contextId}
+      onClose={() => {
+        mergeDialogOpen = false;
+      }}
+    />
+  {/if}
 </div>

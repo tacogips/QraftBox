@@ -20,9 +20,10 @@
   interface Props {
     contextId: string;
     projectPath: string;
+    onResumeToChanges?: (() => void) | undefined;
   }
 
-  const { contextId, projectPath }: Props = $props();
+  const { contextId, projectPath, onResumeToChanges = undefined }: Props = $props();
 
   /**
    * Queue store instance
@@ -98,10 +99,14 @@
 
   /**
    * Handle resume session (Claude CLI)
+   * After resume, navigate to Changes screen if callback provided
    */
   async function handleResumeSession(sessionId: string): Promise<void> {
     try {
       await claudeSessionsStore.resumeSession(sessionId);
+      if (onResumeToChanges !== undefined) {
+        onResumeToChanges();
+      }
     } catch (e) {
       console.error("Failed to resume session:", e);
     }

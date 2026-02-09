@@ -149,6 +149,24 @@ export function createCheckoutFailure(
 }
 
 /**
+ * Request for merging a branch into the current branch
+ */
+export interface BranchMergeRequest {
+  readonly branch: string;
+  readonly noFf?: boolean | undefined;
+}
+
+/**
+ * Response from branch merge operation
+ */
+export interface BranchMergeResponse {
+  readonly success: boolean;
+  readonly mergedBranch: string;
+  readonly currentBranch: string;
+  readonly error?: string | undefined;
+}
+
+/**
  * Check if a branch name is valid according to git naming rules
  *
  * Invalid characters include: space, .., ~, ^, :, ?, *, [, \, @{

@@ -419,6 +419,70 @@ export async function checkoutBranch(
 }
 
 /**
+ * Merge a branch into the current branch
+ *
+ * Runs `git merge <branch>` in the specified project directory.
+ * If merge conflicts occur, the merge is automatically aborted.
+ *
+ * @param projectPath - Path to git repository
+ * @param branch - Branch name to merge
+ * @param noFf - If true, always create a merge commit (--no-ff)
+ * @returns Promise resolving to merge result
+ */
+export async function mergeBranch(
+  projectPath: string,
+  branch: string,
+  noFf?: boolean | undefined,
+): Promise<{ success: boolean; currentBranch: string; error?: string }> {
+  let currentBranch: string;
+  try {
+    currentBranch = await getCurrentBranch(projectPath);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      currentBranch: "unknown",
+      error: `Failed to get current branch: ${errorMessage}`,
+    };
+  }
+
+  const mergeArgs = ["merge"];
+  if (noFf === true) {
+    mergeArgs.push("--no-ff");
+  }
+  mergeArgs.push(branch);
+
+  const mergeResult = await execGit(mergeArgs, { cwd: projectPath });
+
+  if (mergeResult.exitCode !== 0) {
+    const isConflict =
+      mergeResult.stderr.includes("CONFLICT") ||
+      mergeResult.stdout.includes("CONFLICT") ||
+      mergeResult.stderr.includes("Automatic merge failed");
+
+    if (isConflict) {
+      await execGit(["merge", "--abort"], { cwd: projectPath });
+      return {
+        success: false,
+        currentBranch,
+        error: "Merge conflicts detected. Merge was aborted.",
+      };
+    }
+
+    return {
+      success: false,
+      currentBranch,
+      error: `Merge failed: ${mergeResult.stderr}`,
+    };
+  }
+
+  return {
+    success: true,
+    currentBranch,
+  };
+}
+
+/**
  * Get ahead/behind counts for a branch relative to its upstream
  *
  * Uses `git rev-list --count --left-right` to count commits ahead and behind.
