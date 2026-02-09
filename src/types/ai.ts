@@ -226,6 +226,7 @@ export interface AISessionInfo {
   readonly startedAt?: string | undefined;
   readonly completedAt?: string | undefined;
   readonly context: AIPromptContext;
+  readonly lastAssistantMessage?: string | undefined;
 }
 
 /**

@@ -275,14 +275,16 @@
   /**
    * Toggle session expansion in accordion
    */
-  function toggleSessionExpansion(sessionId: string): void {
+  function toggleSessionExpansion(sessionId: string, kind: "qraftbox" | "claude-cli"): void {
     const newSet = new Set(expandedSessionIds);
     if (newSet.has(sessionId)) {
       newSet.delete(sessionId);
     } else {
       newSet.add(sessionId);
-      // Fetch summary when expanding
-      void fetchSessionSummary(sessionId);
+      // Only fetch summary for CLI sessions (QraftBox sessions use in-memory data)
+      if (kind === "claude-cli") {
+        void fetchSessionSummary(sessionId);
+      }
     }
     expandedSessionIds = newSet;
   }
@@ -592,8 +594,8 @@
             <!-- Header Row (clickable, sticky) -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              onclick={() => toggleSessionExpansion(itemId)}
-              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSessionExpansion(itemId); } }}
+              onclick={() => toggleSessionExpansion(itemId, item.kind)}
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSessionExpansion(itemId, item.kind); } }}
               role="button"
               tabindex={0}
               class="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm cursor-pointer select-none {isFirst
@@ -865,8 +867,37 @@
                   </div>
                 {/if}
 
-                <!-- Inline Transcript -->
-                <SessionTranscriptInline sessionId={itemId} {contextId} />
+                <!-- Inline Transcript: QraftBox sessions use in-memory data, CLI sessions fetch from disk -->
+                {#if item.kind === "qraftbox"}
+                  <div class="px-4 py-3">
+                    <!-- User prompt -->
+                    <div class="border-l-4 border-accent-emphasis bg-bg-secondary rounded-r mb-2">
+                      <div class="px-3 py-1.5">
+                        <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg">user</span>
+                      </div>
+                      <div class="px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words text-text-primary">
+                        {stripSystemTags(item.session.prompt)}
+                      </div>
+                    </div>
+                    <!-- Assistant response -->
+                    {#if item.session.lastAssistantMessage}
+                      <div class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r">
+                        <div class="px-3 py-1.5">
+                          <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-success-muted text-success-fg">assistant</span>
+                        </div>
+                        <div class="px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words text-text-primary max-h-[300px] overflow-y-auto">
+                          {stripSystemTags(item.session.lastAssistantMessage)}
+                        </div>
+                      </div>
+                    {:else if item.session.state === "failed"}
+                      <div class="text-xs text-danger-fg py-2">Session failed.</div>
+                    {:else}
+                      <div class="text-xs text-success-fg py-2">Session completed.</div>
+                    {/if}
+                  </div>
+                {:else}
+                  <SessionTranscriptInline sessionId={itemId} {contextId} />
+                {/if}
               </div>
             {/if}
           </div>

@@ -34,6 +34,7 @@ interface InternalSession {
   createdAt: Date;
   startedAt?: Date;
   completedAt?: Date;
+  lastAssistantMessage?: string;
   listeners: Set<(event: AIProgressEvent) => void>;
   abortController?: AbortController;
   toolAgentSession?: ToolAgentSession;
@@ -120,6 +121,7 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
     startedAt: session.startedAt?.toISOString(),
     completedAt: session.completedAt?.toISOString(),
     context: session.request.context,
+    lastAssistantMessage: session.lastAssistantMessage,
   };
 }
 
@@ -201,6 +203,7 @@ export function createSessionManager(
               typeof message.content === "string"
                 ? message.content
                 : JSON.stringify(message.content);
+            session.lastAssistantMessage = content;
             emitEvent(
               sessionId,
               createProgressEvent("message", sessionId, {
@@ -324,14 +327,17 @@ export function createSessionManager(
           return;
         }
 
+        const stubbedContent =
+          "[AI Integration Stubbed] Tool registry not provided. The full prompt was:\n\n" +
+          session.fullPrompt.slice(0, 500) +
+          (session.fullPrompt.length > 500 ? "..." : "");
+        session.lastAssistantMessage = stubbedContent;
+
         emitEvent(
           sessionId,
           createProgressEvent("message", sessionId, {
             role: "assistant",
-            content:
-              "[AI Integration Stubbed] Tool registry not provided. The full prompt was:\n\n" +
-              session.fullPrompt.slice(0, 500) +
-              (session.fullPrompt.length > 500 ? "..." : ""),
+            content: stubbedContent,
           }),
         );
 

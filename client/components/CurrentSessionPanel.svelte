@@ -480,11 +480,18 @@
             </div>
           {:else if displayMode === "completed" && completedSession !== null}
             <div class="px-4 py-2">
-              <p class="text-xs text-text-primary whitespace-pre-wrap mb-2">
+              <p class="text-xs text-text-secondary whitespace-pre-wrap mb-2">
                 {stripSystemTags(completedSession.prompt)}
               </p>
               {#if completedSession.state === "failed"}
                 <p class="text-xs text-danger-fg">Session failed.</p>
+              {:else if completedSession.lastAssistantMessage}
+                <div class="border-l-4 border-success-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1">
+                  <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-success-muted text-success-fg mb-1 inline-block">assistant</span>
+                  <p class="text-xs text-text-primary whitespace-pre-wrap font-mono mt-1 max-h-[200px] overflow-y-auto">
+                    {stripSystemTags(completedSession.lastAssistantMessage)}
+                  </p>
+                </div>
               {:else}
                 <p class="text-xs text-success-fg">Session completed.</p>
               {/if}
