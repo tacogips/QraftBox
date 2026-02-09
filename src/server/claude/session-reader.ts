@@ -696,6 +696,228 @@ export class ClaudeSessionReader {
 
     return latest.modified;
   }
+
+  /**
+   * Get session summary with tool usage, tasks, and file modifications
+   *
+   * @param sessionId - Session ID to get summary for
+   * @returns Session summary or null if session not found
+   */
+  async getSessionSummary(sessionId: string): Promise<SessionSummary | null> {
+    const session = await this.getSession(sessionId);
+    if (session === null) {
+      return null;
+    }
+
+    const jsonlPath = session.fullPath;
+    if (!existsSync(jsonlPath)) {
+      return null;
+    }
+
+    const fileStat = await stat(jsonlPath);
+    const fileSize = fileStat.size;
+
+    // Skip files larger than 10MB to avoid memory issues
+    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    if (fileSize > MAX_FILE_SIZE) {
+      return {
+        sessionId,
+        toolUsage: [],
+        tasks: [],
+        filesModified: [],
+      };
+    }
+
+    const content = await readFile(jsonlPath, "utf-8");
+    const lines = content.split("\n").filter((line) => line.trim().length > 0);
+
+    // Track tool usage counts
+    const toolCounts = new Map<string, number>();
+
+    // Track tasks with their current status
+    const tasksMap = new Map<string, SessionTask>();
+    let taskIdCounter = 1;
+
+    // Track unique file modifications
+    const filesModifiedSet = new Map<
+      string,
+      { path: string; tool: "Edit" | "Write" }
+    >();
+
+    // Parse each line to extract tool usage and tasks
+    for (const line of lines) {
+      try {
+        const event: unknown = JSON.parse(line);
+        if (typeof event !== "object" || event === null) {
+          continue;
+        }
+
+        const obj = event as Record<string, unknown>;
+
+        // Process assistant events with message.content array
+        if (obj["type"] === "assistant" && typeof obj["message"] === "object") {
+          const message = obj["message"] as Record<string, unknown>;
+          const content = message["content"];
+
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (
+                typeof block === "object" &&
+                block !== null &&
+                (block as Record<string, unknown>)["type"] === "tool_use"
+              ) {
+                const toolUse = block as Record<string, unknown>;
+                const toolName =
+                  typeof toolUse["name"] === "string"
+                    ? toolUse["name"]
+                    : undefined;
+                const toolInput =
+                  typeof toolUse["input"] === "object"
+                    ? toolUse["input"]
+                    : null;
+
+                // Count tool usage
+                if (toolName !== undefined) {
+                  const currentCount = toolCounts.get(toolName) ?? 0;
+                  toolCounts.set(toolName, currentCount + 1);
+
+                  // Extract file paths from Edit and Write tools
+                  if (
+                    (toolName === "Edit" || toolName === "Write") &&
+                    toolInput !== null
+                  ) {
+                    const input = toolInput as Record<string, unknown>;
+                    const filePath =
+                      typeof input["file_path"] === "string"
+                        ? input["file_path"]
+                        : undefined;
+
+                    if (filePath !== undefined) {
+                      filesModifiedSet.set(filePath, {
+                        path: filePath,
+                        tool: toolName,
+                      });
+                    }
+                  }
+
+                  // Extract tasks from TaskCreate
+                  if (toolName === "TaskCreate" && toolInput !== null) {
+                    const input = toolInput as Record<string, unknown>;
+                    const subject =
+                      typeof input["subject"] === "string"
+                        ? input["subject"]
+                        : "";
+
+                    if (subject !== "") {
+                      const taskId = `task-${taskIdCounter}`;
+                      taskIdCounter++;
+                      tasksMap.set(taskId, {
+                        id: taskId,
+                        subject,
+                        status: "pending",
+                      });
+                    }
+                  }
+
+                  // Update task status from TaskUpdate
+                  if (toolName === "TaskUpdate" && toolInput !== null) {
+                    const input = toolInput as Record<string, unknown>;
+                    const taskId =
+                      typeof input["taskId"] === "string"
+                        ? input["taskId"]
+                        : undefined;
+                    const status =
+                      typeof input["status"] === "string"
+                        ? input["status"]
+                        : undefined;
+
+                    if (taskId !== undefined && status !== undefined) {
+                      const existingTask = tasksMap.get(taskId);
+                      if (existingTask !== undefined) {
+                        tasksMap.set(taskId, {
+                          ...existingTask,
+                          status,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (error: unknown) {
+        // Skip malformed lines
+        continue;
+      }
+    }
+
+    // Also check ~/.claude/todos/{sessionId}-agent-*.json files
+    const todosDir = join(homedir(), ".claude", "todos");
+    if (existsSync(todosDir)) {
+      try {
+        const todoFiles = await readdir(todosDir);
+        const sessionTodoFiles = todoFiles.filter((filename) =>
+          filename.startsWith(`${sessionId}-agent-`),
+        );
+
+        for (const todoFile of sessionTodoFiles) {
+          try {
+            const todoPath = join(todosDir, todoFile);
+            const todoContent = await readFile(todoPath, "utf-8");
+            const todoData: unknown = JSON.parse(todoContent);
+
+            if (Array.isArray(todoData)) {
+              for (const task of todoData) {
+                if (typeof task === "object" && task !== null) {
+                  const taskObj = task as Record<string, unknown>;
+                  const id =
+                    typeof taskObj["id"] === "string" ? taskObj["id"] : "";
+                  const content =
+                    typeof taskObj["content"] === "string"
+                      ? taskObj["content"]
+                      : "";
+                  const status =
+                    typeof taskObj["status"] === "string"
+                      ? taskObj["status"]
+                      : "pending";
+
+                  if (id !== "" && content !== "") {
+                    // Use content as subject for todo tasks
+                    tasksMap.set(id, {
+                      id,
+                      subject: content,
+                      status,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (error: unknown) {
+            // Skip files that can't be parsed
+            continue;
+          }
+        }
+      } catch (error: unknown) {
+        // Skip if todos directory can't be read
+      }
+    }
+
+    // Convert maps to arrays
+    const toolUsage: ToolUsageEntry[] = Array.from(toolCounts.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count);
+
+    const tasks: SessionTask[] = Array.from(tasksMap.values());
+    const filesModified: FileModEntry[] = Array.from(filesModifiedSet.values());
+
+    return {
+      sessionId,
+      toolUsage,
+      tasks,
+      filesModified,
+    };
+  }
 }
 
 /**
@@ -707,4 +929,39 @@ export interface TranscriptEvent {
   readonly timestamp?: string | undefined;
   readonly content?: unknown;
   readonly raw: object;
+}
+
+/**
+ * Tool usage entry extracted from session
+ */
+export interface ToolUsageEntry {
+  readonly name: string;
+  readonly count: number;
+}
+
+/**
+ * Task extracted from session
+ */
+export interface SessionTask {
+  readonly id: string;
+  readonly subject: string;
+  readonly status: string;
+}
+
+/**
+ * File modification entry
+ */
+export interface FileModEntry {
+  readonly path: string;
+  readonly tool: "Edit" | "Write";
+}
+
+/**
+ * Session summary with activity details
+ */
+export interface SessionSummary {
+  readonly sessionId: string;
+  readonly toolUsage: readonly ToolUsageEntry[];
+  readonly tasks: readonly SessionTask[];
+  readonly filesModified: readonly FileModEntry[];
 }

@@ -12,7 +12,10 @@ import type {
   SessionSource,
 } from "../../types/claude-session";
 import { isSessionSource } from "../../types/claude-session";
-import { ClaudeSessionReader } from "../claude/session-reader";
+import {
+  ClaudeSessionReader,
+  type SessionSummary,
+} from "../claude/session-reader";
 
 /**
  * Error response format
@@ -39,6 +42,7 @@ interface ResumeSessionResponse {
  * - GET /api/claude/sessions - List sessions with filtering
  * - GET /api/claude/sessions/:id - Get specific session
  * - GET /api/claude/sessions/:id/transcript - Get session transcript events
+ * - GET /api/claude/sessions/:id/summary - Get session summary with tool usage and tasks
  * - POST /api/claude/sessions/:id/resume - Resume a session
  *
  * @returns Hono app with Claude sessions routes mounted
@@ -353,6 +357,46 @@ export function createClaudeSessionsRoutes(): Hono {
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to read transcript";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /api/claude/sessions/:id/summary
+   *
+   * Get session summary with tool usage, tasks, and file modifications.
+   */
+  app.get("/sessions/:id/summary", async (c) => {
+    const sessionId = c.req.param("id");
+
+    if (!sessionId || sessionId.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Session ID is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const summary: SessionSummary | null =
+        await sessionReader.getSessionSummary(sessionId);
+
+      if (summary === null) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${sessionId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      return c.json(summary);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to get session summary";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
