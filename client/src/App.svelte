@@ -20,6 +20,25 @@
   type ScreenType = "diff" | "commits" | "sessions" | "worktree" | "tools";
 
   /**
+   * Valid screens for hash validation
+   */
+  const VALID_SCREENS: ReadonlySet<string> = new Set([
+    "diff",
+    "commits",
+    "sessions",
+    "worktree",
+    "tools",
+  ]);
+
+  /**
+   * Parse the URL hash into a ScreenType, defaulting to "diff" for invalid hashes
+   */
+  function screenFromHash(): ScreenType {
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    return VALID_SCREENS.has(hash) ? (hash as ScreenType) : "diff";
+  }
+
+  /**
    * Application state
    */
   let contextId = $state<string | null>(null);
@@ -31,7 +50,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
-  let currentScreen = $state<ScreenType>("diff");
+  let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
 
   // AI prompt state
@@ -361,10 +380,14 @@
   }
 
   /**
-   * Navigate to a specific screen
+   * Navigate to a specific screen and update URL hash
    */
   function navigateToScreen(screen: ScreenType): void {
     currentScreen = screen;
+    const newHash = `#/${screen}`;
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
+    }
   }
 
   /**
@@ -508,6 +531,16 @@
   }
 
   /**
+   * Handle browser back/forward navigation via hashchange
+   */
+  function handleHashChange(): void {
+    const screen = screenFromHash();
+    if (screen !== currentScreen) {
+      currentScreen = screen;
+    }
+  }
+
+  /**
    * WebSocket connection for realtime file change updates
    */
   let ws: WebSocket | null = null;
@@ -584,8 +617,20 @@
     void init();
     connectWebSocket();
     window.addEventListener("keydown", handleKeydown);
+    window.addEventListener("hashchange", handleHashChange);
+
+    // Set initial hash if empty
+    if (
+      !window.location.hash ||
+      window.location.hash === "#" ||
+      window.location.hash === "#/"
+    ) {
+      window.location.hash = `#/${currentScreen}`;
+    }
+
     return () => {
       window.removeEventListener("keydown", handleKeydown);
+      window.removeEventListener("hashchange", handleHashChange);
       disconnectWebSocket();
     };
   });
@@ -635,7 +680,9 @@
         onclick={() => (headerMenuOpen = !headerMenuOpen)}
       >
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"></path>
+          <path
+            d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"
+          ></path>
         </svg>
       </button>
       {#if headerMenuOpen}
@@ -646,8 +693,13 @@
           <button
             type="button"
             class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                   {currentScreen === 'tools' ? 'text-text-primary font-semibold' : 'text-text-secondary'}"
-            onclick={() => { navigateToScreen("tools"); headerMenuOpen = false; }}
+                   {currentScreen === 'tools'
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              navigateToScreen("tools");
+              headerMenuOpen = false;
+            }}
           >
             Tools
           </button>
