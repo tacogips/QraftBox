@@ -1476,6 +1476,8 @@
           onToggle={() => {
             aiPanelCollapsed = !aiPanelCollapsed;
           }}
+          onNewSession={handleNewSession}
+          onSearchSession={handleSearchSession}
         />
       </div>
     {:else if currentScreen === "commits"}
