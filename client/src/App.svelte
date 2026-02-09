@@ -8,6 +8,7 @@
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
   import CurrentSessionPanel from "../components/CurrentSessionPanel.svelte";
+  import SessionToolbar from "../components/SessionToolbar.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
@@ -790,6 +791,15 @@
   }
 
   /**
+   * Start a new session by expanding the AI prompt panel and focusing it
+   */
+  function handleNewSession(): void {
+    if (aiPanelCollapsed) {
+      aiPanelCollapsed = false;
+    }
+  }
+
+  /**
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
@@ -1121,22 +1131,22 @@
       <button
         type="button"
         class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-               {currentScreen === 'commits'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("commits")}
-      >
-        Commits
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
                {currentScreen === 'sessions'
           ? 'text-text-primary font-semibold border-accent-emphasis'
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("sessions")}
       >
         Sessions
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
+               {currentScreen === 'commits'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => navigateToScreen("commits")}
+      >
+        Commits
       </button>
     </nav>
 
@@ -1419,6 +1429,13 @@
           </div>
         </div>
 
+        <!-- Session Toolbar (new session + search session) -->
+        <SessionToolbar
+          {contextId}
+          onNewSession={handleNewSession}
+          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+        />
+
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
           {contextId}
@@ -1441,18 +1458,18 @@
           }}
         />
       </div>
-    {:else if currentScreen === "sessions"}
-      <!-- Unified Sessions Screen -->
-      <main class="flex-1 overflow-hidden">
-        {#if contextId !== null}
-          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
-        {/if}
-      </main>
     {:else if currentScreen === "commits"}
       <!-- Commits Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
           <CommitsScreen {contextId} />
+        {/if}
+      </main>
+    {:else if currentScreen === "sessions"}
+      <!-- Unified Sessions Screen -->
+      <main class="flex-1 overflow-hidden">
+        {#if contextId !== null}
+          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
         {/if}
       </main>
     {:else if currentScreen === "worktree"}
