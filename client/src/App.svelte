@@ -52,6 +52,7 @@
   let projectPath = $state<string>("");
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
+  let pathCopied = $state(false);
 
   // AI prompt state
   let aiPanelCollapsed = $state(true);
@@ -541,6 +542,29 @@
   }
 
   /**
+   * Copy project path to clipboard
+   */
+  function copyPath(): void {
+    void navigator.clipboard.writeText(projectPath).then(() => {
+      pathCopied = true;
+      setTimeout(() => {
+        pathCopied = false;
+      }, 1500);
+    });
+  }
+
+  /**
+   * Truncate long path to show last ~30 characters
+   */
+  function truncatePath(path: string): string {
+    const maxLength = 30;
+    if (path.length <= maxLength) {
+      return path;
+    }
+    return "..." + path.slice(-maxLength);
+  }
+
+  /**
    * WebSocket connection for realtime file change updates
    */
   let ws: WebSocket | null = null;
@@ -725,9 +749,38 @@
     <!-- Project path and status -->
     {#if projectPath}
       <div
-        class="py-2 px-4 text-sm border-b-2 border-accent-emphasis text-text-primary"
+        class="py-2 px-4 text-sm border-b-2 border-accent-emphasis text-text-primary flex items-center gap-1"
+        title={projectPath}
       >
-        {projectPath}
+        <span
+          class="overflow-hidden text-ellipsis whitespace-nowrap max-w-[200px]"
+        >
+          {truncatePath(projectPath)}
+        </span>
+        <button
+          type="button"
+          class="text-text-secondary hover:text-text-primary transition-colors"
+          onclick={copyPath}
+          title="Copy path to clipboard"
+        >
+          {#if pathCopied}
+            <!-- Checkmark icon -->
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"
+                fill="currentColor"
+              />
+            </svg>
+          {:else}
+            <!-- Clipboard icon -->
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M5.75 1a.75.75 0 0 0-.75.75v.5h-.5A1.75 1.75 0 0 0 2.75 4v9.5c0 .966.784 1.75 1.75 1.75h7a1.75 1.75 0 0 0 1.75-1.75V4a1.75 1.75 0 0 0-1.75-1.75h-.5v-.5A.75.75 0 0 0 10.25 1h-4.5zM10 2.5v.5h-4v-.5h4zm-6.5 2a.25.25 0 0 1 .25-.25h7.5a.25.25 0 0 1 .25.25v9.5a.25.25 0 0 1-.25.25h-7.5a.25.25 0 0 1-.25-.25V4.5z"
+                fill="currentColor"
+              />
+            </svg>
+          {/if}
+        </button>
       </div>
     {/if}
     {#if contextId !== null}
