@@ -30,9 +30,12 @@
     onSubmit: (
       prompt: string,
       immediate: boolean,
-      refs: readonly FileReference[]
+      refs: readonly FileReference[],
     ) => Promise<void>;
     onToggle: () => void;
+    onNewSession?: () => void;
+    onSearchSession?: () => void;
+    onChangePage?: () => void;
   }
 
   const {
@@ -42,6 +45,9 @@
     allFiles,
     onSubmit,
     onToggle,
+    onNewSession,
+    onSearchSession,
+    onChangePage,
   }: Props = $props();
 
   /**
@@ -153,7 +159,9 @@
           onclick={handleToggle}
           class="p-1 text-text-secondary hover:text-text-primary transition-colors"
           title={collapsed ? "Expand (a)" : "Collapse (a)"}
-          aria-label={collapsed ? "Expand prompt panel" : "Collapse prompt panel"}
+          aria-label={collapsed
+            ? "Expand prompt panel"
+            : "Collapse prompt panel"}
         >
           <svg
             width="16"
@@ -170,6 +178,95 @@
 
         <span class="text-xs font-medium text-text-secondary">Ask AI</span>
 
+        <!-- Session Management Icons -->
+        <div class="flex items-center gap-1 ml-2">
+          {#if onNewSession !== undefined}
+            <button
+              type="button"
+              onclick={onNewSession}
+              class="p-1 rounded hover:bg-bg-hover transition-colors
+                     text-text-tertiary hover:text-text-primary"
+              title="New Session"
+              aria-label="Create new session"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          {/if}
+
+          {#if onSearchSession !== undefined}
+            <button
+              type="button"
+              onclick={onSearchSession}
+              class="p-1 rounded hover:bg-bg-hover transition-colors
+                     text-text-tertiary hover:text-text-primary"
+              title="Search Sessions"
+              aria-label="Search and browse sessions"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </button>
+          {/if}
+
+          {#if onChangePage !== undefined}
+            <button
+              type="button"
+              onclick={onChangePage}
+              class="p-1 rounded hover:bg-bg-hover transition-colors
+                     text-text-tertiary hover:text-text-primary"
+              title="Change Page"
+              aria-label="Navigate to different page"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"
+                />
+                <path d="M14 2v4a2 2 0 0 0 2 2h4" />
+                <path d="M10 9H8" />
+                <path d="M16 13H8" />
+                <path d="M16 17H8" />
+              </svg>
+            </button>
+          {/if}
+        </div>
+
         {#if queueStatus.runningCount > 0 || queueStatus.queuedCount > 0}
           <span
             class="px-2 py-0.5 text-xs rounded-full bg-accent-subtle text-accent-fg"
@@ -179,9 +276,7 @@
         {/if}
       </div>
 
-      <div class="text-xs text-text-tertiary">
-        Ctrl+Enter to submit
-      </div>
+      <div class="text-xs text-text-tertiary">Ctrl+Enter to submit</div>
     </div>
 
     <!-- Input area -->

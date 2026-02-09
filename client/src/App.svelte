@@ -12,7 +12,6 @@
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
   import CurrentSessionPanel from "../components/CurrentSessionPanel.svelte";
-  import SessionToolbar from "../components/SessionToolbar.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
@@ -981,6 +980,22 @@
   }
 
   /**
+   * Search session placeholder (to be implemented)
+   */
+  function handleSearchSession(): void {
+    // TODO: Implement session search functionality
+    console.log("Search session requested");
+  }
+
+  /**
+   * Change page placeholder (to be implemented)
+   */
+  function handleChangePage(): void {
+    // TODO: Implement page change functionality
+    console.log("Change page requested");
+  }
+
+  /**
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
@@ -1623,16 +1638,6 @@
           </div>
         </div>
 
-        <!-- Session Toolbar (new session + search session) -->
-        <SessionToolbar
-          {contextId}
-          {projectPath}
-          excludeSessionId={selectedCliSessionId}
-          onNewSession={handleNewSession}
-          onResumeSession={(sessionId) =>
-            void handleResumeCliSession(sessionId)}
-        />
-
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
           {contextId}
@@ -1661,6 +1666,9 @@
           onToggle={() => {
             aiPanelCollapsed = !aiPanelCollapsed;
           }}
+          onNewSession={handleNewSession}
+          onSearchSession={handleSearchSession}
+          onChangePage={handleChangePage}
         />
       </div>
     {:else if currentScreen === "commits"}

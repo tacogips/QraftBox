@@ -7,11 +7,15 @@
  */
 
 import { Hono } from "hono";
-import type { GitActionResult } from "../git-actions/executor.js";
+import type {
+  GitActionResult,
+  PRStatusResult,
+} from "../git-actions/executor.js";
 import {
   executeCommit,
   executePush,
   executeCreatePR,
+  getPRStatus,
 } from "../git-actions/executor.js";
 
 /**
@@ -63,6 +67,7 @@ function isNonEmptyString(value: unknown): value is string {
  * - POST /commit - Execute AI-powered commit
  * - POST /push - Execute git push (direct, no AI)
  * - POST /create-pr - Execute AI-powered PR creation
+ * - GET /pr-status - Get PR status for current branch
  *
  * @returns Hono app with git-actions routes
  */
@@ -176,6 +181,41 @@ export function createGitActionsRoutes(): Hono {
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to execute create-pr";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /pr-status
+   *
+   * Get PR status for the current branch.
+   * Query params:
+   * - projectPath: Absolute path to project repository
+   */
+  app.get("/pr-status", async (c) => {
+    try {
+      const projectPath = c.req.query("projectPath");
+
+      // Validate projectPath
+      if (!isNonEmptyString(projectPath)) {
+        const errorResponse: ErrorResponse = {
+          error: "projectPath query parameter must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Get PR status
+      const status: PRStatusResult = await getPRStatus(projectPath);
+
+      return c.json({ status });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to get PR status";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
