@@ -1,7 +1,8 @@
 /**
  * Push API Routes
  *
- * REST endpoints for AI-powered git push operations.
+ * REST endpoints for git push operations.
+ * Push executes direct git commands (no AI).
  * Provides push execution, preview, status, and remote information.
  */
 

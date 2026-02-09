@@ -1,7 +1,9 @@
 /**
  * Git Actions API Routes
  *
- * REST endpoints for AI-powered git operations (commit, push, create-pr).
+ * REST endpoints for git operations (commit, push, create-pr).
+ * Commit and Create PR use Claude Code agent (AI-powered).
+ * Push runs git push directly (no AI).
  */
 
 import { Hono } from "hono";
@@ -59,7 +61,7 @@ function isNonEmptyString(value: unknown): value is string {
  *
  * Routes:
  * - POST /commit - Execute AI-powered commit
- * - POST /push - Execute AI-powered push
+ * - POST /push - Execute git push (direct, no AI)
  * - POST /create-pr - Execute AI-powered PR creation
  *
  * @returns Hono app with git-actions routes
@@ -106,7 +108,7 @@ export function createGitActionsRoutes(): Hono {
   /**
    * POST /push
    *
-   * Execute AI-powered git push operation.
+   * Execute git push (direct git command, no AI).
    */
   app.post("/push", async (c) => {
     try {

@@ -31,6 +31,7 @@ import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { PromptStore } from "../../types/local-prompt.js";
 import { createGitActionsRoutes } from "./git-actions.js";
 import { createBranchRoutes } from "./branches.js";
+import { createSystemInfoRoutes } from "./system-info.js";
 
 /**
  * Route group definition
@@ -211,6 +212,11 @@ export function getNonContextRouteGroups(
     {
       prefix: "/git-actions",
       routes: createGitActionsRoutes(),
+    },
+    // System info routes - GET /api/system-info
+    {
+      prefix: "/system-info",
+      routes: createSystemInfoRoutes(),
     },
   ];
 }

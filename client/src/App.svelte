@@ -12,12 +12,19 @@
   import HeaderStatusBadges from "../components/HeaderStatusBadges.svelte";
   import WorktreeScreen from "../components/worktree/WorktreeScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
+  import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import CurrentStateView from "../components/CurrentStateView.svelte";
 
   /**
    * Screen type for navigation
    */
-  type ScreenType = "diff" | "commits" | "sessions" | "worktree" | "tools";
+  type ScreenType =
+    | "diff"
+    | "commits"
+    | "sessions"
+    | "worktree"
+    | "tools"
+    | "system-info";
 
   /**
    * Valid screens for hash validation
@@ -28,6 +35,7 @@
     "sessions",
     "worktree",
     "tools",
+    "system-info",
   ]);
 
   /**
@@ -727,6 +735,19 @@
           >
             Tools
           </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                   {currentScreen === 'system-info'
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              navigateToScreen("system-info");
+              headerMenuOpen = false;
+            }}
+          >
+            System Info
+          </button>
         </div>
       {/if}
     </div>
@@ -1132,6 +1153,11 @@
       <!-- Tools Screen -->
       <main class="flex-1 overflow-hidden">
         <ToolsScreen />
+      </main>
+    {:else if currentScreen === "system-info"}
+      <!-- System Info Screen -->
+      <main class="flex-1 overflow-hidden">
+        <SystemInfoScreen />
       </main>
     {/if}
   </div>

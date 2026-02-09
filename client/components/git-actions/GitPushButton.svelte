@@ -2,13 +2,14 @@
   /**
    * GitPushButton Component
    *
-   * Displays a "Commit & Push" button and a 3-dot menu for git operations.
-   * - "Commit & Push" button: runs commit via Claude CLI then git push sequentially.
-   * - 3-dot menu: Commit with custom ctx, Push with custom ctx,
-   *   Fetch, Merge, Create PR, Open current PR in Browser, Merge PR.
+   * Displays "Commit" and "Push" buttons and a 3-dot menu for git operations.
+   * - "Commit" button: runs commit via Claude CLI
+   * - "Push" button: runs git push directly (no AI)
+   * - 3-dot menu: Commit with custom ctx, Fetch, Merge,
+   *   Create PR, Open current PR in Browser, Merge PR.
    *
    * Commit and Create PR use Claude Code agent (claude CLI).
-   * Push uses direct git commands.
+   * Push, Fetch, and Merge use direct git commands.
    * Success/error notifications shown as toast from top.
    */
 
@@ -21,9 +22,7 @@
 
   // Menu state
   let menuOpen = $state(false);
-  let customCtxAction = $state<"commit" | "push" | "fetch" | "merge" | null>(
-    null,
-  );
+  let customCtxAction = $state<"commit" | "fetch" | "merge" | null>(null);
   let customCtxText = $state("");
 
   // Dropdown position (fixed, viewport-relative)
@@ -35,9 +34,7 @@
 
   // Operation state
   let operating = $state(false);
-  let operationPhase = $state<"idle" | "checking" | "committing" | "pushing">(
-    "idle",
-  );
+  let operationPhase = $state<"idle" | "committing" | "pushing">("idle");
 
   // Toast state for notifications
   let toastMessage = $state<string | null>(null);
@@ -91,16 +88,6 @@
     success: boolean;
     output: string;
     error?: string;
-  }
-
-  /** Status response from /api/ctx/{contextId}/status */
-  interface StatusData {
-    clean: boolean;
-    staged: string[];
-    modified: string[];
-    untracked: string[];
-    conflicts: string[];
-    branch: string;
   }
 
   /**
@@ -166,70 +153,64 @@
   }
 
   /**
-   * Execute commit via Claude CLI then push via git sequentially
-   * Checks status first to decide whether to commit or push
+   * Execute commit via Claude CLI
    */
-  async function handleGitPush(): Promise<void> {
+  async function handleCommit(): Promise<void> {
     operating = true;
-    operationPhase = "checking";
+    operationPhase = "committing";
     try {
-      // Step 1: Check status to determine if we need to commit or push
-      const statusResp = await fetch(`/api/ctx/${contextId}/status`);
-      if (!statusResp.ok) {
-        throw new Error(`Status check failed: ${statusResp.status}`);
+      const commitResp = await fetch("/api/git-actions/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+      if (!commitResp.ok) {
+        const errData = (await commitResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Commit failed: ${commitResp.status}`);
       }
-      const statusData = (await statusResp.json()) as StatusData;
-
-      // If working tree is not clean, commit
-      if (
-        !statusData.clean ||
-        statusData.staged.length > 0 ||
-        statusData.modified.length > 0 ||
-        statusData.untracked.length > 0
-      ) {
-        operationPhase = "committing";
-        const commitResp = await fetch("/api/git-actions/commit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectPath }),
-        });
-        if (!commitResp.ok) {
-          const errData = (await commitResp.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(
-            errData.error ?? `Commit failed: ${commitResp.status}`,
-          );
-        }
-        const commitResult = (await commitResp.json()) as GitActionResult;
-        if (!commitResult.success) {
-          throw new Error(commitResult.error ?? "Commit failed");
-        }
-
-        showToast("Commit completed", "success");
-      } else {
-        // If working tree is clean, push
-        operationPhase = "pushing";
-        const pushResp = await fetch("/api/git-actions/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectPath }),
-        });
-        if (!pushResp.ok) {
-          const errData = (await pushResp.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(errData.error ?? `Push failed: ${pushResp.status}`);
-        }
-        const pushResult = (await pushResp.json()) as GitActionResult;
-        if (!pushResult.success) {
-          throw new Error(pushResult.error ?? "Push failed");
-        }
-
-        showToast("Push completed", "success");
+      const commitResult = (await commitResp.json()) as GitActionResult;
+      if (!commitResult.success) {
+        throw new Error(commitResult.error ?? "Commit failed");
       }
+
+      showToast("Commit completed", "success");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Operation failed";
+      const msg = e instanceof Error ? e.message : "Commit failed";
+      showToast(msg, "error");
+    } finally {
+      operating = false;
+      operationPhase = "idle";
+    }
+  }
+
+  /**
+   * Execute push via git
+   */
+  async function handlePush(): Promise<void> {
+    operating = true;
+    operationPhase = "pushing";
+    try {
+      const pushResp = await fetch("/api/git-actions/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+      if (!pushResp.ok) {
+        const errData = (await pushResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Push failed: ${pushResp.status}`);
+      }
+      const pushResult = (await pushResp.json()) as GitActionResult;
+      if (!pushResult.success) {
+        throw new Error(pushResult.error ?? "Push failed");
+      }
+
+      showToast("Push completed", "success");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Push failed";
       showToast(msg, "error");
     } finally {
       operating = false;
@@ -266,19 +247,6 @@
           throw new Error(errData.error ?? `Commit failed: ${resp.status}`);
         }
         result = (await resp.json()) as GitActionResult;
-      } else if (action === "push") {
-        const resp = await fetch("/api/git-actions/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ projectPath }),
-        });
-        if (!resp.ok) {
-          const errData = (await resp.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(errData.error ?? `Push failed: ${resp.status}`);
-        }
-        result = (await resp.json()) as GitActionResult;
       } else {
         // fetch / merge - not yet wired to git-actions endpoints
         const actionLabel = action === "fetch" ? "Fetch" : "Merge";
@@ -294,11 +262,9 @@
       const actionLabel =
         action === "commit"
           ? "Commit"
-          : action === "push"
-            ? "Push"
-            : action === "fetch"
-              ? "Fetch"
-              : "Merge";
+          : action === "fetch"
+            ? "Fetch"
+            : "Merge";
       showToast(`${actionLabel} completed`, "success");
       customCtxAction = null;
       customCtxText = "";
@@ -423,17 +389,17 @@
 <svelte:window onclick={handleWindowClick} />
 
 <div class="flex items-center gap-1 git-actions-menu-container">
-  <!-- Commit & Push button -->
+  <!-- Commit button -->
   <button
     type="button"
     class="px-3 py-1 text-xs font-medium border border-border-default rounded
            bg-success-emphasis text-white hover:opacity-90
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
-    onclick={() => void handleGitPush()}
+    onclick={() => void handleCommit()}
     disabled={operating}
   >
-    {#if operating}
+    {#if operating && operationPhase === "committing"}
       <svg
         class="animate-spin"
         width="12"
@@ -445,17 +411,37 @@
       >
         <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
       </svg>
-      {#if operationPhase === "checking"}
-        Checking...
-      {:else if operationPhase === "committing"}
-        Committing...
-      {:else if operationPhase === "pushing"}
-        Pushing...
-      {:else}
-        Running...
-      {/if}
+      Committing...
     {:else}
-      Commit & Push
+      Commit
+    {/if}
+  </button>
+
+  <!-- Push button -->
+  <button
+    type="button"
+    class="px-3 py-1 text-xs font-medium border border-border-default rounded
+           bg-accent-emphasis text-white hover:opacity-90
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center gap-1.5"
+    onclick={() => void handlePush()}
+    disabled={operating}
+  >
+    {#if operating && operationPhase === "pushing"}
+      <svg
+        class="animate-spin"
+        width="12"
+        height="12"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
+      </svg>
+      Pushing...
+    {:else}
+      Push
     {/if}
   </button>
 
@@ -525,48 +511,6 @@
           disabled={operating}
         >
           {operating ? "Running..." : "Commit"}
-        </button>
-      </div>
-    {/if}
-
-    <!-- Push with custom ctx -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             text-text-primary border-t border-border-default
-             {customCtxAction === 'push' ? 'bg-bg-tertiary' : ''}"
-      onclick={(e) => {
-        e.stopPropagation();
-        customCtxAction = customCtxAction === "push" ? null : "push";
-        customCtxText = "";
-      }}
-      disabled={operating}
-    >
-      Push with custom ctx
-    </button>
-
-    {#if customCtxAction === "push"}
-      <div
-        class="px-3 py-2 border-t border-border-default bg-bg-primary"
-        role="presentation"
-      >
-        <textarea
-          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
-                 rounded text-text-primary font-mono resize-y
-                 focus:outline-none focus:border-accent-emphasis"
-          placeholder="Push runs git push directly (no AI)."
-          bind:value={customCtxText}
-          disabled={operating}
-        ></textarea>
-        <button
-          type="button"
-          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
-                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomCtxSubmit()}
-          disabled={operating}
-        >
-          {operating ? "Running..." : "Push"}
         </button>
       </div>
     {/if}
