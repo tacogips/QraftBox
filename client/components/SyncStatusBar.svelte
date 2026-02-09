@@ -50,11 +50,11 @@ const statusText = $derived.by(() => {
 const statusColorClass = $derived.by(() => {
   switch (status.mode) {
     case "local":
-      return "text-yellow-400";
+      return "text-attention-fg";
     case "remote":
-      return "text-blue-400";
+      return "text-accent-fg";
     case "synced":
-      return "text-green-400";
+      return "text-success-fg";
     default:
       return "text-text-secondary";
   }
@@ -181,7 +181,7 @@ function handlePull(): void {
            {loading || !hasUnpushed
       ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
       : 'bg-bg-tertiary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-1
            transition-colors duration-150"
     aria-label="Push local notes to remote"
     title="Push to remote"
@@ -215,7 +215,7 @@ function handlePull(): void {
            {loading || !hasUnpulled
       ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
       : 'bg-bg-tertiary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-1
            transition-colors duration-150"
     aria-label="Pull remote notes to local"
     title="Pull from remote"

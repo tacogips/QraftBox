@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the design of a multi-directory workspace feature for aynd. The feature allows users to work on multiple git repositories simultaneously using a tab-based interface, with iPad-friendly directory selection.
+This document describes the design of a multi-directory workspace feature for qraftbox. The feature allows users to work on multiple git repositories simultaneously using a tab-based interface, with iPad-friendly directory selection.
 
 ## Requirements Summary
 
@@ -230,8 +230,8 @@ All existing API endpoints become context-scoped:
   "canGoUp": true,
   "entries": [
     {
-      "name": "aynd",
-      "path": "/Users/taco/projects/aynd",
+      "name": "qraftbox",
+      "path": "/Users/taco/projects/qraftbox",
       "isDirectory": true,
       "isGitRepo": true,
       "isSymlink": false,
@@ -257,7 +257,7 @@ All existing API endpoints become context-scoped:
 
 ```json
 {
-  "path": "/Users/taco/projects/aynd",
+  "path": "/Users/taco/projects/qraftbox",
   "setActive": true
 }
 ```
@@ -268,9 +268,9 @@ All existing API endpoints become context-scoped:
 {
   "tab": {
     "id": "550e8400-e29b-41d4-a716-446655440000",
-    "path": "/Users/taco/projects/aynd",
-    "name": "aynd",
-    "repositoryRoot": "/Users/taco/projects/aynd",
+    "path": "/Users/taco/projects/qraftbox",
+    "name": "qraftbox",
+    "repositoryRoot": "/Users/taco/projects/qraftbox",
     "isGitRepo": true,
     "createdAt": 1738656000,
     "lastAccessedAt": 1738656000
@@ -330,7 +330,7 @@ app.use('/api/ctx/:contextId/*', async (c, next) => {
 
 ```
 +--------------------------------------------------------------------------+
-| [+] | [aynd] [x] | [other-repo] [x] | [my-lib] [x] |      [New Dir]     |
+| [+] | [qraftbox] [x] | [other-repo] [x] | [my-lib] [x] |      [New Dir]     |
 +--------------------------------------------------------------------------+
 |  File Tree        |                                                      |
 |  (for active tab) |           Diff View (for active tab)                 |
@@ -354,7 +354,7 @@ Each tab displays:
 
 ```
 +---------------------------+
-| [git-icon] aynd [*] [x]   |  <-- Active tab (highlighted)
+| [git-icon] qraftbox [*] [x]   |  <-- Active tab (highlighted)
 +---------------------------+
 | [folder] other-repo  [x]  |  <-- Inactive tab
 +---------------------------+
@@ -374,7 +374,7 @@ Full-screen modal optimized for touch:
 +------------------------------------------------------------------+
 |                                                                  |
 |  +------------------------------------------------------------+  |
-|  | [git] aynd/                              2 hours ago    [>] |  |  <- 60px row
+|  | [git] qraftbox/                              2 hours ago    [>] |  |  <- 60px row
 |  +------------------------------------------------------------+  |
 |  | [git] other-project/                     1 day ago      [>] |  |
 |  +------------------------------------------------------------+  |
@@ -384,7 +384,7 @@ Full-screen modal optimized for touch:
 |  +------------------------------------------------------------+  |
 |                                                                  |
 +------------------------------------------------------------------+
-|  Path: /Users/taco/projects/aynd                                 |
+|  Path: /Users/taco/projects/qraftbox                                 |
 |                                                                  |
 |  [                    Open This Directory                      ] |  <- 56px button
 +------------------------------------------------------------------+
@@ -441,7 +441,7 @@ For power users, a collapsible path input:
 +------------------------------------------------------------------+
 |  [v] Enter path manually                                         |
 +------------------------------------------------------------------+
-|  [ /Users/taco/projects/aynd_________________ ] [Go]             |
+|  [ /Users/taco/projects/qraftbox_________________ ] [Go]             |
 +------------------------------------------------------------------+
 ```
 
@@ -451,8 +451,8 @@ For power users, a collapsible path input:
 +------------------------------------------------------------------+
 |  Recent Directories                                    [Clear All]|
 +------------------------------------------------------------------+
-|  [git] aynd                                       2 hours ago    |
-|        /Users/taco/projects/aynd                                 |
+|  [git] qraftbox                                       2 hours ago    |
+|        /Users/taco/projects/qraftbox                                 |
 +------------------------------------------------------------------+
 |  [git] other-repo                                 Yesterday      |
 |        /Users/taco/projects/other-repo                           |
@@ -469,7 +469,7 @@ For power users, a collapsible path input:
 |  Bookmarks                                          [Edit] [Add] |
 +------------------------------------------------------------------+
 |  [*] Main Project                                                |
-|      /Users/taco/projects/aynd                                   |
+|      /Users/taco/projects/qraftbox                                   |
 +------------------------------------------------------------------+
 |  [*] Work Repo                                                   |
 |      /Users/taco/work/main-app                                   |
@@ -490,7 +490,7 @@ When limit reached:
 ### Tab Persistence
 
 Workspace state persisted to:
-- `~/.aynd/workspace.json` (server-side)
+- `~/.qraftbox/workspace.json` (server-side)
 - `localStorage` (client-side, for quick restore)
 
 ### Tab State Isolation
@@ -634,7 +634,7 @@ http://localhost:3000/ctx/550e8400-e29b-41d4-a716-446655440000
 Or with path encoding:
 
 ```
-http://localhost:3000/?dir=/Users/taco/projects/aynd
+http://localhost:3000/?dir=/Users/taco/projects/qraftbox
 ```
 
 ## Implementation Phases

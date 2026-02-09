@@ -61,7 +61,7 @@ function getHighlightClass(): string {
   if (highlightClass !== undefined) {
     return highlightClass;
   }
-  return "bg-yellow-300 dark:bg-yellow-700 text-black dark:text-white";
+  return "bg-attention-emphasis text-text-primary";
 }
 
 /**

@@ -37,7 +37,7 @@ async function gitExec(args: string[]): Promise<void> {
  */
 beforeAll(async () => {
   // Create temporary directory
-  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-test-"));
+  testRepoPath = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-test-"));
 
   // Initialize git repository
   await gitExec(["init"]);
@@ -153,13 +153,94 @@ describe("getCommitLog", () => {
 
   test("should handle empty repository", async () => {
     const emptyRepoPath = await fs.mkdtemp(
-      path.join(os.tmpdir(), "aynd-empty-"),
+      path.join(os.tmpdir(), "qraftbox-empty-"),
     );
     await Bun.spawn(["git", "init"], { cwd: emptyRepoPath }).exited;
 
     await expect(getCommitLog(emptyRepoPath)).rejects.toThrow(GitError);
 
     await fs.rm(emptyRepoPath, { recursive: true, force: true });
+  });
+
+  test("should search commits by message", async () => {
+    const result = await getCommitLog(testRepoPath, { search: "file2" });
+
+    expect(result.commits.length).toBeGreaterThan(0);
+    expect(result.commits.some((c) => c.message.includes("file2"))).toBe(true);
+    // Should return correct total count from search results, not all commits
+    expect(result.pagination.total).toBeLessThan(5);
+  });
+
+  test("should search commits case-insensitively", async () => {
+    const result = await getCommitLog(testRepoPath, { search: "RENAME" });
+
+    expect(result.commits.length).toBeGreaterThan(0);
+    expect(
+      result.commits.some((c) => c.message.toLowerCase().includes("rename")),
+    ).toBe(true);
+  });
+
+  test("should search commits by author", async () => {
+    const result = await getCommitLog(testRepoPath, { search: "Test User" });
+
+    expect(result.commits.length).toBe(5);
+    expect(result.commits.every((c) => c.author.name === "Test User")).toBe(
+      true,
+    );
+    expect(result.pagination.total).toBe(5);
+  });
+
+  test("should use OR logic for search (message OR author)", async () => {
+    // Search for a term that appears in message but not author
+    const result = await getCommitLog(testRepoPath, { search: "Rename" });
+
+    expect(result.commits.length).toBeGreaterThan(0);
+    // Should find commits where message matches, even though author doesn't match "Rename"
+    expect(result.commits.some((c) => c.message.includes("Rename"))).toBe(true);
+  });
+
+  test("should handle search with pagination", async () => {
+    const result = await getCommitLog(testRepoPath, {
+      search: "file",
+      limit: 2,
+    });
+
+    expect(result.commits.length).toBeLessThanOrEqual(2);
+    expect(result.pagination.limit).toBe(2);
+    // If there are more than 2 results, hasMore should be true
+    if (result.pagination.total > 2) {
+      expect(result.pagination.hasMore).toBe(true);
+    }
+  });
+
+  test("should handle search with offset", async () => {
+    const firstPage = await getCommitLog(testRepoPath, {
+      search: "file",
+      limit: 2,
+      offset: 0,
+    });
+    const secondPage = await getCommitLog(testRepoPath, {
+      search: "file",
+      limit: 2,
+      offset: 2,
+    });
+
+    // Should return different commits
+    if (firstPage.commits[0] && secondPage.commits[0]) {
+      expect(firstPage.commits[0].hash).not.toBe(secondPage.commits[0].hash);
+    }
+    // Both should have the same total count
+    expect(firstPage.pagination.total).toBe(secondPage.pagination.total);
+  });
+
+  test("should return empty results for no search matches", async () => {
+    const result = await getCommitLog(testRepoPath, {
+      search: "nonexistent_query_xyz",
+    });
+
+    expect(result.commits).toEqual([]);
+    expect(result.pagination.total).toBe(0);
+    expect(result.pagination.hasMore).toBe(false);
   });
 });
 

@@ -13,13 +13,13 @@
 **Source**: design-docs/specs/design-claude-session-browser.md
 
 ### Summary
-Browse, filter, and resume all Claude Code sessions from aynd, not just sessions created through aynd. Read session data from ~/.claude/projects/, distinguish aynd-spawned vs external sessions, and provide UI for session management.
+Browse, filter, and resume all Claude Code sessions from qraftbox, not just sessions created through qraftbox. Read session data from ~/.claude/projects/, distinguish qraftbox-spawned vs external sessions, and provide UI for session management.
 
 ### Scope
 **Included**:
 - Read Claude session indices from ~/.claude/projects/
 - List and filter sessions by project, source, branch
-- Session source detection (aynd vs claude-cli)
+- Session source detection (qraftbox vs claude-cli)
 - UI for browsing and filtering sessions
 - Session resume functionality
 
@@ -59,7 +59,7 @@ interface ClaudeSessionEntry {
   isSidechain: boolean;
 }
 
-type SessionSource = 'aynd' | 'claude-cli' | 'unknown';
+type SessionSource = 'qraftbox' | 'claude-cli' | 'unknown';
 
 interface ExtendedSessionEntry extends ClaudeSessionEntry {
   source: SessionSource;
@@ -106,7 +106,7 @@ interface ProjectInfo {
 **Status**: NOT_STARTED
 
 ```typescript
-interface AyndSessionRegistry {
+interface QraftBoxSessionRegistry {
   sessions: Array<{
     sessionId: string;
     createdAt: string;
@@ -116,8 +116,8 @@ interface AyndSessionRegistry {
 
 class SessionRegistry {
   async register(sessionId: string, projectPath: string): Promise<void>;
-  async isAyndSession(sessionId: string): Promise<boolean>;
-  async getRegistry(): Promise<AyndSessionRegistry>;
+  async isQraftBoxSession(sessionId: string): Promise<boolean>;
+  async getRegistry(): Promise<QraftBoxSessionRegistry>;
 }
 ```
 
@@ -250,7 +250,7 @@ const groupedSessions: Readable<GroupedSessions>;
 
 **Checklist**:
 - [ ] Session metadata display
-- [ ] Source badge (AYND/CLI)
+- [ ] Source badge (QRAFTBOX/CLI)
 - [ ] Relative timestamps
 - [ ] Resume button
 - [ ] View details button
@@ -287,7 +287,7 @@ const groupedSessions: Readable<GroupedSessions>;
 **Dependencies**: None
 
 **Description**:
-Define TypeScript types for Claude sessions and implement session registry for tracking aynd-created sessions.
+Define TypeScript types for Claude sessions and implement session registry for tracking qraftbox-created sessions.
 
 **Completion Criteria**:
 - [x] All session types defined
@@ -490,12 +490,12 @@ All completion criteria met. Ready for integration into main application.
   - Private methods: readSessionIndex(), detectSource(), matchesFilters(), getLatestModified()
 - Constructor accepts optional projectsDir and sessionRegistry parameters for testability
 - Source detection strategy:
-  - Primary: Check SessionRegistry for aynd-created sessions
-  - Fallback: Pattern matching for [aynd-context], "context from aynd:", "aynd session"
+  - Primary: Check SessionRegistry for qraftbox-created sessions
+  - Fallback: Pattern matching for [qraftbox-context], "context from qraftbox:", "qraftbox session"
   - Default: "claude-cli" for sessions without markers
 - Filtering support:
   - workingDirectoryPrefix - filter by project path prefix
-  - source - filter by SessionSource (aynd, claude-cli)
+  - source - filter by SessionSource (qraftbox, claude-cli)
   - branch - filter by git branch name
   - search - case-insensitive search in firstPrompt and summary
   - dateRange - filter by modified date range (from/to)
@@ -522,7 +522,7 @@ All completion criteria met. Ready for integration into main application.
   - GET /api/claude/sessions/:id - Retrieves specific session by ID
   - POST /api/claude/sessions/:id/resume - Returns instructions for resuming sessions (actual spawning deferred)
 - Request validation for all query parameters and request bodies
-  - Source validation (aynd, claude-cli, unknown)
+  - Source validation (qraftbox, claude-cli, unknown)
   - Numeric validation for offset (non-negative) and limit (positive)
   - SortBy validation (modified, created)
   - SortOrder validation (asc, desc)
@@ -575,7 +575,7 @@ All completion criteria met. Ready for integration into main application.
   - SessionFilters, SessionListResponse, ProjectInfo interfaces
   - Type guards with strict TypeScript compliance (bracket notation for index signatures)
 - Implemented `src/server/claude/session-registry.ts` with SessionRegistry class
-  - File-based registry in ~/.local/aynd/session-registry.json
+  - File-based registry in ~/.local/qraftbox/session-registry.json
   - Concurrent access protection with file locking
   - Atomic lock acquisition using exclusive write flag (wx mode)
   - Stale lock detection and cleanup (30s timeout)

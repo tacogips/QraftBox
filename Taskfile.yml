@@ -1,7 +1,7 @@
 version: '3'
 
 vars:
-  PROJECT_NAME: aynd
+  PROJECT_NAME: qraftbox
 
 tasks:
   default:
@@ -15,7 +15,19 @@ tasks:
       - bun install
 
   dev:
-    desc: Run in development mode with watch
+    desc: Run backend + client dev servers with hot reload
+    deps:
+      - dev:server
+      - dev:client
+
+  dev:server:
+    desc: Run backend server with watch
+    cmds:
+      - bun run --watch src/main.ts
+
+  dev:client:
+    desc: Run Vite dev server with HMR
+    dir: client
     cmds:
       - bun run dev
 
@@ -96,6 +108,18 @@ tasks:
       - echo "PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"
       - bunx playwright --version
       - ls "$PLAYWRIGHT_BROWSERS_PATH" 2>/dev/null || echo "Browsers not found. Run 'nix develop' first."
+
+  restart:
+    desc: Restart dev server on port 7155 (kill existing, start fresh)
+    vars:
+      PORT: '{{.PORT | default "7155"}}'
+    cmds:
+      - |
+        for pid in $(ss -tlnp 2>/dev/null | grep ':{{.PORT}} ' | grep -oP 'pid=\K[0-9]+'); do
+          kill "$pid" 2>/dev/null && echo "Killed PID $pid"
+        done
+        sleep 1
+      - bun run src/main.ts --port {{.PORT}}
 
   ci:
     desc: Run all CI checks

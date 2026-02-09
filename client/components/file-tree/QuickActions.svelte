@@ -97,20 +97,20 @@
   >
     <!-- Quick Actions Menu Popup -->
     <div
-      class="quick-actions-menu absolute bg-white dark:bg-gray-800 border border-border-default rounded-lg shadow-lg py-2 min-w-[200px] z-50"
+      class="quick-actions-menu absolute bg-bg-primary border border-border-default rounded-lg shadow-lg py-2 min-w-[200px] z-50"
       role="menu"
       aria-label="Quick actions for {path}"
     >
       <!-- Copy Path Action -->
       <button
         type="button"
-        class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
+        class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
         onclick={handleCopyPath}
         role="menuitem"
       >
         <!-- Copy Icon -->
         <svg
-          class="w-5 h-5 text-gray-600 dark:text-gray-400 shrink-0"
+          class="w-5 h-5 text-text-secondary shrink-0"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
@@ -125,20 +125,20 @@
         </svg>
 
         <!-- Label -->
-        <span class="text-gray-900 dark:text-gray-100 text-sm">Copy Path</span>
+        <span class="text-text-primary text-text-tertiary text-sm">Copy Path</span>
       </button>
 
       <!-- Open in Editor Action (if callback provided) -->
       {#if onOpenInEditor !== undefined}
         <button
           type="button"
-          class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
+          class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
           onclick={handleOpenInEditor}
           role="menuitem"
         >
           <!-- External Link Icon -->
           <svg
-            class="w-5 h-5 text-gray-600 dark:text-gray-400 shrink-0"
+            class="w-5 h-5 text-text-secondary shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -153,7 +153,7 @@
           </svg>
 
           <!-- Label -->
-          <span class="text-gray-900 dark:text-gray-100 text-sm"
+          <span class="text-text-primary text-text-tertiary text-sm"
             >Open in Editor</span
           >
         </button>
@@ -163,13 +163,13 @@
       <div class="border-t border-border-default mt-2 pt-2">
         <button
           type="button"
-          class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-700 focus:bg-gray-100 dark:focus:bg-gray-700 focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
+          class="quick-action-item w-full text-left px-4 py-2.5 hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none transition-colors min-h-[44px] flex items-center gap-3"
           onclick={onClose}
           role="menuitem"
         >
           <!-- Close Icon -->
           <svg
-            class="w-5 h-5 text-gray-600 dark:text-gray-400 shrink-0"
+            class="w-5 h-5 text-text-secondary shrink-0"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -184,7 +184,7 @@
           </svg>
 
           <!-- Label -->
-          <span class="text-gray-600 dark:text-gray-400 text-sm">Close</span>
+          <span class="text-text-secondary text-sm">Close</span>
         </button>
       </div>
     </div>
@@ -218,7 +218,7 @@
   }
 
   .quick-action-item:focus-visible {
-    outline: 2px solid rgb(37 99 235); /* blue-600 */
+    outline: 2px solid var(--color-accent-fg);
     outline-offset: -2px;
   }
 

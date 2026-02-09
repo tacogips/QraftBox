@@ -2,7 +2,7 @@
  * Sync Manager Module
  *
  * Manages git notes synchronization for push/pull operations.
- * Wraps git push/pull commands to sync aynd-comments ref with remotes.
+ * Wraps git push/pull commands to sync qraftbox-comments ref with remotes.
  */
 
 import type { SyncStatus, SyncMode } from "../../types/comments.js";
@@ -61,7 +61,7 @@ export interface SyncManager {
 /**
  * Git notes reference for comments
  */
-const NOTES_REF = "aynd-comments";
+const NOTES_REF = "qraftbox-comments";
 
 /**
  * Full git ref path for notes

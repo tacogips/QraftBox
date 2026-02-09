@@ -134,7 +134,7 @@ const fileName = $derived(filePath.split("/").pop() ?? filePath);
       class="p-2 min-w-[44px] min-h-[44px] -mr-2
              text-text-secondary hover:text-text-primary
              hover:bg-bg-hover rounded
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
       aria-label="Close comments panel"
     >
       <svg
@@ -196,7 +196,7 @@ const fileName = $derived(filePath.split("/").pop() ?? filePath);
                    bg-bg-tertiary text-xs font-medium text-text-secondary
                    hover:bg-bg-hover hover:text-text-primary
                    border-b border-border-default
-                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
                    transition-colors duration-150"
             disabled={onJumpToLine === undefined}
             aria-label="Jump to line {lineNumber}"

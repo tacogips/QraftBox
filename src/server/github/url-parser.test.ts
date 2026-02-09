@@ -15,7 +15,9 @@ const execAsync = promisify(exec);
 describe("parseGitRemoteUrl", () => {
   describe("SSH format", () => {
     it("should parse SSH URL with .git extension", () => {
-      const result = parseGitRemoteUrl("git@github.com:octocat/Hello-World.git");
+      const result = parseGitRemoteUrl(
+        "git@github.com:octocat/Hello-World.git",
+      );
 
       expect(result).not.toBeNull();
       expect(result?.owner).toBe("octocat");
@@ -85,9 +87,7 @@ describe("parseGitRemoteUrl", () => {
     });
 
     it("should return null for non-GitHub URL", () => {
-      const result = parseGitRemoteUrl(
-        "https://gitlab.com/owner/repo.git",
-      );
+      const result = parseGitRemoteUrl("https://gitlab.com/owner/repo.git");
 
       expect(result).toBeNull();
     });
@@ -105,9 +105,7 @@ describe("parseGitRemoteUrl", () => {
     });
 
     it("should return null for URL with extra path segments", () => {
-      const result = parseGitRemoteUrl(
-        "https://github.com/owner/repo/extra",
-      );
+      const result = parseGitRemoteUrl("https://github.com/owner/repo/extra");
 
       expect(result).toBeNull();
     });
@@ -152,7 +150,7 @@ describe("getRepoFromRemote", () => {
 
   beforeAll(async () => {
     // Create temporary directory for test repository
-    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "aynd-test-"));
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-test-"));
     repoDir = path.join(tempDir, "test-repo");
     await fs.mkdir(repoDir);
 
@@ -219,10 +217,9 @@ describe("getRepoFromRemote", () => {
     });
 
     it("should default to origin when no remote specified", async () => {
-      await execAsync(
-        "git remote add origin git@github.com:test/default.git",
-        { cwd: repoDir },
-      );
+      await execAsync("git remote add origin git@github.com:test/default.git", {
+        cwd: repoDir,
+      });
 
       const result = await getRepoFromRemote(repoDir);
 

@@ -47,9 +47,9 @@ let longPressTimer: ReturnType<typeof setTimeout> | undefined =
 function getBackgroundClass(): string {
   switch (line.changeType) {
     case "added":
-      return "bg-green-900/30";
+      return "bg-diff-add-bg";
     case "modified":
-      return "bg-yellow-900/20";
+      return "bg-attention-muted";
     case "unchanged":
       return "bg-transparent";
     default:
@@ -83,9 +83,9 @@ function getIndicator(): string {
 function getIndicatorClass(): string {
   switch (line.changeType) {
     case "added":
-      return "text-green-400";
+      return "text-success-fg";
     case "modified":
-      return "text-yellow-400";
+      return "text-attention-fg";
     case "unchanged":
       return "text-text-secondary";
     default:
@@ -139,8 +139,8 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="flex min-h-[44px] font-mono text-sm cursor-pointer select-none {getBackgroundClass()} {selected
-    ? 'ring-2 ring-blue-500 ring-inset'
+  class="flex font-mono text-xs leading-5 cursor-pointer select-none {getBackgroundClass()} {selected
+    ? 'ring-2 ring-accent-emphasis ring-inset'
     : ''}"
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -155,21 +155,21 @@ function handlePointerLeave(): void {
   <div
     class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default"
   >
-    <span class="pt-2">{line.lineNumber}</span>
+    <span>{line.lineNumber}</span>
   </div>
 
   <!-- Indicator Column -->
   <div
     class="w-8 flex-shrink-0 flex items-start justify-center {getIndicatorClass()} border-r border-border-default"
   >
-    <span class="pt-2 font-bold">{getIndicator()}</span>
+    <span class="font-bold">{getIndicator()}</span>
   </div>
 
   <!-- Content Column -->
-  <div class="flex-1 px-3 py-2 overflow-x-auto">
+  <div class="flex-1 px-2 overflow-x-auto">
     {#if highlighted !== undefined}
       <!-- Render syntax-highlighted HTML from Shiki -->
-      {@html highlighted}
+      <span class="highlighted-line">{@html highlighted}</span>
     {:else}
       <!-- Plain text fallback -->
       <pre class="m-0 p-0">{line.content}</pre>
@@ -183,6 +183,11 @@ pre {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.highlighted-line {
   white-space: pre-wrap;
   word-break: break-word;
 }

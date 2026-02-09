@@ -25,6 +25,14 @@ import { createPromptRoutes } from "./prompts.js";
 import { createDiffRoutes } from "./diff.js";
 import { createFileRoutes as createFileRoutesImpl } from "./files.js";
 import { createStatusRoutes as createStatusRoutesImpl } from "./status.js";
+import { createToolRoutes } from "./tools.js";
+import { createLocalPromptRoutes } from "./local-prompts.js";
+import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import type { PromptStore } from "../../types/local-prompt.js";
+import { createGitActionsRoutes } from "./git-actions.js";
+import { createBranchRoutes } from "./branches.js";
+import { createSystemInfoRoutes } from "./system-info.js";
+import type { ModelConfig } from "../../types/system-info.js";
 
 /**
  * Route group definition
@@ -44,7 +52,10 @@ export interface RouteGroup {
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
   readonly sessionManager: SessionManager;
+  readonly promptStore?: PromptStore | undefined;
+  readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
+  readonly modelConfig?: ModelConfig | undefined;
 }
 
 /**
@@ -138,6 +149,12 @@ export function getContextScopedRouteGroups(
       prefix: "/prompts",
       routes: createPromptsRoutes(),
     },
+    // Branch routes - GET /api/ctx/:contextId/branches
+    // Wrapped to extract context from middleware
+    {
+      prefix: "/branches",
+      routes: createBranchRoutesWithMiddleware(),
+    },
   ];
 }
 
@@ -172,6 +189,42 @@ export function getNonContextRouteGroups(
         sessionManager: config.sessionManager,
       }),
     },
+    // Local prompt management routes - /api/prompts
+    ...(config.promptStore !== undefined
+      ? [
+          {
+            prefix: "/prompts",
+            routes: createLocalPromptRoutes({
+              promptStore: config.promptStore,
+              sessionManager: config.sessionManager,
+            }),
+          },
+        ]
+      : []),
+    // Tool management routes - GET /api/tools
+    ...(config.toolRegistry !== undefined
+      ? [
+          {
+            prefix: "/tools",
+            routes: createToolRoutes(config.toolRegistry),
+          },
+        ]
+      : []),
+    // Git actions routes - POST /api/git-actions
+    {
+      prefix: "/git-actions",
+      routes: createGitActionsRoutes(),
+    },
+    // System info routes - GET /api/system-info
+    {
+      prefix: "/system-info",
+      routes: createSystemInfoRoutes(
+        config.modelConfig ?? {
+          promptModel: "claude-opus-4-6",
+          assistantModel: "claude-opus-4-6",
+        },
+      ),
+    },
   ];
 }
 
@@ -200,6 +253,7 @@ export function getNonContextRouteGroups(
  * - /api/ctx/:contextId/pr - Pull request management
  * - /api/ctx/:contextId/claude-sessions - Claude session management
  * - /api/ctx/:contextId/prompts - Prompt management
+ * - /api/ctx/:contextId/branches - Branch listing, search, checkout
  *
  * @param app - Main Hono app instance
  * @param config - Mount routes configuration
@@ -244,6 +298,35 @@ type ContextVariables = {
 };
 
 /**
+ * Create a new Request with the URL path rewritten to be relative to the route mount point.
+ *
+ * Context-scoped routes are mounted at /api/ctx/<contextId>/<prefix>/...
+ * The sub-app's route handlers expect paths relative to the mount point (e.g., "/" or "/autocomplete").
+ * However, c.req.raw retains the full original URL, so we must strip the prefix.
+ *
+ * Path structure: ['', 'api', 'ctx', '<contextId>', ...prefixParts, ...remaining]
+ * We strip the first 4 segments + prefix parts and keep only the remaining path.
+ *
+ * @param originalReq - Original Request with full URL
+ * @param prefix - Route group prefix (e.g., "/files", "/status", "/commits")
+ * @returns New Request with relative path
+ */
+function createRelativeRequest(originalReq: Request, prefix: string): Request {
+  const url = new URL(originalReq.url);
+  const prefixParts = prefix.split("/").filter(Boolean);
+  const segments = url.pathname.split("/");
+  // segments[0] = '', [1] = 'api', [2] = 'ctx', [3] = contextId, [4..] = prefix + remaining
+  const sliceAt = 4 + prefixParts.length;
+  const remaining = segments.slice(sliceAt);
+  url.pathname = "/" + remaining.join("/");
+  return new Request(url.toString(), {
+    method: originalReq.method,
+    headers: originalReq.headers,
+    body: originalReq.body,
+  });
+}
+
+/**
  * Create commits routes that get ServerContext from middleware
  *
  * Creates a middleware-wrapped version of commit routes that extracts
@@ -262,8 +345,11 @@ function createCommitsRoutes(): Hono<{ Variables: ContextVariables }> {
     // Create routes with the context for this specific request
     const commitRoutes = createCommitHistoryRoutes(serverContext);
 
-    // Forward the request to the dynamically created routes
-    return commitRoutes.fetch(c.req.raw, c.env);
+    // Forward the request with URL rewritten to be relative to mount point
+    return commitRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/commits"),
+      c.env,
+    );
   });
 
   return app;
@@ -294,7 +380,10 @@ function createSearchRoutesWithMiddleware(): Hono<{
     };
 
     const searchRoutes = createSearchRoutesImpl(searchContext as any);
-    return searchRoutes.fetch(c.req.raw, c.env);
+    return searchRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/search"),
+      c.env,
+    );
   });
 
   return app;
@@ -318,7 +407,10 @@ function createStatusRoutesWithMiddleware(): Hono<{
     }
 
     const statusRoutes = createStatusRoutesImpl(serverContext);
-    return statusRoutes.fetch(c.req.raw, c.env);
+    return statusRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/status"),
+      c.env,
+    );
   });
 
   return app;
@@ -342,7 +434,7 @@ function createFileRoutesWithMiddleware(): Hono<{
     }
 
     const fileRoutes = createFileRoutesImpl(serverContext);
-    return fileRoutes.fetch(c.req.raw, c.env);
+    return fileRoutes.fetch(createRelativeRequest(c.req.raw, "/files"), c.env);
   });
 
   return app;
@@ -356,4 +448,31 @@ function createFileRoutesWithMiddleware(): Hono<{
 function createPromptsRoutes(): Hono {
   // Prompts routes optionally take configDir
   return createPromptRoutes(undefined);
+}
+
+/**
+ * Create branch routes that get ServerContext from middleware
+ *
+ * Creates a middleware-wrapped version of branch routes that extracts
+ * ServerContext from c.get("serverContext") for each request.
+ */
+function createBranchRoutesWithMiddleware(): Hono<{
+  Variables: ContextVariables;
+}> {
+  const app = new Hono<{ Variables: ContextVariables }>();
+
+  app.use("*", async (c) => {
+    const serverContext = c.get("serverContext");
+    if (serverContext === undefined) {
+      return c.json({ error: "Server context not available", code: 500 }, 500);
+    }
+
+    const branchRoutes = createBranchRoutes(serverContext);
+    return branchRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/branches"),
+      c.env,
+    );
+  });
+
+  return app;
 }

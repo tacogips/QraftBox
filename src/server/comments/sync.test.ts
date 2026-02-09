@@ -21,7 +21,7 @@ describe("Sync Manager", () => {
 
   beforeEach(async () => {
     // Create temporary directory
-    tempDir = await mkdtemp(join(tmpdir(), "aynd-sync-test-"));
+    tempDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-test-"));
 
     // Initialize git repository
     await execGit(["init"], { cwd: tempDir });
@@ -140,7 +140,7 @@ describe("Sync Manager", () => {
 
     test("updates lastSyncAt after successful push", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -162,7 +162,7 @@ describe("Sync Manager", () => {
 
     test("clears hasUnsyncedChanges after successful push", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -188,7 +188,7 @@ describe("Sync Manager", () => {
 
     test("pushes notes to remote", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -209,12 +209,14 @@ describe("Sync Manager", () => {
 
         // Verify notes exist in remote
         const remoteCheckResult = await execGit(
-          ["ls-remote", "origin", "refs/notes/aynd-comments"],
+          ["ls-remote", "origin", "refs/notes/qraftbox-comments"],
           { cwd: tempDir },
         );
 
         expect(remoteCheckResult.exitCode).toBe(0);
-        expect(remoteCheckResult.stdout).toContain("refs/notes/aynd-comments");
+        expect(remoteCheckResult.stdout).toContain(
+          "refs/notes/qraftbox-comments",
+        );
       } finally {
         await rm(remoteDir, { recursive: true, force: true });
       }
@@ -230,7 +232,7 @@ describe("Sync Manager", () => {
 
     test("updates lastSyncAt after successful pull", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -257,7 +259,7 @@ describe("Sync Manager", () => {
         await manager.pushNotes();
 
         // Create a clone and pull
-        const cloneDir = await mkdtemp(join(tmpdir(), "aynd-sync-clone-"));
+        const cloneDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-clone-"));
         await execGit(["clone", tempDir, cloneDir], { cwd: tmpdir() });
         const cloneManager = createSyncManager(cloneDir);
 
@@ -275,7 +277,7 @@ describe("Sync Manager", () => {
 
     test("clears hasUnsyncedChanges after successful pull", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -293,7 +295,7 @@ describe("Sync Manager", () => {
         await manager.pushNotes();
 
         // Create a clone
-        const cloneDir = await mkdtemp(join(tmpdir(), "aynd-sync-clone-"));
+        const cloneDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-clone-"));
         await execGit(["clone", tempDir, cloneDir], { cwd: tmpdir() });
         const cloneManager = createSyncManager(cloneDir);
 
@@ -316,7 +318,7 @@ describe("Sync Manager", () => {
 
     test("pulls notes from remote", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -334,7 +336,7 @@ describe("Sync Manager", () => {
         await manager.pushNotes();
 
         // Create a clone
-        const cloneDir = await mkdtemp(join(tmpdir(), "aynd-sync-clone-"));
+        const cloneDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-clone-"));
         await execGit(["clone", tempDir, cloneDir], { cwd: tmpdir() });
         const cloneBridge = createCommentBridge(cloneDir);
         const cloneManager = createSyncManager(cloneDir);
@@ -358,7 +360,7 @@ describe("Sync Manager", () => {
   describe("integration scenarios", () => {
     test("push and pull workflow with multiple comments", async () => {
       // Create a bare remote repository
-      const remoteDir = await mkdtemp(join(tmpdir(), "aynd-sync-remote-"));
+      const remoteDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-remote-"));
       await execGit(["init", "--bare"], { cwd: remoteDir });
 
       try {
@@ -386,7 +388,7 @@ describe("Sync Manager", () => {
         await manager.pushNotes();
 
         // Create a clone
-        const cloneDir = await mkdtemp(join(tmpdir(), "aynd-sync-clone-"));
+        const cloneDir = await mkdtemp(join(tmpdir(), "qraftbox-sync-clone-"));
         await execGit(["clone", tempDir, cloneDir], { cwd: tmpdir() });
         const cloneBridge = createCommentBridge(cloneDir);
         const cloneManager = createSyncManager(cloneDir);

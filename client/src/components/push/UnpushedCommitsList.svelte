@@ -43,18 +43,18 @@
 
 <div class="unpushed-commits-list">
   {#if commits.length === 0}
-    <div class="empty-state p-4 text-center text-gray-500">
+    <div class="empty-state p-4 text-center text-text-secondary">
       <p>No unpushed commits</p>
     </div>
   {:else}
     <div class="commits-container max-h-[300px] overflow-y-auto">
-      <ul class="divide-y divide-gray-200">
+      <ul class="divide-y divide-border-default">
         {#each commits as commit (commit.hash)}
-          <li class="commit-item p-3 hover:bg-gray-50 transition-colors">
+          <li class="commit-item p-3 hover:bg-bg-secondary transition-colors">
             <div class="flex items-start gap-3">
               <!-- Commit Hash Badge -->
               <div
-                class="commit-hash-badge px-2 py-0.5 bg-gray-200 text-gray-700 text-xs font-mono rounded"
+                class="commit-hash-badge px-2 py-0.5 bg-bg-tertiary text-text-primary text-xs font-mono rounded"
               >
                 {commit.shortHash}
               </div>
@@ -63,14 +63,14 @@
               <div class="flex-1 min-w-0">
                 <!-- Commit Message -->
                 <p
-                  class="commit-message text-sm font-medium text-gray-900 truncate"
+                  class="commit-message text-sm font-medium text-text-primary truncate"
                 >
                   {commit.message}
                 </p>
 
                 <!-- Commit Metadata -->
                 <div
-                  class="commit-metadata flex items-center gap-2 mt-1 text-xs text-gray-500"
+                  class="commit-metadata flex items-center gap-2 mt-1 text-xs text-text-secondary"
                 >
                   <span class="author truncate">{commit.author}</span>
                   <span class="separator">•</span>
@@ -99,7 +99,7 @@
 
   .commits-container {
     scrollbar-width: thin;
-    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+    scrollbar-color: var(--color-border-default) transparent;
   }
 
   .commits-container::-webkit-scrollbar {
@@ -111,12 +111,12 @@
   }
 
   .commits-container::-webkit-scrollbar-thumb {
-    background-color: rgba(156, 163, 175, 0.5);
+    background-color: var(--color-border-default);
     border-radius: 3px;
   }
 
   .commits-container::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(156, 163, 175, 0.7);
+    background-color: var(--color-border-emphasis);
   }
 
   .commit-item {

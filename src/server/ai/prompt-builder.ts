@@ -43,7 +43,7 @@ const FILE_MENTION_PATTERN =
  * @returns Array of parsed file mentions with optional line ranges
  */
 export function parseFileMentions(
-  prompt: string
+  prompt: string,
 ): readonly { path: string; startLine?: number; endLine?: number }[] {
   const mentions: { path: string; startLine?: number; endLine?: number }[] = [];
   const seen = new Set<string>();
@@ -68,8 +68,7 @@ export function parseFileMentions(
 
       if (startStr !== undefined) {
         startLine = parseInt(startStr, 10);
-        endLine =
-          endStr !== undefined ? parseInt(endStr, 10) : startLine;
+        endLine = endStr !== undefined ? parseInt(endStr, 10) : startLine;
       }
     } else {
       path = fullMatch;
@@ -110,7 +109,7 @@ export async function readFileLines(
   cwd: string,
   readFile: FileReader,
   startLine?: number,
-  endLine?: number
+  endLine?: number,
 ): Promise<ResolvedFileContent | null> {
   try {
     const fullPath = path.startsWith("/") ? path : `${cwd}/${path}`;
@@ -157,7 +156,7 @@ export async function readFileLines(
 export async function resolveFileReferences(
   refs: readonly FileReference[],
   cwd: string,
-  readFile: FileReader
+  readFile: FileReader,
 ): Promise<readonly FileReference[]> {
   const resolved: FileReference[] = [];
 
@@ -173,7 +172,7 @@ export async function resolveFileReferences(
       cwd,
       readFile,
       ref.startLine,
-      ref.endLine
+      ref.endLine,
     );
 
     if (result !== null) {
@@ -210,7 +209,7 @@ function formatFileReference(ref: FileReference): string {
       lines.push(`### File: ${ref.path} (Line ${ref.startLine})`);
     } else {
       lines.push(
-        `### File: ${ref.path} (Lines ${ref.startLine}-${ref.endLine})`
+        `### File: ${ref.path} (Lines ${ref.startLine}-${ref.endLine})`,
       );
     }
   } else {
@@ -295,11 +294,12 @@ export function formatContext(context: AIPromptContext): string {
   }
 
   // File references
-  if (context.references.length > 0) {
+  const references = context.references ?? [];
+  if (references.length > 0) {
     sections.push("## Referenced Files");
     sections.push("");
 
-    for (const ref of context.references) {
+    for (const ref of references) {
       sections.push(formatFileReference(ref));
       sections.push("");
     }
@@ -343,7 +343,7 @@ export function buildPromptWithContext(request: AIPromptRequest): string {
  */
 export function extractAndMergeFileMentions(
   prompt: string,
-  existingRefs: readonly FileReference[]
+  existingRefs: readonly FileReference[],
 ): readonly FileReference[] {
   const mentions = parseFileMentions(prompt);
 

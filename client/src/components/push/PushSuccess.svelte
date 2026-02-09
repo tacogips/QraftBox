@@ -51,7 +51,7 @@
     <!-- Success Icon -->
     <div class="success-icon-container">
       <svg
-        class="success-icon w-16 h-16 text-green-600"
+        class="success-icon w-16 h-16 text-success-fg"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
@@ -66,28 +66,28 @@
     </div>
 
     <!-- Success Message -->
-    <h2 class="text-xl font-bold text-gray-900">Push Successful!</h2>
+    <h2 class="text-xl font-bold text-text-primary">Push Successful!</h2>
 
     <!-- Push Details -->
     <div class="push-details w-full space-y-2 text-sm">
       <div class="detail-row flex justify-between">
-        <span class="text-gray-600">Remote:</span>
-        <span class="font-medium text-gray-900">{remote}</span>
+        <span class="text-text-secondary">Remote:</span>
+        <span class="font-medium text-text-primary">{remote}</span>
       </div>
 
       <div class="detail-row flex justify-between">
-        <span class="text-gray-600">Branch:</span>
-        <span class="font-medium text-gray-900">{branch}</span>
+        <span class="text-text-secondary">Branch:</span>
+        <span class="font-medium text-text-primary">{branch}</span>
       </div>
 
       <div class="detail-row flex justify-between">
-        <span class="text-gray-600">Commits Pushed:</span>
-        <span class="font-medium text-gray-900">{pushedCommits}</span>
+        <span class="text-text-secondary">Commits Pushed:</span>
+        <span class="font-medium text-text-primary">{pushedCommits}</span>
       </div>
 
       <div class="detail-row flex justify-between">
-        <span class="text-gray-600">Session ID:</span>
-        <span class="font-mono text-xs text-gray-700 truncate max-w-[200px]"
+        <span class="text-text-secondary">Session ID:</span>
+        <span class="font-mono text-xs text-text-primary truncate max-w-[200px]"
           >{sessionId}</span
         >
       </div>
@@ -99,11 +99,11 @@
       onclick={handleClose}
       onkeydown={handleKeydown}
       class="close-button w-full min-h-[44px] px-6 py-2
-             text-white bg-green-600
+             text-white bg-success-emphasis
              rounded-lg
-             hover:bg-green-700
-             focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
-             active:bg-green-800
+             hover:bg-success-emphasis
+             focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2
+             active:bg-success-emphasis
              transition-colors
              font-medium text-base"
       aria-label="Close success message"
@@ -161,10 +161,10 @@
   }
 
   .push-details {
-    background-color: #f9fafb;
+    background-color: var(--color-bg-secondary);
     padding: 1rem;
     border-radius: 0.5rem;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border-default);
   }
 
   .detail-row {

@@ -91,7 +91,7 @@ export function validatePattern(pattern: string): ValidationResult {
 function getContextLines(
   lines: readonly string[],
   lineIndex: number,
-  contextLines: number
+  contextLines: number,
 ): SearchResultContext {
   const before: string[] = [];
   const after: string[] = [];
@@ -124,7 +124,7 @@ function getContextLines(
 export function searchInFile(
   content: string,
   filePath: string,
-  options: SearchOptions
+  options: SearchOptions,
 ): readonly SearchResult[] {
   const {
     pattern,
@@ -212,7 +212,7 @@ export async function searchInFiles(
   files: readonly string[],
   cwd: string,
   options: SearchOptions,
-  readFile: (path: string) => Promise<string>
+  readFile: (path: string) => Promise<string>,
 ): Promise<readonly SearchResult[]> {
   const { maxResults = DEFAULT_MAX_RESULTS } = options;
   const results: SearchResult[] = [];
@@ -260,7 +260,7 @@ export async function getFilesForScope(
   scope: SearchScope,
   filePath: string | undefined,
   _diffTarget: DiffTarget,
-  _cwd: string
+  _cwd: string,
 ): Promise<readonly string[]> {
   switch (scope) {
     case "file": {
@@ -303,7 +303,7 @@ export async function executeSearch(
   diffTarget: DiffTarget,
   cwd: string,
   options: SearchOptions,
-  readFile: (path: string) => Promise<string>
+  readFile: (path: string) => Promise<string>,
 ): Promise<{
   results: readonly SearchResult[];
   filesSearched: number;

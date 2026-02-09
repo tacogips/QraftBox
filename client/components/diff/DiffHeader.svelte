@@ -50,16 +50,11 @@
    * Get button class based on whether it's the active mode
    */
   function getButtonClass(mode: ViewMode): string {
-    const baseClasses =
-      "min-h-[44px] px-4 py-2 text-sm font-medium rounded-md transition-colors";
-    const activeClasses = "bg-blue-600 text-white";
-    const inactiveClasses =
-      "bg-bg-secondary text-text-primary hover:bg-bg-tertiary";
-
+    const base = "segmented-control-item";
     if (mode === viewMode) {
-      return `${baseClasses} ${activeClasses}`;
+      return `${base} segmented-control-item--active`;
     }
-    return `${baseClasses} ${inactiveClasses}`;
+    return base;
   }
 
   /**
@@ -102,17 +97,17 @@
 
     <!-- Middle: Stats -->
     <div class="flex items-center gap-4 flex-shrink-0">
-      <span class="text-sm font-medium text-green-600" aria-label="Additions">
+      <span class="text-sm font-medium text-success-fg" aria-label="Additions">
         +{file.additions}
       </span>
-      <span class="text-sm font-medium text-red-600" aria-label="Deletions">
+      <span class="text-sm font-medium text-danger-fg" aria-label="Deletions">
         -{file.deletions}
       </span>
     </div>
 
     <!-- Right side: View mode toggle -->
     <div
-      class="flex items-center gap-2 flex-shrink-0"
+      class="segmented-control flex-shrink-0"
       role="group"
       aria-label="View mode selection"
     >
@@ -146,3 +141,57 @@
     </div>
   </div>
 </header>
+
+<style>
+  .segmented-control {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-muted);
+    background-color: var(--color-bg-inset);
+  }
+
+  .segmented-control-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 36px;
+    padding: 4px 14px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease,
+      box-shadow 0.15s ease;
+    background-color: transparent;
+    color: var(--color-text-secondary);
+  }
+
+  .segmented-control-item:hover:not(.segmented-control-item--active) {
+    background-color: var(--color-bg-hover);
+    color: var(--color-text-primary);
+  }
+
+  .segmented-control-item--active {
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+    box-shadow: var(--shadow-segmented-active);
+  }
+
+  .segmented-control-item:focus-visible {
+    outline: 2px solid var(--color-accent-fg);
+    outline-offset: -2px;
+    z-index: 1;
+  }
+
+  .segmented-control-item:active {
+    transform: scale(0.98);
+  }
+</style>

@@ -62,13 +62,13 @@
 </script>
 
 <div
-  class="flex items-center min-h-[44px] px-4 py-2 bg-bg-tertiary border-y border-border-default"
+  class="flex items-center px-4 py-0.5 bg-bg-tertiary border-y border-border-default"
   role="separator"
   aria-label="Diff chunk: {formatChunkHeader()}"
 >
   <!-- Chunk Header -->
   <div class="flex-1 flex items-center gap-3">
-    <span class="font-mono text-sm text-text-secondary font-medium">
+    <span class="font-mono text-xs text-text-secondary font-medium">
       {formatChunkHeader()}
     </span>
     <span class="text-xs text-text-tertiary">
@@ -80,7 +80,7 @@
   {#if onExpandContext !== undefined}
     <button
       onclick={handleExpandContext}
-      class="px-3 py-1.5 min-h-[32px] text-xs font-medium text-text-primary bg-bg-secondary border border-border-default rounded hover:bg-bg-hover active:bg-bg-pressed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+      class="px-3 py-1.5 min-h-[32px] text-xs font-medium text-text-primary bg-bg-secondary border border-border-default rounded hover:bg-bg-hover active:bg-bg-pressed focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2"
       type="button"
       aria-label="Expand hidden context lines"
     >

@@ -261,6 +261,12 @@ export async function getCommitLog(
   const offset = options?.offset ?? 0;
   const search = options?.search;
 
+  // If search is provided, use OR logic (message OR author)
+  if (search && search.trim()) {
+    return getCommitLogWithSearch(cwd, branch, search.trim(), limit, offset);
+  }
+
+  // No search: standard pagination
   const args = [
     "log",
     branch,
@@ -269,18 +275,99 @@ export async function getCommitLog(
     `--max-count=${limit}`,
   ];
 
-  // Add search filter if provided
-  if (search && search.trim()) {
-    args.push("--all-match");
-    args.push(`--grep=${search}`);
-    args.push(`--author=${search}`);
-  }
-
   const output = await execGit(args, cwd);
   const commits = parseGitLog(output);
 
   // Get total count for pagination
   const total = await getCommitCount(cwd, branch);
+
+  const pagination: CommitPagination = {
+    offset,
+    limit,
+    total,
+    hasMore: offset + commits.length < total,
+  };
+
+  return {
+    commits,
+    pagination,
+    branch,
+  };
+}
+
+/**
+ * Get commits with search filter using OR logic (message OR author OR hash)
+ *
+ * @param cwd - Repository working directory
+ * @param branch - Branch name
+ * @param query - Search query string
+ * @param limit - Maximum number of results
+ * @param offset - Number of results to skip
+ * @returns Commit log response with search results
+ */
+async function getCommitLogWithSearch(
+  cwd: string,
+  branch: string,
+  query: string,
+  limit: number,
+  offset: number,
+): Promise<CommitLogResponse> {
+  // Over-fetch to ensure we have enough results after deduplication and pagination
+  const fetchLimit = Math.max(limit * 4, offset + limit + 100);
+  const format =
+    "--format=%H%n%h%n%s%n%b%n---BODY-END---%n%an%n%ae%n%cn%n%ce%n%at%n%P%n---END---";
+
+  // Perform parallel searches: message, author, and optionally hash
+  const messageArgs = [
+    "log",
+    branch,
+    format,
+    `--max-count=${fetchLimit}`,
+    "-i",
+    `--grep=${query}`,
+  ];
+
+  const authorArgs = [
+    "log",
+    branch,
+    format,
+    `--max-count=${fetchLimit}`,
+    "-i",
+    `--author=${query}`,
+  ];
+
+  const searches: Promise<string>[] = [
+    execGit(messageArgs, cwd).catch(() => ""),
+    execGit(authorArgs, cwd).catch(() => ""),
+  ];
+
+  // If query looks like a hex hash prefix (4-40 chars), also search by commit hash
+  if (/^[0-9a-f]{4,40}$/i.test(query)) {
+    const hashArgs = ["log", "-1", query, format];
+    searches.push(execGit(hashArgs, cwd).catch(() => ""));
+  }
+
+  const outputs = await Promise.all(searches);
+
+  // Merge and deduplicate by hash
+  const seenHashes = new Set<string>();
+  const allResults: CommitInfo[] = [];
+
+  for (const output of outputs) {
+    for (const commit of parseGitLog(output)) {
+      if (!seenHashes.has(commit.hash)) {
+        seenHashes.add(commit.hash);
+        allResults.push(commit);
+      }
+    }
+  }
+
+  // Sort by date (newest first)
+  allResults.sort((a, b) => b.date - a.date);
+
+  // Apply pagination manually
+  const total = allResults.length;
+  const commits = allResults.slice(offset, offset + limit);
 
   const pagination: CommitPagination = {
     offset,

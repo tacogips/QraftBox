@@ -36,13 +36,13 @@
 
 {#if behindCount > 0}
   <div
-    class="push-behind-warning p-4 bg-yellow-50 border border-yellow-300 rounded-lg"
+    class="push-behind-warning p-4 bg-attention-muted border border-attention-emphasis rounded-lg"
     role="alert"
   >
     <div class="flex items-start gap-3">
       <!-- Warning Icon -->
       <svg
-        class="warning-icon w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5"
+        class="warning-icon w-5 h-5 text-attention-fg flex-shrink-0 mt-0.5"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
@@ -57,15 +57,15 @@
 
       <!-- Warning Message -->
       <div class="flex-1">
-        <h3 class="text-sm font-medium text-yellow-800 mb-1">
+        <h3 class="text-sm font-medium text-attention-fg mb-1">
           Branch Behind Remote
         </h3>
-        <p class="text-sm text-yellow-700">
+        <p class="text-sm text-attention-fg">
           {message()}
         </p>
 
         <!-- Suggestions -->
-        <div class="mt-3 text-sm text-yellow-700">
+        <div class="mt-3 text-sm text-attention-fg">
           <p class="font-medium">Suggestions:</p>
           <ul class="list-disc list-inside mt-1 space-y-1">
             <li>Pull changes from remote first</li>

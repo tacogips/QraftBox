@@ -2,11 +2,19 @@
  * CLI Entry Point
  *
  * Provides CLI argument parsing, browser opening, and shutdown handlers
- * for the aynd server application.
+ * for the qraftbox server application.
  */
 
 import { Command } from "commander";
 import type { CLIConfig, SyncMode } from "../types/index";
+import { loadConfig, validateConfig } from "./config";
+import { createContextManager } from "../server/workspace/context-manager";
+import { createServer, startServer } from "../server/index";
+import { createWebSocketManager } from "../server/websocket/index.js";
+import { createFileWatcher } from "../server/watcher/index.js";
+import type { FileWatcher } from "../server/watcher/index.js";
+import { createWatcherBroadcaster } from "../server/watcher/broadcast.js";
+import type { WatcherBroadcaster } from "../server/watcher/broadcast.js";
 
 /**
  * Parse command-line arguments into CLIConfig
@@ -33,7 +41,7 @@ export function parseArgs(args: string[]): CLIConfig {
   const program = new Command();
 
   program
-    .name("aynd")
+    .name("qraftbox")
     .description(
       "All You Need Is Diff - Local diff viewer with git integration",
     )
@@ -41,8 +49,7 @@ export function parseArgs(args: string[]): CLIConfig {
     .argument("[projectPath]", "Path to project directory", ".")
     .option("-p, --port <number>", "Server port", "7144")
     .option("-h, --host <string>", "Server host", "localhost")
-    .option("--open", "Open browser automatically (default: true)")
-    .option("--no-open", "Do not open browser automatically")
+    .option("--open", "Open browser automatically")
     .option("--watch", "Enable file watching (default: true)")
     .option("--no-watch", "Disable file watching")
     .option(
@@ -81,11 +88,13 @@ export function parseArgs(args: string[]): CLIConfig {
   return {
     port,
     host: options["host"],
-    open: options["open"] ?? true,
+    open: options["open"] ?? false,
     watch: options["watch"] ?? true,
     syncMode,
     ai: options["ai"] ?? true,
     projectPath,
+    promptModel: options["promptModel"] ?? "claude-opus-4-6",
+    assistantModel: options["assistantModel"] ?? "claude-opus-4-6",
   };
 }
 
@@ -187,44 +196,83 @@ export function setupShutdownHandlers(cleanup: () => Promise<void>): void {
 }
 
 /**
- * Main entry point for the aynd CLI application
+ * Main entry point for the qraftbox CLI application
  *
  * Orchestrates the startup sequence:
  * 1. Parse command-line arguments
  * 2. Load configuration
- * 3. Start server
- * 4. Setup shutdown handlers
- * 5. Open browser if requested
- *
- * This is a placeholder implementation that will be wired up once
- * other modules (config, server) are implemented.
+ * 3. Create WebSocket manager for real-time updates
+ * 4. Start server with WebSocket support
+ * 5. Start file watcher if enabled
+ * 6. Setup shutdown handlers
+ * 7. Open browser if requested
  *
  * @returns Promise that resolves when startup is complete
  */
 export async function main(): Promise<void> {
+  let watcher: FileWatcher | undefined = undefined;
+  let broadcaster: WatcherBroadcaster | undefined = undefined;
+
   try {
     // Parse CLI arguments
     const cliConfig = parseArgs(process.argv);
 
-    console.log("aynd - All You Need Is Diff");
-    console.log(`Starting server on ${cliConfig.host}:${cliConfig.port}...`);
-    console.log(`Project path: ${cliConfig.projectPath}`);
-    console.log(`Sync mode: ${cliConfig.syncMode}`);
-    console.log(`AI features: ${cliConfig.ai ? "enabled" : "disabled"}`);
-    console.log(`File watching: ${cliConfig.watch ? "enabled" : "disabled"}`);
+    // Validate and resolve config
+    const config = loadConfig(cliConfig);
+    const validation = validateConfig(config);
+    if (!validation.valid) {
+      console.error(`Invalid configuration: ${validation.error}`);
+      process.exit(1);
+    }
 
-    // Import and call loadConfig from ../cli/config
-    // This will be implemented in the next task
-    // const config = await loadConfig(cliConfig);
+    console.log("qraftbox - All You Need Is Diff");
+    console.log(`Starting server on ${config.host}:${config.port}...`);
+    console.log(`Project path: ${config.projectPath}`);
+    console.log(`Sync mode: ${config.syncMode}`);
+    console.log(`AI features: ${config.ai ? "enabled" : "disabled"}`);
+    console.log(`File watching: ${config.watch ? "enabled" : "disabled"}`);
 
-    // TODO: Start server with configuration
-    // TODO: Setup shutdown handlers
-    // TODO: Open browser if cliConfig.open is true
+    // Create context manager and initial context
+    const contextManager = createContextManager();
+    await contextManager.createContext(config.projectPath);
 
-    console.log("Server started successfully");
-    console.log(
-      `Open your browser at http://${cliConfig.host}:${cliConfig.port}`,
-    );
+    // Create WebSocket manager for realtime updates
+    const wsManager = createWebSocketManager();
+
+    // Create and start the HTTP server with WebSocket support
+    const app = createServer({ config, contextManager });
+    const server = startServer(app, config, wsManager);
+
+    console.log(`Server started on http://${server.hostname}:${server.port}`);
+
+    // Start file watcher for realtime updates
+    if (config.watch) {
+      watcher = createFileWatcher(config.projectPath);
+      broadcaster = createWatcherBroadcaster(watcher, wsManager);
+      broadcaster.start();
+      await watcher.start();
+      console.log(
+        `File watching: enabled (WebSocket at ws://${server.hostname}:${server.port}/ws)`,
+      );
+    }
+
+    // Setup graceful shutdown
+    setupShutdownHandlers(async () => {
+      // Stop watcher if active
+      if (watcher !== undefined) {
+        await watcher.stop();
+      }
+      if (broadcaster !== undefined) {
+        broadcaster.stop();
+      }
+      wsManager.close();
+      server.stop();
+    });
+
+    // Open browser if requested
+    if (config.open) {
+      await openBrowser(`http://${server.hostname}:${server.port}`);
+    }
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     console.error(`Failed to start server: ${errorMessage}`);

@@ -47,15 +47,15 @@
   function getStatusBadgeClass(status: StagedFile["status"]): string {
     switch (status) {
       case "A":
-        return "bg-green-100 text-green-700";
+        return "bg-success-subtle text-success-fg";
       case "M":
-        return "bg-blue-100 text-blue-700";
+        return "bg-accent-subtle text-accent-fg";
       case "D":
-        return "bg-red-100 text-red-700";
+        return "bg-danger-subtle text-danger-fg";
       case "R":
-        return "bg-purple-100 text-purple-700";
+        return "bg-done-muted text-done-fg";
       default:
-        return "bg-gray-100 text-gray-700";
+        return "bg-bg-secondary text-text-primary";
     }
   }
 
@@ -152,7 +152,7 @@
         <div class="change-stats flex items-center gap-2 flex-shrink-0">
           {#if file.additions > 0}
             <span
-              class="additions text-xs font-mono text-green-600"
+              class="additions text-xs font-mono text-success-fg"
               title={`${file.additions} additions`}
             >
               +{file.additions}
@@ -161,7 +161,7 @@
 
           {#if file.deletions > 0}
             <span
-              class="deletions text-xs font-mono text-red-600"
+              class="deletions text-xs font-mono text-danger-fg"
               title={`${file.deletions} deletions`}
             >
               -{file.deletions}

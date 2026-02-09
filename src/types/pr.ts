@@ -5,7 +5,7 @@
  * Based on design-docs/specs/design-ai-commit.md
  */
 
-import type { UnpushedCommit } from './push-context.js';
+import type { UnpushedCommit } from "./push-context.js";
 
 /**
  * Existing pull request information from GitHub
@@ -14,7 +14,7 @@ export interface ExistingPR {
   readonly number: number;
   readonly title: string;
   readonly body: string;
-  readonly state: 'open' | 'closed' | 'merged';
+  readonly state: "open" | "closed" | "merged";
   readonly url: string;
   readonly baseBranch: string;
   readonly headBranch: string;
@@ -99,7 +99,7 @@ export interface CreatePRParams {
 export interface UpdatePRParams {
   readonly title?: string;
   readonly body?: string;
-  readonly state?: 'open' | 'closed';
+  readonly state?: "open" | "closed";
   readonly base?: string;
 }
 
@@ -109,35 +109,35 @@ export interface UpdatePRParams {
 
 export function validateExistingPR(pr: ExistingPR): string | null {
   if (pr.number <= 0) {
-    return 'PR number must be positive';
+    return "PR number must be positive";
   }
 
   if (!pr.title.trim()) {
-    return 'PR title cannot be empty';
+    return "PR title cannot be empty";
   }
 
   if (!pr.url.trim()) {
-    return 'PR URL cannot be empty';
+    return "PR URL cannot be empty";
   }
 
   if (!pr.baseBranch.trim()) {
-    return 'Base branch cannot be empty';
+    return "Base branch cannot be empty";
   }
 
   if (!pr.headBranch.trim()) {
-    return 'Head branch cannot be empty';
+    return "Head branch cannot be empty";
   }
 
   if (pr.createdAt <= 0) {
-    return 'Created timestamp must be positive';
+    return "Created timestamp must be positive";
   }
 
   if (pr.updatedAt <= 0) {
-    return 'Updated timestamp must be positive';
+    return "Updated timestamp must be positive";
   }
 
   if (pr.updatedAt < pr.createdAt) {
-    return 'Updated timestamp cannot be before created timestamp';
+    return "Updated timestamp cannot be before created timestamp";
   }
 
   return null;
@@ -147,23 +147,23 @@ export function validatePRPromptContext(
   context: PRPromptContext,
 ): string | null {
   if (!context.branchName.trim()) {
-    return 'Branch name cannot be empty';
+    return "Branch name cannot be empty";
   }
 
   if (!context.baseBranch.trim()) {
-    return 'Base branch cannot be empty';
+    return "Base branch cannot be empty";
   }
 
   if (!context.remoteName.trim()) {
-    return 'Remote name cannot be empty';
+    return "Remote name cannot be empty";
   }
 
   if (!context.repoOwner.trim()) {
-    return 'Repository owner cannot be empty';
+    return "Repository owner cannot be empty";
   }
 
   if (!context.repoName.trim()) {
-    return 'Repository name cannot be empty';
+    return "Repository name cannot be empty";
   }
 
   if (context.existingPR !== null) {
@@ -178,19 +178,19 @@ export function validatePRPromptContext(
 
 export function validatePRRequest(request: PRRequest): string | null {
   if (!request.promptTemplateId.trim()) {
-    return 'Prompt template ID cannot be empty';
+    return "Prompt template ID cannot be empty";
   }
 
   if (!request.baseBranch.trim()) {
-    return 'Base branch cannot be empty';
+    return "Base branch cannot be empty";
   }
 
   if (request.title !== undefined && !request.title.trim()) {
-    return 'Title cannot be empty string if provided';
+    return "Title cannot be empty string if provided";
   }
 
-  if (request.body !== undefined && request.body.trim() === '') {
-    return 'Body cannot be empty string if provided';
+  if (request.body !== undefined && request.body.trim() === "") {
+    return "Body cannot be empty string if provided";
   }
 
   return null;
@@ -198,24 +198,24 @@ export function validatePRRequest(request: PRRequest): string | null {
 
 export function validatePRResult(result: PRResult): string | null {
   if (!result.sessionId.trim()) {
-    return 'Session ID cannot be empty';
+    return "Session ID cannot be empty";
   }
 
   if (result.success) {
     if (result.prNumber === undefined || result.prNumber <= 0) {
-      return 'PR number is required and must be positive for successful results';
+      return "PR number is required and must be positive for successful results";
     }
 
     if (result.prUrl === undefined || !result.prUrl.trim()) {
-      return 'PR URL is required for successful results';
+      return "PR URL is required for successful results";
     }
 
     if (result.title === undefined || !result.title.trim()) {
-      return 'Title is required for successful results';
+      return "Title is required for successful results";
     }
   } else {
     if (result.error === undefined || !result.error.trim()) {
-      return 'Error message is required for failed results';
+      return "Error message is required for failed results";
     }
   }
 
@@ -224,23 +224,23 @@ export function validatePRResult(result: PRResult): string | null {
 
 export function validateBranchPRStatus(status: BranchPRStatus): string | null {
   if (!status.baseBranch.trim()) {
-    return 'Base branch cannot be empty';
+    return "Base branch cannot be empty";
   }
 
   if (!status.repoOwner.trim()) {
-    return 'Repository owner cannot be empty';
+    return "Repository owner cannot be empty";
   }
 
   if (!status.repoName.trim()) {
-    return 'Repository name cannot be empty';
+    return "Repository name cannot be empty";
   }
 
   if (status.hasPR && status.pr === null) {
-    return 'PR is required when hasPR is true';
+    return "PR is required when hasPR is true";
   }
 
   if (!status.hasPR && status.pr !== null) {
-    return 'PR must be null when hasPR is false';
+    return "PR must be null when hasPR is false";
   }
 
   if (status.pr !== null) {
@@ -251,60 +251,56 @@ export function validateBranchPRStatus(status: BranchPRStatus): string | null {
   }
 
   if (!status.canCreatePR && status.reason === undefined) {
-    return 'Reason is required when canCreatePR is false';
+    return "Reason is required when canCreatePR is false";
   }
 
   return null;
 }
 
-export function validateCreatePRParams(
-  params: CreatePRParams,
-): string | null {
+export function validateCreatePRParams(params: CreatePRParams): string | null {
   if (!params.title.trim()) {
-    return 'Title cannot be empty';
+    return "Title cannot be empty";
   }
 
   if (!params.body.trim()) {
-    return 'Body cannot be empty';
+    return "Body cannot be empty";
   }
 
   if (!params.head.trim()) {
-    return 'Head branch cannot be empty';
+    return "Head branch cannot be empty";
   }
 
   if (!params.base.trim()) {
-    return 'Base branch cannot be empty';
+    return "Base branch cannot be empty";
   }
 
   if (params.head === params.base) {
-    return 'Head and base branches cannot be the same';
+    return "Head and base branches cannot be the same";
   }
 
   return null;
 }
 
-export function validateUpdatePRParams(
-  params: UpdatePRParams,
-): string | null {
+export function validateUpdatePRParams(params: UpdatePRParams): string | null {
   if (
     params.title === undefined &&
     params.body === undefined &&
     params.state === undefined &&
     params.base === undefined
   ) {
-    return 'At least one field must be provided for update';
+    return "At least one field must be provided for update";
   }
 
   if (params.title !== undefined && !params.title.trim()) {
-    return 'Title cannot be empty string if provided';
+    return "Title cannot be empty string if provided";
   }
 
-  if (params.body !== undefined && params.body.trim() === '') {
-    return 'Body cannot be empty string if provided';
+  if (params.body !== undefined && params.body.trim() === "") {
+    return "Body cannot be empty string if provided";
   }
 
   if (params.base !== undefined && !params.base.trim()) {
-    return 'Base branch cannot be empty string if provided';
+    return "Base branch cannot be empty string if provided";
   }
 
   return null;

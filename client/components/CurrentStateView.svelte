@@ -13,6 +13,7 @@ import CurrentStateLineComponent from "./current-state/CurrentStateLine.svelte";
 import DeletedMarker from "./current-state/DeletedMarker.svelte";
 import ExpandedDeletedBlock from "./current-state/ExpandedDeletedBlock.svelte";
 import ExpandControls from "./current-state/ExpandControls.svelte";
+import { highlightLines } from "../src/lib/highlighter";
 
 /**
  * CurrentStateView Component
@@ -66,6 +67,55 @@ const allCollapsed = $derived(
   hasDeletedBlocks && allBlockIds.every((id) => !store.isExpanded(id))
 );
 
+// Syntax highlighting maps
+let lineHighlightMap = $state<Map<number, string>>(new Map());
+let deletedBlockHighlightMap = $state<Map<string, string[]>>(new Map());
+
+$effect(() => {
+  const lines = currentStateLines;
+  const filePath = file.path;
+
+  // Highlight current state lines
+  const contentLines = lines.map((l) => l.content);
+  const code = contentLines.join("\n");
+
+  void highlightLines(code, filePath).then((htmlLines) => {
+    const map = new Map<number, string>();
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const html = htmlLines[i];
+      if (line !== undefined && html !== undefined) {
+        map.set(line.lineNumber, html);
+      }
+    }
+    lineHighlightMap = map;
+  });
+
+  // Highlight deleted blocks
+  const blocks: DeletedBlock[] = [];
+  for (const line of lines) {
+    if (line.deletedBefore !== undefined) {
+      blocks.push(line.deletedBefore);
+    }
+  }
+
+  if (blocks.length > 0) {
+    void Promise.all(
+      blocks.map((block) =>
+        highlightLines(block.lines.join("\n"), filePath).then(
+          (htmlLines) => [block.id, htmlLines] as const,
+        ),
+      ),
+    ).then((results) => {
+      const map = new Map<string, string[]>();
+      for (const [id, htmlLines] of results) {
+        map.set(id, htmlLines);
+      }
+      deletedBlockHighlightMap = map;
+    });
+  }
+});
+
 // Selected line state
 let selectedLine = $state<number | undefined>(undefined);
 
@@ -111,6 +161,15 @@ function isBlockExpanded(blockId: string): boolean {
  * Handle keyboard navigation
  */
 function handleKeydown(event: KeyboardEvent): void {
+  const isInTextBox =
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement;
+
+  // Skip shortcuts while typing in text boxes
+  if (isInTextBox) {
+    return;
+  }
+
   // j/k for line navigation (vim-style)
   if (event.key === "j" && selectedLine !== undefined) {
     const nextLine = currentStateLines.find((l) => l.lineNumber > selectedLine!);
@@ -186,6 +245,7 @@ $effect(() => {
             {#if isBlockExpanded(line.deletedBefore.id)}
               <ExpandedDeletedBlock
                 block={line.deletedBefore}
+                highlightedLines={deletedBlockHighlightMap.get(line.deletedBefore.id)}
                 onCollapse={() => handleToggleBlock(line.deletedBefore!.id)}
               />
             {:else}
@@ -200,6 +260,7 @@ $effect(() => {
           {#if line.content !== "" || line.changeType !== "unchanged"}
             <CurrentStateLineComponent
               {line}
+              highlighted={lineHighlightMap.get(line.lineNumber)}
               selected={selectedLine === line.lineNumber}
               onSelect={() => handleLineSelect(line.lineNumber)}
             />

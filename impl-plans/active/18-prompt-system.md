@@ -147,7 +147,7 @@ function createPromptBuilder(): PromptBuilder;
 
 ### 4. Default Prompt Templates
 
-#### ~/.config/aynd/default-prompts/
+#### ~/.config/qraftbox/default-prompts/
 
 **Status**: NOT_STARTED
 
@@ -223,7 +223,7 @@ function hasStagedChanges(cwd: string): Promise<boolean>;
 | Prompt Types | `src/types/prompt-config.ts` | COMPLETED | 73 pass |
 | Prompt Loader | `src/server/prompts/loader.ts` | NOT_STARTED | - |
 | Prompt Builder | `src/server/prompts/builder.ts` | NOT_STARTED | - |
-| Default Templates | `~/.config/aynd/default-prompts/` | NOT_STARTED | - |
+| Default Templates | `~/.config/qraftbox/default-prompts/` | NOT_STARTED | - |
 | Prompt Routes | `src/server/routes/prompts.ts` | NOT_STARTED | - |
 | Staged Files | `src/server/git/staged.ts` | COMPLETED | 20 pass |
 

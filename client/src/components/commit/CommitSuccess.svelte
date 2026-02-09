@@ -84,11 +84,11 @@
   <!-- Success Icon -->
   <div class="flex items-center justify-center mb-6">
     <div
-      class="w-16 h-16 rounded-full bg-green-100
+      class="w-16 h-16 rounded-full bg-success-subtle
              flex items-center justify-center"
     >
       <svg
-        class="w-10 h-10 text-green-600"
+        class="w-10 h-10 text-success-fg"
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -114,7 +114,7 @@
       <span class="text-sm text-text-tertiary">Commit:</span>
       <code
         class="px-2 py-1 text-sm font-mono
-               bg-bg-tertiary text-blue-600
+               bg-bg-tertiary text-accent-fg
                rounded border border-border-default"
         title={commitHash}
       >
@@ -143,7 +143,7 @@
              text-text-primary bg-bg-tertiary
              border border-border-default rounded-lg
              hover:bg-bg-hover
-             focus:outline-none focus:ring-2 focus:ring-blue-500
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis
              font-medium transition-colors"
       aria-label="Close commit success dialog"
     >
@@ -154,10 +154,10 @@
       type="button"
       onclick={handlePush}
       class="flex-1 px-6 py-3 min-h-[44px]
-             text-white bg-blue-600
+             text-white bg-success-emphasis
              rounded-lg
-             hover:bg-blue-700
-             focus:outline-none focus:ring-2 focus:ring-blue-500
+             hover:brightness-110
+             focus:outline-none focus:ring-2 focus:ring-success-emphasis
              font-medium transition-colors"
       aria-label="Continue to push"
     >

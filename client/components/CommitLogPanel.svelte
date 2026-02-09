@@ -105,26 +105,26 @@
 
 <!-- Commit Log Panel Container -->
 <div
-  class="commit-log-panel flex flex-col bg-white border-t border-gray-200"
+  class="commit-log-panel flex flex-col bg-bg-primary border-t border-border-default"
   class:collapsed
 >
   <!-- Panel Header -->
   <div
-    class="panel-header border-b border-gray-200 p-4 flex items-center justify-between min-h-[48px]"
+    class="panel-header border-b border-border-default p-4 flex items-center justify-between min-h-[48px]"
   >
-    <h2 class="text-lg font-semibold text-gray-900">Commits</h2>
+    <h2 class="text-lg font-semibold text-text-primary">Commits</h2>
 
     <!-- Collapse/Expand Toggle Button -->
     <button
       type="button"
-      class="collapse-toggle p-2 rounded-md hover:bg-gray-100 focus:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 transition-colors min-h-[44px] min-w-[44px]"
+      class="collapse-toggle p-2 rounded-md hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 transition-colors min-h-[44px] min-w-[44px]"
       onclick={toggleCollapse}
       aria-label={collapsed ? "Expand commit panel" : "Collapse commit panel"}
       aria-expanded={!collapsed}
     >
       <!-- Chevron Icon -->
       <svg
-        class="chevron w-5 h-5 text-gray-600 transition-transform"
+        class="chevron w-5 h-5 text-text-secondary transition-transform"
         class:rotate-180={collapsed}
         fill="none"
         stroke="currentColor"
@@ -145,10 +145,10 @@
   {#if !collapsed}
     <div class="panel-content flex flex-col flex-1 min-h-0">
       <!-- Search Input -->
-      <div class="search-container p-4 border-b border-gray-200">
+      <div class="search-container p-4 border-b border-border-default">
         <input
           type="text"
-          class="search-input w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-600 focus:border-transparent min-h-[44px]"
+          class="search-input w-full px-3 py-2 border border-border-default rounded-md focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent min-h-[44px]"
           placeholder="Search commits by message, author, or hash..."
           value={search}
           oninput={(e) => onSearchChange(e.currentTarget.value)}
@@ -161,11 +161,11 @@
         {#if loading}
           <!-- Loading State -->
           <div
-            class="loading-state flex items-center justify-center p-8 text-gray-500"
+            class="loading-state flex items-center justify-center p-8 text-text-secondary"
           >
             <div class="flex flex-col items-center gap-2">
               <div
-                class="spinner w-8 h-8 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"
+                class="spinner w-8 h-8 border-4 border-border-default border-t-accent-fg rounded-full animate-spin"
                 aria-hidden="true"
               ></div>
               <p class="text-sm">Loading commits...</p>
@@ -174,11 +174,11 @@
         {:else if error !== null}
           <!-- Error State -->
           <div
-            class="error-state flex items-center justify-center p-8 text-red-600"
+            class="error-state flex items-center justify-center p-8 text-danger-fg"
           >
             <div class="flex flex-col items-center gap-2 text-center">
               <svg
-                class="w-12 h-12 text-red-400"
+                class="w-12 h-12 text-danger-fg"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -197,11 +197,11 @@
         {:else if filteredCommits.length === 0}
           <!-- Empty State -->
           <div
-            class="empty-state flex items-center justify-center p-8 text-gray-500"
+            class="empty-state flex items-center justify-center p-8 text-text-secondary"
           >
             <div class="flex flex-col items-center gap-2 text-center">
               <svg
-                class="w-12 h-12 text-gray-300"
+                class="w-12 h-12 text-text-tertiary"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -233,10 +233,10 @@
 
           <!-- Load More Button -->
           {#if hasMore}
-            <div class="load-more-container p-4 border-t border-gray-200">
+            <div class="load-more-container p-4 border-t border-border-default">
               <button
                 type="button"
-                class="load-more-button w-full px-4 py-3 bg-gray-100 hover:bg-gray-200 focus:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 rounded-md text-sm font-medium text-gray-700 transition-colors min-h-[48px]"
+                class="load-more-button w-full px-4 py-3 bg-bg-secondary hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 rounded-md text-sm font-medium text-text-primary transition-colors min-h-[48px]"
                 onclick={onLoadMore}
                 disabled={loadingMore}
                 aria-label="Load more commits"
@@ -277,7 +277,7 @@
 
   .commit-list {
     scrollbar-width: thin;
-    scrollbar-color: rgb(209 213 219) transparent;
+    scrollbar-color: var(--color-border-default) transparent;
   }
 
   .commit-list::-webkit-scrollbar {
@@ -289,12 +289,12 @@
   }
 
   .commit-list::-webkit-scrollbar-thumb {
-    background-color: rgb(209 213 219);
+    background-color: var(--color-border-default);
     border-radius: 4px;
   }
 
   .commit-list::-webkit-scrollbar-thumb:hover {
-    background-color: rgb(156 163 175);
+    background-color: var(--color-border-emphasis);
   }
 
   @keyframes spin {

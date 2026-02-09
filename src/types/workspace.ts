@@ -1,5 +1,5 @@
 /**
- * Workspace Types for the aynd multi-directory workspace feature
+ * Workspace Types for the qraftbox multi-directory workspace feature
  *
  * This module defines types for managing multiple git repositories
  * simultaneously using a tab-based interface with directory browsing.

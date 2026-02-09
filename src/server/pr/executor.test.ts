@@ -71,6 +71,7 @@ describe("createPRExecutor", () => {
       }),
       addLabels: async () => {},
       requestReviewers: async () => {},
+      mergePR: async () => ({ merged: true, message: "Merged" }),
     };
   });
 
@@ -248,6 +249,7 @@ describe("executePRCreation", () => {
       },
       addLabels: async () => {},
       requestReviewers: async () => {},
+      mergePR: async () => ({ merged: true, message: "Merged" }),
     };
   });
 
@@ -392,6 +394,7 @@ describe("executePRUpdate", () => {
       }),
       addLabels: async () => {},
       requestReviewers: async () => {},
+      mergePR: async () => ({ merged: true, message: "Merged" }),
     };
   });
 

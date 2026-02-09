@@ -1,5 +1,5 @@
 /**
- * Search types for the aynd diff viewer
+ * Search types for the qraftbox diff viewer
  *
  * This module defines types for regex-based search functionality
  * with three scopes: file, changed, and all.
@@ -72,7 +72,7 @@ export interface ValidationResult {
  * @returns Validation result with error message if invalid
  */
 export function validateSearchRequest(
-  request: SearchRequest
+  request: SearchRequest,
 ): ValidationResult {
   // Validate pattern
   if (!request.pattern || request.pattern.trim().length === 0) {

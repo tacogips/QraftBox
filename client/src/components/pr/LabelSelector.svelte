@@ -77,7 +77,7 @@
 </script>
 
 <div class="label-selector">
-  <label class="block text-sm font-medium text-gray-700 mb-2">
+  <label class="block text-sm font-medium text-text-primary mb-2">
     Labels (optional)
   </label>
 
@@ -86,7 +86,7 @@
     class="selected-labels flex flex-wrap gap-2 mb-2 min-h-[44px] items-center"
   >
     {#if selected.length === 0}
-      <span class="text-sm text-gray-400">No labels selected</span>
+      <span class="text-sm text-text-tertiary">No labels selected</span>
     {:else}
       {#each selected as label}
         <button
@@ -94,10 +94,10 @@
           onclick={() => removeLabel(label)}
           {disabled}
           class="label-chip flex items-center gap-2 px-3 py-1.5 min-h-[36px]
-                 bg-blue-100 text-blue-800 border border-blue-300
+                 bg-accent-subtle text-accent-fg border border-accent-emphasis
                  rounded-full
-                 hover:bg-blue-200
-                 focus:outline-none focus:ring-2 focus:ring-blue-500
+                 hover:bg-accent-subtle
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  disabled:opacity-50 disabled:cursor-not-allowed
                  text-sm font-medium"
           aria-label="Remove label {label}"
@@ -127,19 +127,19 @@
       onclick={toggleDropdown}
       {disabled}
       class="add-label-button w-full min-h-[44px] px-4 py-2
-             text-gray-700 bg-white border border-gray-300
+             text-text-primary bg-bg-primary border border-border-default
              rounded-lg
              flex items-center justify-between
-             hover:bg-gray-50
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
-             disabled:bg-gray-100 disabled:cursor-not-allowed
+             hover:bg-bg-secondary
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
+             disabled:bg-bg-secondary disabled:cursor-not-allowed
              text-base font-medium"
       aria-label="Add labels"
       aria-expanded={isDropdownOpen}
     >
       <span>Add Labels</span>
       <svg
-        class="w-5 h-5 text-gray-400 transition-transform {isDropdownOpen
+        class="w-5 h-5 text-text-tertiary transition-transform {isDropdownOpen
           ? 'rotate-180'
           : ''}"
         xmlns="http://www.w3.org/2000/svg"
@@ -157,10 +157,10 @@
     <!-- Dropdown List -->
     {#if isDropdownOpen}
       <div
-        class="label-dropdown absolute z-10 mt-2 w-full bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto"
+        class="label-dropdown absolute z-10 mt-2 w-full bg-bg-primary border border-border-default rounded-lg shadow-lg max-h-48 overflow-y-auto"
       >
         {#if availableLabels.length === 0}
-          <div class="p-4 text-sm text-gray-500 text-center">
+          <div class="p-4 text-sm text-text-secondary text-center">
             No labels available
           </div>
         {:else}
@@ -173,15 +173,15 @@
               }}
               class="label-option w-full px-4 py-2 min-h-[44px]
                      text-left text-sm
-                     hover:bg-gray-100
-                     focus:outline-none focus:bg-gray-100
+                     hover:bg-bg-secondary
+                     focus:outline-none focus:bg-bg-secondary
                      flex items-center justify-between"
               aria-label="Toggle label {label}"
             >
               <span>{label}</span>
               {#if selected.includes(label)}
                 <svg
-                  class="w-5 h-5 text-purple-600"
+                  class="w-5 h-5 text-accent-fg"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"
@@ -200,7 +200,7 @@
     {/if}
   </div>
 
-  <p class="mt-1 text-xs text-gray-500">
+  <p class="mt-1 text-xs text-text-secondary">
     Select labels to categorize this pull request
   </p>
 </div>

@@ -115,7 +115,7 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <div
-  class="deleted-marker relative min-h-[44px] flex items-center cursor-pointer
+  class="deleted-marker relative min-h-[28px] flex items-center cursor-pointer
          group transition-all duration-150"
   onclick={handleClick}
   onpointerdown={handlePointerDown}
@@ -140,23 +140,23 @@ function handleKeydown(event: KeyboardEvent): void {
 
   <!-- Indicator column -->
   <div
-    class="w-8 flex-shrink-0 flex items-center justify-center text-red-400 border-r border-border-default"
+    class="w-8 flex-shrink-0 flex items-center justify-center text-danger-fg border-r border-border-default"
   >
     <span class="font-bold text-xs">-</span>
   </div>
 
   <!-- Red line indicator and hint -->
-  <div class="flex-1 relative py-[21px]">
+  <div class="flex-1 relative py-[13px]">
     <!-- The thin red line -->
     <div
-      class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-red-500
+      class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-danger-emphasis
              {isHovered || isPressed ? 'h-[4px]' : ''}"
     ></div>
 
     <!-- Hover/focus hint -->
     <div
       class="absolute left-3 top-1/2 -translate-y-1/2 px-2 py-1
-             bg-red-900/80 text-red-200 text-xs rounded
+             bg-danger-subtle text-danger-fg text-xs rounded
              opacity-0 group-hover:opacity-100 group-focus:opacity-100
              transition-opacity duration-150 pointer-events-none
              whitespace-nowrap"
@@ -172,7 +172,7 @@ function handleKeydown(event: KeyboardEvent): void {
 }
 
 .deleted-marker:focus-visible {
-  outline: 2px solid rgb(59 130 246);
+  outline: 2px solid var(--color-accent-fg);
   outline-offset: -2px;
 }
 </style>

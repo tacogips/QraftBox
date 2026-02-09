@@ -1,8 +1,8 @@
 /**
- * Commit Types for the aynd commit log viewer
+ * Commit Types for the qraftbox commit log viewer
  *
  * This module defines types for browsing git commit history and viewing
- * commit diffs within the aynd application.
+ * commit diffs within the qraftbox application.
  */
 
 /**

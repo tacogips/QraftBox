@@ -147,7 +147,7 @@
 
   <!-- Panel -->
   <div
-    class="push-panel fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[85vh] overflow-y-auto"
+    class="push-panel fixed bottom-0 left-0 right-0 bg-bg-primary rounded-t-2xl shadow-2xl z-50 max-h-[85vh] overflow-y-auto"
     onclick={handlePanelClick}
     role="dialog"
     aria-labelledby="push-panel-title"
@@ -155,17 +155,17 @@
   >
     <!-- Panel Header -->
     <div
-      class="panel-header sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10"
+      class="panel-header sticky top-0 bg-bg-primary border-b border-border-default px-6 py-4 z-10"
     >
       <div class="flex items-center justify-between">
-        <h2 id="push-panel-title" class="text-xl font-bold text-gray-900">
+        <h2 id="push-panel-title" class="text-xl font-bold text-text-primary">
           Push Commits
         </h2>
 
         <button
           type="button"
           onclick={onClose}
-          class="close-icon-button p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+          class="close-icon-button p-2 text-text-tertiary hover:text-text-secondary rounded-lg hover:bg-bg-secondary transition-colors"
           aria-label="Close panel"
           disabled={status === "pushing"}
         >
@@ -212,11 +212,11 @@
           <!-- Error Message -->
           {#if status === "error" && error}
             <div
-              class="error-message p-4 bg-red-50 border border-red-300 rounded-lg"
+              class="error-message p-4 bg-danger-subtle border border-danger-emphasis rounded-lg"
             >
               <div class="flex items-start gap-3">
                 <svg
-                  class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+                  class="w-5 h-5 text-danger-fg flex-shrink-0 mt-0.5"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"
@@ -228,10 +228,10 @@
                   />
                 </svg>
                 <div class="flex-1">
-                  <h3 class="text-sm font-medium text-red-800 mb-1">
+                  <h3 class="text-sm font-medium text-danger-fg mb-1">
                     Push Failed
                   </h3>
-                  <p class="text-sm text-red-700">{error}</p>
+                  <p class="text-sm text-danger-fg">{error}</p>
                 </div>
               </div>
             </div>
@@ -239,7 +239,7 @@
 
           <!-- Unpushed Commits List -->
           <div>
-            <h3 class="text-sm font-medium text-gray-700 mb-2">
+            <h3 class="text-sm font-medium text-text-primary mb-2">
               Unpushed Commits ({unpushedCommits.length})
             </h3>
             <UnpushedCommitsList commits={unpushedCommits} />
@@ -255,7 +255,7 @@
 
           <!-- Options -->
           <div class="options-section space-y-3">
-            <h3 class="text-sm font-medium text-gray-700">Options</h3>
+            <h3 class="text-sm font-medium text-text-primary">Options</h3>
 
             <!-- Force Push Toggle -->
             <label class="option-toggle flex items-center gap-3 cursor-pointer">
@@ -264,12 +264,12 @@
                 checked={forcePush}
                 onchange={(e) => onForcePushChange(e.currentTarget.checked)}
                 disabled={status === "pushing"}
-                class="toggle-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                class="toggle-checkbox w-5 h-5 text-success-fg border-border-default rounded focus:ring-2 focus:ring-success-emphasis"
               />
               <div class="flex-1">
-                <span class="text-sm font-medium text-gray-900">Force Push</span
+                <span class="text-sm font-medium text-text-primary">Force Push</span
                 >
-                <p class="text-xs text-gray-500">
+                <p class="text-xs text-text-secondary">
                   Overwrite remote branch (use with caution)
                 </p>
               </div>
@@ -282,13 +282,13 @@
                 checked={setUpstream}
                 onchange={(e) => onSetUpstreamChange(e.currentTarget.checked)}
                 disabled={status === "pushing"}
-                class="toggle-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                class="toggle-checkbox w-5 h-5 text-success-fg border-border-default rounded focus:ring-2 focus:ring-success-emphasis"
               />
               <div class="flex-1">
-                <span class="text-sm font-medium text-gray-900"
+                <span class="text-sm font-medium text-text-primary"
                   >Set Upstream</span
                 >
-                <p class="text-xs text-gray-500">
+                <p class="text-xs text-text-secondary">
                   Set remote as upstream tracking branch
                 </p>
               </div>
@@ -301,11 +301,11 @@
                 checked={pushTags}
                 onchange={(e) => onPushTagsChange(e.currentTarget.checked)}
                 disabled={status === "pushing"}
-                class="toggle-checkbox w-5 h-5 text-green-600 border-gray-300 rounded focus:ring-2 focus:ring-green-500"
+                class="toggle-checkbox w-5 h-5 text-success-fg border-border-default rounded focus:ring-2 focus:ring-success-emphasis"
               />
               <div class="flex-1">
-                <span class="text-sm font-medium text-gray-900">Push Tags</span>
-                <p class="text-xs text-gray-500">Push all tags to remote</p>
+                <span class="text-sm font-medium text-text-primary">Push Tags</span>
+                <p class="text-xs text-text-secondary">Push all tags to remote</p>
               </div>
             </label>
           </div>
@@ -316,7 +316,7 @@
     <!-- Panel Footer (Action Buttons) -->
     {#if status !== "pushing" && status !== "success"}
       <div
-        class="panel-footer sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4"
+        class="panel-footer sticky bottom-0 bg-bg-primary border-t border-border-default px-6 py-4"
       >
         <div class="flex gap-3">
           <!-- Cancel Button -->
@@ -324,11 +324,11 @@
             type="button"
             onclick={onClose}
             class="cancel-button flex-1 min-h-[44px] px-6 py-2
-                   text-gray-700 bg-gray-100
+                   text-text-primary bg-bg-secondary
                    rounded-lg
-                   hover:bg-gray-200
-                   focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2
-                   active:bg-gray-300
+                   hover:bg-bg-tertiary
+                   focus:outline-none focus:ring-2 focus:ring-border-emphasis focus:ring-offset-2
+                   active:bg-bg-tertiary
                    transition-colors
                    font-medium text-base"
           >
@@ -341,12 +341,12 @@
             onclick={handlePush}
             disabled={unpushedCommits.length === 0}
             class="push-action-button flex-1 min-h-[44px] px-6 py-2
-                   text-white bg-green-600
+                   text-white bg-success-emphasis
                    rounded-lg
-                   hover:bg-green-700
-                   focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
-                   active:bg-green-800
-                   disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
+                   hover:bg-success-emphasis
+                   focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2
+                   active:bg-success-emphasis
+                   disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
                    transition-colors
                    font-medium text-base"
           >
@@ -433,7 +433,7 @@
   }
 
   .option-toggle:hover {
-    background-color: #f9fafb;
+    background-color: var(--color-bg-secondary);
   }
 
   .toggle-checkbox {

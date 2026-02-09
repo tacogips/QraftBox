@@ -89,8 +89,8 @@
            flex items-center justify-between gap-3
            text-left
            bg-bg-tertiary border border-border-default rounded-lg
-           hover:bg-bg-hover hover:border-blue-500
-           focus:outline-none focus:ring-2 focus:ring-blue-500
+           hover:bg-bg-hover hover:border-accent-emphasis
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis
            transition-colors"
     aria-expanded={isOpen}
     aria-haspopup="listbox"
@@ -150,7 +150,7 @@
                  border-b border-border-default last:border-b-0
                  focus:outline-none focus:bg-bg-hover
                  transition-colors
-                 {selectedId === template.id ? 'bg-blue-50' : ''}"
+                 {selectedId === template.id ? 'bg-accent-subtle' : ''}"
           role="option"
           aria-selected={selectedId === template.id}
         >
@@ -167,7 +167,7 @@
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                class="text-blue-600"
+                class="text-accent-fg"
                 aria-hidden="true"
               >
                 <polyline points="20 6 9 17 4 12" />
@@ -182,7 +182,7 @@
             <div
               class="template-name text-sm font-medium
                      {selectedId === template.id
-                ? 'text-blue-600'
+                ? 'text-accent-fg'
                 : 'text-text-primary'}"
             >
               {template.name}

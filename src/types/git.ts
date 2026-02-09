@@ -1,5 +1,5 @@
 /**
- * Git Types for the aynd git operations layer
+ * Git Types for the qraftbox git operations layer
  *
  * This module defines types for git operations including file status,
  * diff generation, file tree representation, and working tree state.
@@ -58,7 +58,7 @@ export interface DiffChunk {
  * A single line change within a diff chunk
  */
 export interface DiffChange {
-  readonly type: "add" | "del" | "normal";
+  readonly type: "add" | "delete" | "context";
   readonly oldLine?: number | undefined;
   readonly newLine?: number | undefined;
   readonly content: string;

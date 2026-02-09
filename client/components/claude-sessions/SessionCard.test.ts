@@ -20,7 +20,7 @@ describe("SessionCard component", () => {
     // - Import ExtendedSessionEntry type from types/claude-session
     // - Use $derived for computed values (source badge classes, relative time, etc.)
     // - Handle onResume and optional onView callbacks
-    // - Display source badge (AYND/CLI/UNKNOWN) with distinct colors
+    // - Display source badge (QRAFTBOX/CLI/UNKNOWN) with distinct colors
     // - Show first prompt as title (truncated if needed)
     // - Display metadata: project path, git branch, message count
     // - Show relative timestamps (e.g., "2 hours ago")
@@ -51,7 +51,7 @@ describe("SessionCard component", () => {
 
   test("component displays session metadata correctly", () => {
     // Metadata display:
-    // - Source badge (AYND blue, CLI purple, UNKNOWN gray)
+    // - Source badge (QRAFTBOX blue, CLI purple, UNKNOWN gray)
     // - First prompt as clickable title
     // - Summary (if different from first prompt)
     // - Project path (extracted name)

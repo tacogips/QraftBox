@@ -44,15 +44,17 @@ export interface ClaudeSessionEntry {
   projectPath: string;
   /** Whether this is a sidechain session */
   isSidechain: boolean;
+  /** Whether the session contains at least one real user prompt (undefined for backward compatibility) */
+  hasUserPrompt?: boolean;
 }
 
 /**
  * Session source identifier
- * - aynd: Created by aynd
+ * - qraftbox: Created by qraftbox
  * - claude-cli: Created by Claude CLI directly
  * - unknown: Cannot determine source
  */
-export type SessionSource = 'aynd' | 'claude-cli' | 'unknown';
+export type SessionSource = "qraftbox" | "claude-cli" | "unknown";
 
 /**
  * Extended session entry with source tracking
@@ -116,42 +118,49 @@ export interface ProjectInfo {
 /**
  * Type guard for ClaudeSessionIndex
  */
-export function isClaudeSessionIndex(value: unknown): value is ClaudeSessionIndex {
-  if (typeof value !== 'object' || value === null) {
+export function isClaudeSessionIndex(
+  value: unknown,
+): value is ClaudeSessionIndex {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
 
   const obj = value as Record<string, unknown>;
 
   return (
-    typeof obj['version'] === 'number' &&
-    Array.isArray(obj['entries']) &&
-    typeof obj['originalPath'] === 'string'
+    typeof obj["version"] === "number" &&
+    Array.isArray(obj["entries"]) &&
+    typeof obj["originalPath"] === "string"
   );
 }
 
 /**
  * Type guard for ClaudeSessionEntry
  */
-export function isClaudeSessionEntry(value: unknown): value is ClaudeSessionEntry {
-  if (typeof value !== 'object' || value === null) {
+export function isClaudeSessionEntry(
+  value: unknown,
+): value is ClaudeSessionEntry {
+  if (typeof value !== "object" || value === null) {
     return false;
   }
 
   const obj = value as Record<string, unknown>;
 
   return (
-    typeof obj['sessionId'] === 'string' &&
-    typeof obj['fullPath'] === 'string' &&
-    typeof obj['fileMtime'] === 'number' &&
-    typeof obj['firstPrompt'] === 'string' &&
-    typeof obj['summary'] === 'string' &&
-    typeof obj['messageCount'] === 'number' &&
-    typeof obj['created'] === 'string' &&
-    typeof obj['modified'] === 'string' &&
-    typeof obj['gitBranch'] === 'string' &&
-    typeof obj['projectPath'] === 'string' &&
-    typeof obj['isSidechain'] === 'boolean'
+    typeof obj["sessionId"] === "string" &&
+    typeof obj["fullPath"] === "string" &&
+    typeof obj["fileMtime"] === "number" &&
+    typeof obj["firstPrompt"] === "string" &&
+    typeof obj["summary"] === "string" &&
+    typeof obj["messageCount"] === "number" &&
+    typeof obj["created"] === "string" &&
+    typeof obj["modified"] === "string" &&
+    typeof obj["gitBranch"] === "string" &&
+    typeof obj["projectPath"] === "string" &&
+    typeof obj["isSidechain"] === "boolean" &&
+    // hasUserPrompt is optional for backward compatibility with existing index files
+    (typeof obj["hasUserPrompt"] === "boolean" ||
+      obj["hasUserPrompt"] === undefined)
   );
 }
 
@@ -159,13 +168,15 @@ export function isClaudeSessionEntry(value: unknown): value is ClaudeSessionEntr
  * Type guard for SessionSource
  */
 export function isSessionSource(value: unknown): value is SessionSource {
-  return value === 'aynd' || value === 'claude-cli' || value === 'unknown';
+  return value === "qraftbox" || value === "claude-cli" || value === "unknown";
 }
 
 /**
  * Type guard for ExtendedSessionEntry
  */
-export function isExtendedSessionEntry(value: unknown): value is ExtendedSessionEntry {
+export function isExtendedSessionEntry(
+  value: unknown,
+): value is ExtendedSessionEntry {
   if (!isClaudeSessionEntry(value)) {
     return false;
   }
@@ -173,7 +184,6 @@ export function isExtendedSessionEntry(value: unknown): value is ExtendedSession
   const obj = value as unknown as Record<string, unknown>;
 
   return (
-    isSessionSource(obj['source']) &&
-    typeof obj['projectEncoded'] === 'string'
+    isSessionSource(obj["source"]) && typeof obj["projectEncoded"] === "string"
   );
 }

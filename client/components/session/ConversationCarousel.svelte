@@ -1,143 +1,169 @@
 <script lang="ts">
-/**
- * ConversationCarousel Component
- *
- * Displays conversation turns in a horizontal card carousel.
- *
- * Props:
- * - turns: Array of conversation turns
- * - currentIndex: Current visible card index
- * - onIndexChange: Callback when index changes
- *
- * Design:
- * - Horizontal swipeable carousel
- * - Arrow navigation buttons
- * - Pagination dots
- * - Keyboard navigation (left/right)
- */
+  /**
+   * ConversationCarousel Component
+   *
+   * Displays conversation turns in a horizontal card carousel.
+   *
+   * Props:
+   * - turns: Array of conversation turns
+   * - currentIndex: Current visible card index
+   * - onIndexChange: Callback when index changes
+   *
+   * Design:
+   * - Horizontal swipeable carousel
+   * - Arrow navigation buttons
+   * - Pagination dots
+   * - Keyboard navigation (left/right)
+   */
 
-import type { ConversationTurn } from "../../../src/types/ai";
-import MessageCard from "./MessageCard.svelte";
+  import type { ConversationTurn } from "../../../src/types/ai";
+  import MessageCard from "./MessageCard.svelte";
 
-interface Props {
-  turns: readonly ConversationTurn[];
-  currentIndex: number;
-  onIndexChange: (index: number) => void;
-}
-
-// Svelte 5 props syntax
-const { turns, currentIndex, onIndexChange }: Props = $props();
-
-/**
- * Reference to carousel container
- */
-let carouselContainer: HTMLDivElement | null = $state(null);
-
-/**
- * Touch start X position
- */
-let touchStartX: number | null = $state(null);
-
-/**
- * Navigate to previous card
- */
-function goToPrevious(): void {
-  if (currentIndex > 0) {
-    onIndexChange(currentIndex - 1);
-  }
-}
-
-/**
- * Navigate to next card
- */
-function goToNext(): void {
-  if (currentIndex < turns.length - 1) {
-    onIndexChange(currentIndex + 1);
-  }
-}
-
-/**
- * Navigate to specific index
- */
-function goToIndex(index: number): void {
-  if (index >= 0 && index < turns.length) {
-    onIndexChange(index);
-  }
-}
-
-/**
- * Handle keyboard navigation
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === "ArrowLeft") {
-    event.preventDefault();
-    goToPrevious();
-  } else if (event.key === "ArrowRight") {
-    event.preventDefault();
-    goToNext();
-  }
-}
-
-/**
- * Handle touch start
- */
-function handleTouchStart(event: TouchEvent): void {
-  const touch = event.touches[0];
-  if (touch !== undefined) {
-    touchStartX = touch.clientX;
-  }
-}
-
-/**
- * Handle touch end (swipe detection)
- */
-function handleTouchEnd(event: TouchEvent): void {
-  if (touchStartX === null) return;
-
-  const touch = event.changedTouches[0];
-  if (touch === undefined) return;
-
-  const touchEndX = touch.clientX;
-  const diff = touchStartX - touchEndX;
-  const threshold = 50; // Minimum swipe distance
-
-  if (diff > threshold) {
-    // Swiped left -> go to next
-    goToNext();
-  } else if (diff < -threshold) {
-    // Swiped right -> go to previous
-    goToPrevious();
+  interface Props {
+    turns: readonly ConversationTurn[];
+    currentIndex: number;
+    onIndexChange: (index: number) => void;
   }
 
-  touchStartX = null;
-}
+  // Svelte 5 props syntax
+  const { turns, currentIndex, onIndexChange }: Props = $props();
 
-/**
- * Check if can navigate to previous
- */
-const canGoPrevious = $derived(currentIndex > 0);
+  /**
+   * Reference to carousel container
+   */
+  let carouselContainer: HTMLDivElement | null = $state(null);
 
-/**
- * Check if can navigate to next
- */
-const canGoNext = $derived(currentIndex < turns.length - 1);
+  /**
+   * Touch start X position
+   */
+  let touchStartX: number | null = $state(null);
 
-/**
- * Scroll to current card when index changes
- */
-$effect(() => {
-  if (carouselContainer === null) return;
-
-  const cards = carouselContainer.querySelectorAll(".carousel-card");
-  const currentCard = cards[currentIndex];
-  if (currentCard !== undefined) {
-    currentCard.scrollIntoView({
-      behavior: "smooth",
-      block: "nearest",
-      inline: "center",
-    });
+  /**
+   * Navigate to previous card
+   */
+  function goToPrevious(): void {
+    if (currentIndex > 0) {
+      onIndexChange(currentIndex - 1);
+    }
   }
-});
+
+  /**
+   * Navigate to next card
+   */
+  function goToNext(): void {
+    if (currentIndex < turns.length - 1) {
+      onIndexChange(currentIndex + 1);
+    }
+  }
+
+  /**
+   * Navigate to specific index
+   */
+  function goToIndex(index: number): void {
+    if (index >= 0 && index < turns.length) {
+      onIndexChange(index);
+    }
+  }
+
+  /**
+   * Handle keyboard navigation
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      goToPrevious();
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      goToNext();
+    }
+  }
+
+  /**
+   * Handle touch start
+   */
+  function handleTouchStart(event: TouchEvent): void {
+    const touch = event.touches[0];
+    if (touch !== undefined) {
+      touchStartX = touch.clientX;
+    }
+  }
+
+  /**
+   * Handle touch end (swipe detection)
+   */
+  function handleTouchEnd(event: TouchEvent): void {
+    if (touchStartX === null) return;
+
+    const touch = event.changedTouches[0];
+    if (touch === undefined) return;
+
+    const touchEndX = touch.clientX;
+    const diff = touchStartX - touchEndX;
+    const threshold = 50; // Minimum swipe distance
+
+    if (diff > threshold) {
+      // Swiped left -> go to next
+      goToNext();
+    } else if (diff < -threshold) {
+      // Swiped right -> go to previous
+      goToPrevious();
+    }
+
+    touchStartX = null;
+  }
+
+  /**
+   * Check if can navigate to previous
+   */
+  const canGoPrevious = $derived(currentIndex > 0);
+
+  /**
+   * Check if can navigate to next
+   */
+  const canGoNext = $derived(currentIndex < turns.length - 1);
+
+  /**
+   * Scroll to current card when index changes
+   */
+  $effect(() => {
+    if (carouselContainer === null) return;
+
+    const cards = carouselContainer.querySelectorAll(".carousel-card");
+    const currentCard = cards[currentIndex];
+    if (currentCard !== undefined) {
+      currentCard.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      });
+    }
+  });
+
+  /**
+   * Check if a turn is a tool response
+   * A turn is a tool response if:
+   * - The turn is a user message AND
+   * - The previous turn exists AND
+   * - The previous turn is an assistant message AND
+   * - The previous turn has tool calls
+   */
+  function isToolResponse(index: number): boolean {
+    if (index <= 0) return false;
+
+    const currentTurn = turns[index];
+    const previousTurn = turns[index - 1];
+
+    if (currentTurn === undefined || previousTurn === undefined) {
+      return false;
+    }
+
+    return (
+      currentTurn.role === "user" &&
+      previousTurn.role === "assistant" &&
+      previousTurn.toolCalls !== undefined &&
+      previousTurn.toolCalls.length > 0
+    );
+  }
 </script>
 
 <div
@@ -150,9 +176,7 @@ $effect(() => {
 >
   {#if turns.length === 0}
     <div class="flex-1 flex items-center justify-center">
-      <p class="text-sm text-text-tertiary">
-        No messages yet
-      </p>
+      <p class="text-sm text-text-tertiary">No messages yet</p>
     </div>
   {:else}
     <!-- Carousel container -->
@@ -169,14 +193,14 @@ $effect(() => {
       >
         {#each turns as turn, index (turn.id)}
           <div
-            class="carousel-card flex-shrink-0 w-full px-4 py-4"
+            class="carousel-card flex-shrink-0 w-full px-2 py-2"
             role="tabpanel"
             aria-roledescription="slide"
             aria-label="Message {index + 1} of {turns.length}"
             aria-hidden={index !== currentIndex}
           >
-            <div class="max-w-2xl mx-auto h-full overflow-y-auto">
-              <MessageCard {turn} />
+            <div class="max-w-lg mx-auto h-full overflow-y-auto">
+              <MessageCard {turn} isToolResponse={isToolResponse(index)} />
             </div>
           </div>
         {/each}
@@ -197,7 +221,7 @@ $effect(() => {
                  hover:bg-bg-hover hover:text-text-primary
                  disabled:opacity-30 disabled:cursor-not-allowed
                  transition-all
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Previous message"
         >
           <svg
@@ -229,7 +253,7 @@ $effect(() => {
                  hover:bg-bg-hover hover:text-text-primary
                  disabled:opacity-30 disabled:cursor-not-allowed
                  transition-all
-                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
           aria-label="Next message"
         >
           <svg
@@ -253,7 +277,7 @@ $effect(() => {
     <!-- Pagination dots -->
     {#if turns.length > 1}
       <div
-        class="flex items-center justify-center gap-2 py-3"
+        class="flex items-center justify-center gap-1.5 py-2"
         role="tablist"
         aria-label="Message navigation"
       >
@@ -261,11 +285,11 @@ $effect(() => {
           <button
             type="button"
             onclick={() => goToIndex(index)}
-            class="w-2.5 h-2.5 rounded-full transition-all
-                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+            class="w-2 h-2 rounded-full transition-all
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
                    {index === currentIndex
-                     ? 'bg-blue-500 scale-110'
-                     : 'bg-text-quaternary hover:bg-text-tertiary'}"
+              ? 'bg-accent-emphasis scale-110'
+              : 'bg-text-quaternary hover:bg-text-tertiary'}"
             role="tab"
             aria-selected={index === currentIndex}
             aria-label="Go to message {index + 1}"

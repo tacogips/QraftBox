@@ -16,10 +16,7 @@ import type {
 import type { PRService } from "../github/pr-service.js";
 import { getPushStatus, getUnpushedCommits } from "../git/push.js";
 import { buildPrompt } from "../prompts/builder.js";
-import {
-  loadPromptContent,
-  loadPrompts,
-} from "../prompts/loader.js";
+import { loadPromptContent, loadPrompts } from "../prompts/loader.js";
 
 /**
  * Error thrown when PR operations fail
@@ -201,7 +198,9 @@ async function getDiffSummary(
  */
 export function createPRExecutor(prService: PRService): PRExecutor {
   return {
-    async getRepoInfo(cwd: string): Promise<{ owner: string; name: string } | null> {
+    async getRepoInfo(
+      cwd: string,
+    ): Promise<{ owner: string; name: string } | null> {
       const remoteUrl = await getRemoteUrl(cwd);
       if (remoteUrl === null) {
         return null;
@@ -254,7 +253,7 @@ export function createPRExecutor(prService: PRService): PRExecutor {
       // Determine default base branch
       const baseBranch = availableBaseBranches.includes("main")
         ? "main"
-        : availableBaseBranches[0] ?? "main";
+        : (availableBaseBranches[0] ?? "main");
 
       // Check if we can create a PR
       if (existingPR !== null) {
@@ -272,7 +271,10 @@ export function createPRExecutor(prService: PRService): PRExecutor {
 
       // Check if there are commits to create PR with
       const pushStatus = await getPushStatus(cwd);
-      if (pushStatus.aheadCount === 0 && pushStatus.unpushedCommits.length === 0) {
+      if (
+        pushStatus.aheadCount === 0 &&
+        pushStatus.unpushedCommits.length === 0
+      ) {
         return {
           hasPR: false,
           pr: null,
@@ -526,22 +528,16 @@ export async function executePRCreation(
 
     // Add labels if specified
     if (request.labels !== undefined && request.labels.length > 0) {
-      await prService.addLabels(
-        repoOwner,
-        repoName,
-        pr.number,
-        [...request.labels],
-      );
+      await prService.addLabels(repoOwner, repoName, pr.number, [
+        ...request.labels,
+      ]);
     }
 
     // Request reviewers if specified
     if (request.reviewers !== undefined && request.reviewers.length > 0) {
-      await prService.requestReviewers(
-        repoOwner,
-        repoName,
-        pr.number,
-        [...request.reviewers],
-      );
+      await prService.requestReviewers(repoOwner, repoName, pr.number, [
+        ...request.reviewers,
+      ]);
     }
 
     return {
@@ -580,22 +576,16 @@ export async function executePRUpdate(
 
     // Add new labels if specified
     if (request.labels !== undefined && request.labels.length > 0) {
-      await prService.addLabels(
-        repoOwner,
-        repoName,
-        pr.number,
-        [...request.labels],
-      );
+      await prService.addLabels(repoOwner, repoName, pr.number, [
+        ...request.labels,
+      ]);
     }
 
     // Request new reviewers if specified
     if (request.reviewers !== undefined && request.reviewers.length > 0) {
-      await prService.requestReviewers(
-        repoOwner,
-        repoName,
-        pr.number,
-        [...request.reviewers],
-      );
+      await prService.requestReviewers(repoOwner, repoName, pr.number, [
+        ...request.reviewers,
+      ]);
     }
 
     return {

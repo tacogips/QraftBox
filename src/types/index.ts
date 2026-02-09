@@ -1,5 +1,5 @@
 /**
- * Shared base types for aynd server and CLI
+ * Shared base types for qraftbox server and CLI
  *
  * This module exports common types used across the server foundation,
  * including CLI configuration, view modes, and synchronization settings.
@@ -14,7 +14,7 @@ export type { ValidationResult } from "./workspace";
 /**
  * CLI configuration for server startup
  *
- * Contains all configuration parameters needed to start the aynd server,
+ * Contains all configuration parameters needed to start the qraftbox server,
  * including network settings, behavior flags, and project path.
  */
 export interface CLIConfig {
@@ -25,6 +25,10 @@ export interface CLIConfig {
   readonly syncMode: SyncMode;
   readonly ai: boolean;
   readonly projectPath: string;
+  /** Model used for internal prompts (commit messages, etc.) */
+  readonly promptModel: string;
+  /** Model used for AI assistant interactions */
+  readonly assistantModel: string;
 }
 
 /**

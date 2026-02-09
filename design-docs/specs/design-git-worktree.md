@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add git worktree support to aynd to enable working with multiple branches simultaneously in separate directories. This feature provides:
+Add git worktree support to qraftbox to enable working with multiple branches simultaneously in separate directories. This feature provides:
 1. Create worktrees with a consistent default path structure
 2. Detect whether current directory is a worktree or main repository
 3. Navigate between worktrees and main repository
@@ -27,7 +27,7 @@ Add git worktree support to aynd to enable working with multiple branches simult
 
 Worktrees are stored under a consistent path structure:
 ```
-~/.local/aynd/worktrees/{encoded_project_path}/{worktree_name}
+~/.local/qraftbox/worktrees/{encoded_project_path}/{worktree_name}
 ```
 
 ### Path Encoding
@@ -37,7 +37,7 @@ Project paths are converted using double underscore replacement to create filesy
 | Original Path | Encoded Name |
 |---------------|--------------|
 | `/home/user/projects/my-app` | `home__user__projects__my-app` |
-| `/g/gits/tacogips/aynd` | `g__gits__tacogips__aynd` |
+| `/g/gits/tacogips/qraftbox` | `g__gits__tacogips__qraftbox` |
 
 **Encoding Rules**:
 - Leading `/` is removed
@@ -49,7 +49,7 @@ Project paths are converted using double underscore replacement to create filesy
 ```
 Main repo: /home/user/projects/my-app
 Worktree for branch "feature-auth":
-  ~/.local/aynd/worktrees/home__user__projects__my-app/feature-auth
+  ~/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth
 ```
 
 ## Worktree Detection Logic
@@ -240,7 +240,7 @@ When a user opens a worktree directory as a workspace tab:
 ```
 Main Repository (/home/user/projects/my-app)
     |
-    +-- [Create Worktree] --> Worktree (/home/user/.local/aynd/worktrees/.../feature-auth)
+    +-- [Create Worktree] --> Worktree (/home/user/.local/qraftbox/worktrees/.../feature-auth)
     |                              |
     +-- [List Worktrees]           +-- [Go to Main Repository] --> Main Repository
     |                              |
@@ -262,9 +262,9 @@ When a worktree is opened as a workspace tab:
 // Worktree tab example
 {
   id: "ctx-456",
-  path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+  path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
   name: "feature-auth",
-  repositoryRoot: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+  repositoryRoot: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
   isGitRepo: true,
   isWorktree: true,
   mainRepositoryPath: "/home/user/projects/my-app",  // <-- Navigate back to this

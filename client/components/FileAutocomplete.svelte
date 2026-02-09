@@ -254,7 +254,7 @@ function handleItemClick(index: number): void {
         onclick={() => handleItemClick(index)}
         class="w-full px-3 py-3 min-h-[48px] text-left flex items-center gap-3
                {index === selectedIndex
-          ? 'bg-blue-600/20 border-l-2 border-l-blue-500'
+          ? 'bg-accent-muted border-l-2 border-l-accent-fg'
           : 'hover:bg-bg-hover'}
                border-b border-border-default last:border-b-0
                focus:outline-none"
@@ -273,7 +273,7 @@ function handleItemClick(index: number): void {
           stroke-linecap="round"
           stroke-linejoin="round"
           class="flex-shrink-0 {file.isChanged
-            ? 'text-yellow-400'
+            ? 'text-attention-fg'
             : 'text-text-tertiary'}"
           aria-hidden="true"
         >
@@ -290,7 +290,7 @@ function handleItemClick(index: number): void {
             {#if file.isChanged}
               <span
                 class="px-1.5 py-0.5 text-[10px] font-medium
-                       bg-yellow-500/20 text-yellow-400 rounded"
+                       bg-attention-emphasis/20 text-attention-fg rounded"
               >
                 Changed
               </span>

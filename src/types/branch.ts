@@ -39,6 +39,9 @@ export interface BranchListResponse {
   readonly branches: readonly BranchInfo[];
   readonly current: string;
   readonly defaultBranch: string;
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
 }
 
 /**
@@ -143,6 +146,41 @@ export function createCheckoutFailure(
     stashCreated: undefined,
     error,
   };
+}
+
+/**
+ * Request for merging a branch into the current branch
+ */
+export interface BranchMergeRequest {
+  readonly branch: string;
+  readonly noFf?: boolean | undefined;
+}
+
+/**
+ * Response from branch merge operation
+ */
+export interface BranchMergeResponse {
+  readonly success: boolean;
+  readonly mergedBranch: string;
+  readonly currentBranch: string;
+  readonly error?: string | undefined;
+}
+
+/**
+ * Request for creating a new branch
+ */
+export interface BranchCreateRequest {
+  readonly branch: string;
+  readonly startPoint?: string | undefined;
+}
+
+/**
+ * Response from branch creation operation
+ */
+export interface BranchCreateResponse {
+  readonly success: boolean;
+  readonly branch: string;
+  readonly error?: string | undefined;
 }
 
 /**

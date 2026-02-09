@@ -20,7 +20,11 @@ export interface PRService {
   /**
    * Get a pull request by number
    */
-  getPR(owner: string, repo: string, prNumber: number): Promise<ExistingPR | null>;
+  getPR(
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<ExistingPR | null>;
 
   /**
    * Find a pull request for a specific branch
@@ -79,6 +83,16 @@ export interface PRService {
     prNumber: number,
     reviewers: string[],
   ): Promise<void>;
+
+  /**
+   * Merge a pull request
+   */
+  mergePR(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    mergeMethod?: "merge" | "squash" | "rebase",
+  ): Promise<{ merged: boolean; message: string }>;
 }
 
 /**
@@ -125,7 +139,7 @@ function mapPRResponse(pr: {
     baseBranch: pr.base.ref,
     headBranch: pr.head.ref,
     isDraft: pr.draft ?? false,
-    labels: pr.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")),
+    labels: pr.labels.map((l) => (typeof l === "string" ? l : (l.name ?? ""))),
     reviewers: (pr.requested_reviewers ?? []).map((r) => r.login),
     assignees: (pr.assignees ?? []).map((a) => a.login),
     createdAt: new Date(pr.created_at).getTime(),
@@ -341,6 +355,25 @@ export function createPRService(options: PRServiceOptions = {}): PRService {
         pull_number: prNumber,
         reviewers,
       });
+    },
+
+    async mergePR(
+      owner: string,
+      repo: string,
+      prNumber: number,
+      mergeMethod: "merge" | "squash" | "rebase" = "merge",
+    ): Promise<{ merged: boolean; message: string }> {
+      const client = await getClient();
+      const { data } = await client.rest.pulls.merge({
+        owner,
+        repo,
+        pull_number: prNumber,
+        merge_method: mergeMethod,
+      });
+      return {
+        merged: data.merged,
+        message: data.message,
+      };
     },
   };
 }

@@ -14,9 +14,25 @@ You (the LLM model) must NOT use emojis in any output, as they may be garbled or
 
 You (the LLM model) must include a paraphrase or summary of the user's instruction/request in your first response of a session, to confirm understanding of what was asked (e.g., "I understand you are asking me to...").
 
+## Prohibited Actions
+
+You (the LLM model) MUST NEVER create issues or pull requests on `anthropics/claude-code` or any other Anthropic-owned repository. If you need to create issues or PRs related to Claude Code agent functionality, use `tacogips/claude-code-agent` instead.
+
 ## Role and Responsibility
 
-You are a professional system architect. You will continuously perform system design, implementation, and test execution according to user instructions. However, you must always consider the possibility that user instructions may contain unclear parts, incorrect parts, or that the user may be giving instructions based on a misunderstanding of the system. You have an obligation to prioritize questioning the validity of execution and asking necessary questions over executing tasks when appropriate, rather than simply following user instructions as given.
+You are a professional system architect. You will continuously perform system design, implementation, and test execution according to user instructions.
+
+## Autonomous Operation Policy
+
+You (the LLM model) MUST operate autonomously and NEVER ask for confirmation before proceeding with work. Specifically:
+
+- Do NOT ask "Would you like me to...?" or "Should I...?" or "Do you want me to...?" -- just do it.
+- Do NOT use `AskUserQuestion` tool unless the user explicitly says "ask me" or "what do you think?" or similar.
+- Do NOT use `EnterPlanMode` unless the user explicitly requests planning.
+- When you discover a problem (e.g., broken wiring, missing code, bugs), fix it immediately. Do not describe the problem and ask permission to fix it.
+- When multiple approaches exist, choose the most reasonable one and proceed. Briefly explain your choice after the fact in your output, not before.
+- If user instructions contain ambiguity that can be reasonably resolved by examining the codebase, resolve it yourself and proceed.
+- Only stop to ask the user when there is a genuine, unresolvable ambiguity that cannot be determined from the codebase or context (e.g., a business decision with no technical answer).
 
 ## Language Instructions
 
@@ -129,7 +145,17 @@ feat: implement user authentication system
 
 ## Project Overview
 
-This is aynd - a TypeScript project with Bun runtime and Nix flake development environment support.
+**QraftBox** is a local diff viewer and git operations tool with AI integration, built with TypeScript and Bun runtime.
+
+Key features:
+- Local git diff viewing with inline and side-by-side modes
+- Git worktree management for multi-branch workflows
+- AI-powered commit, push, and pull request operations via Claude Code agent
+- Claude Code session browsing and management
+- Multi-directory workspace support with tab-based navigation
+- Git comment annotations via git notes
+- Custom tool registration system for extending AI agent capabilities
+- File watching with real-time updates via WebSocket
 
 ## Development Environment
 - **Language**: TypeScript
@@ -171,6 +197,39 @@ This is aynd - a TypeScript project with Bun runtime and Nix flake development e
 **Coding Standards**: Refer to `.claude/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
 
 **TypeScript Configuration**: This project uses maximum TypeScript strictness. See `tsconfig.json` for the complete strict configuration.
+
+### Verify-Fix Cycle (MANDATORY for UI-related changes)
+
+After `check-and-test-after-modify` passes for UI-related changes, the main conversation MUST perform a browser verification step using `agent-browser`, then loop if errors are found:
+
+```
+ts-coding (implement)
+    |
+    v
+check-and-test-after-modify (typecheck + unit tests)
+    |
+    v
+Browser Verify (agent-browser: open, snapshot, screenshot)
+    |
+    +-- UI looks correct --> Done (or proceed to ts-review)
+    |
+    +-- UI has issues --> ts-coding (fix) --> check-and-test --> Browser Verify (loop)
+```
+
+**Browser verification commands** (run by main conversation, not subagent):
+```bash
+agent-browser open http://localhost:7155
+agent-browser snapshot -i          # Agent inspects DOM structure
+agent-browser screenshot --full    # Capture visual state
+agent-browser get text @e1         # Check specific content
+agent-browser close
+```
+
+**When to apply**: Any change that affects client-side rendering, layout, components, CSS, or API responses consumed by the UI. Skip for pure backend/library changes with no UI impact.
+
+**Cycle limit**: Maximum 3 verify-fix iterations. If issues persist after 3 cycles, document remaining issues and report to user.
+
+**Full TDD workflow**: See `.claude/skills/e2e-tdd/SKILL.md` for comprehensive TDD workflow with Playwright + agent-browser.
 
 ## Design Documentation
 

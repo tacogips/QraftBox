@@ -23,7 +23,7 @@ A new feature to browse git commit history and view diffs for individual commits
 - Pagination for large repositories
 - Integration with existing file tree and diff view components
 
-**Status**: Design complete, pending implementation planning.
+**Status**: Implemented (plan 16 completed, code merged).
 
 ### Multi-Directory Workspace (Phase 6)
 
@@ -39,7 +39,7 @@ A feature to work on multiple git repositories simultaneously with tab-based UI.
 - Isolated state per tab (file tree, diff, commits)
 - Context-scoped API routes
 
-**Status**: Design complete, pending implementation planning.
+**Status**: Implemented (plan 17 completed, code merged).
 
 ### AI-Powered Git Operations (Phase 7-11)
 
@@ -64,11 +64,11 @@ Execute git operations (Commit, Push, PR) using Claude Code agent with customiza
 - Update existing PR
 - GitHub authentication via GITHUB_TOKEN or `gh auth`
 
-**Prompt Location**: `~/.config/aynd/default-prompts/`
+**Prompt Location**: `~/.config/qraftbox/default-prompts/`
 - `commit.md`, `commit-*.md` - Commit prompts
 - `push.md`, `push-*.md` - Push prompts
 - `pr.md`, `pr-*.md` - PR prompts
 
-**Status**: Design complete, pending implementation planning.
+**Status**: Implemented (plans 18-23 completed, code merged).
 
 ---

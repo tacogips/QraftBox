@@ -1,5 +1,5 @@
 {
-  "name": "aynd",
+  "name": "qraftbox",
   "version": "0.1.0",
   "description": "All You Need Is Diff",
   "type": "module",
@@ -34,6 +34,7 @@
   "license": "MIT",
   "trustedDependencies": [],
   "devDependencies": {
+    "@playwright/test": "1.58.1",
     "@types/bun": "1.1.14",
     "@vitest/ui": "2.1.8",
     "prettier": "3.4.2",
@@ -43,6 +44,7 @@
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
+    "claude-code-agent": "file:../claude-code-agent",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

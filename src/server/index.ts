@@ -8,9 +8,17 @@
 import { Hono } from "hono";
 import type { CLIConfig } from "../types/index";
 import type { ContextManager } from "./workspace/context-manager";
+import type { ServerWebSocket } from "bun";
+import type { WebSocketManager } from "./websocket/index";
 import { createErrorHandler } from "./errors";
 import { createStaticMiddleware, createSPAFallback } from "./static";
+import { mountAllRoutes } from "./routes/index";
+import { createSessionManager } from "./ai/session-manager";
+import { createPromptStore } from "./prompts/prompt-store";
+import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
+import { createQraftBoxToolRegistry } from "./tools/registry";
+import { DEFAULT_AI_CONFIG } from "../types/ai";
 
 /**
  * Server options for creating the Hono instance
@@ -77,22 +85,34 @@ export function createServer(options: ServerOptions): Hono {
     return c.json(response);
   });
 
-  // TODO: Mount workspace routes at /api/workspace
-  // import { createWorkspaceRoutes } from "./routes/workspace";
-  // app.route("/api/workspace", createWorkspaceRoutes(options.contextManager));
+  // Mount all API routes (workspace, browse, context-scoped routes)
+  const toolRegistry = createQraftBoxToolRegistry({
+    projectPath: options.config.projectPath,
+  });
 
-  // TODO: Mount browse routes at /api/browse
-  // import { createBrowseRoutes } from "./routes/browse";
-  // app.route("/api/browse", createBrowseRoutes());
+  // Initialize tool registry (fire and forget)
+  void toolRegistry.initialize().catch((e) => {
+    console.error("Failed to initialize tool registry:", e);
+  });
 
-  // TODO: Mount context-scoped routes under /api/ctx/:contextId
-  // Context-scoped routes pattern:
-  // const contextApp = new Hono();
-  // contextApp.use("/:contextId/*", contextMiddleware(options.contextManager));
-  // contextApp.route("/:contextId/commits", commitRoutes);
-  // contextApp.route("/:contextId/search", searchRoutes);
-  // ... other context-scoped routes
-  // app.route("/api/ctx", contextApp);
+  const sessionManager = createSessionManager(DEFAULT_AI_CONFIG, toolRegistry);
+  const promptStore = createPromptStore();
+
+  // Initialize system prompt files (fire and forget)
+  void ensureSystemPromptFiles().catch((e) => {
+    console.error("Failed to initialize system prompt files:", e);
+  });
+
+  mountAllRoutes(app, {
+    contextManager: options.contextManager,
+    sessionManager,
+    promptStore,
+    toolRegistry,
+    modelConfig: {
+      promptModel: options.config.promptModel,
+      assistantModel: options.config.assistantModel,
+    },
+  });
 
   // Static file serving and SPA fallback
   // Assumes client build is at ./dist/client relative to project root
@@ -109,13 +129,65 @@ export function createServer(options: ServerOptions): Hono {
  * Start HTTP server
  *
  * Starts the Bun HTTP server with the provided Hono app, binding to the
- * host and port specified in config.
+ * host and port specified in config. Optionally configures WebSocket support
+ * for real-time file change notifications.
+ *
+ * When wsManager is provided, the server handles WebSocket upgrade requests
+ * at the `/ws` endpoint and routes WebSocket events to the manager.
  *
  * @param app - Hono app instance
  * @param config - CLI configuration
+ * @param wsManager - Optional WebSocket manager for real-time updates
  * @returns Server instance with port, hostname, and stop function
  */
-export function startServer(app: Hono, config: CLIConfig): Server {
+export function startServer(
+  app: Hono,
+  config: CLIConfig,
+  wsManager?: WebSocketManager | undefined,
+): Server {
+  if (wsManager !== undefined) {
+    // Capture wsManager in a const for use inside handlers
+    const manager = wsManager;
+
+    const server = Bun.serve({
+      fetch(
+        req: Request,
+        server: import("bun").Server,
+      ): Response | Promise<Response> | undefined {
+        const url = new URL(req.url);
+        if (url.pathname === "/ws") {
+          if (server.upgrade(req)) {
+            return undefined;
+          }
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+        return app.fetch(req, server);
+      },
+      websocket: {
+        open(ws: ServerWebSocket<unknown>): void {
+          manager.handleOpen(ws);
+        },
+        close(ws: ServerWebSocket<unknown>): void {
+          manager.handleClose(ws);
+        },
+        message(ws: ServerWebSocket<unknown>, message: string | Buffer): void {
+          manager.handleMessage(ws, message);
+        },
+      },
+      port: config.port,
+      hostname: config.host,
+    });
+
+    return {
+      port: server.port,
+      hostname: server.hostname,
+      stop(): void {
+        server.stop();
+      },
+    };
+  }
+
+  // HTTP-only server (no WebSocket)
   const server = Bun.serve({
     fetch: app.fetch,
     port: config.port,

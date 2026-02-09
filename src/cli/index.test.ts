@@ -15,11 +15,13 @@ describe("parseArgs", () => {
     expect(config).toEqual({
       port: 7144,
       host: "localhost",
-      open: true,
+      open: false,
       watch: true,
       syncMode: "manual",
       ai: true,
       projectPath: ".",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     });
   });
 
@@ -37,8 +39,8 @@ describe("parseArgs", () => {
     expect(config.host).toBe("0.0.0.0");
   });
 
-  test("parses --no-open flag", () => {
-    const args = ["node", "script.js", "--no-open"];
+  test("defaults open to false", () => {
+    const args = ["node", "script.js"];
     const config = parseArgs(args);
 
     expect(config.open).toBe(false);
@@ -122,7 +124,6 @@ describe("parseArgs", () => {
       "9000",
       "--host",
       "127.0.0.1",
-      "--no-open",
       "--no-watch",
       "--sync-mode",
       "auto",
@@ -139,6 +140,8 @@ describe("parseArgs", () => {
       syncMode: "auto",
       ai: false,
       projectPath: "/path/to/project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     });
   });
 

@@ -159,7 +159,7 @@
         class="p-2 min-w-[44px] min-h-[44px]
                text-text-secondary hover:text-text-primary
                hover:bg-bg-hover rounded-lg
-               focus:outline-none focus:ring-2 focus:ring-blue-500"
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
         aria-label="Close commit panel"
         title="Close (Esc)"
       >
@@ -216,7 +216,7 @@
                text-text-primary bg-bg-tertiary
                border border-border-default rounded-lg
                hover:bg-bg-hover
-               focus:outline-none focus:ring-2 focus:ring-blue-500
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                font-medium transition-colors"
       >
         Cancel
@@ -227,12 +227,12 @@
         onclick={handleCommit}
         disabled={isCommitDisabled()}
         class="px-6 py-3 min-h-[52px] min-w-[120px]
-               text-white bg-blue-600
+               text-white bg-success-emphasis
                rounded-lg
-               hover:bg-blue-700
+               hover:brightness-110
                disabled:opacity-50 disabled:cursor-not-allowed
-               focus:outline-none focus:ring-2 focus:ring-blue-500
-               font-medium transition-colors
+               focus:outline-none focus:ring-2 focus:ring-success-emphasis
+               font-medium transition-all
                flex items-center justify-center gap-2"
       >
         <svg

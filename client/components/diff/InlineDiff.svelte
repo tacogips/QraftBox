@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DiffChunk } from "../../src/types/diff";
   import DiffLine from "./DiffLine.svelte";
+  import SplitButton from "../common/SplitButton.svelte";
 
   /**
    * InlineDiff Component
@@ -19,9 +20,45 @@
   interface Props {
     chunks: readonly DiffChunk[];
     onLineSelect?: (line: number, type: "old" | "new") => void;
+    onCommentOpen?: (line: number, type: "old" | "new", shiftKey: boolean) => void;
+    onCommentSubmit?: (prompt: string, immediate: boolean) => void;
+    onCommentCancel?: () => void;
+    commentLine?: { type: "old" | "new"; startLine: number; endLine: number } | undefined;
+    placeholder?: string;
+    rangeLines?: readonly number[];
+    oldHighlightMap?: Map<number, string>;
+    newHighlightMap?: Map<number, string>;
+    filePath?: string;
   }
 
-  let { chunks, onLineSelect = undefined }: Props = $props();
+  let {
+    chunks,
+    onLineSelect = undefined,
+    onCommentOpen = undefined,
+    onCommentSubmit = undefined,
+    onCommentCancel = undefined,
+    commentLine = undefined,
+    placeholder = "Ask AI about this line...",
+    rangeLines = [],
+    oldHighlightMap = undefined,
+    newHighlightMap = undefined,
+    filePath = undefined,
+  }: Props = $props();
+
+  let commentText = $state("");
+
+  /**
+   * Get line context display
+   */
+  const lineContext = $derived.by(() => {
+    if (commentLine === undefined) return "";
+    if (filePath === undefined) return "";
+    const lineInfo =
+      commentLine.startLine === commentLine.endLine
+        ? `L${commentLine.startLine}`
+        : `L${commentLine.startLine}-L${commentLine.endLine}`;
+    return `${filePath}:${lineInfo}`;
+  });
 
   /**
    * Flatten all changes from all chunks into a single list
@@ -70,9 +107,55 @@
       onLineSelect(oldLine, "old");
     }
   }
+
+  /**
+   * Handle comment button click
+   */
+  function handleCommentOpen(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+    shiftKey: boolean,
+  ): void {
+    if (onCommentOpen === undefined) return;
+    if (newLine !== undefined) {
+      onCommentOpen(newLine, "new", shiftKey);
+    } else if (oldLine !== undefined) {
+      onCommentOpen(oldLine, "old", shiftKey);
+    }
+  }
+
+  /**
+   * Check if comment box should show after this line (renders after endLine)
+   */
+  function isCommentLine(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+  ): boolean {
+    if (commentLine === undefined) return false;
+    if (commentLine.type === "new" && newLine === commentLine.endLine) return true;
+    if (commentLine.type === "old" && oldLine === commentLine.endLine) return true;
+    return false;
+  }
+
+  /**
+   * Check if a line is in the highlighted range
+   */
+  function isInRange(
+    oldLine: number | undefined,
+    newLine: number | undefined,
+  ): boolean {
+    if (commentLine === undefined) return false;
+    if (commentLine.type === "new" && newLine !== undefined) {
+      return rangeLines.includes(newLine);
+    }
+    if (commentLine.type === "old" && oldLine !== undefined) {
+      return rangeLines.includes(oldLine);
+    }
+    return false;
+  }
 </script>
 
-<div class="w-full font-mono">
+<div class="w-full font-mono text-xs leading-5">
   {#if flattenedChanges.length === 0}
     <!-- Empty state when no changes exist -->
     <div
@@ -83,18 +166,28 @@
   {:else}
     <!-- Render each change as an inline diff line -->
     {#each flattenedChanges as { change, index } (index)}
-      <div class="flex">
+      <div class="flex diff-line-row group/inlinerow {isInRange(change.oldLine, change.newLine) ? 'bg-accent-muted' : ''}">
         <!-- Old line number column -->
         <div
-          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default"
+          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
         >
+          {#if onCommentOpen !== undefined}
+            <button
+              type="button"
+              class="absolute left-0 top-1 w-6 h-6 flex items-center justify-center
+                     rounded bg-accent-emphasis text-white text-xs font-bold
+                     opacity-0 group-hover/inlinerow:opacity-100
+                     hover:bg-accent-fg transition-opacity z-10 cursor-pointer"
+              onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine, e.shiftKey); }}
+              aria-label="Add comment"
+            >+</button>
+          {/if}
           {#if change.oldLine !== undefined}
-            <span class="pt-2 min-h-[44px] flex items-start"
+            <span class="leading-5"
               >{change.oldLine}</span
             >
           {:else}
-            <!-- Empty placeholder for added lines -->
-            <span class="pt-2 min-h-[44px] flex items-start opacity-30">-</span>
+            <span class="leading-5 opacity-30">-</span>
           {/if}
         </div>
 
@@ -103,12 +196,11 @@
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default"
         >
           {#if change.newLine !== undefined}
-            <span class="pt-2 min-h-[44px] flex items-start"
+            <span class="leading-5"
               >{change.newLine}</span
             >
           {:else}
-            <!-- Empty placeholder for deleted lines -->
-            <span class="pt-2 min-h-[44px] flex items-start opacity-30">-</span>
+            <span class="leading-5 opacity-30">-</span>
           {/if}
         </div>
 
@@ -117,10 +209,53 @@
           <DiffLine
             {change}
             lineNumber={change.newLine ?? change.oldLine ?? index + 1}
+            highlighted={change.type === "delete"
+              ? oldHighlightMap?.get(change.oldLine ?? 0)
+              : newHighlightMap?.get(change.newLine ?? 0)}
             onSelect={() => handleLineSelect(change.oldLine, change.newLine)}
           />
         </div>
       </div>
+      {#if isCommentLine(change.oldLine, change.newLine)}
+        <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
+          <textarea
+            class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+            placeholder="Ask AI about this code..."
+            bind:value={commentText}
+            onkeydown={(e) => {
+              if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
+                e.preventDefault();
+                onCommentSubmit(commentText, true);
+                commentText = "";
+              }
+              if (e.key === "Escape" && onCommentCancel !== undefined) {
+                onCommentCancel();
+                commentText = "";
+              }
+            }}
+          ></textarea>
+          <div class="flex items-center justify-between mt-2">
+            <!-- Left side: File and line info -->
+            <div class="text-xs text-text-tertiary font-mono">
+              {lineContext}
+            </div>
+            <!-- Right side: Buttons -->
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
+              >Cancel</button>
+              <SplitButton
+                disabled={commentText.trim().length === 0}
+                onPrimaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, false); commentText = ""; } }}
+                onSecondaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
+              />
+            </div>
+          </div>
+        </div>
+      {/if}
     {/each}
   {/if}
 </div>

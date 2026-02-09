@@ -23,7 +23,7 @@ describe("branch module", () => {
 
   beforeEach(async () => {
     // Create temporary directory for test repository
-    repoPath = await mkdtemp(join(tmpdir(), "aynd-branch-test-"));
+    repoPath = await mkdtemp(join(tmpdir(), "qraftbox-branch-test-"));
 
     // Initialize git repository
     await execGit(["init", "-b", "main"], { cwd: repoPath });
@@ -94,13 +94,14 @@ describe("branch module", () => {
 
   describe("listBranches", () => {
     test("lists single branch in new repository", async () => {
-      const branches = await listBranches(repoPath);
+      const result = await listBranches(repoPath);
 
-      expect(branches.length).toBe(1);
-      expect(branches[0]?.name).toBe("main");
-      expect(branches[0]?.isCurrent).toBe(true);
-      expect(branches[0]?.isDefault).toBe(true);
-      expect(branches[0]?.isRemote).toBe(false);
+      expect(result.branches.length).toBe(1);
+      expect(result.branches[0]?.name).toBe("main");
+      expect(result.branches[0]?.isCurrent).toBe(true);
+      expect(result.branches[0]?.isDefault).toBe(true);
+      expect(result.branches[0]?.isRemote).toBe(false);
+      expect(result.total).toBe(1);
     });
 
     test("lists multiple local branches", async () => {
@@ -109,10 +110,10 @@ describe("branch module", () => {
       await execGit(["checkout", "-b", "feature-2"], { cwd: repoPath });
       await execGit(["checkout", "main"], { cwd: repoPath });
 
-      const branches = await listBranches(repoPath);
+      const result = await listBranches(repoPath);
 
-      expect(branches.length).toBe(3);
-      const branchNames = branches.map((b) => b.name);
+      expect(result.branches.length).toBe(3);
+      const branchNames = result.branches.map((b) => b.name);
       expect(branchNames).toContain("main");
       expect(branchNames).toContain("feature-1");
       expect(branchNames).toContain("feature-2");
@@ -121,39 +122,104 @@ describe("branch module", () => {
     test("marks current branch correctly", async () => {
       await execGit(["checkout", "-b", "feature"], { cwd: repoPath });
 
-      const branches = await listBranches(repoPath);
+      const result = await listBranches(repoPath);
 
-      const mainBranch = branches.find((b) => b.name === "main");
-      const featureBranch = branches.find((b) => b.name === "feature");
+      const mainBranch = result.branches.find((b) => b.name === "main");
+      const featureBranch = result.branches.find((b) => b.name === "feature");
 
       expect(mainBranch?.isCurrent).toBe(false);
       expect(featureBranch?.isCurrent).toBe(true);
     });
 
     test("includes last commit information", async () => {
-      const branches = await listBranches(repoPath);
+      const result = await listBranches(repoPath);
+      const mainBranch = result.branches.find((b) => b.name === "main");
 
-      expect(branches[0]?.lastCommit).toBeDefined();
-      expect(branches[0]?.lastCommit.hash).toBeTruthy();
-      expect(branches[0]?.lastCommit.message).toBe("Initial commit");
-      expect(branches[0]?.lastCommit.author).toBe("Test User");
-      expect(branches[0]?.lastCommit.date).toBeGreaterThan(0);
+      expect(mainBranch?.lastCommit).toBeDefined();
+      expect(mainBranch?.lastCommit.hash).toBeTruthy();
+      expect(mainBranch?.lastCommit.message).toBe("Initial commit");
+      expect(mainBranch?.lastCommit.author).toBe("Test User");
+      expect(mainBranch?.lastCommit.date).toBeGreaterThan(0);
     });
 
     test("excludes remote branches by default", async () => {
-      const branches = await listBranches(repoPath);
+      const result = await listBranches(repoPath);
 
-      const remoteBranches = branches.filter((b) => b.isRemote);
+      const remoteBranches = result.branches.filter((b) => b.isRemote);
       expect(remoteBranches.length).toBe(0);
     });
 
     test("includes remote branches when requested", async () => {
-      // We need to set up a remote to test this
-      // For simplicity, we'll skip this test if no remote is configured
-      const branches = await listBranches(repoPath, true);
+      const result = await listBranches(repoPath, true);
 
       // Should at least have local branches
-      expect(branches.length).toBeGreaterThan(0);
+      expect(result.branches.length).toBeGreaterThan(0);
+    });
+
+    test("sorts by commit date descending with default branch first", async () => {
+      // Create branches with commits at different times
+      await execGit(["checkout", "-b", "older-branch"], { cwd: repoPath });
+      await writeFile(join(repoPath, "old.txt"), "old");
+      await execGit(["add", "old.txt"], { cwd: repoPath });
+      await execGit(["commit", "-m", "Old commit"], { cwd: repoPath });
+
+      await execGit(["checkout", "main"], { cwd: repoPath });
+      await execGit(["checkout", "-b", "newer-branch"], { cwd: repoPath });
+      await writeFile(join(repoPath, "new.txt"), "new");
+      await execGit(["add", "new.txt"], { cwd: repoPath });
+      await execGit(["commit", "-m", "New commit"], { cwd: repoPath });
+
+      await execGit(["checkout", "main"], { cwd: repoPath });
+
+      const result = await listBranches(repoPath);
+
+      // Default branch (main) should be first
+      expect(result.branches[0]?.name).toBe("main");
+      expect(result.branches[0]?.isDefault).toBe(true);
+
+      // Non-default branches should be sorted by date desc
+      const nonDefault = result.branches.filter((b) => !b.isDefault);
+      for (let i = 0; i < nonDefault.length - 1; i++) {
+        const current = nonDefault[i];
+        const next = nonDefault[i + 1];
+        if (current !== undefined && next !== undefined) {
+          expect(current.lastCommit.date).toBeGreaterThanOrEqual(
+            next.lastCommit.date,
+          );
+        }
+      }
+    });
+
+    test("respects pagination with offset and limit", async () => {
+      // Create several branches
+      for (let i = 1; i <= 5; i++) {
+        await execGit(["checkout", "-b", `page-${i}`], { cwd: repoPath });
+        await writeFile(
+          join(repoPath, `page${String(i)}.txt`),
+          `page ${String(i)}`,
+        );
+        await execGit(["add", "."], { cwd: repoPath });
+        await execGit(["commit", "-m", `Page ${String(i)}`], { cwd: repoPath });
+      }
+      await execGit(["checkout", "main"], { cwd: repoPath });
+
+      // First page (offset 0, limit 2) - includes default branch pinned
+      const page1 = await listBranches(repoPath, false, {
+        offset: 0,
+        limit: 2,
+      });
+      // Default branch (main) + 2 non-default = 3 on first page
+      expect(page1.branches.length).toBe(3);
+      expect(page1.branches[0]?.isDefault).toBe(true);
+
+      // Second page (offset 2, limit 2) - no default branch
+      const page2 = await listBranches(repoPath, false, {
+        offset: 2,
+        limit: 2,
+      });
+      expect(page2.branches.length).toBe(2);
+      // Default branch should NOT appear on page 2
+      expect(page2.branches.find((b) => b.isDefault)).toBeUndefined();
     });
   });
 

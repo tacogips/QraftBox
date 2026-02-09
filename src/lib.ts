@@ -1,5 +1,5 @@
 /**
- * Library module for aynd
+ * Library module for qraftbox
  */
 
 /**
@@ -21,4 +21,17 @@ export function greet(name: string): string {
  */
 export function add(a: number, b: number): number {
   return a + b;
+}
+
+// Temporary test function for syntax highlighting verification
+export function syntaxHighlightTest(): { result: string; count: number } {
+  const items: string[] = ["hello", "world"];
+  const count = items.length;
+  // Template literal with expressions
+  const message = `Found ${count} items: ${items.join(", ")}`;
+  if (count > 0) {
+    console.log(message);
+    return { result: message, count };
+  }
+  return { result: "empty", count: 0 };
 }

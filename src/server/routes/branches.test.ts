@@ -46,7 +46,7 @@ async function gitExec(args: readonly string[]): Promise<void> {
 beforeAll(async () => {
   // Create temporary directory
   testRepoPath = await fs.mkdtemp(
-    path.join(os.tmpdir(), "aynd-branches-routes-test-"),
+    path.join(os.tmpdir(), "qraftbox-branches-routes-test-"),
   );
 
   // Initialize git repository
@@ -116,6 +116,9 @@ describe("createBranchRoutes", () => {
       expect(data).toHaveProperty("branches");
       expect(data).toHaveProperty("current", "main");
       expect(data).toHaveProperty("defaultBranch", "main");
+      expect(data).toHaveProperty("total");
+      expect(data).toHaveProperty("offset", 0);
+      expect(data).toHaveProperty("limit", 30);
       expect(data.branches.length).toBeGreaterThanOrEqual(3);
 
       // Verify main branch

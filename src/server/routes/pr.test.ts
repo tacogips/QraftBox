@@ -83,7 +83,9 @@ function createMockPRExecutor(): PRExecutor {
         repoName: "test-repo",
       } as BranchPRStatus),
     ),
-    getBaseBranches: mock(() => Promise.resolve(["main", "develop", "feature"])),
+    getBaseBranches: mock(() =>
+      Promise.resolve(["main", "develop", "feature"]),
+    ),
     buildContext: mock(() =>
       Promise.resolve({
         branchName: "feature-branch",
@@ -179,6 +181,7 @@ function createMockPRService(): PRService {
     ),
     addLabels: mock(() => Promise.resolve()),
     requestReviewers: mock(() => Promise.resolve()),
+    mergePR: mock(() => Promise.resolve({ merged: true, message: "Merged" })),
   };
 }
 
@@ -225,7 +228,9 @@ describe("validatePRRequest", () => {
   });
 
   test("should reject empty promptTemplateId", () => {
-    expect(validatePRRequest({ promptTemplateId: "", baseBranch: "main" })).toEqual({
+    expect(
+      validatePRRequest({ promptTemplateId: "", baseBranch: "main" }),
+    ).toEqual({
       valid: false,
       error: "promptTemplateId must be a non-empty string",
     });
@@ -328,9 +333,11 @@ describe("validateLabelsRequest", () => {
 
 describe("validateReviewersRequest", () => {
   test("should accept valid request", () => {
-    expect(validateReviewersRequest({ reviewers: ["user1", "user2"] })).toEqual({
-      valid: true,
-    });
+    expect(validateReviewersRequest({ reviewers: ["user1", "user2"] })).toEqual(
+      {
+        valid: true,
+      },
+    );
   });
 
   test("should reject non-object", () => {
@@ -371,9 +378,7 @@ describe("createPRRoutes", () => {
     test("should return PR status", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -408,9 +413,7 @@ describe("createPRRoutes", () => {
     test("should return 500 on executor error", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       executor.getPRStatus = mock(() =>
@@ -432,9 +435,7 @@ describe("createPRRoutes", () => {
     test("should return available branches", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -468,9 +469,7 @@ describe("createPRRoutes", () => {
     test("should create PR", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -498,9 +497,7 @@ describe("createPRRoutes", () => {
     test("should return 400 for invalid request", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -521,9 +518,7 @@ describe("createPRRoutes", () => {
     test("should return 400 when no repo info", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       executor.getRepoInfo = mock(() => Promise.resolve(null));
@@ -544,7 +539,10 @@ describe("createPRRoutes", () => {
 
       expect(res.status).toBe(400);
       const data = await res.json();
-      expect(data).toHaveProperty("error", "No GitHub repository information available");
+      expect(data).toHaveProperty(
+        "error",
+        "No GitHub repository information available",
+      );
     });
   });
 
@@ -552,9 +550,7 @@ describe("createPRRoutes", () => {
     test("should update PR", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -583,9 +579,7 @@ describe("createPRRoutes", () => {
     test("should return 400 for invalid PR number", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -613,9 +607,7 @@ describe("createPRRoutes", () => {
     test("should add labels", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -640,9 +632,7 @@ describe("createPRRoutes", () => {
     test("should return 400 for invalid labels", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -665,9 +655,7 @@ describe("createPRRoutes", () => {
     test("should request reviewers", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();
@@ -692,9 +680,7 @@ describe("createPRRoutes", () => {
     test("should return 400 for invalid reviewers", async () => {
       const contextId = "test-context" as ContextId;
       const context = createMockContext(contextId, "/test/repo");
-      const contexts = new Map<ContextId, WorkspaceTab>([
-        [contextId, context],
-      ]);
+      const contexts = new Map<ContextId, WorkspaceTab>([[contextId, context]]);
       const contextManager = createMockContextManager(contexts);
       const executor = createMockPRExecutor();
       const prService = createMockPRService();

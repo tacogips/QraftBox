@@ -4,8 +4,14 @@
 
 import { describe, it, expect, beforeEach } from "bun:test";
 import type { Hono } from "hono";
-import { createWorktreeRoutes, type WorktreeRoutesDependencies } from "./worktree";
-import type { ContextManager, ServerContext } from "../workspace/context-manager";
+import {
+  createWorktreeRoutes,
+  type WorktreeRoutesDependencies,
+} from "./worktree";
+import type {
+  ContextManager,
+  ServerContext,
+} from "../workspace/context-manager";
 import type {
   WorktreeInfo,
   RepositoryDetectionResult,
@@ -84,7 +90,7 @@ const mockWorktrees: WorktreeInfo[] = [
     mainRepositoryPath: "/home/user/projects/my-app",
   },
   {
-    path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+    path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
     head: "def456",
     branch: "feature-auth",
     isMain: false,
@@ -104,7 +110,7 @@ const mockDetectionMain: RepositoryDetectionResult = {
 
 const mockDetectionWorktree: RepositoryDetectionResult = {
   type: "worktree",
-  path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-auth",
+  path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-auth",
   gitDir: "/home/user/projects/my-app/.git/worktrees/feature-auth",
   mainRepositoryPath: "/home/user/projects/my-app",
   worktreeName: "feature-auth",
@@ -116,7 +122,9 @@ describe("Worktree Routes", () => {
 
   // Create default mock dependencies function
   const createMockDeps = (): WorktreeRoutesDependencies => ({
-    detectRepositoryType: async (_path: string): Promise<RepositoryDetectionResult> => {
+    detectRepositoryType: async (
+      _path: string,
+    ): Promise<RepositoryDetectionResult> => {
       return mockDetectionMain;
     },
     listWorktrees: async (_cwd: string): Promise<WorktreeInfo[]> => {
@@ -128,7 +136,7 @@ describe("Worktree Routes", () => {
     ): Promise<CreateWorktreeResult> => {
       return {
         success: true,
-        path: "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-new",
+        path: "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-new",
         branch: "feature-new",
       };
     },
@@ -145,8 +153,11 @@ describe("Worktree Routes", () => {
     getMainRepositoryPath: async (_path: string): Promise<string | null> => {
       return null; // Main repo by default
     },
-    generateDefaultWorktreePath: (_projectPath: string, worktreeName: string): string => {
-      return `/home/user/.local/aynd/worktrees/home__user__projects__my-app/${worktreeName}`;
+    generateDefaultWorktreePath: (
+      _projectPath: string,
+      worktreeName: string,
+    ): string => {
+      return `/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/${worktreeName}`;
     },
   });
 
@@ -188,9 +199,12 @@ describe("Worktree Routes", () => {
     });
 
     it("should return 404 for non-existent context", async () => {
-      const response = await app.request(`/${NON_EXISTENT_CONTEXT_ID}/worktree`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(404);
 
@@ -221,13 +235,18 @@ describe("Worktree Routes", () => {
 
   describe("GET /:id/worktree/detect", () => {
     it("should detect main repository", async () => {
-      const response = await app.request(`/${TEST_CONTEXT_ID}/worktree/detect`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${TEST_CONTEXT_ID}/worktree/detect`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(200);
 
-      const body = (await response.json()) as { detection: RepositoryDetectionResult };
+      const body = (await response.json()) as {
+        detection: RepositoryDetectionResult;
+      };
       expect(body.detection).toEqual(mockDetectionMain);
     });
 
@@ -243,20 +262,28 @@ describe("Worktree Routes", () => {
 
       app = createWorktreeRoutes(contextManager, worktreeDeps);
 
-      const response = await app.request(`/${TEST_CONTEXT_ID}/worktree/detect`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${TEST_CONTEXT_ID}/worktree/detect`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(200);
 
-      const body = (await response.json()) as { detection: RepositoryDetectionResult };
+      const body = (await response.json()) as {
+        detection: RepositoryDetectionResult;
+      };
       expect(body.detection).toEqual(mockDetectionWorktree);
     });
 
     it("should return 400 for invalid context ID", async () => {
-      const response = await app.request(`/${INVALID_CONTEXT_ID}/worktree/detect`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${INVALID_CONTEXT_ID}/worktree/detect`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(400);
 
@@ -265,9 +292,12 @@ describe("Worktree Routes", () => {
     });
 
     it("should return 404 for non-existent context", async () => {
-      const response = await app.request(`/${NON_EXISTENT_CONTEXT_ID}/worktree/detect`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree/detect`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(404);
 
@@ -287,9 +317,12 @@ describe("Worktree Routes", () => {
 
       app = createWorktreeRoutes(contextManager, failingDeps);
 
-      const response = await app.request(`/${TEST_CONTEXT_ID}/worktree/detect`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${TEST_CONTEXT_ID}/worktree/detect`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(500);
 
@@ -319,7 +352,9 @@ describe("Worktree Routes", () => {
     it("should return main repository path for worktree", async () => {
       const worktreeDeps: WorktreeRoutesDependencies = {
         ...createMockDeps(),
-        getMainRepositoryPath: async (_path: string): Promise<string | null> => {
+        getMainRepositoryPath: async (
+          _path: string,
+        ): Promise<string | null> => {
           return "/home/user/projects/my-app";
         },
       };
@@ -343,9 +378,12 @@ describe("Worktree Routes", () => {
     });
 
     it("should return 400 for invalid context ID", async () => {
-      const response = await app.request(`/${INVALID_CONTEXT_ID}/worktree/main`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${INVALID_CONTEXT_ID}/worktree/main`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(400);
 
@@ -354,9 +392,12 @@ describe("Worktree Routes", () => {
     });
 
     it("should return 404 for non-existent context", async () => {
-      const response = await app.request(`/${NON_EXISTENT_CONTEXT_ID}/worktree/main`, {
-        method: "GET",
-      });
+      const response = await app.request(
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree/main`,
+        {
+          method: "GET",
+        },
+      );
 
       expect(response.status).toBe(404);
 
@@ -367,7 +408,9 @@ describe("Worktree Routes", () => {
     it("should return 500 when operation fails", async () => {
       const failingDeps: WorktreeRoutesDependencies = {
         ...createMockDeps(),
-        getMainRepositoryPath: async (_path: string): Promise<string | null> => {
+        getMainRepositoryPath: async (
+          _path: string,
+        ): Promise<string | null> => {
           throw new Error("Operation failed");
         },
       };
@@ -398,7 +441,7 @@ describe("Worktree Routes", () => {
 
       const body = (await response.json()) as { path: string; exists: boolean };
       expect(body.path).toBe(
-        "/home/user/.local/aynd/worktrees/home__user__projects__my-app/feature-test",
+        "/home/user/.local/qraftbox/worktrees/home__user__projects__my-app/feature-test",
       );
       expect(typeof body.exists).toBe("boolean");
     });
@@ -411,7 +454,9 @@ describe("Worktree Routes", () => {
       expect(response.status).toBe(400);
 
       const body = (await response.json()) as { error: string; code: number };
-      expect(body.error).toContain("Missing required query parameter: projectPath");
+      expect(body.error).toContain(
+        "Missing required query parameter: projectPath",
+      );
     });
 
     it("should return 400 when name is missing", async () => {
@@ -514,15 +559,18 @@ describe("Worktree Routes", () => {
     });
 
     it("should return 404 for non-existent context", async () => {
-      const response = await app.request(`/${NON_EXISTENT_CONTEXT_ID}/worktree`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await app.request(
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            branch: "feature-new",
+          }),
         },
-        body: JSON.stringify({
-          branch: "feature-new",
-        }),
-      });
+      );
 
       expect(response.status).toBe(404);
 
@@ -610,7 +658,7 @@ describe("Worktree Routes", () => {
   describe("DELETE /:id/worktree", () => {
     it("should remove worktree", async () => {
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -625,7 +673,7 @@ describe("Worktree Routes", () => {
 
     it("should remove worktree with force flag", async () => {
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old&force=true`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old&force=true`,
         {
           method: "DELETE",
         },
@@ -640,7 +688,7 @@ describe("Worktree Routes", () => {
 
     it("should return 400 for invalid context ID", async () => {
       const response = await app.request(
-        `/${INVALID_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${INVALID_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -654,7 +702,7 @@ describe("Worktree Routes", () => {
 
     it("should return 404 for non-existent context", async () => {
       const response = await app.request(
-        `/${NON_EXISTENT_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${NON_EXISTENT_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },
@@ -692,7 +740,7 @@ describe("Worktree Routes", () => {
       app = createWorktreeRoutes(contextManager, failingDeps);
 
       const response = await app.request(
-        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/aynd/worktrees/feature-old`,
+        `/${TEST_CONTEXT_ID}/worktree?path=/home/user/.local/qraftbox/worktrees/feature-old`,
         {
           method: "DELETE",
         },

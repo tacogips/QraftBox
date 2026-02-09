@@ -50,12 +50,12 @@
   {disabled}
   class="pr-button px-6 py-2 min-h-[44px]
          flex items-center justify-center gap-3
-         text-white bg-purple-600
+         text-white bg-done-emphasis
          rounded-lg
-         hover:bg-purple-700
-         focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-         active:bg-purple-800
-         disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
+         hover:opacity-90
+         focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+         active:opacity-80
+         disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
          transition-colors
          font-medium text-base"
   aria-label="Create Pull Request"

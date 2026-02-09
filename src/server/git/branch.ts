@@ -9,10 +9,13 @@ import type {
   BranchInfo,
   BranchCheckoutRequest,
   BranchCheckoutResponse,
+  BranchCreateRequest,
+  BranchCreateResponse,
 } from "../../types/branch.js";
 import {
   createCheckoutSuccess,
   createCheckoutFailure,
+  isValidBranchName,
 } from "../../types/branch.js";
 import { execGit } from "./executor.js";
 
@@ -35,17 +38,38 @@ import { execGit } from "./executor.js";
  * const allBranches = await listBranches('/path/to/repo', true);
  * ```
  */
+/**
+ * Options for listing branches
+ */
+export interface ListBranchesOptions {
+  readonly includeRemote?: boolean | undefined;
+  readonly offset?: number | undefined;
+  readonly limit?: number | undefined;
+}
+
+/**
+ * Result of listing branches with pagination metadata
+ */
+export interface ListBranchesResult {
+  readonly branches: readonly BranchInfo[];
+  readonly total: number;
+  readonly currentBranch: string;
+  readonly defaultBranch: string;
+}
+
 export async function listBranches(
   projectPath: string,
   includeRemote?: boolean | undefined,
-): Promise<readonly BranchInfo[]> {
+  options?: { offset?: number; limit?: number } | undefined,
+): Promise<ListBranchesResult> {
   // Get current branch
   const currentBranch = await getCurrentBranch(projectPath);
 
   // Get default branch
   const defaultBranch = await getDefaultBranch(projectPath);
 
-  // Format: refname, objectname (short), committerdate (iso), subject, authorname
+  // Format: refname, objectname (short), committerdate (unix), subject, authorname
+  // Sort by committerdate descending (most recent first)
   const format =
     "%(refname:short)%09%(objectname:short)%09%(committerdate:iso8601)%09%(subject)%09%(authorname)";
 
@@ -53,7 +77,7 @@ export async function listBranches(
   const refs = includeRemote ? ["refs/heads", "refs/remotes"] : ["refs/heads"];
 
   const result = await execGit(
-    ["for-each-ref", `--format=${format}`, ...refs],
+    ["for-each-ref", "--sort=-committerdate", `--format=${format}`, ...refs],
     { cwd: projectPath },
   );
 
@@ -61,7 +85,8 @@ export async function listBranches(
     throw new Error(`Failed to list branches: ${result.stderr}`);
   }
 
-  const branches: BranchInfo[] = [];
+  const allBranches: BranchInfo[] = [];
+  let defaultBranchInfo: BranchInfo | undefined = undefined;
   const lines = result.stdout.split("\n");
 
   for (const line of lines) {
@@ -111,7 +136,7 @@ export async function listBranches(
       }
     }
 
-    branches.push({
+    const branchInfo: BranchInfo = {
       name,
       isCurrent,
       isDefault,
@@ -123,10 +148,37 @@ export async function listBranches(
         date,
       },
       aheadBehind,
-    });
+    };
+
+    // Separate default branch from the rest
+    if (isDefault) {
+      defaultBranchInfo = branchInfo;
+    } else {
+      allBranches.push(branchInfo);
+    }
   }
 
-  return branches;
+  // Total = non-default branches (default is always pinned separately)
+  const total = allBranches.length;
+
+  // Apply pagination to non-default branches
+  const offset = options?.offset ?? 0;
+  const limit = options?.limit ?? 30;
+  const paged = allBranches.slice(offset, offset + limit);
+
+  // Default branch is always first (pinned), then paginated rest
+  const branches: BranchInfo[] = [];
+  if (defaultBranchInfo !== undefined && offset === 0) {
+    branches.push(defaultBranchInfo);
+  }
+  branches.push(...paged);
+
+  return {
+    branches,
+    total: defaultBranchInfo !== undefined ? total + 1 : total,
+    currentBranch,
+    defaultBranch,
+  };
 }
 
 /**
@@ -246,11 +298,11 @@ export async function searchBranches(
 ): Promise<readonly BranchInfo[]> {
   // List all branches (including remote if query might match remote branches)
   const includeRemote = query.includes("/");
-  const allBranches = await listBranches(projectPath, includeRemote);
+  const result = await listBranches(projectPath, includeRemote);
 
   // Filter by partial name match (case-insensitive)
   const lowerQuery = query.toLowerCase();
-  const filtered = allBranches.filter((branch) =>
+  const filtered = result.branches.filter((branch) =>
     branch.name.toLowerCase().includes(lowerQuery),
   );
 
@@ -370,6 +422,70 @@ export async function checkoutBranch(
 }
 
 /**
+ * Merge a branch into the current branch
+ *
+ * Runs `git merge <branch>` in the specified project directory.
+ * If merge conflicts occur, the merge is automatically aborted.
+ *
+ * @param projectPath - Path to git repository
+ * @param branch - Branch name to merge
+ * @param noFf - If true, always create a merge commit (--no-ff)
+ * @returns Promise resolving to merge result
+ */
+export async function mergeBranch(
+  projectPath: string,
+  branch: string,
+  noFf?: boolean | undefined,
+): Promise<{ success: boolean; currentBranch: string; error?: string }> {
+  let currentBranch: string;
+  try {
+    currentBranch = await getCurrentBranch(projectPath);
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      currentBranch: "unknown",
+      error: `Failed to get current branch: ${errorMessage}`,
+    };
+  }
+
+  const mergeArgs = ["merge"];
+  if (noFf === true) {
+    mergeArgs.push("--no-ff");
+  }
+  mergeArgs.push(branch);
+
+  const mergeResult = await execGit(mergeArgs, { cwd: projectPath });
+
+  if (mergeResult.exitCode !== 0) {
+    const isConflict =
+      mergeResult.stderr.includes("CONFLICT") ||
+      mergeResult.stdout.includes("CONFLICT") ||
+      mergeResult.stderr.includes("Automatic merge failed");
+
+    if (isConflict) {
+      await execGit(["merge", "--abort"], { cwd: projectPath });
+      return {
+        success: false,
+        currentBranch,
+        error: "Merge conflicts detected. Merge was aborted.",
+      };
+    }
+
+    return {
+      success: false,
+      currentBranch,
+      error: `Merge failed: ${mergeResult.stderr}`,
+    };
+  }
+
+  return {
+    success: true,
+    currentBranch,
+  };
+}
+
+/**
  * Get ahead/behind counts for a branch relative to its upstream
  *
  * Uses `git rev-list --count --left-right` to count commits ahead and behind.
@@ -431,4 +547,64 @@ export async function getAheadBehind(
   const ahead = parseInt(parts[1] ?? "0", 10);
 
   return { ahead, behind };
+}
+
+/**
+ * Create a new git branch
+ *
+ * Uses `git checkout -b <branchName> [startPoint]` to create and switch to a new branch.
+ *
+ * @param projectPath - Path to git repository
+ * @param request - Create request with branch name and optional start point
+ * @returns Promise resolving to BranchCreateResponse
+ */
+export async function createBranch(
+  projectPath: string,
+  request: BranchCreateRequest,
+): Promise<BranchCreateResponse> {
+  // Validate branch name
+  if (!isValidBranchName(request.branch)) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: "Invalid branch name",
+    };
+  }
+
+  // Check if branch already exists
+  const checkResult = await execGit(["rev-parse", "--verify", request.branch], {
+    cwd: projectPath,
+  });
+
+  if (checkResult.exitCode === 0) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: `Branch '${request.branch}' already exists`,
+    };
+  }
+
+  // Build create command
+  const createArgs = ["checkout", "-b", request.branch];
+  if (
+    request.startPoint !== undefined &&
+    request.startPoint.trim().length > 0
+  ) {
+    createArgs.push(request.startPoint);
+  }
+
+  const createResult = await execGit(createArgs, { cwd: projectPath });
+
+  if (createResult.exitCode !== 0) {
+    return {
+      success: false,
+      branch: request.branch,
+      error: `Failed to create branch: ${createResult.stderr}`,
+    };
+  }
+
+  return {
+    success: true,
+    branch: request.branch,
+  };
 }

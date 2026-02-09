@@ -171,7 +171,7 @@ const replyAuthor = $derived(
       class="ml-11 mt-1 px-3 py-1.5 min-h-[36px] text-xs text-text-secondary
              hover:text-text-primary hover:bg-bg-hover
              rounded transition-colors duration-150
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
     >
       <span class="flex items-center gap-1.5">
         <svg

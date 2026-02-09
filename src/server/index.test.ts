@@ -19,6 +19,8 @@ describe("createServer", () => {
       syncMode: "manual",
       ai: false,
       projectPath: "/tmp/test-project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
   });
 
@@ -81,6 +83,8 @@ describe("startServer and stopServer", () => {
       syncMode: "manual",
       ai: false,
       projectPath: "/tmp/test-project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
 
     const contextManager = createContextManager();
@@ -107,6 +111,8 @@ describe("startServer and stopServer", () => {
       syncMode: "manual",
       ai: false,
       projectPath: "/tmp/test-project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
 
     const contextManager = createContextManager();
@@ -142,6 +148,8 @@ describe("Server integration", () => {
       syncMode: "manual",
       ai: false,
       projectPath: "/tmp/test-project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
 
     const contextManager = createContextManager();
@@ -173,6 +181,8 @@ describe("Server integration", () => {
       syncMode: "manual",
       ai: false,
       projectPath: "/tmp/test-project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
 
     const contextManager = createContextManager();

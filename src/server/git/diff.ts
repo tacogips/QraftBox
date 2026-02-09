@@ -5,8 +5,15 @@
  * Uses execGit from ./executor.ts for git command execution.
  */
 
-import type { DiffFile, FileStatus, FileStatusCode } from "../../types/git.js";
+import type {
+  DiffFile,
+  DiffChunk,
+  DiffChange,
+  FileStatus,
+  FileStatusCode,
+} from "../../types/git.js";
 import { execGit } from "./executor.js";
+import { parseDiff, detectBinary } from "./parser.js";
 
 /**
  * Options for generating diffs
@@ -16,6 +23,220 @@ export interface DiffOptions {
   readonly target?: string | undefined;
   readonly paths?: readonly string[] | undefined;
   readonly contextLines?: number | undefined;
+}
+
+/**
+ * Maximum file size (in bytes) to read for untracked files.
+ * Files larger than this are treated as binary to avoid memory issues.
+ */
+const MAX_UNTRACKED_FILE_SIZE = 1024 * 1024; // 1MB
+
+/**
+ * Automatically detect the appropriate diff base for feature branches.
+ *
+ * When on a feature branch (not main/master), returns the merge-base
+ * with the parent branch to show all branch changes. On main/master
+ * or when detection fails, returns undefined to keep default behavior.
+ *
+ * Logic:
+ * - Get current branch name via `git rev-parse --abbrev-ref HEAD`
+ * - If on main or master, return undefined (show working tree changes only)
+ * - Otherwise, try to find merge-base with main, then master
+ * - Return merge-base commit hash or undefined if detection fails
+ *
+ * @param projectPath - Path to git repository
+ * @returns Promise resolving to base commit hash or undefined
+ *
+ * @example
+ * ```typescript
+ * const base = await detectDefaultDiffBase('/path/to/repo');
+ * if (base !== undefined) {
+ *   // On feature branch - base is merge-base with main/master
+ *   const diff = await getDiff(projectPath, { base });
+ * } else {
+ *   // On main/master or detection failed - show working tree changes
+ *   const diff = await getDiff(projectPath);
+ * }
+ * ```
+ */
+export async function detectDefaultDiffBase(
+  projectPath: string,
+): Promise<string | undefined> {
+  try {
+    // Get current branch name
+    const branchResult = await execGit(["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (branchResult.exitCode !== 0) {
+      return undefined;
+    }
+
+    const currentBranch = branchResult.stdout.trim();
+
+    // If on main or master, return undefined (show working tree changes only)
+    if (currentBranch === "main" || currentBranch === "master") {
+      return undefined;
+    }
+
+    // Try to find merge-base with main first
+    const mainResult = await execGit(["merge-base", "main", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (mainResult.exitCode === 0) {
+      return mainResult.stdout.trim();
+    }
+
+    // If main doesn't exist, try master
+    const masterResult = await execGit(["merge-base", "master", "HEAD"], {
+      cwd: projectPath,
+    });
+
+    if (masterResult.exitCode === 0) {
+      return masterResult.stdout.trim();
+    }
+
+    // Neither main nor master exists, return undefined
+    return undefined;
+  } catch {
+    // Any errors should be handled gracefully
+    return undefined;
+  }
+}
+
+/**
+ * Get DiffFile entries for untracked files in the working tree.
+ *
+ * Uses `git ls-files --others --exclude-standard` to find untracked files,
+ * then reads each file to construct synthetic diff entries showing the
+ * entire file content as additions (status: "added").
+ *
+ * @param projectPath - Path to git repository
+ * @param pathFilters - Optional path filters to limit results
+ * @returns Array of DiffFile objects for untracked files
+ */
+async function getUntrackedDiffFiles(
+  projectPath: string,
+  pathFilters?: readonly string[] | undefined,
+): Promise<readonly DiffFile[]> {
+  const lsArgs = ["ls-files", "--others", "--exclude-standard"];
+
+  if (pathFilters !== undefined && pathFilters.length > 0) {
+    lsArgs.push("--", ...pathFilters);
+  }
+
+  const lsResult = await execGit(lsArgs, { cwd: projectPath });
+
+  if (lsResult.exitCode !== 0 || lsResult.stdout.trim() === "") {
+    return [];
+  }
+
+  const untrackedPaths = lsResult.stdout
+    .trim()
+    .split("\n")
+    .filter((p) => p.length > 0);
+
+  const results: DiffFile[] = [];
+
+  for (const filePath of untrackedPaths) {
+    const fullPath = `${projectPath}/${filePath}`;
+
+    try {
+      const file = Bun.file(fullPath);
+      const size = file.size;
+
+      // Skip overly large files - treat as binary
+      if (size > MAX_UNTRACKED_FILE_SIZE) {
+        results.push({
+          path: filePath,
+          status: "added",
+          oldPath: undefined,
+          additions: 0,
+          deletions: 0,
+          chunks: [],
+          isBinary: true,
+          fileSize: size,
+        });
+        continue;
+      }
+
+      // Check if file is binary by reading a sample
+      const sample = await file.slice(0, 8192).arrayBuffer();
+      const sampleBytes = new Uint8Array(sample);
+      let isBinaryFile = false;
+      for (const byte of sampleBytes) {
+        if (byte === 0) {
+          isBinaryFile = true;
+          break;
+        }
+      }
+
+      if (isBinaryFile || detectBinary("", filePath)) {
+        results.push({
+          path: filePath,
+          status: "added",
+          oldPath: undefined,
+          additions: 0,
+          deletions: 0,
+          chunks: [],
+          isBinary: true,
+          fileSize: size,
+        });
+        continue;
+      }
+
+      // Read text content and build synthetic diff
+      const content = await file.text();
+      const lines = content.split("\n");
+
+      // Remove trailing empty line from split (file usually ends with newline)
+      if (lines.length > 0 && lines[lines.length - 1] === "") {
+        lines.pop();
+      }
+
+      const changes: DiffChange[] = lines.map((line, i) => ({
+        type: "add" as const,
+        oldLine: undefined,
+        newLine: i + 1,
+        content: line,
+      }));
+
+      const chunk: DiffChunk = {
+        oldStart: 0,
+        oldLines: 0,
+        newStart: 1,
+        newLines: lines.length,
+        header: `@@ -0,0 +1,${lines.length} @@`,
+        changes,
+      };
+
+      results.push({
+        path: filePath,
+        status: "added",
+        oldPath: undefined,
+        additions: lines.length,
+        deletions: 0,
+        chunks: [chunk],
+        isBinary: false,
+        fileSize: size,
+      });
+    } catch {
+      // Skip files that can't be read
+      results.push({
+        path: filePath,
+        status: "added",
+        oldPath: undefined,
+        additions: 0,
+        deletions: 0,
+        chunks: [],
+        isBinary: true,
+        fileSize: undefined,
+      });
+    }
+  }
+
+  return results;
 }
 
 /**
@@ -47,7 +268,7 @@ export async function getDiff(
   options?: DiffOptions | undefined,
 ): Promise<readonly DiffFile[]> {
   const contextLines = options?.contextLines ?? 3;
-  const args: string[] = ["diff", `-U${contextLines}`, "--numstat"];
+  const args: string[] = ["diff", `-U${contextLines}`];
 
   // Build ref arguments
   if (options?.base !== undefined && options?.target !== undefined) {
@@ -75,19 +296,14 @@ export async function getDiff(
       result.stderr.includes("bad revision 'HEAD'")
     ) {
       // For repositories with no commits, use --cached to show staged files
-      const stagedArgs: string[] = [
-        "diff",
-        `-U${contextLines}`,
-        "--numstat",
-        "--cached",
-      ];
+      const stagedArgs: string[] = ["diff", `-U${contextLines}`, "--cached"];
 
       if (options?.paths !== undefined && options.paths.length > 0) {
         stagedArgs.push("--", ...options.paths);
       }
 
       const stagedResult = await execGit(stagedArgs, { cwd: projectPath });
-      return parseGitDiff(stagedResult.stdout);
+      return parseDiff(stagedResult.stdout);
     }
 
     // Other fatal errors should be thrown
@@ -96,8 +312,23 @@ export async function getDiff(
     }
   }
 
-  // Parse the diff output using inline parser
-  return parseGitDiff(result.stdout);
+  // Parse the unified diff output using full parser
+  const files = parseDiff(result.stdout);
+
+  // When comparing against working tree (no explicit target), also include untracked files.
+  // git diff HEAD doesn't show untracked files, so we need to fetch them separately.
+  const isWorkingTreeDiff = options?.target === undefined;
+  if (isWorkingTreeDiff) {
+    const untrackedFiles = await getUntrackedDiffFiles(
+      projectPath,
+      options?.paths,
+    );
+    if (untrackedFiles.length > 0) {
+      return [...files, ...untrackedFiles];
+    }
+  }
+
+  return files;
 }
 
 /**
@@ -234,74 +465,6 @@ export async function getChangedFiles(
 
     return parsePorcelainStatus(result.stdout);
   }
-}
-
-/**
- * Parse git diff --numstat output into DiffFile array
- *
- * This is a basic inline parser. It will be replaced by the full parser
- * from ./parser.ts once TASK-004 is completed.
- *
- * @param rawDiff - Raw git diff output
- * @returns Array of DiffFile objects
- */
-function parseGitDiff(rawDiff: string): readonly DiffFile[] {
-  if (rawDiff.trim().length === 0) {
-    return [];
-  }
-
-  const files: DiffFile[] = [];
-  const lines = rawDiff.split("\n");
-
-  for (const line of lines) {
-    if (line.trim().length === 0) {
-      continue;
-    }
-
-    // Parse numstat line: "additions\tdeletions\tfilename"
-    const match = line.match(/^(\d+|-)\s+(\d+|-)\s+(.+)$/);
-    if (match === null) {
-      continue;
-    }
-
-    const additionsStr = match[1];
-    const deletionsStr = match[2];
-    const path = match[3];
-
-    if (
-      additionsStr === undefined ||
-      deletionsStr === undefined ||
-      path === undefined
-    ) {
-      continue;
-    }
-
-    const additions = additionsStr === "-" ? 0 : parseInt(additionsStr, 10);
-    const deletions = deletionsStr === "-" ? 0 : parseInt(deletionsStr, 10);
-
-    // Determine status based on additions/deletions
-    let status: FileStatusCode = "modified";
-    const isBinary = additionsStr === "-" && deletionsStr === "-";
-
-    if (additions > 0 && deletions === 0) {
-      status = "added";
-    } else if (additions === 0 && deletions > 0) {
-      status = "deleted";
-    }
-
-    files.push({
-      path,
-      status,
-      oldPath: undefined,
-      additions,
-      deletions,
-      chunks: [], // TODO: Full chunk parsing in TASK-004
-      isBinary,
-      fileSize: undefined,
-    });
-  }
-
-  return files;
 }
 
 /**

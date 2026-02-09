@@ -38,13 +38,13 @@
 </script>
 
 <div
-  class="github-auth-required p-6 bg-amber-50 border border-amber-300 rounded-lg"
+  class="github-auth-required p-6 bg-attention-muted border border-attention-fg rounded-lg"
 >
   <div class="flex flex-col items-center gap-4">
     <!-- Warning Icon -->
     <div class="warning-icon-container">
       <svg
-        class="w-16 h-16 text-amber-600"
+        class="w-16 h-16 text-attention-fg"
         xmlns="http://www.w3.org/2000/svg"
         viewBox="0 0 20 20"
         fill="currentColor"
@@ -60,14 +60,14 @@
 
     <!-- Auth Required Message -->
     <div class="text-center">
-      <h2 class="text-xl font-bold text-gray-900 mb-2">
+      <h2 class="text-xl font-bold text-text-primary mb-2">
         GitHub Authentication Required
       </h2>
-      <p class="text-base text-gray-700 mb-4">
+      <p class="text-base text-text-primary mb-4">
         To create pull requests, you need to authenticate with GitHub.
       </p>
-      <p class="text-sm text-gray-600">
-        You will be redirected to GitHub to authorize aynd.
+      <p class="text-sm text-text-secondary">
+        You will be redirected to GitHub to authorize qraftbox.
       </p>
     </div>
 
@@ -77,12 +77,12 @@
       onclick={handleAuthenticate}
       onkeydown={handleKeydown}
       class="authenticate-button min-h-[44px] px-8 py-3
-             text-white bg-purple-600
+             text-white bg-done-emphasis
              rounded-lg
              flex items-center gap-3
-             hover:bg-purple-700
-             focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-             active:bg-purple-800
+             hover:opacity-90
+             focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+             active:opacity-80
              transition-colors
              font-medium text-base"
       aria-label="Authenticate with GitHub"
@@ -102,7 +102,7 @@
     </button>
 
     <!-- Security Note -->
-    <p class="text-xs text-gray-500 text-center max-w-md">
+    <p class="text-xs text-text-secondary text-center max-w-md">
       We will only request permissions necessary for creating and managing pull
       requests. You can revoke access at any time in your GitHub settings.
     </p>

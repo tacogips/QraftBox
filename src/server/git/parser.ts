@@ -207,7 +207,7 @@ export function parseFileDiff(rawFileDiff: string): DiffFile {
         } else if (firstChar === "-") {
           // Deletion
           chunkChanges.push({
-            type: "del",
+            type: "delete",
             oldLine: oldLine,
             newLine: undefined,
             content: chunkLine.substring(1),
@@ -218,7 +218,7 @@ export function parseFileDiff(rawFileDiff: string): DiffFile {
         } else if (firstChar === " ") {
           // Normal (context) line
           chunkChanges.push({
-            type: "normal",
+            type: "context",
             oldLine: oldLine,
             newLine: newLine,
             content: chunkLine.substring(1),
@@ -230,7 +230,7 @@ export function parseFileDiff(rawFileDiff: string): DiffFile {
           // Empty or malformed line - treat as context if within chunk
           if (chunkLineCount < chunkHeader.oldLines + chunkHeader.newLines) {
             chunkChanges.push({
-              type: "normal",
+              type: "context",
               oldLine: oldLine,
               newLine: newLine,
               content: chunkLine,

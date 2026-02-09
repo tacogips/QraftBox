@@ -425,22 +425,22 @@ describe("Git Types", () => {
       };
 
       const del: DiffChange = {
-        type: "del",
+        type: "delete",
         oldLine: 10,
         newLine: undefined,
         content: "-deleted",
       };
 
       const normal: DiffChange = {
-        type: "normal",
+        type: "context",
         oldLine: 10,
         newLine: 10,
         content: " unchanged",
       };
 
       expect(add.type).toBe("add");
-      expect(del.type).toBe("del");
-      expect(normal.type).toBe("normal");
+      expect(del.type).toBe("delete");
+      expect(normal.type).toBe("context");
     });
   });
 

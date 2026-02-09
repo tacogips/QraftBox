@@ -11,7 +11,10 @@ import type { GitHubService } from "../github/service.js";
 import type { ContextManager } from "../workspace/context-manager.js";
 import type { ContextId } from "../../types/workspace.js";
 import type { GitHubUser, RepoInfo } from "../../types/github.js";
-import { getRepoFromRemote, type RepoIdentifier } from "../github/url-parser.js";
+import {
+  getRepoFromRemote,
+  type RepoIdentifier,
+} from "../github/url-parser.js";
 
 /**
  * Dependencies for GitHub routes (for dependency injection in tests)
@@ -119,7 +122,9 @@ export function createGitHubRoutes(
       return c.json(response);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : "Failed to check authentication status";
+        e instanceof Error
+          ? e.message
+          : "Failed to check authentication status";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
@@ -146,7 +151,8 @@ export function createGitHubRoutes(
 
       if (!user) {
         const errorResponse: ErrorResponse = {
-          error: "Not authenticated. Please provide a GitHub token via GITHUB_TOKEN environment variable or gh auth login.",
+          error:
+            "Not authenticated. Please provide a GitHub token via GITHUB_TOKEN environment variable or gh auth login.",
           code: 401,
         };
         return c.json(errorResponse, 401);

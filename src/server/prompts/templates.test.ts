@@ -144,7 +144,7 @@ describe("getBuiltinTemplateContent", () => {
       "Standard commit message with context",
     );
     expect(content.frontmatter.version).toBe("1.0.0");
-    expect(content.frontmatter.author).toBe("aynd");
+    expect(content.frontmatter.author).toBe("qraftbox");
   });
 
   test("parses variables from frontmatter", () => {

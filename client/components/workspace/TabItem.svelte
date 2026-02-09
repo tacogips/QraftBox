@@ -50,7 +50,7 @@
   class="tab-item relative flex items-center gap-2 px-4 h-12
          border-r border-bg-border
          {active
-    ? 'bg-bg-primary text-text-primary border-b-2 border-b-blue-500'
+    ? 'bg-bg-primary text-text-primary border-b-2 border-b-accent-fg'
     : 'bg-bg-secondary text-text-secondary hover:bg-bg-hover'}
          transition-colors duration-150 cursor-pointer
          min-w-[120px] max-w-[200px] shrink-0"
@@ -111,7 +111,7 @@
     type="button"
     class="close-btn shrink-0 w-5 h-5 flex items-center justify-center
            rounded hover:bg-bg-tertiary focus:bg-bg-tertiary
-           focus:outline-none focus:ring-2 focus:ring-blue-500
+           focus:outline-none focus:ring-2 focus:ring-accent-emphasis
            transition-colors duration-150"
     onclick={handleClose}
     aria-label="Close tab {tab.name}"

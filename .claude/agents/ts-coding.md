@@ -103,16 +103,27 @@ Follow this workflow:
 
 ## Post-Implementation Verification (For Calling Agent)
 
-**NOTE TO CALLING AGENT**: After this ts-coding subagent completes and returns results, the calling agent SHOULD invoke the `check-and-test-after-modify` agent for comprehensive verification.
+**NOTE TO CALLING AGENT**: After this ts-coding subagent completes and returns results, the calling agent MUST perform the following verification cycle:
 
-Use Task tool with:
+### Step 1: Run Tests
+Invoke `check-and-test-after-modify` agent:
 - `subagent_type`: `check-and-test-after-modify`
 - `prompt`: Include modified modules, summary, and modified files from ts-coding results
 
-The `check-and-test-after-modify` agent provides:
-- Detailed error reporting with complete output
-- Comprehensive test failure analysis
-- Actionable suggestions for fixes
+### Step 2: Browser Verify (for UI-affecting changes)
+After tests pass, the **main conversation** (not subagent) runs `agent-browser` to visually confirm:
+```bash
+agent-browser open http://localhost:7155
+agent-browser snapshot -i          # Inspect DOM structure
+agent-browser screenshot --full    # Capture visual state
+agent-browser close
+```
+
+If UI issues are found: fix with ts-coding -> re-test -> re-verify (max 3 loops).
+
+**Skip** this step for pure backend/library changes with no UI impact.
+
+**Reference**: See `.claude/skills/e2e-tdd/SKILL.md` for detailed verification workflows.
 
 ## Response Format
 

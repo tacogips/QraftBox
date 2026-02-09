@@ -58,11 +58,31 @@
 
     switch (status) {
       case "added":
-        return "text-green-600";
+        return "text-success-fg";
       case "modified":
-        return "text-yellow-600";
+        return "text-attention-fg";
       case "deleted":
-        return "text-red-600";
+        return "text-danger-fg";
+      default:
+        return "";
+    }
+  }
+
+  /**
+   * Get background class for the entire file-node row based on diff status
+   */
+  function getStatusBackgroundClass(
+    status: "added" | "modified" | "deleted" | undefined,
+  ): string {
+    if (status === undefined) return "";
+
+    switch (status) {
+      case "added":
+        return "status-added";
+      case "modified":
+        return "status-modified";
+      case "deleted":
+        return "status-deleted";
       default:
         return "";
     }
@@ -86,10 +106,10 @@
 <!-- File Node Button -->
 <button
   type="button"
-  class="file-node w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors min-h-[48px] flex items-center gap-2"
-  class:bg-blue-50={selected}
+  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(node.status)}"
+  class:bg-accent-subtle={selected && !node.status}
   class:border-l-4={selected}
-  class:border-blue-600={selected}
+  class:border-accent-emphasis={selected}
   style="padding-left: {leftPadding}rem"
   onclick={onSelect}
   aria-label="Select file {node.name}"
@@ -97,7 +117,7 @@
 >
   <!-- File Icon -->
   <svg
-    class="file-icon w-5 h-5 text-gray-400 shrink-0"
+    class="file-icon w-3.5 h-3.5 text-text-tertiary shrink-0"
     fill="none"
     stroke="currentColor"
     viewBox="0 0 24 24"
@@ -112,7 +132,7 @@
   </svg>
 
   <!-- File Name -->
-  <span class="file-name text-gray-900 truncate flex-1">
+  <span class="file-name text-text-primary text-xs truncate flex-1">
     {node.name}
   </span>
 
@@ -141,7 +161,39 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .file-node:active {
-    background-color: rgb(243 244 246); /* gray-100 */
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):hover {
+    background-color: var(--color-bg-tertiary);
+  }
+
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):active {
+    background-color: var(--color-bg-tertiary);
+  }
+
+  /* Status-based background colors for diff file nodes */
+  .file-node.status-added {
+    background-color: var(--color-diff-add-bg);
+  }
+
+  .file-node.status-added:hover,
+  .file-node.status-added:active {
+    background-color: var(--color-diff-add-word);
+  }
+
+  .file-node.status-modified {
+    background-color: var(--color-attention-muted);
+  }
+
+  .file-node.status-modified:hover,
+  .file-node.status-modified:active {
+    background-color: var(--color-attention-emphasis);
+  }
+
+  .file-node.status-deleted {
+    background-color: var(--color-diff-del-bg);
+  }
+
+  .file-node.status-deleted:hover,
+  .file-node.status-deleted:active {
+    background-color: var(--color-diff-del-word);
   }
 </style>

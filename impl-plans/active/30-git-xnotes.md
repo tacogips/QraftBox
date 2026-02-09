@@ -281,7 +281,7 @@ function createCommentRoutes(): Hono;
 - `src/server/comments/bridge.test.ts` - Comprehensive test suite with 27 tests
 
 **Implementation Details**:
-- Uses `git notes --ref=aynd-comments` for storage (NOT npm git-xnotes library)
+- Uses `git notes --ref=qraftbox-comments` for storage (NOT npm git-xnotes library)
 - Comments stored as JSON arrays in git notes
 - All CRUD operations: getComments, getFileComments, addComment, updateComment, deleteComment, replyToComment
 - Default author fetched from git config user.name/user.email
@@ -325,10 +325,10 @@ function createCommentRoutes(): Hono;
 - `src/server/comments/sync.test.ts` - Comprehensive test suite with 18 tests
 
 **Implementation Details**:
-- Wraps git push/pull commands for `refs/notes/aynd-comments` ref
+- Wraps git push/pull commands for `refs/notes/qraftbox-comments` ref
 - getSyncStatus: Returns local/remote note counts via `git notes list` and `git ls-remote`
-- pushNotes: Pushes notes ref to origin with `git push origin refs/notes/aynd-comments`
-- pullNotes: Fetches notes ref from origin with `git fetch origin refs/notes/aynd-comments:refs/notes/aynd-comments`
+- pushNotes: Pushes notes ref to origin with `git push origin refs/notes/qraftbox-comments`
+- pullNotes: Fetches notes ref from origin with `git fetch origin refs/notes/qraftbox-comments:refs/notes/qraftbox-comments`
 - setSyncMode/getSyncMode: Store mode in memory (manual, auto-push, auto-pull, auto)
 - markAsChanged: Track hasUnsyncedChanges flag for bridge integration
 - lastSyncAt: Timestamp updated after successful push/pull operations

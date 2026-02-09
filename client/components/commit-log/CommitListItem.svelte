@@ -67,27 +67,27 @@
 <!-- Commit List Item Button -->
 <button
   type="button"
-  class="commit-item w-full text-left px-4 py-3 hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors min-h-[48px] flex flex-col gap-1"
-  class:bg-blue-50={selected}
+  class="commit-item w-full text-left px-4 py-3 hover:bg-bg-secondary focus:bg-bg-secondary focus:outline-none transition-colors min-h-[48px] flex flex-col gap-1"
+  class:bg-accent-subtle={selected}
   class:border-l-4={selected}
-  class:border-blue-600={selected}
+  class:border-accent-emphasis={selected}
   onclick={onSelect}
   aria-label="Select commit {commit.shortHash}"
   aria-selected={selected}
 >
   <!-- Commit Hash and Date -->
-  <div class="commit-header flex items-center gap-2 text-xs text-gray-500">
+  <div class="commit-header flex items-center gap-2 text-xs text-text-secondary">
     <span class="commit-hash font-mono">{commit.shortHash}</span>
     <span class="commit-date">{formatDate(commit.date)}</span>
   </div>
 
   <!-- Commit Message -->
-  <div class="commit-message text-sm text-gray-900 truncate">
+  <div class="commit-message text-sm text-text-primary truncate">
     {messageFirstLine}
   </div>
 
   <!-- Commit Author -->
-  <div class="commit-author text-xs text-gray-600">
+  <div class="commit-author text-xs text-text-secondary">
     {commit.author.name}
   </div>
 </button>
@@ -105,7 +105,7 @@
   }
 
   .commit-item:active {
-    background-color: rgb(243 244 246); /* gray-100 */
+    background-color: var(--color-bg-pressed);
   }
 
   .commit-hash {

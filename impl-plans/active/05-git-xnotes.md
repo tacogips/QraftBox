@@ -261,7 +261,7 @@ function createCommentRoutes(context: ServerContext): Hono;
 **Notes**:
 - Implemented createCommentBridge factory function with full CommentBridge interface
 - All 8 interface methods implemented: getComments, getFileComments, addComment, replyToComment, updateComment, deleteComment, getDefaultAuthor
-- Uses git notes (refs/notes/aynd-comments) for persistent comment storage
+- Uses git notes (refs/notes/qraftbox-comments) for persistent comment storage
 - Comprehensive test suite with mocked git executor (21 tests, all passing)
 - Type safety: properly handles exactOptionalPropertyTypes, noPropertyAccessFromIndexSignature
 - Error handling: uses GitError for git command failures, proper error messages

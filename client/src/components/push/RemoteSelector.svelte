@@ -55,7 +55,7 @@
   <!-- Remote Dropdown -->
   <label
     for="remote-select"
-    class="block text-sm font-medium text-gray-700 mb-2"
+    class="block text-sm font-medium text-text-primary mb-2"
   >
     Remote
   </label>
@@ -66,10 +66,10 @@
     onchange={handleChange}
     {disabled}
     class="remote-select w-full min-h-[44px] px-3 py-2
-           border border-gray-300 rounded-lg
-           text-base text-gray-900
-           focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500
-           disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed
+           border border-border-default rounded-lg
+           text-base text-text-primary
+           focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:border-success-emphasis
+           disabled:bg-bg-secondary disabled:text-text-secondary disabled:cursor-not-allowed
            transition-colors"
     aria-label="Select remote repository"
   >
@@ -87,7 +87,7 @@
   <!-- Remote URL Display -->
   {#if selected}
     <div
-      class="remote-url mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600 font-mono truncate"
+      class="remote-url mt-2 p-2 bg-bg-secondary rounded text-xs text-text-secondary font-mono truncate"
     >
       {selected.url}
     </div>

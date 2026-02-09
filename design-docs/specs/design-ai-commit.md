@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the design of AI-powered git operations (Commit and Push) for aynd. When users press the "Commit" or "Push" button, a new Claude Code agent session is started with a customizable prompt. The agent executes the requested git operation.
+This document describes the design of AI-powered git operations (Commit and Push) for qraftbox. When users press the "Commit" or "Push" button, a new Claude Code agent session is started with a customizable prompt. The agent executes the requested git operation.
 
 ## Requirements Summary
 
@@ -91,7 +91,7 @@ New:
 ## Configuration Directory Structure
 
 ```
-~/.config/aynd/
+~/.config/qraftbox/
 +-- default-prompts/
 |   +-- commit.md              # Default commit prompt
 |   +-- commit-conventional.md # Conventional commits style
@@ -110,7 +110,7 @@ New:
 
 ### Default Prompt Location Priority
 
-1. `~/.config/aynd/default-prompts/<operation>.md` (user override)
+1. `~/.config/qraftbox/default-prompts/<operation>.md` (user override)
 2. Built-in default (embedded in application)
 
 ### Prompt Categories
@@ -125,7 +125,7 @@ New:
 
 ### Library Choice: Octokit
 
-aynd uses **@octokit/rest** for GitHub API operations:
+qraftbox uses **@octokit/rest** for GitHub API operations:
 
 | Library | Purpose |
 |---------|---------|
@@ -145,7 +145,7 @@ aynd uses **@octokit/rest** for GitHub API operations:
 
 ### Authentication Priority
 
-aynd uses the following authentication methods in order:
+qraftbox uses the following authentication methods in order:
 
 | Priority | Method | Source |
 |----------|--------|--------|
@@ -860,7 +860,7 @@ Keep the existing title unless the scope has significantly changed.
       "id": "commit",
       "name": "Standard Commit",
       "description": "Generate a clear, concise commit message",
-      "path": "~/.config/aynd/default-prompts/commit.md",
+      "path": "~/.config/qraftbox/default-prompts/commit.md",
       "isBuiltin": false,
       "isDefault": true
     },
@@ -868,7 +868,7 @@ Keep the existing title unless the scope has significantly changed.
       "id": "commit-conventional",
       "name": "Conventional Commits",
       "description": "Strict conventional commits format",
-      "path": "~/.config/aynd/default-prompts/commit-conventional.md",
+      "path": "~/.config/qraftbox/default-prompts/commit-conventional.md",
       "isBuiltin": true,
       "isDefault": false
     }
@@ -1420,7 +1420,7 @@ The commit button appears in the header/toolbar area:
 
 ```
 +--------------------------------------------------------------------------+
-| [+] | [aynd] [x] | [repo2] [x] |    | [Commit] [Push] | [Session: 2]    |
+| [+] | [qraftbox] [x] | [repo2] [x] |    | [Commit] [Push] | [Session: 2]    |
 +--------------------------------------------------------------------------+
 ```
 
@@ -1543,7 +1543,7 @@ The push button appears next to the commit button:
 
 ```
 +--------------------------------------------------------------------------+
-| [+] | [aynd] [x] | [repo2] [x] |    | [Commit] [Push 3] | [Session: 2]  |
+| [+] | [qraftbox] [x] | [repo2] [x] |    | [Commit] [Push 3] | [Session: 2]  |
 +--------------------------------------------------------------------------+
                                               ^-- Badge shows unpushed count
 ```
@@ -1687,7 +1687,7 @@ The PR button appears in the toolbar, showing PR status:
 
 ```
 +--------------------------------------------------------------------------+
-| [+] | [aynd] [x] |    | [Commit] [Push 3] [PR #123] | [Session: 2]      |
+| [+] | [qraftbox] [x] |    | [Commit] [Push 3] [PR #123] | [Session: 2]      |
 +--------------------------------------------------------------------------+
                                        ^-- Shows PR number if exists
 ```
@@ -1696,7 +1696,7 @@ Or when no PR exists:
 
 ```
 +--------------------------------------------------------------------------+
-| [+] | [aynd] [x] |    | [Commit] [Push 3] [Create PR] | [Session: 2]    |
+| [+] | [qraftbox] [x] |    | [Commit] [Push 3] [Create PR] | [Session: 2]    |
 +--------------------------------------------------------------------------+
 ```
 
@@ -2329,7 +2329,7 @@ GitHubAuthRequired.svelte
 | PR templates | Use repo's PR template |
 | CI status display | Show CI checks in PR panel |
 | Review status | Show review approval status |
-| Merge PR | Merge from aynd UI |
+| Merge PR | Merge from qraftbox UI |
 | PR comments | View/reply to PR comments |
 | Multi-repo PRs | Create PRs across repos |
 | PR chaining | Create dependent PRs |

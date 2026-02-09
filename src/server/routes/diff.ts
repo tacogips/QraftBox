@@ -111,6 +111,8 @@ export function createDiffRoutes(
     }
 
     // Build diff options
+    // Default: git diff HEAD (uncommitted changes only)
+    // Pass ?base=merge-base explicitly for full branch diff
     const diffOptions: DiffOptions = {
       base: base ?? undefined,
       target: target ?? undefined,

@@ -4,15 +4,19 @@
  * Provides REST API endpoints for browsing and managing Claude Code sessions.
  */
 
-import { Hono } from 'hono';
+import { Hono } from "hono";
 import type {
   ProjectInfo,
   SessionListResponse,
   ExtendedSessionEntry,
   SessionSource,
-} from '../../types/claude-session';
-import { isSessionSource } from '../../types/claude-session';
-import { ClaudeSessionReader } from '../claude/session-reader';
+} from "../../types/claude-session";
+import { isSessionSource } from "../../types/claude-session";
+import {
+  ClaudeSessionReader,
+  type SessionSummary,
+} from "../claude/session-reader";
+import { stripSystemTags } from "../../utils/strip-system-tags";
 
 /**
  * Error response format
@@ -38,6 +42,8 @@ interface ResumeSessionResponse {
  * - GET /api/claude/projects - List all Claude projects
  * - GET /api/claude/sessions - List sessions with filtering
  * - GET /api/claude/sessions/:id - Get specific session
+ * - GET /api/claude/sessions/:id/transcript - Get session transcript events
+ * - GET /api/claude/sessions/:id/summary - Get session summary with tool usage and tasks
  * - POST /api/claude/sessions/:id/resume - Resume a session
  *
  * @returns Hono app with Claude sessions routes mounted
@@ -51,13 +57,13 @@ export function createClaudeSessionsRoutes(): Hono {
    *
    * List all Claude projects with session counts and last modified timestamps.
    */
-  app.get('/projects', async (c) => {
+  app.get("/projects", async (c) => {
     try {
       const projects: ProjectInfo[] = await sessionReader.listProjects();
       return c.json(projects);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : 'Failed to list projects';
+        e instanceof Error ? e.message : "Failed to list projects";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
@@ -73,7 +79,7 @@ export function createClaudeSessionsRoutes(): Hono {
    *
    * Query parameters:
    * - workingDirectoryPrefix: Filter by working directory prefix
-   * - source: Filter by session source (aynd, claude-cli, unknown)
+   * - source: Filter by session source (qraftbox, claude-cli, unknown)
    * - branch: Filter by git branch
    * - search: Search in firstPrompt and summary
    * - dateFrom: Start date (ISO 8601)
@@ -83,26 +89,26 @@ export function createClaudeSessionsRoutes(): Hono {
    * - sortBy: Sort field (modified, created)
    * - sortOrder: Sort order (asc, desc)
    */
-  app.get('/sessions', async (c) => {
+  app.get("/sessions", async (c) => {
     try {
       // Parse query parameters
-      const workingDirectoryPrefix = c.req.query('workingDirectoryPrefix');
-      const sourceParam = c.req.query('source');
-      const branch = c.req.query('branch');
-      const search = c.req.query('search');
-      const dateFrom = c.req.query('dateFrom');
-      const dateTo = c.req.query('dateTo');
-      const offsetParam = c.req.query('offset');
-      const limitParam = c.req.query('limit');
-      const sortByParam = c.req.query('sortBy');
-      const sortOrderParam = c.req.query('sortOrder');
+      const workingDirectoryPrefix = c.req.query("workingDirectoryPrefix");
+      const sourceParam = c.req.query("source");
+      const branch = c.req.query("branch");
+      const search = c.req.query("search");
+      const dateFrom = c.req.query("dateFrom");
+      const dateTo = c.req.query("dateTo");
+      const offsetParam = c.req.query("offset");
+      const limitParam = c.req.query("limit");
+      const sortByParam = c.req.query("sortBy");
+      const sortOrderParam = c.req.query("sortOrder");
 
       // Validate source parameter
       let source: SessionSource | undefined;
       if (sourceParam !== undefined) {
         if (!isSessionSource(sourceParam)) {
           const errorResponse: ErrorResponse = {
-            error: `Invalid source value: ${sourceParam}. Must be one of: aynd, claude-cli, unknown`,
+            error: `Invalid source value: ${sourceParam}. Must be one of: qraftbox, claude-cli, unknown`,
             code: 400,
           };
           return c.json(errorResponse, 400);
@@ -116,7 +122,7 @@ export function createClaudeSessionsRoutes(): Hono {
         const parsed = parseInt(offsetParam, 10);
         if (isNaN(parsed) || parsed < 0) {
           const errorResponse: ErrorResponse = {
-            error: 'offset must be a non-negative integer',
+            error: "offset must be a non-negative integer",
             code: 400,
           };
           return c.json(errorResponse, 400);
@@ -129,7 +135,7 @@ export function createClaudeSessionsRoutes(): Hono {
         const parsed = parseInt(limitParam, 10);
         if (isNaN(parsed) || parsed <= 0) {
           const errorResponse: ErrorResponse = {
-            error: 'limit must be a positive integer',
+            error: "limit must be a positive integer",
             code: 400,
           };
           return c.json(errorResponse, 400);
@@ -138,9 +144,9 @@ export function createClaudeSessionsRoutes(): Hono {
       }
 
       // Validate sortBy parameter
-      let sortBy: 'modified' | 'created' | undefined;
+      let sortBy: "modified" | "created" | undefined;
       if (sortByParam !== undefined) {
-        if (sortByParam !== 'modified' && sortByParam !== 'created') {
+        if (sortByParam !== "modified" && sortByParam !== "created") {
           const errorResponse: ErrorResponse = {
             error: `Invalid sortBy value: ${sortByParam}. Must be one of: modified, created`,
             code: 400,
@@ -151,9 +157,9 @@ export function createClaudeSessionsRoutes(): Hono {
       }
 
       // Validate sortOrder parameter
-      let sortOrder: 'asc' | 'desc' | undefined;
+      let sortOrder: "asc" | "desc" | undefined;
       if (sortOrderParam !== undefined) {
-        if (sortOrderParam !== 'asc' && sortOrderParam !== 'desc') {
+        if (sortOrderParam !== "asc" && sortOrderParam !== "desc") {
           const errorResponse: ErrorResponse = {
             error: `Invalid sortOrder value: ${sortOrderParam}. Must be one of: asc, desc`,
             code: 400,
@@ -182,8 +188,8 @@ export function createClaudeSessionsRoutes(): Hono {
         dateRange?: { from?: string; to?: string };
         offset?: number;
         limit?: number;
-        sortBy?: 'modified' | 'created';
-        sortOrder?: 'asc' | 'desc';
+        sortBy?: "modified" | "created";
+        sortOrder?: "asc" | "desc";
       } = {};
 
       if (workingDirectoryPrefix !== undefined) {
@@ -218,10 +224,16 @@ export function createClaudeSessionsRoutes(): Hono {
       const response: SessionListResponse =
         await sessionReader.listSessions(options);
 
+      // Strip system tags from firstPrompt/summary before returning
+      for (const session of response.sessions) {
+        session.firstPrompt = stripSystemTags(session.firstPrompt);
+        session.summary = stripSystemTags(session.summary);
+      }
+
       return c.json(response);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : 'Failed to list sessions';
+        e instanceof Error ? e.message : "Failed to list sessions";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
@@ -235,12 +247,12 @@ export function createClaudeSessionsRoutes(): Hono {
    *
    * Get a specific session by ID.
    */
-  app.get('/sessions/:id', async (c) => {
-    const sessionId = c.req.param('id');
+  app.get("/sessions/:id", async (c) => {
+    const sessionId = c.req.param("id");
 
     if (!sessionId || sessionId.length === 0) {
       const errorResponse: ErrorResponse = {
-        error: 'Session ID is required',
+        error: "Session ID is required",
         code: 400,
       };
       return c.json(errorResponse, 400);
@@ -258,10 +270,142 @@ export function createClaudeSessionsRoutes(): Hono {
         return c.json(errorResponse, 404);
       }
 
+      session.firstPrompt = stripSystemTags(session.firstPrompt);
+      session.summary = stripSystemTags(session.summary);
       return c.json(session);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : 'Failed to get session';
+        e instanceof Error ? e.message : "Failed to get session";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /api/claude/sessions/:id/transcript
+   *
+   * Get transcript events for a specific session.
+   *
+   * Query parameters:
+   * - offset: Skip first N events (default: 0)
+   * - limit: Return at most N events (default: 200, max: 1000)
+   */
+  app.get("/sessions/:id/transcript", async (c) => {
+    const sessionId = c.req.param("id");
+
+    if (!sessionId || sessionId.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Session ID is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    // Parse query parameters
+    const offsetParam = c.req.query("offset");
+    const limitParam = c.req.query("limit");
+
+    let offset = 0;
+    if (offsetParam !== undefined) {
+      const parsed = parseInt(offsetParam, 10);
+      if (isNaN(parsed) || parsed < 0) {
+        const errorResponse: ErrorResponse = {
+          error: "offset must be a non-negative integer",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+      offset = parsed;
+    }
+
+    let limit = 200;
+    if (limitParam !== undefined) {
+      const parsed = parseInt(limitParam, 10);
+      if (isNaN(parsed) || parsed <= 0) {
+        const errorResponse: ErrorResponse = {
+          error: "limit must be a positive integer",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+      if (parsed > 1000) {
+        const errorResponse: ErrorResponse = {
+          error: "limit must not exceed 1000",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+      limit = parsed;
+    }
+
+    try {
+      const result = await sessionReader.readTranscript(
+        sessionId,
+        offset,
+        limit,
+      );
+
+      if (result === null) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${sessionId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      return c.json({
+        events: result.events,
+        sessionId,
+        offset,
+        limit,
+        total: result.total,
+      });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to read transcript";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /api/claude/sessions/:id/summary
+   *
+   * Get session summary with tool usage, tasks, and file modifications.
+   */
+  app.get("/sessions/:id/summary", async (c) => {
+    const sessionId = c.req.param("id");
+
+    if (!sessionId || sessionId.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Session ID is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const summary: SessionSummary | null =
+        await sessionReader.getSessionSummary(sessionId);
+
+      if (summary === null) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${sessionId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      return c.json(summary);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to get session summary";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
@@ -279,12 +423,12 @@ export function createClaudeSessionsRoutes(): Hono {
    * Request body:
    * - prompt (optional): Additional prompt to send when resuming
    */
-  app.post('/sessions/:id/resume', async (c) => {
-    const sessionId = c.req.param('id');
+  app.post("/sessions/:id/resume", async (c) => {
+    const sessionId = c.req.param("id");
 
     if (!sessionId || sessionId.length === 0) {
       const errorResponse: ErrorResponse = {
-        error: 'Session ID is required',
+        error: "Session ID is required",
         code: 400,
       };
       return c.json(errorResponse, 400);
@@ -300,9 +444,9 @@ export function createClaudeSessionsRoutes(): Hono {
     }
 
     // Validate request body structure
-    if (typeof requestBody !== 'object' || requestBody === null) {
+    if (typeof requestBody !== "object" || requestBody === null) {
       const errorResponse: ErrorResponse = {
-        error: 'Request body must be a JSON object',
+        error: "Request body must be a JSON object",
         code: 400,
       };
       return c.json(errorResponse, 400);
@@ -312,15 +456,15 @@ export function createClaudeSessionsRoutes(): Hono {
     const body = requestBody as Record<string, unknown>;
     let prompt: string | undefined;
 
-    if ('prompt' in body) {
-      if (typeof body['prompt'] !== 'string') {
+    if ("prompt" in body) {
+      if (typeof body["prompt"] !== "string") {
         const errorResponse: ErrorResponse = {
-          error: 'prompt must be a string',
+          error: "prompt must be a string",
           code: 400,
         };
         return c.json(errorResponse, 400);
       }
-      prompt = body['prompt'];
+      prompt = body["prompt"];
     }
 
     try {
@@ -350,14 +494,14 @@ export function createClaudeSessionsRoutes(): Hono {
 
       const response: ResumeSessionResponse = {
         sessionId,
-        instructions: instructions.join('\n'),
+        instructions: instructions.join("\n"),
         prompt,
       };
 
       return c.json(response);
     } catch (e) {
       const errorMessage =
-        e instanceof Error ? e.message : 'Failed to resume session';
+        e instanceof Error ? e.message : "Failed to resume session";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

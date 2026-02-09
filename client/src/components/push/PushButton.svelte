@@ -52,12 +52,12 @@
   {disabled}
   class="push-button px-6 py-2 min-h-[44px]
          flex items-center justify-center gap-3
-         text-white bg-green-600
+         text-white bg-success-emphasis
          rounded-lg
-         hover:bg-green-700
-         focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2
-         active:bg-green-800
-         disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
+         hover:bg-success-emphasis
+         focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2
+         active:bg-success-emphasis
+         disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
          transition-colors
          font-medium text-base"
   aria-label={unpushedCount > 0
@@ -74,7 +74,7 @@
       class="unpushed-count-badge px-2 py-0.5 min-w-[24px]
              flex items-center justify-center
              text-xs font-bold
-             bg-green-800 text-white rounded-full"
+             bg-success-emphasis text-white rounded-full"
       aria-label={`${unpushedCount} unpushed commit${unpushedCount === 1 ? "" : "s"}`}
     >
       {unpushedCount}

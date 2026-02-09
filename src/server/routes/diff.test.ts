@@ -36,7 +36,7 @@ async function gitExec(args: readonly string[]): Promise<void> {
 beforeAll(async () => {
   // Create temporary directory
   testRepoPath = await fs.mkdtemp(
-    path.join(os.tmpdir(), "aynd-diff-routes-test-"),
+    path.join(os.tmpdir(), "qraftbox-diff-routes-test-"),
   );
 
   // Initialize git repository

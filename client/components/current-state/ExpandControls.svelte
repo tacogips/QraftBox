@@ -88,7 +88,7 @@ function handleKeydown(event: KeyboardEvent): void {
              {allExpanded
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
-             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
              transition-colors duration-150"
       aria-label="Expand all deleted blocks (keyboard: zR)"
       aria-disabled={allExpanded}
@@ -122,7 +122,7 @@ function handleKeydown(event: KeyboardEvent): void {
              {allCollapsed
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
-             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
              transition-colors duration-150"
       aria-label="Collapse all deleted blocks (keyboard: zM)"
       aria-disabled={allCollapsed}

@@ -68,7 +68,7 @@ describe("worktree types", () => {
     it("should represent worktree", () => {
       const result: RepositoryDetectionResult = {
         type: "worktree",
-        path: "/home/user/.local/aynd/worktrees/project/feature",
+        path: "/home/user/.local/qraftbox/worktrees/project/feature",
         gitDir: "/home/user/project/.git/worktrees/feature",
         mainRepositoryPath: "/home/user/project",
         worktreeName: "feature",
@@ -182,8 +182,8 @@ describe("encodeProjectPath", () => {
   });
 
   it("should handle complex path", () => {
-    expect(encodeProjectPath("/g/gits/tacogips/aynd")).toBe(
-      "g__gits__tacogips__aynd",
+    expect(encodeProjectPath("/g/gits/tacogips/qraftbox")).toBe(
+      "g__gits__tacogips__qraftbox",
     );
   });
 
@@ -206,15 +206,15 @@ describe("decodeProjectPath", () => {
   });
 
   it("should handle complex path", () => {
-    expect(decodeProjectPath("g__gits__tacogips__aynd")).toBe(
-      "/g/gits/tacogips/aynd",
+    expect(decodeProjectPath("g__gits__tacogips__qraftbox")).toBe(
+      "/g/gits/tacogips/qraftbox",
     );
   });
 
   it("should be inverse of encodeProjectPath", () => {
     const originalPaths = [
       "/home/user/projects/my-app",
-      "/g/gits/tacogips/aynd",
+      "/g/gits/tacogips/qraftbox",
       "/project",
       "/a/b/c/d/e",
     ];
@@ -238,7 +238,7 @@ describe("generateDefaultWorktreePath", () => {
     const expected = join(
       home,
       ".local",
-      "aynd",
+      "qraftbox",
       "worktrees",
       "home__user__projects__my-app",
       "feature-auth",
@@ -248,15 +248,15 @@ describe("generateDefaultWorktreePath", () => {
 
   it("should encode project path correctly", () => {
     const result = generateDefaultWorktreePath(
-      "/g/gits/tacogips/aynd",
+      "/g/gits/tacogips/qraftbox",
       "feature-worktree",
     );
     const expected = join(
       home,
       ".local",
-      "aynd",
+      "qraftbox",
       "worktrees",
-      "g__gits__tacogips__aynd",
+      "g__gits__tacogips__qraftbox",
       "feature-worktree",
     );
     expect(result).toBe(expected);
@@ -277,7 +277,7 @@ describe("generateDefaultWorktreePath", () => {
     const result1 = generateDefaultWorktreePath("/project1", "branch1");
     const result2 = generateDefaultWorktreePath("/project2", "branch2");
 
-    const base = join(home, ".local", "aynd", "worktrees");
+    const base = join(home, ".local", "qraftbox", "worktrees");
     expect(result1).toContain(base);
     expect(result2).toContain(base);
   });

@@ -62,7 +62,7 @@ function handleKeydown(event: KeyboardEvent): void {
 </script>
 
 <div
-  class="expanded-deleted-block border-l-4 border-red-500 bg-red-950/50 overflow-hidden"
+  class="expanded-deleted-block border-l-4 border-danger-emphasis bg-danger-subtle overflow-hidden"
   role="region"
   aria-label="Expanded deleted content: {lineCountText}"
   data-block-id={block.id}
@@ -70,13 +70,13 @@ function handleKeydown(event: KeyboardEvent): void {
 >
   <!-- Header with collapse button -->
   <div
-    class="flex items-center justify-between px-3 py-2 min-h-[44px] bg-red-900/30 border-b border-red-800/50"
+    class="flex items-center justify-between px-3 py-1 min-h-[28px] bg-danger-subtle border-b border-danger-emphasis"
   >
     <div class="flex items-center gap-2 text-sm">
-      <span class="text-red-300 font-medium">
+      <span class="text-danger-fg font-medium">
         {lineCountText}
       </span>
-      <span class="text-red-400/60 text-xs">
+      <span class="text-danger-fg/60 text-xs">
         (original lines {block.originalStart}-{block.originalEnd})
       </span>
     </div>
@@ -85,9 +85,9 @@ function handleKeydown(event: KeyboardEvent): void {
       type="button"
       onclick={handleCollapse}
       class="px-3 py-1.5 min-h-[32px] text-xs font-medium rounded
-             bg-red-900/50 text-red-200 border border-red-700/50
-             hover:bg-red-800/60 active:bg-red-800/80
-             focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2 focus:ring-offset-red-950
+             bg-danger-subtle text-danger-fg border border-danger-emphasis
+             hover:bg-danger-emphasis active:bg-danger-emphasis
+             focus:outline-none focus:ring-2 focus:ring-danger-emphasis focus:ring-offset-2 focus:ring-offset-danger-subtle
              transition-colors duration-150"
       aria-label="Collapse deleted content"
     >
@@ -116,27 +116,27 @@ function handleKeydown(event: KeyboardEvent): void {
   <div class="deleted-lines">
     {#each block.lines as lineContent, index}
       <div
-        class="flex min-h-[36px] font-mono text-sm bg-red-900/20 border-b border-red-900/30 last:border-b-0"
+        class="flex font-mono text-xs leading-5 bg-danger-subtle border-b border-danger-emphasis last:border-b-0"
       >
         <!-- Original line number -->
         <div
-          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-red-400/60 border-r border-red-800/30"
+          class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-danger-fg/60 border-r border-danger-emphasis"
         >
-          <span class="pt-2">{getLineNumber(index)}</span>
+          <span>{getLineNumber(index)}</span>
         </div>
 
         <!-- Delete indicator -->
         <div
-          class="w-8 flex-shrink-0 flex items-start justify-center text-red-400 border-r border-red-800/30"
+          class="w-8 flex-shrink-0 flex items-start justify-center text-danger-fg border-r border-danger-emphasis"
         >
-          <span class="pt-2 font-bold">-</span>
+          <span class="font-bold">-</span>
         </div>
 
         <!-- Content -->
-        <div class="flex-1 px-3 py-2 text-red-200/80 overflow-x-auto">
+        <div class="flex-1 px-2 text-danger-fg overflow-x-auto">
           {#if highlightedLines !== undefined && highlightedLines[index] !== undefined}
             <!-- Render syntax-highlighted HTML from Shiki -->
-            {@html highlightedLines[index]}
+            <span class="highlighted-line">{@html highlightedLines[index]}</span>
           {:else}
             <!-- Plain text fallback -->
             <pre class="m-0 p-0">{lineContent}</pre>
@@ -153,6 +153,11 @@ pre {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.highlighted-line {
   white-space: pre-wrap;
   word-break: break-word;
 }

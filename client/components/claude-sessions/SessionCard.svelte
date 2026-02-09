@@ -11,7 +11,7 @@
    * - onView: Callback when view button is clicked (optional)
    *
    * Design:
-   * - Source badge (AYND/CLI) with distinct colors
+   * - Source badge (QraftBox/CLI) with distinct colors
    * - First prompt as title (truncated)
    * - Metadata: project path, branch, message count
    * - Relative timestamps
@@ -63,12 +63,12 @@
    */
   const sourceBadgeClasses = $derived.by(() => {
     switch (session.source) {
-      case "aynd":
-        return "bg-blue-600/20 text-blue-400 border-blue-600/30";
+      case "qraftbox":
+        return "bg-accent-muted text-accent-fg border-accent-emphasis/30";
       case "claude-cli":
-        return "bg-purple-600/20 text-purple-400 border-purple-600/30";
+        return "bg-done-muted text-done-fg border-done-emphasis/30";
       default:
-        return "bg-gray-600/20 text-gray-400 border-gray-600/30";
+        return "bg-bg-emphasis/20 text-text-tertiary border-border-emphasis/30";
     }
   });
 
@@ -77,8 +77,8 @@
    */
   const sourceBadgeText = $derived.by(() => {
     switch (session.source) {
-      case "aynd":
-        return "AYND";
+      case "qraftbox":
+        return "QraftBox";
       case "claude-cli":
         return "CLI";
       default:
@@ -119,7 +119,7 @@
 <!-- Session Card -->
 <article
   class="session-card p-4 rounded-lg border border-bg-border
-         bg-bg-primary hover:bg-bg-secondary hover:border-blue-500/30
+         bg-bg-primary hover:bg-bg-secondary hover:border-accent-emphasis/30
          transition-all duration-150 group"
   aria-label={`Claude session: ${truncate(session.firstPrompt, 100)}`}
 >
@@ -138,7 +138,7 @@
     <!-- Title (First Prompt) -->
     <h3
       class="flex-1 text-sm font-medium text-text-primary line-clamp-2
-             group-hover:text-blue-400 transition-colors"
+             group-hover:text-accent-fg transition-colors"
       title={session.firstPrompt}
     >
       {truncate(session.firstPrompt, 120)}
@@ -238,7 +238,7 @@
       <span
         class="inline-flex items-center px-1.5 py-0.5 rounded
                text-[10px] font-medium
-               bg-yellow-600/20 text-yellow-400 border border-yellow-600/30"
+               bg-attention-emphasis/20 text-attention-fg border border-attention-emphasis"
         title="Sidechain session"
       >
         SIDECHAIN
@@ -253,8 +253,8 @@
       type="button"
       onclick={handleResume}
       class="flex-1 px-3 py-2 rounded-md text-sm font-medium
-             bg-blue-600 hover:bg-blue-700 text-white
-             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-bg-primary
+             bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 focus:ring-offset-bg-primary
              transition-colors duration-150"
       aria-label={`Resume session: ${truncate(session.firstPrompt, 50)}`}
     >
@@ -268,7 +268,7 @@
         onclick={handleView}
         class="px-3 py-2 rounded-md text-sm font-medium
                bg-bg-tertiary hover:bg-bg-hover text-text-primary
-               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-bg-primary
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 focus:ring-offset-bg-primary
                transition-colors duration-150"
         aria-label={`View session details: ${truncate(session.firstPrompt, 50)}`}
       >

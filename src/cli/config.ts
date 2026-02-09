@@ -1,5 +1,5 @@
 /**
- * Configuration module for aynd CLI
+ * Configuration module for qraftbox CLI
  *
  * This module provides configuration loading and validation for the CLI,
  * including default values and merging with user-provided overrides.
@@ -21,6 +21,8 @@ export interface ConfigDefaults {
   readonly WATCH: boolean;
   readonly SYNC_MODE: SyncMode;
   readonly AI: boolean;
+  readonly PROMPT_MODEL: string;
+  readonly ASSISTANT_MODEL: string;
 }
 
 /**
@@ -29,10 +31,12 @@ export interface ConfigDefaults {
 export const DEFAULT_CONFIG: ConfigDefaults = {
   PORT: 7144,
   HOST: "localhost",
-  OPEN: true,
+  OPEN: false,
   WATCH: true,
   SYNC_MODE: "manual",
   AI: true,
+  PROMPT_MODEL: "claude-opus-4-6",
+  ASSISTANT_MODEL: "claude-opus-4-6",
 } as const;
 
 /**
@@ -58,6 +62,8 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
     syncMode: overrides?.syncMode ?? DEFAULT_CONFIG.SYNC_MODE,
     ai: overrides?.ai ?? DEFAULT_CONFIG.AI,
     projectPath,
+    promptModel: overrides?.promptModel ?? DEFAULT_CONFIG.PROMPT_MODEL,
+    assistantModel: overrides?.assistantModel ?? DEFAULT_CONFIG.ASSISTANT_MODEL,
   };
 }
 

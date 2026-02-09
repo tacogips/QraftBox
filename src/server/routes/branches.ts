@@ -12,13 +12,17 @@ import type {
   BranchListResponse,
   BranchCheckoutRequest,
   BranchCheckoutResponse,
+  BranchMergeRequest,
+  BranchMergeResponse,
+  BranchCreateRequest,
+  BranchCreateResponse,
 } from "../../types/branch.js";
 import {
   listBranches,
-  getCurrentBranch,
-  getDefaultBranch,
   searchBranches,
   checkoutBranch,
+  mergeBranch,
+  createBranch,
 } from "../git/branch.js";
 
 /**
@@ -103,18 +107,26 @@ export function createBranchRoutes(
     const includeRemote =
       includeRemoteParam === "true" || includeRemoteParam === "1";
 
+    // Pagination parameters
+    const offsetParam = c.req.query("offset");
+    const limitParam = c.req.query("limit");
+    const offset = offsetParam !== undefined ? parseInt(offsetParam, 10) : 0;
+    const limit = limitParam !== undefined ? parseInt(limitParam, 10) : 30;
+
     try {
-      // Execute git branch operations
-      const [branches, current, defaultBranch] = await Promise.all([
-        listBranches(serverContext.projectPath, includeRemote),
-        getCurrentBranch(serverContext.projectPath),
-        getDefaultBranch(serverContext.projectPath),
-      ]);
+      const result = await listBranches(
+        serverContext.projectPath,
+        includeRemote,
+        { offset, limit },
+      );
 
       const response: BranchListResponse = {
-        branches,
-        current,
-        defaultBranch,
+        branches: result.branches,
+        current: result.currentBranch,
+        defaultBranch: result.defaultBranch,
+        total: result.total,
+        offset,
+        limit,
       };
 
       return c.json(response);
@@ -270,6 +282,150 @@ export function createBranchRoutes(
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to checkout branch";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /merge
+   *
+   * Merge a branch into the current branch.
+   * Requires clean working tree (no uncommitted changes).
+   *
+   * Request body (BranchMergeRequest):
+   * - branch (required): Branch name to merge
+   * - noFf (optional): Force merge commit even for fast-forward (default: false)
+   *
+   * Returns:
+   * - success: Boolean indicating success
+   * - mergedBranch: Branch that was merged
+   * - currentBranch: Current branch name
+   * - error (optional): Error message if merge failed
+   */
+  app.post("/merge", async (c) => {
+    const serverContext = context ?? c.get("serverContext");
+
+    if (serverContext === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: "Server context not available",
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+
+    let mergeRequest: BranchMergeRequest;
+    try {
+      const body = await c.req.json();
+      mergeRequest = body as BranchMergeRequest;
+    } catch {
+      const errorResponse: ErrorResponse = {
+        error: "Invalid JSON in request body",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    if (
+      mergeRequest.branch === undefined ||
+      mergeRequest.branch.trim().length === 0
+    ) {
+      const errorResponse: ErrorResponse = {
+        error: "Branch name is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const result = await mergeBranch(
+        serverContext.projectPath,
+        mergeRequest.branch,
+        mergeRequest.noFf,
+      );
+
+      const response: BranchMergeResponse = {
+        success: result.success,
+        mergedBranch: mergeRequest.branch,
+        currentBranch: result.currentBranch,
+        error: result.error,
+      };
+
+      const statusCode = result.success ? 200 : 400;
+      return c.json(response, statusCode);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to merge branch";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /create
+   *
+   * Create a new branch and switch to it.
+   *
+   * Request body (BranchCreateRequest):
+   * - branch (required): New branch name
+   * - startPoint (optional): Commit/ref to create from (default: current HEAD)
+   *
+   * Returns:
+   * - success: Boolean indicating success
+   * - branch: Created branch name
+   * - error (optional): Error message if creation failed
+   */
+  app.post("/create", async (c) => {
+    const serverContext = context ?? c.get("serverContext");
+
+    if (serverContext === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: "Server context not available",
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+
+    let createRequest: BranchCreateRequest;
+    try {
+      const body = await c.req.json();
+      createRequest = body as BranchCreateRequest;
+    } catch {
+      const errorResponse: ErrorResponse = {
+        error: "Invalid JSON in request body",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    if (
+      createRequest.branch === undefined ||
+      createRequest.branch.trim().length === 0
+    ) {
+      const errorResponse: ErrorResponse = {
+        error: "Branch name is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const response: BranchCreateResponse = await createBranch(
+        serverContext.projectPath,
+        createRequest,
+      );
+
+      const statusCode = response.success ? 201 : 400;
+      return c.json(response, statusCode);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to create branch";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

@@ -37,6 +37,7 @@
    */
   let localValue = $state(value);
   let debounceTimer: number | null = $state(null);
+  let isFocused = $state(false);
 
   /**
    * Sync local value when prop changes
@@ -91,17 +92,17 @@
 </script>
 
 <!-- Search Input Container -->
-<div class="search-input relative w-full">
+<div class="search-input relative ml-auto {isFocused ? 'w-56' : 'w-36'} transition-all duration-200">
   <!-- Search Icon -->
   <div
-    class="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none
+    class="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none
            text-text-tertiary"
     aria-hidden="true"
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      width="18"
-      height="18"
+      width="14"
+      height="14"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
@@ -120,13 +121,15 @@
     value={localValue}
     oninput={handleInput}
     onkeydown={handleKeyDown}
+    onfocus={() => (isFocused = true)}
+    onblur={() => (isFocused = false)}
     {placeholder}
-    class="w-full pl-10 pr-10 py-2.5 rounded-lg
+    class="w-full pl-7 pr-7 py-1 text-sm rounded-md
            bg-bg-secondary border border-bg-border
            text-text-primary placeholder-text-tertiary
-           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-           transition-all duration-150"
-    aria-label="Search sessions by prompt or summary"
+           focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-transparent
+           transition-all duration-200"
+    aria-label="Search"
     autocomplete="off"
     spellcheck="false"
   />
@@ -136,18 +139,18 @@
     <button
       type="button"
       onclick={handleClear}
-      class="absolute right-2 top-1/2 -translate-y-1/2
-             p-1.5 rounded-md
+      class="absolute right-1 top-1/2 -translate-y-1/2
+             p-1 rounded
              text-text-tertiary hover:text-text-primary hover:bg-bg-hover
              transition-colors duration-150
-             focus:outline-none focus:ring-2 focus:ring-blue-500"
+             focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
       aria-label="Clear search"
       title="Clear search (Esc)"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="16"
-        height="16"
+        width="12"
+        height="12"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

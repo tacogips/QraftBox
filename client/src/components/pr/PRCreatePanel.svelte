@@ -149,7 +149,7 @@
 
   <!-- Panel -->
   <div
-    class="pr-panel fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-50 max-h-[85vh] overflow-y-auto"
+    class="pr-panel fixed bottom-0 left-0 right-0 bg-bg-primary rounded-t-2xl shadow-2xl z-50 max-h-[85vh] overflow-y-auto"
     onclick={handlePanelClick}
     role="dialog"
     aria-labelledby="pr-panel-title"
@@ -157,17 +157,17 @@
   >
     <!-- Panel Header -->
     <div
-      class="panel-header sticky top-0 bg-white border-b border-gray-200 px-6 py-4 z-10"
+      class="panel-header sticky top-0 bg-bg-primary border-b border-border-default px-6 py-4 z-10"
     >
       <div class="flex items-center justify-between">
-        <h2 id="pr-panel-title" class="text-xl font-bold text-gray-900">
+        <h2 id="pr-panel-title" class="text-xl font-bold text-text-primary">
           Create Pull Request
         </h2>
 
         <button
           type="button"
           onclick={onClose}
-          class="close-icon-button p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition-colors"
+          class="close-icon-button p-2 text-text-tertiary hover:text-text-secondary rounded-lg hover:bg-bg-secondary transition-colors"
           aria-label="Close panel"
           disabled={status === "creating"}
         >
@@ -200,11 +200,11 @@
           <!-- Error Message -->
           {#if status === "error" && error}
             <div
-              class="error-message p-4 bg-red-50 border border-red-300 rounded-lg"
+              class="error-message p-4 bg-danger-subtle border border-danger-emphasis rounded-lg"
             >
               <div class="flex items-start gap-3">
                 <svg
-                  class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+                  class="w-5 h-5 text-danger-fg flex-shrink-0 mt-0.5"
                   xmlns="http://www.w3.org/2000/svg"
                   viewBox="0 0 20 20"
                   fill="currentColor"
@@ -216,10 +216,10 @@
                   />
                 </svg>
                 <div class="flex-1">
-                  <h3 class="text-sm font-medium text-red-800 mb-1">
+                  <h3 class="text-sm font-medium text-danger-fg mb-1">
                     PR Creation Failed
                   </h3>
-                  <p class="text-sm text-red-700">{error}</p>
+                  <p class="text-sm text-danger-fg">{error}</p>
                 </div>
               </div>
             </div>
@@ -229,7 +229,7 @@
           <div>
             <label
               for="pr-title"
-              class="block text-sm font-medium text-gray-700 mb-2"
+              class="block text-sm font-medium text-text-primary mb-2"
             >
               Title
             </label>
@@ -239,9 +239,9 @@
               bind:value={titleInput}
               placeholder="Enter PR title (optional - AI will generate if empty)"
               disabled={status === "creating"}
-              class="w-full px-4 py-2 min-h-[44px] border border-gray-300 rounded-lg
-                     focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
-                     disabled:bg-gray-100 disabled:cursor-not-allowed
+              class="w-full px-4 py-2 min-h-[44px] border border-border-default rounded-lg
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
+                     disabled:bg-bg-secondary disabled:cursor-not-allowed
                      text-base"
             />
           </div>
@@ -250,7 +250,7 @@
           <div>
             <label
               for="pr-description"
-              class="block text-sm font-medium text-gray-700 mb-2"
+              class="block text-sm font-medium text-text-primary mb-2"
             >
               Description
             </label>
@@ -260,9 +260,9 @@
               placeholder="Enter PR description (optional - AI will generate if empty)"
               disabled={status === "creating"}
               rows="4"
-              class="w-full px-4 py-2 border border-gray-300 rounded-lg
-                     focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent
-                     disabled:bg-gray-100 disabled:cursor-not-allowed
+              class="w-full px-4 py-2 border border-border-default rounded-lg
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
+                     disabled:bg-bg-secondary disabled:cursor-not-allowed
                      text-base resize-vertical"
             ></textarea>
           </div>
@@ -297,7 +297,7 @@
     <!-- Panel Footer (Action Buttons) -->
     {#if status !== "creating"}
       <div
-        class="panel-footer sticky bottom-0 bg-white border-t border-gray-200 px-6 py-4"
+        class="panel-footer sticky bottom-0 bg-bg-primary border-t border-border-default px-6 py-4"
       >
         <div class="flex gap-3">
           <!-- Cancel Button -->
@@ -305,11 +305,11 @@
             type="button"
             onclick={handleCancel}
             class="cancel-button flex-1 min-h-[44px] px-6 py-2
-                   text-gray-700 bg-gray-100
+                   text-text-primary bg-bg-secondary
                    rounded-lg
-                   hover:bg-gray-200
-                   focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2
-                   active:bg-gray-300
+                   hover:bg-bg-tertiary
+                   focus:outline-none focus:ring-2 focus:ring-border-emphasis focus:ring-offset-2
+                   active:bg-bg-tertiary
                    transition-colors
                    font-medium text-base"
           >
@@ -321,12 +321,12 @@
             type="button"
             onclick={handleSubmit}
             class="create-action-button flex-1 min-h-[44px] px-6 py-2
-                   text-white bg-purple-600
+                   text-white bg-done-emphasis
                    rounded-lg
-                   hover:bg-purple-700
-                   focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2
-                   active:bg-purple-800
-                   disabled:bg-gray-300 disabled:text-gray-500 disabled:cursor-not-allowed
+                   hover:opacity-90
+                   focus:outline-none focus:ring-2 focus:ring-done-fg focus:ring-offset-2
+                   active:opacity-80
+                   disabled:bg-bg-tertiary disabled:text-text-secondary disabled:cursor-not-allowed
                    transition-colors
                    font-medium text-base"
           >

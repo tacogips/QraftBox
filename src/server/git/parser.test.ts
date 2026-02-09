@@ -132,11 +132,11 @@ describe("parseFileDiff", () => {
     expect(chunk.changes.length).toBe(5);
 
     // Verify change types
-    expect(chunk.changes[0]?.type).toBe("normal");
-    expect(chunk.changes[1]?.type).toBe("del");
+    expect(chunk.changes[0]?.type).toBe("context");
+    expect(chunk.changes[1]?.type).toBe("delete");
     expect(chunk.changes[2]?.type).toBe("add");
     expect(chunk.changes[3]?.type).toBe("add");
-    expect(chunk.changes[4]?.type).toBe("normal");
+    expect(chunk.changes[4]?.type).toBe("context");
   });
 
   test("should parse new file (added)", () => {
@@ -270,7 +270,7 @@ Binary files a/image.png and b/image.png differ`;
 
     // Should not include the "\ No newline" marker as a change
     const changeTypes = chunk.changes.map((c) => c.type);
-    expect(changeTypes).toEqual(["normal", "del", "add"]);
+    expect(changeTypes).toEqual(["context", "delete", "add"]);
   });
 
   test("should track line numbers correctly", () => {

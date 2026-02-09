@@ -25,6 +25,7 @@ interface Props {
   selected?: boolean;
   onSelect?: () => void;
   onLongPress?: () => void;
+  onCommentClick?: (shiftKey: boolean) => void;
 }
 
 // Svelte 5 props syntax
@@ -35,6 +36,7 @@ let {
   selected = false,
   onSelect = undefined,
   onLongPress = undefined,
+  onCommentClick = undefined,
 }: Props = $props();
 
 // State for long press detection
@@ -47,9 +49,9 @@ let longPressTimer: ReturnType<typeof setTimeout> | undefined =
 function getBackgroundClass(type: DiffChangeType): string {
   switch (type) {
     case "add":
-      return "bg-green-900/30";
+      return "bg-diff-add-bg";
     case "delete":
-      return "bg-red-900/30";
+      return "bg-diff-del-bg";
     case "context":
       return "bg-transparent";
     default:
@@ -83,9 +85,9 @@ function getIndicator(type: DiffChangeType): string {
 function getIndicatorClass(type: DiffChangeType): string {
   switch (type) {
     case "add":
-      return "text-green-400";
+      return "text-success-fg";
     case "delete":
-      return "text-red-400";
+      return "text-danger-fg";
     case "context":
       return "text-text-secondary";
     default:
@@ -139,10 +141,9 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="flex min-h-[44px] font-mono text-sm cursor-pointer select-none {getBackgroundClass(
+  class="diff-line-row flex font-mono text-xs leading-5 select-none {getBackgroundClass(
     change.type,
-  )} {selected ? 'ring-2 ring-blue-500 ring-inset' : ''}"
-  onclick={handleClick}
+  )} {selected ? 'ring-2 ring-accent-emphasis ring-inset' : ''}"
   onpointerdown={handlePointerDown}
   onpointerup={handlePointerUp}
   onpointerleave={handlePointerLeave}
@@ -151,11 +152,22 @@ function handlePointerLeave(): void {
   aria-label="Diff line {lineNumber}: {change.content}"
   aria-selected={selected}
 >
-  <!-- Line Number Column -->
+  <!-- Line Number Column with comment "+" button -->
   <div
-    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default"
+    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default relative group/gutter"
   >
-    <span class="pt-2">{lineNumber}</span>
+    {#if onCommentClick !== undefined}
+      <button
+        type="button"
+        class="comment-trigger absolute left-0 top-1 w-6 h-6 flex items-center justify-center
+               rounded bg-accent-emphasis text-white text-xs font-bold
+               opacity-0 group-hover/gutter:opacity-100
+               hover:bg-accent-emphasis transition-opacity z-10 cursor-pointer"
+        onclick={(e) => { e.stopPropagation(); onCommentClick?.(e.shiftKey); }}
+        aria-label="Add comment on line {lineNumber}"
+      >+</button>
+    {/if}
+    <span class="cursor-pointer" onclick={handleClick}>{lineNumber}</span>
   </div>
 
   <!-- Indicator Column -->
@@ -164,14 +176,14 @@ function handlePointerLeave(): void {
       change.type,
     )} border-r border-border-default"
   >
-    <span class="pt-2 font-bold">{getIndicator(change.type)}</span>
+    <span class="font-bold">{getIndicator(change.type)}</span>
   </div>
 
   <!-- Content Column -->
-  <div class="flex-1 px-3 py-2 overflow-x-auto">
+  <div class="flex-1 px-2 overflow-x-auto cursor-pointer" onclick={handleClick}>
     {#if highlighted !== undefined}
       <!-- Render syntax-highlighted HTML from Shiki -->
-      {@html highlighted}
+      <span class="highlighted-line">{@html highlighted}</span>
     {:else}
       <!-- Plain text fallback -->
       <pre class="m-0 p-0">{change.content}</pre>
@@ -187,5 +199,15 @@ pre {
   line-height: inherit;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.highlighted-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Show "+" button when hovering anywhere on the row */
+.diff-line-row:hover .comment-trigger {
+  opacity: 1;
 }
 </style>

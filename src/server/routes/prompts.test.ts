@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
  * Create a test config directory with sample templates
  */
 async function createTestConfigDir(): Promise<string> {
-  const testDir = join(tmpdir(), `aynd-test-${Date.now()}`);
+  const testDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
   await mkdir(testDir, { recursive: true });
 
   // Create a sample user template
@@ -150,7 +150,7 @@ describe("Prompt Routes", () => {
     });
 
     test("handles empty user template directory gracefully", async () => {
-      const emptyDir = join(tmpdir(), `aynd-empty-${Date.now()}`);
+      const emptyDir = join(tmpdir(), `qraftbox-empty-${Date.now()}`);
       await mkdir(emptyDir, { recursive: true });
 
       const emptyApp = createPromptRoutes(emptyDir);
@@ -225,7 +225,7 @@ describe("Prompt Routes", () => {
   describe("GET /api/prompts/default/:category", () => {
     beforeEach(() => {
       // Set environment variable to point to test config for all tests in this suite
-      process.env["AYND_TEST_CONFIG_DIR"] = testConfigDir;
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = testConfigDir;
     });
 
     afterEach(async () => {
@@ -236,7 +236,7 @@ describe("Prompt Routes", () => {
         // Ignore errors
       }
       // Clean up environment
-      delete process.env["AYND_TEST_CONFIG_DIR"];
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
     });
 
     test("returns null when no default is set", async () => {
@@ -276,12 +276,12 @@ describe("Prompt Routes", () => {
   describe("PUT /api/prompts/default/:category", () => {
     beforeEach(() => {
       // Set environment variable to point to test config
-      process.env["AYND_TEST_CONFIG_DIR"] = testConfigDir;
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = testConfigDir;
     });
 
     afterEach(() => {
       // Clean up environment
-      delete process.env["AYND_TEST_CONFIG_DIR"];
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
     });
 
     test("sets default prompt for category", async () => {
@@ -451,7 +451,7 @@ describe("Prompt Routes", () => {
   describe("Error Handling", () => {
     test("handles corrupted template files gracefully", async () => {
       // Create a corrupted template file
-      const corruptedDir = join(tmpdir(), `aynd-corrupt-${Date.now()}`);
+      const corruptedDir = join(tmpdir(), `qraftbox-corrupt-${Date.now()}`);
       await mkdir(corruptedDir, { recursive: true });
       await writeFile(
         join(corruptedDir, "commit-corrupt.md"),
