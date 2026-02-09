@@ -169,13 +169,13 @@ $effect(() => {
       >
         {#each turns as turn, index (turn.id)}
           <div
-            class="carousel-card flex-shrink-0 w-full px-4 py-4"
+            class="carousel-card flex-shrink-0 w-full px-2 py-2"
             role="tabpanel"
             aria-roledescription="slide"
             aria-label="Message {index + 1} of {turns.length}"
             aria-hidden={index !== currentIndex}
           >
-            <div class="max-w-2xl mx-auto h-full overflow-y-auto">
+            <div class="max-w-lg mx-auto h-full overflow-y-auto">
               <MessageCard {turn} />
             </div>
           </div>
@@ -253,7 +253,7 @@ $effect(() => {
     <!-- Pagination dots -->
     {#if turns.length > 1}
       <div
-        class="flex items-center justify-center gap-2 py-3"
+        class="flex items-center justify-center gap-1.5 py-2"
         role="tablist"
         aria-label="Message navigation"
       >
@@ -261,7 +261,7 @@ $effect(() => {
           <button
             type="button"
             onclick={() => goToIndex(index)}
-            class="w-2.5 h-2.5 rounded-full transition-all
+            class="w-2 h-2 rounded-full transition-all
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2
                    {index === currentIndex
                      ? 'bg-accent-emphasis scale-110'

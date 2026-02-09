@@ -75,7 +75,7 @@ function toggleTools(): void {
   aria-label="{roleText} message"
 >
   <!-- Header -->
-  <div class="px-4 py-2 bg-bg-tertiary/50 flex items-center justify-between">
+  <div class="px-3 py-1 bg-bg-tertiary/50 flex items-center justify-between">
     <span class="text-xs font-semibold tracking-wide {roleTextColor}">
       {roleText}
     </span>
@@ -85,8 +85,8 @@ function toggleTools(): void {
   </div>
 
   <!-- Content -->
-  <div class="p-4">
-    <div class="text-sm text-text-primary whitespace-pre-wrap break-words">
+  <div class="px-3 py-1.5">
+    <div class="text-xs text-text-primary whitespace-pre-wrap break-words max-h-40 overflow-y-auto">
       {turn.content}
     </div>
   </div>
@@ -98,7 +98,7 @@ function toggleTools(): void {
       <button
         type="button"
         onclick={toggleTools}
-        class="w-full px-4 py-2 flex items-center justify-between
+        class="w-full px-3 py-1 flex items-center justify-between
                bg-bg-tertiary/30 hover:bg-bg-tertiary/50
                transition-colors
                focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
@@ -148,7 +148,7 @@ function toggleTools(): void {
       {#if toolsExpanded && turn.toolCalls !== undefined}
         <div
           id="tool-calls-{turn.id}"
-          class="px-4 py-2 space-y-2"
+          class="px-3 py-1.5 space-y-1.5"
         >
           {#each turn.toolCalls as toolCall (toolCall.id)}
             <ToolCallDisplay {toolCall} />

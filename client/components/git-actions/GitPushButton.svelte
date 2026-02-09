@@ -16,9 +16,10 @@
   interface Props {
     contextId: string;
     projectPath: string;
+    onSuccess?: (() => void) | undefined;
   }
 
-  const { contextId, projectPath }: Props = $props();
+  const { contextId, projectPath, onSuccess }: Props = $props();
 
   // Menu state
   let menuOpen = $state(false);
@@ -176,6 +177,7 @@
       }
 
       showToast("Commit completed", "success");
+      onSuccess?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Commit failed";
       showToast(msg, "error");
@@ -209,6 +211,7 @@
       }
 
       showToast("Push completed", "success");
+      onSuccess?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Push failed";
       showToast(msg, "error");
@@ -266,6 +269,7 @@
             ? "Fetch"
             : "Merge";
       showToast(`${actionLabel} completed`, "success");
+      onSuccess?.();
       customCtxAction = null;
       customCtxText = "";
       menuOpen = false;

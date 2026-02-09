@@ -1,24 +1,35 @@
 # Installing Dependencies for QraftBox
 
 QraftBox requires **Git** and **Claude Code** to be installed on your system.
-This guide walks you through installing both tools on macOS, Linux, and Windows.
+This guide walks you through installing both tools on macOS, Linux, and Windows using various package managers.
 
 > [Japanese / 日本語はこちら](#日本語-japanese)
+
+**Official Pages:**
+
+| Tool | Official Page |
+|------|---------------|
+| Git | [https://git-scm.com/](https://git-scm.com/) |
+| Claude Code | [https://docs.anthropic.com/en/docs/claude-code/overview](https://docs.anthropic.com/en/docs/claude-code/overview) |
 
 ---
 
 ## Table of Contents
 
 - [Git](#git)
-  - [macOS](#git--macos)
-  - [Linux](#git--linux)
-  - [Windows](#git--windows)
+  - [Homebrew (macOS / Linux)](#git--homebrew-macos--linux)
+  - [Xcode Command Line Tools (macOS)](#git--xcode-command-line-tools-macos)
+  - [Linux Package Managers](#git--linux-package-managers)
+  - [Nix](#git--nix)
+  - [Windows Package Managers](#git--windows-package-managers)
+  - [Windows Installer](#git--windows-installer)
   - [Verify Git Installation](#verify-git-installation)
 - [Claude Code](#claude-code)
-  - [Prerequisites](#claude-code-prerequisites)
-  - [macOS](#claude-code--macos)
-  - [Linux](#claude-code--linux)
-  - [Windows](#claude-code--windows)
+  - [Prerequisites (Node.js)](#claude-code-prerequisites-nodejs)
+  - [npm (All Platforms)](#claude-code--npm-all-platforms)
+  - [Homebrew (macOS / Linux)](#claude-code--homebrew-macos--linux)
+  - [Nix](#claude-code--nix)
+  - [Linux Permission Fix](#claude-code--linux-permission-fix)
   - [Verify Claude Code Installation](#verify-claude-code-installation)
 - [Japanese / 日本語はこちら](#日本語-japanese)
 
@@ -28,9 +39,19 @@ This guide walks you through installing both tools on macOS, Linux, and Windows.
 
 Git is a version control system that QraftBox uses to manage repositories, diffs, and worktrees.
 
-### Git -- macOS
+Official page: [https://git-scm.com/](https://git-scm.com/)
 
-**Option A: Xcode Command Line Tools (Recommended)**
+### Git -- Homebrew (macOS / Linux)
+
+[Homebrew](https://brew.sh/) works on both macOS and Linux.
+
+```bash
+brew install git
+```
+
+### Git -- Xcode Command Line Tools (macOS)
+
+If you are on macOS and do not use Homebrew, you can install Git via Xcode Command Line Tools.
 
 Open Terminal and run:
 
@@ -38,38 +59,70 @@ Open Terminal and run:
 xcode-select --install
 ```
 
-A dialog will appear asking you to install the tools. Click "Install" and wait for completion.
+A dialog will appear. Click "Install" and wait for completion. Git is included automatically.
 
-**Option B: Homebrew**
+### Git -- Linux Package Managers
 
-If you have [Homebrew](https://brew.sh/) installed:
-
-```bash
-brew install git
-```
-
-### Git -- Linux
-
-**Ubuntu / Debian:**
+**Ubuntu / Debian (apt):**
 
 ```bash
 sudo apt update
 sudo apt install git
 ```
 
-**Fedora:**
+**Fedora (dnf):**
 
 ```bash
 sudo dnf install git
 ```
 
-**Arch Linux:**
+**Arch Linux (pacman):**
 
 ```bash
 sudo pacman -S git
 ```
 
-### Git -- Windows
+### Git -- Nix
+
+If you use [Nix](https://nixos.org/), you can install Git declaratively or imperatively.
+
+**Imperative (nix-env):**
+
+```bash
+nix-env -iA nixpkgs.git
+```
+
+**Declarative (flake shell / nix-shell):**
+
+```bash
+nix-shell -p git
+```
+
+Or add `git` to your `flake.nix` `devShells` packages list.
+
+### Git -- Windows Package Managers
+
+**winget (built into Windows 10/11):**
+
+```powershell
+winget install --id Git.Git -e --source winget
+```
+
+**Chocolatey:**
+
+```powershell
+choco install git
+```
+
+**Scoop:**
+
+```powershell
+scoop install git
+```
+
+### Git -- Windows Installer
+
+If you prefer not to use a package manager:
 
 1. Download the installer from [https://git-scm.com/downloads/win](https://git-scm.com/downloads/win)
 2. Run the downloaded `.exe` file
@@ -92,7 +145,9 @@ You should see output like `git version 2.x.x`. Any version 2.20 or later will w
 
 Claude Code is Anthropic's CLI tool for AI-powered coding. QraftBox uses it for commit, push, and pull request operations.
 
-### Claude Code Prerequisites
+Official page: [https://docs.anthropic.com/en/docs/claude-code/overview](https://docs.anthropic.com/en/docs/claude-code/overview)
+
+### Claude Code Prerequisites (Node.js)
 
 Claude Code requires **Node.js version 18 or later**. Check if you already have it:
 
@@ -100,46 +155,71 @@ Claude Code requires **Node.js version 18 or later**. Check if you already have 
 node --version
 ```
 
-If you see `v18.x.x` or higher, you are ready. If not, install Node.js first:
+If you see `v18.x.x` or higher, you are ready. If not, install Node.js first using one of these methods:
 
-- **macOS**: `brew install node` (via Homebrew) or download from [https://nodejs.org/](https://nodejs.org/)
-- **Linux**: `sudo apt install nodejs npm` (Ubuntu/Debian) or use [NodeSource](https://github.com/nodesource/distributions)
-- **Windows**: Download the installer from [https://nodejs.org/](https://nodejs.org/)
+| Platform | Command / Link |
+|----------|----------------|
+| Homebrew (macOS / Linux) | `brew install node` |
+| Ubuntu / Debian | `sudo apt install nodejs npm` or use [NodeSource](https://github.com/nodesource/distributions) |
+| Fedora | `sudo dnf install nodejs npm` |
+| Arch Linux | `sudo pacman -S nodejs npm` |
+| Nix | `nix-env -iA nixpkgs.nodejs` or add `nodejs` to your flake |
+| winget (Windows) | `winget install OpenJS.NodeJS.LTS` |
+| Chocolatey (Windows) | `choco install nodejs-lts` |
+| Scoop (Windows) | `scoop install nodejs-lts` |
+| Installer (any platform) | [https://nodejs.org/](https://nodejs.org/) |
 
-### Claude Code -- macOS
+### Claude Code -- npm (All Platforms)
 
-Open Terminal and run:
+The primary installation method for Claude Code is npm. This works on macOS, Linux, and Windows:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-### Claude Code -- Linux
+### Claude Code -- Homebrew (macOS / Linux)
 
-Open a terminal and run:
+If you use Homebrew, you can also install Claude Code via:
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+brew install claude-code
 ```
 
-If you get a permission error, either:
+### Claude Code -- Nix
 
-- Use `sudo npm install -g @anthropic-ai/claude-code`, or
-- Configure npm to use a user-level directory (recommended):
+**Imperative (nix-env):**
+
+```bash
+nix-env -iA nixpkgs.claude-code
+```
+
+**Declarative (flake shell / nix-shell):**
+
+```bash
+nix-shell -p claude-code
+```
+
+Or add `claude-code` to your `flake.nix` `devShells` packages list.
+
+> Note: Availability in nixpkgs may vary. If the package is not yet available, use the npm method above.
+
+### Claude Code -- Linux Permission Fix
+
+If you get a permission error when running `npm install -g` on Linux, you have two options:
+
+**Option A: Use sudo**
+
+```bash
+sudo npm install -g @anthropic-ai/claude-code
+```
+
+**Option B: Change npm global directory (Recommended)**
 
 ```bash
 mkdir -p ~/.npm-global
 npm config set prefix '~/.npm-global'
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-npm install -g @anthropic-ai/claude-code
-```
-
-### Claude Code -- Windows
-
-Open Command Prompt or PowerShell and run:
-
-```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
@@ -166,22 +246,33 @@ Once both Git and Claude Code are installed, you can proceed with setting up and
 ## 日本語 (Japanese)
 
 QraftBox を使用するには **Git** と **Claude Code** のインストールが必要です。
-このガイドでは、macOS、Linux、Windows での両ツールのインストール方法を初心者向けに説明します。
+このガイドでは、macOS、Linux、Windows での各種パッケージマネージャーを使った両ツールのインストール方法を初心者向けに説明します。
 
 > [English / 英語版はこちら](#installing-dependencies-for-qraftbox)
+
+**公式ページ:**
+
+| ツール | 公式ページ |
+|--------|-----------|
+| Git | [https://git-scm.com/](https://git-scm.com/) |
+| Claude Code | [https://docs.anthropic.com/en/docs/claude-code/overview](https://docs.anthropic.com/en/docs/claude-code/overview) |
 
 ### 目次
 
 - [Git のインストール](#git-のインストール)
-  - [macOS](#git----macos)
-  - [Linux](#git----linux)
-  - [Windows](#git----windows)
+  - [Homebrew (macOS / Linux)](#git----homebrew-macos--linux)
+  - [Xcode コマンドラインツール (macOS)](#git----xcode-コマンドラインツール-macos)
+  - [Linux パッケージマネージャー](#git----linux-パッケージマネージャー)
+  - [Nix](#git----nix)
+  - [Windows パッケージマネージャー](#git----windows-パッケージマネージャー)
+  - [Windows インストーラー](#git----windows-インストーラー)
   - [Git のインストール確認](#git-のインストール確認)
 - [Claude Code のインストール](#claude-code-のインストール)
-  - [前提条件](#前提条件)
-  - [macOS](#claude-code----macos)
-  - [Linux](#claude-code----linux)
-  - [Windows](#claude-code----windows)
+  - [前提条件 (Node.js)](#前提条件-nodejs)
+  - [npm (全プラットフォーム共通)](#claude-code----npm-全プラットフォーム共通)
+  - [Homebrew (macOS / Linux)](#claude-code----homebrew-macos--linux)
+  - [Nix](#claude-code----nix)
+  - [Linux パーミッション修正](#claude-code----linux-パーミッション修正)
   - [Claude Code のインストール確認](#claude-code-のインストール確認)
 
 ---
@@ -190,9 +281,19 @@ QraftBox を使用するには **Git** と **Claude Code** のインストール
 
 Git はバージョン管理システムです。QraftBox はリポジトリ、差分（diff）、ワークツリーの管理に Git を使用しています。
 
-#### Git -- macOS
+公式ページ: [https://git-scm.com/](https://git-scm.com/)
 
-**方法 A: Xcode コマンドラインツール（推奨）**
+#### Git -- Homebrew (macOS / Linux)
+
+[Homebrew](https://brew.sh/) は macOS と Linux の両方で使えます。
+
+```bash
+brew install git
+```
+
+#### Git -- Xcode コマンドラインツール (macOS)
+
+macOS で Homebrew を使わない場合、Xcode コマンドラインツール経由で Git をインストールできます。
 
 ターミナルを開いて以下を実行します:
 
@@ -200,38 +301,70 @@ Git はバージョン管理システムです。QraftBox はリポジトリ、�
 xcode-select --install
 ```
 
-ダイアログが表示されるので「インストール」をクリックして完了を待ちます。
+ダイアログが表示されるので「インストール」をクリックして完了を待ちます。Git は自動的に含まれています。
 
-**方法 B: Homebrew**
+#### Git -- Linux パッケージマネージャー
 
-[Homebrew](https://brew.sh/) がインストール済みの場合:
-
-```bash
-brew install git
-```
-
-#### Git -- Linux
-
-**Ubuntu / Debian の場合:**
+**Ubuntu / Debian (apt):**
 
 ```bash
 sudo apt update
 sudo apt install git
 ```
 
-**Fedora の場合:**
+**Fedora (dnf):**
 
 ```bash
 sudo dnf install git
 ```
 
-**Arch Linux の場合:**
+**Arch Linux (pacman):**
 
 ```bash
 sudo pacman -S git
 ```
 
-#### Git -- Windows
+#### Git -- Nix
+
+[Nix](https://nixos.org/) を使用している場合、宣言的または命令的にインストールできます。
+
+**命令的 (nix-env):**
+
+```bash
+nix-env -iA nixpkgs.git
+```
+
+**宣言的 (flake shell / nix-shell):**
+
+```bash
+nix-shell -p git
+```
+
+または `flake.nix` の `devShells` パッケージリストに `git` を追加してください。
+
+#### Git -- Windows パッケージマネージャー
+
+**winget (Windows 10/11 に標準搭載):**
+
+```powershell
+winget install --id Git.Git -e --source winget
+```
+
+**Chocolatey:**
+
+```powershell
+choco install git
+```
+
+**Scoop:**
+
+```powershell
+scoop install git
+```
+
+#### Git -- Windows インストーラー
+
+パッケージマネージャーを使わない場合:
 
 1. [https://git-scm.com/downloads/win](https://git-scm.com/downloads/win) からインストーラーをダウンロードします
 2. ダウンロードした `.exe` ファイルを実行します
@@ -254,7 +387,9 @@ git --version
 
 Claude Code は Anthropic が提供する AI コーディング用 CLI ツールです。QraftBox はコミット、プッシュ、プルリクエスト操作に Claude Code を使用しています。
 
-#### 前提条件
+公式ページ: [https://docs.anthropic.com/en/docs/claude-code/overview](https://docs.anthropic.com/en/docs/claude-code/overview)
+
+#### 前提条件 (Node.js)
 
 Claude Code には **Node.js バージョン 18 以降** が必要です。既にインストールされているか確認します:
 
@@ -264,44 +399,69 @@ node --version
 
 `v18.x.x` 以上が表示されれば準備完了です。表示されない場合は、まず Node.js をインストールしてください:
 
-- **macOS**: `brew install node`（Homebrew 経由）または [https://nodejs.org/](https://nodejs.org/) からダウンロード
-- **Linux**: `sudo apt install nodejs npm`（Ubuntu/Debian の場合）または [NodeSource](https://github.com/nodesource/distributions) を利用
-- **Windows**: [https://nodejs.org/](https://nodejs.org/) からインストーラーをダウンロード
+| プラットフォーム | コマンド / リンク |
+|-----------------|------------------|
+| Homebrew (macOS / Linux) | `brew install node` |
+| Ubuntu / Debian | `sudo apt install nodejs npm` または [NodeSource](https://github.com/nodesource/distributions) を利用 |
+| Fedora | `sudo dnf install nodejs npm` |
+| Arch Linux | `sudo pacman -S nodejs npm` |
+| Nix | `nix-env -iA nixpkgs.nodejs` またはflakeに `nodejs` を追加 |
+| winget (Windows) | `winget install OpenJS.NodeJS.LTS` |
+| Chocolatey (Windows) | `choco install nodejs-lts` |
+| Scoop (Windows) | `scoop install nodejs-lts` |
+| インストーラー (全OS) | [https://nodejs.org/](https://nodejs.org/) |
 
-#### Claude Code -- macOS
+#### Claude Code -- npm (全プラットフォーム共通)
 
-ターミナルを開いて以下を実行します:
+Claude Code の主要なインストール方法は npm です。macOS、Linux、Windows のいずれでも使えます:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-#### Claude Code -- Linux
+#### Claude Code -- Homebrew (macOS / Linux)
 
-ターミナルを開いて以下を実行します:
+Homebrew を使っている場合は以下でもインストールできます:
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+brew install claude-code
 ```
 
-パーミッションエラーが出る場合は、以下のいずれかを実行してください:
+#### Claude Code -- Nix
 
-- `sudo npm install -g @anthropic-ai/claude-code` を使う、もしくは
-- npm のインストール先をユーザーディレクトリに変更する（推奨）:
+**命令的 (nix-env):**
+
+```bash
+nix-env -iA nixpkgs.claude-code
+```
+
+**宣言的 (flake shell / nix-shell):**
+
+```bash
+nix-shell -p claude-code
+```
+
+または `flake.nix` の `devShells` パッケージリストに `claude-code` を追加してください。
+
+> 注意: nixpkgs での提供状況は変動する場合があります。パッケージが利用できない場合は、上記の npm による方法を使用してください。
+
+#### Claude Code -- Linux パーミッション修正
+
+Linux で `npm install -g` 実行時にパーミッションエラーが出る場合、2つの方法があります:
+
+**方法 A: sudo を使う**
+
+```bash
+sudo npm install -g @anthropic-ai/claude-code
+```
+
+**方法 B: npm のグローバルディレクトリを変更する（推奨）**
 
 ```bash
 mkdir -p ~/.npm-global
 npm config set prefix '~/.npm-global'
 echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
-npm install -g @anthropic-ai/claude-code
-```
-
-#### Claude Code -- Windows
-
-コマンドプロンプトまたは PowerShell を開いて以下を実行します:
-
-```bash
 npm install -g @anthropic-ai/claude-code
 ```
 

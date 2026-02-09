@@ -3,19 +3,17 @@
    * CurrentSessionPanel Component
    *
    * Compact panel shown above the AIPromptPanel in the Changes screen.
-   * Shows the currently active session (most recent CLI session or running
-   * QraftBox session) and queued prompt count, both expandable on click.
-   * Reuses the visual style of HistorySessionsPanel session rows.
+   * Shows:
+   * 1. Queue count with expandable list of pending prompts
+   * 2. Currently running session (with glow border animation)
+   * 3. Most recent CLI session (when nothing is running)
    *
-   * Props:
-   * - contextId: Context ID for API calls
-   * - running: Currently running QraftBox AI sessions
-   * - queued: Queued QraftBox AI sessions
-   * - onCancelSession: Callback to cancel a QraftBox session
-   * - onResumeSession: Callback to resume a CLI session
+   * The panel border glows when a session is actively running and
+   * stops when execution completes.
    */
 
   import type { AISession } from "../../src/types/ai";
+  import type { LocalPrompt } from "../../src/types/local-prompt";
   import type { ExtendedSessionEntry } from "../../src/types/claude-session";
   import { stripSystemTags } from "../../src/utils/strip-system-tags";
   import SessionTranscriptInline from "./sessions/SessionTranscriptInline.svelte";
@@ -37,60 +35,79 @@
     contextId: string | null;
     running: readonly AISession[];
     queued: readonly AISession[];
+    pendingPrompts: readonly LocalPrompt[];
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
   }
 
-  const { contextId, running, queued, onCancelSession, onResumeSession }: Props = $props();
+  const { contextId, running, queued, pendingPrompts, onCancelSession, onResumeSession }: Props = $props();
 
   /**
-   * Most recent CLI session
+   * Most recent CLI session (shown when nothing else is active)
    */
   let recentCliSession = $state<ExtendedSessionEntry | null>(null);
 
   /**
-   * Whether the current session card is expanded
+   * Expansion states
    */
   let sessionExpanded = $state(false);
-
-  /**
-   * Whether the queued prompts list is expanded
-   */
   let queueExpanded = $state(false);
 
   /**
-   * Session summary data (loaded on expand)
+   * Session summary data (loaded on expand for CLI sessions)
    */
   let sessionSummary = $state<SessionSummaryData | null>(null);
   let summaryLoading = $state(false);
-
-  /**
-   * Expanded sub-sections in summary
-   */
   let tasksExpanded = $state(false);
   let filesExpanded = $state(false);
 
   /**
-   * Current running QraftBox session (first one, if any)
+   * Currently running QraftBox session
    */
   const runningSession = $derived(running.length > 0 ? running[0] : null);
 
   /**
-   * Determine which session to show as the "current session"
-   * Priority: running QraftBox session > most recent CLI session
+   * Whether something is actively running
    */
-  const displaySession = $derived.by(() => {
-    if (runningSession !== null && runningSession !== undefined) {
-      return { kind: "running" as const, id: runningSession.id };
+  const isRunning = $derived(running.length > 0);
+
+  /**
+   * All queued items = queued sessions + pending prompts
+   */
+  const allQueuedItems = $derived.by(() => {
+    const items: { id: string; text: string; source: "session" | "prompt" }[] = [];
+    for (const s of queued) {
+      items.push({ id: s.id, text: s.prompt, source: "session" });
     }
-    if (recentCliSession !== null) {
-      return { kind: "cli" as const, id: recentCliSession.sessionId };
+    for (const p of pendingPrompts) {
+      items.push({ id: p.id, text: p.prompt, source: "prompt" });
     }
-    return null;
+    return items;
   });
 
   /**
-   * Display title for the current session
+   * Total queue count
+   */
+  const queueCount = $derived(allQueuedItems.length);
+
+  /**
+   * Whether the panel has anything to show
+   */
+  const hasContent = $derived(
+    isRunning || queueCount > 0 || recentCliSession !== null,
+  );
+
+  /**
+   * What kind of session to display in the main card
+   */
+  const displayMode = $derived.by(() => {
+    if (isRunning) return "running" as const;
+    if (recentCliSession !== null) return "cli" as const;
+    return "none" as const;
+  });
+
+  /**
+   * Display title
    */
   const displayTitle = $derived.by(() => {
     if (runningSession !== null && runningSession !== undefined) {
@@ -103,13 +120,6 @@
   });
 
   /**
-   * Whether there is any content to show
-   */
-  const hasContent = $derived(
-    displaySession !== null || queued.length > 0,
-  );
-
-  /**
    * Elapsed time tracking for running session
    */
   let elapsedSeconds = $state(0);
@@ -119,12 +129,10 @@
       elapsedSeconds = 0;
       return;
     }
-
     const startTime = new Date(runningSession.startedAt).getTime();
     const updateElapsed = (): void => {
       elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
     };
-
     updateElapsed();
     const interval = setInterval(updateElapsed, 1000);
     return () => clearInterval(interval);
@@ -136,18 +144,12 @@
     return `${min}:${sec.toString().padStart(2, "0")}`;
   });
 
-  /**
-   * Truncate text for display
-   */
   function truncateText(text: string, maxLen = 100): string {
     const stripped = stripSystemTags(text).replaceAll("\n", " ");
     if (stripped.length <= maxLen) return stripped;
     return stripped.slice(0, maxLen) + "...";
   }
 
-  /**
-   * Get relative time string
-   */
   function getRelativeTime(isoDate: string): string {
     const date = new Date(isoDate);
     const now = new Date();
@@ -155,36 +157,25 @@
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
-
     if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
+    if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays === 1) return "yesterday";
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return `${Math.floor(diffDays / 7)}w ago`;
+    return `${diffDays}d ago`;
   }
 
-  /**
-   * Format token count
-   */
   function formatTokenCount(count: number): string {
     if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
     if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
     return count.toString();
   }
 
-  /**
-   * Get short file path
-   */
   function shortPath(fullPath: string): string {
     const parts = fullPath.split("/");
     if (parts.length <= 2) return fullPath;
     return ".../" + parts.slice(-2).join("/");
   }
 
-  /**
-   * Task status dot color
-   */
   function getTaskStatusColor(status: string): string {
     switch (status) {
       case "completed": return "bg-success-emphasis";
@@ -193,9 +184,6 @@
     }
   }
 
-  /**
-   * Fetch the most recent CLI session
-   */
   async function fetchRecentCliSession(): Promise<void> {
     if (contextId === null) return;
     try {
@@ -209,10 +197,7 @@
         `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
       );
       if (!resp.ok) return;
-      const data = (await resp.json()) as {
-        sessions: ExtendedSessionEntry[];
-        total: number;
-      };
+      const data = (await resp.json()) as { sessions: ExtendedSessionEntry[]; total: number };
       if (data.sessions.length > 0 && data.sessions[0] !== undefined) {
         recentCliSession = data.sessions[0];
       }
@@ -221,9 +206,6 @@
     }
   }
 
-  /**
-   * Fetch session summary (for CLI session on expand)
-   */
   async function fetchSessionSummary(sessionId: string): Promise<void> {
     if (contextId === null || sessionSummary !== null || summaryLoading) return;
     summaryLoading = true;
@@ -241,19 +223,13 @@
     }
   }
 
-  /**
-   * Handle session card toggle
-   */
   function toggleSession(): void {
     sessionExpanded = !sessionExpanded;
-    if (sessionExpanded && displaySession !== null && displaySession.kind === "cli") {
-      void fetchSessionSummary(displaySession.id);
+    if (sessionExpanded && displayMode === "cli" && recentCliSession !== null) {
+      void fetchSessionSummary(recentCliSession.sessionId);
     }
   }
 
-  /**
-   * Fetch recent CLI session when contextId becomes available
-   */
   $effect(() => {
     if (contextId !== null) {
       void fetchRecentCliSession();
@@ -261,14 +237,30 @@
   });
 </script>
 
+<style>
+  @keyframes glow-pulse {
+    0%, 100% {
+      box-shadow: 0 0 4px 1px rgba(56, 132, 255, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 12px 3px rgba(56, 132, 255, 0.6);
+    }
+  }
+
+  .session-running-glow {
+    animation: glow-pulse 2s ease-in-out infinite;
+  }
+</style>
+
 {#if hasContent}
   <div
-    class="current-session-panel border-t border-border-default bg-bg-secondary"
+    class="current-session-panel border-t border-border-default bg-bg-secondary
+           {isRunning ? 'session-running-glow' : ''}"
     role="region"
     aria-label="Current session status"
   >
-    <!-- Queued prompts row -->
-    {#if queued.length > 0}
+    <!-- Queue count row (above session card) -->
+    {#if queueCount > 0}
       <button
         type="button"
         onclick={() => (queueExpanded = !queueExpanded)}
@@ -282,28 +274,26 @@
           viewBox="0 0 16 16"
           fill="currentColor"
         >
-          <path
-            d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-          />
+          <path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
         </svg>
         <span class="w-2 h-2 rounded-full bg-attention-emphasis shrink-0"></span>
         <span class="text-xs text-text-secondary">
-          {queued.length} queued prompt{queued.length !== 1 ? "s" : ""}
+          {queueCount} queued prompt{queueCount !== 1 ? "s" : ""}
         </span>
       </button>
 
       {#if queueExpanded}
         <div class="border-b border-border-default bg-bg-primary">
-          {#each queued as session, index (session.id)}
+          {#each allQueuedItems as item, index (item.id)}
             <div
               class="flex items-center gap-2 px-6 py-1.5 text-xs
-                     {index < queued.length - 1 ? 'border-b border-border-default/50' : ''}"
+                     {index < allQueuedItems.length - 1 ? 'border-b border-border-default/50' : ''}"
             >
               <span class="text-text-tertiary shrink-0 w-4 text-right font-mono">
                 {index + 1}.
               </span>
               <span class="text-text-secondary truncate">
-                {truncateText(session.prompt, 120)}
+                {truncateText(item.text, 120)}
               </span>
             </div>
           {/each}
@@ -311,48 +301,39 @@
       {/if}
     {/if}
 
-    <!-- Current session row (running QraftBox or most recent CLI) -->
-    {#if displaySession !== null}
-      <!-- Session header (clickable) -->
+    <!-- Current session card -->
+    {#if displayMode !== "none"}
       <button
         type="button"
         onclick={toggleSession}
         class="w-full flex items-center gap-2 px-4 py-2
                hover:bg-bg-hover transition-colors text-left"
       >
-        <!-- Expand/collapse chevron -->
+        <!-- Chevron -->
         <svg
           class="w-3.5 h-3.5 text-text-tertiary transition-transform shrink-0
                  {sessionExpanded ? 'rotate-90' : ''}"
           viewBox="0 0 16 16"
           fill="currentColor"
         >
-          <path
-            d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-          />
+          <path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
         </svg>
 
-        {#if displaySession.kind === "running"}
-          <!-- Running indicator -->
+        {#if displayMode === "running"}
+          <!-- Running spinner -->
           <svg
-            class="animate-spin-smooth h-3.5 w-3.5 text-accent-fg shrink-0"
+            class="animate-spin h-3.5 w-3.5 text-accent-fg shrink-0"
             xmlns="http://www.w3.org/2000/svg"
             fill="none"
             viewBox="0 0 24 24"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
           >
-            <polyline points="23 4 23 10 17 10" />
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
           <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-fg">
             Running
           </span>
         {:else}
-          <!-- CLI session badge -->
           <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary">
             CLI
           </span>
@@ -363,8 +344,7 @@
           {truncateText(displayTitle)}
         </span>
 
-        {#if displaySession.kind === "running" && runningSession !== null && runningSession !== undefined}
-          <!-- Running session: activity + elapsed time -->
+        {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}
           {#if runningSession.currentActivity}
             <span class="text-[10px] text-text-tertiary shrink-0 animate-pulse">
               {runningSession.currentActivity}
@@ -374,7 +354,6 @@
             {elapsedFormatted}
           </span>
         {:else if recentCliSession !== null}
-          <!-- CLI session: message count + relative time -->
           <span class="text-[10px] text-text-tertiary shrink-0">
             {recentCliSession.messageCount} msgs
           </span>
@@ -384,11 +363,10 @@
         {/if}
       </button>
 
-      <!-- Expanded session content -->
+      <!-- Expanded content -->
       {#if sessionExpanded}
         <div class="border-t border-border-default/50 bg-bg-primary">
-          {#if displaySession.kind === "running" && runningSession !== null && runningSession !== undefined}
-            <!-- Running QraftBox session details -->
+          {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}
             <div class="px-4 py-2">
               <p class="text-xs text-text-primary whitespace-pre-wrap mb-2">
                 {stripSystemTags(runningSession.prompt)}
@@ -415,7 +393,6 @@
               </div>
             </div>
           {:else if recentCliSession !== null && contextId !== null}
-            <!-- CLI session summary + Resume + transcript -->
             <div class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default">
               <div class="flex items-center gap-2 flex-wrap">
                 <button
@@ -439,7 +416,6 @@
                   {#if sessionSummary.toolUsage.length > 0 || sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
                     <span class="text-text-tertiary text-xs">|</span>
                   {/if}
-
                   {#each sessionSummary.toolUsage.slice(0, 6) as tool}
                     <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary">
                       {tool.name}<span class="text-text-tertiary">:{tool.count}</span>
@@ -448,37 +424,27 @@
                   {#if sessionSummary.toolUsage.length > 6}
                     <span class="text-[10px] text-text-tertiary">+{sessionSummary.toolUsage.length - 6} more</span>
                   {/if}
-
                   {#if sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
                     <span class="text-text-tertiary text-xs mx-1">|</span>
                   {/if}
-
                   {#if sessionSummary.filesModified.length > 0}
-                    <button
-                      type="button"
-                      onclick={() => (filesExpanded = !filesExpanded)}
-                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
-                    >
+                    <button type="button" onclick={() => (filesExpanded = !filesExpanded)}
+                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors">
                       {sessionSummary.filesModified.length} file{sessionSummary.filesModified.length !== 1 ? "s" : ""}
                     </button>
                   {/if}
-
                   {#if sessionSummary.tasks.length > 0}
                     {#if sessionSummary.filesModified.length > 0}
                       <span class="text-text-tertiary text-xs">|</span>
                     {/if}
-                    <button
-                      type="button"
-                      onclick={() => (tasksExpanded = !tasksExpanded)}
-                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
-                    >
+                    <button type="button" onclick={() => (tasksExpanded = !tasksExpanded)}
+                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors">
                       {sessionSummary.tasks.length} task{sessionSummary.tasks.length !== 1 ? "s" : ""}
                     </button>
                   {/if}
                 {/if}
               </div>
 
-              <!-- Token usage -->
               {#if sessionSummary?.usage !== undefined && (sessionSummary.usage.inputTokens > 0 || sessionSummary.usage.outputTokens > 0)}
                 <div class="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-text-tertiary">
                   <span>in:{formatTokenCount(sessionSummary.usage.inputTokens)}</span>
@@ -492,7 +458,6 @@
                 </div>
               {/if}
 
-              <!-- Expandable file list -->
               {#if filesExpanded && sessionSummary !== null && sessionSummary.filesModified.length > 0}
                 <div class="mt-2 space-y-0.5">
                   {#each sessionSummary.filesModified as file}
@@ -500,15 +465,12 @@
                       <span class="shrink-0 px-1 rounded text-[9px] font-bold {file.tool === 'Edit' ? 'bg-attention-muted text-attention-fg' : 'bg-success-muted text-success-fg'}">
                         {file.tool === "Edit" ? "M" : "A"}
                       </span>
-                      <span class="text-text-secondary font-mono truncate" title={file.path}>
-                        {shortPath(file.path)}
-                      </span>
+                      <span class="text-text-secondary font-mono truncate" title={file.path}>{shortPath(file.path)}</span>
                     </div>
                   {/each}
                 </div>
               {/if}
 
-              <!-- Expandable task list -->
               {#if tasksExpanded && sessionSummary !== null && sessionSummary.tasks.length > 0}
                 <div class="mt-2 space-y-0.5">
                   {#each sessionSummary.tasks as task}
@@ -522,7 +484,6 @@
               {/if}
             </div>
 
-            <!-- Inline transcript (same as Sessions screen) -->
             <SessionTranscriptInline sessionId={recentCliSession.sessionId} {contextId} />
           {/if}
         </div>

@@ -2,6 +2,7 @@
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
   import type { QueueStatus, FileReference, AISession } from "../../src/types/ai";
+  import type { LocalPrompt } from "../../src/types/local-prompt";
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
@@ -100,6 +101,10 @@
   let runningSessions = $state<AISession[]>([]);
   let queuedSessions = $state<AISession[]>([]);
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Local prompt queue for tracking submitted prompts
+  let pendingPrompts = $state<LocalPrompt[]>([]);
+  let isDispatchingNext = false;
 
   /**
    * Currently selected diff file
@@ -455,13 +460,36 @@
 
   /**
    * Submit AI prompt from the global panel
+   *
+   * Flow:
+   * 1. Add optimistic entry immediately for instant UI feedback
+   * 2. POST to /api/prompts to persist the prompt
+   * 3. If nothing is running, dispatch immediately
+   * 4. Otherwise, prompt stays in pending queue (auto-dispatched later)
    */
   async function handleAIPanelSubmit(
     prompt: string,
-    immediate: boolean,
+    _immediate: boolean,
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
+
+    // 1. Optimistic UI: add to pending immediately
+    const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const optimisticPrompt: LocalPrompt = {
+      id: optimisticId,
+      prompt,
+      description: "",
+      context: { primaryFile: undefined, references: [...refs], diffSummary: undefined },
+      projectPath,
+      status: "pending",
+      sessionId: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      error: null,
+    };
+    pendingPrompts = [...pendingPrompts, optimisticPrompt];
+
     const body = {
       prompt,
       context: {
@@ -471,26 +499,50 @@
       },
       projectPath: projectPath,
     };
+
     try {
+      // 2. Create prompt in store
       const resp = await fetch("/api/prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+
       if (!resp.ok) {
         console.error("AI prompt error:", resp.status);
-      } else if (immediate) {
-        const data = (await resp.json()) as { prompt: { id: string } };
-        await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
+        // Remove optimistic entry on failure
+        pendingPrompts = pendingPrompts.filter((p) => p.id !== optimisticId);
+        return;
+      }
+
+      const data = (await resp.json()) as { prompt: LocalPrompt };
+
+      // 3. Replace optimistic entry with real prompt
+      pendingPrompts = pendingPrompts.map((p) =>
+        p.id === optimisticId ? data.prompt : p,
+      );
+
+      // 4. If nothing is running/queued in session manager, dispatch immediately
+      if (runningSessions.length === 0 && queuedSessions.length === 0) {
+        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ immediate: true }),
         });
+
+        if (dispatchResp.ok) {
+          // Remove from pending (it's now a session)
+          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
+        }
       }
+      // If something is running, prompt stays in pending queue - autoDispatchNext handles it
+
       void fetchQueueStatus();
       void fetchActiveSessions();
     } catch (e) {
       console.error("AI prompt submit error:", e);
+      // Remove optimistic entry on error
+      pendingPrompts = pendingPrompts.filter((p) => p.id !== optimisticId);
     }
   }
 
@@ -598,26 +650,94 @@
       runningSessions = running;
       queuedSessions = queued;
 
-      // Start/stop polling based on whether there are active sessions
-      manageSessionPolling(running.length > 0 || queued.length > 0);
+      // Auto-dispatch next pending prompt if nothing is running
+      if (running.length === 0 && queued.length === 0 && pendingPrompts.length > 0) {
+        void autoDispatchNext();
+      }
     } catch {
       // Silently ignore
     }
   }
 
   /**
-   * Manage polling interval for active sessions
+   * Fetch pending prompts from the local prompt store
    */
-  function manageSessionPolling(hasActive: boolean): void {
+  async function fetchPendingPrompts(): Promise<void> {
+    try {
+      const resp = await fetch("/api/prompts?status=pending");
+      if (!resp.ok) return;
+      const data = (await resp.json()) as {
+        prompts: LocalPrompt[];
+        total: number;
+      };
+      // Merge with optimistic prompts: keep optimistic ones that aren't in server data yet
+      const serverIds = new Set(data.prompts.map((p) => p.id));
+      const optimisticOnly = pendingPrompts.filter(
+        (p) => !serverIds.has(p.id) && p.id.startsWith("optimistic_"),
+      );
+      pendingPrompts = [...optimisticOnly, ...data.prompts];
+    } catch {
+      // Silently ignore
+    }
+  }
+
+  /**
+   * Auto-dispatch the next pending prompt
+   */
+  async function autoDispatchNext(): Promise<void> {
+    if (isDispatchingNext || pendingPrompts.length === 0) return;
+    isDispatchingNext = true;
+    try {
+      const next = pendingPrompts[0];
+      if (next === undefined) return;
+
+      // Skip optimistic prompts (they'll become real after API creates them)
+      if (next.id.startsWith("optimistic_")) return;
+
+      const resp = await fetch(`/api/prompts/${next.id}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ immediate: true }),
+      });
+
+      if (resp.ok) {
+        // Remove from pending list
+        pendingPrompts = pendingPrompts.filter((p) => p.id !== next.id);
+        void fetchActiveSessions();
+        void fetchQueueStatus();
+      }
+    } catch (e) {
+      console.error("Auto-dispatch failed:", e);
+    } finally {
+      isDispatchingNext = false;
+    }
+  }
+
+  /**
+   * Manage polling interval for active sessions and pending prompts
+   */
+  function manageSessionPolling(): void {
+    const hasActive =
+      runningSessions.length > 0 ||
+      queuedSessions.length > 0 ||
+      pendingPrompts.length > 0;
+
     if (hasActive && sessionPollTimer === null) {
       sessionPollTimer = setInterval(() => {
         void fetchActiveSessions();
-      }, 3000);
+        void fetchPendingPrompts();
+      }, 2000);
     } else if (!hasActive && sessionPollTimer !== null) {
       clearInterval(sessionPollTimer);
       sessionPollTimer = null;
     }
   }
+
+  // Re-evaluate polling when state changes
+  $effect(() => {
+    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length];
+    manageSessionPolling();
+  });
 
   /**
    * Cancel a running/queued session from the CurrentSessionPanel
@@ -1023,7 +1143,7 @@
     <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
-        <GitPushButton {contextId} {projectPath} />
+        <GitPushButton {contextId} {projectPath} onSuccess={() => void fetchDiff(contextId)} />
       {/if}
     </div>
   </div>
@@ -1304,6 +1424,7 @@
           {contextId}
           running={runningSessions}
           queued={queuedSessions}
+          {pendingPrompts}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
           onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
         />
