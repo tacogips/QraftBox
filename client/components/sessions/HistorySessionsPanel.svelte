@@ -423,12 +423,10 @@
     <div class="flex-1"></div>
 
     <!-- Compact search bar, right-aligned -->
-    <div class="w-48">
-      <SearchInput
-        value={cliFilters.searchQuery ?? ""}
-        onSearch={handleSearch}
-      />
-    </div>
+    <SearchInput
+      value={cliFilters.searchQuery ?? ""}
+      onSearch={handleSearch}
+    />
   </div>
 
   <!-- Error Banner -->

@@ -847,9 +847,6 @@
           </span>
           <span class="text-success-fg">+{stats.additions}</span>
           <span class="text-danger-fg">-{stats.deletions}</span>
-          {#if contextId !== null}
-            <span class="text-text-tertiary">ctx: {contextId}</span>
-          {/if}
           <div
             class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
           >

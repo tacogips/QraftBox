@@ -311,13 +311,11 @@
     <div class="flex-1"></div>
 
     <!-- Compact search bar, right-aligned -->
-    <div class="w-48">
-      <SearchInput
-        value={searchQuery}
-        onSearch={handleSearch}
-        placeholder="Search commits..."
-      />
-    </div>
+    <SearchInput
+      value={searchQuery}
+      onSearch={handleSearch}
+      placeholder="Search commits..."
+    />
   </div>
 
   <!-- Commit List -->
