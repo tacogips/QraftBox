@@ -88,6 +88,9 @@
   }
 
   let sidebarWidth = $state(loadSidebarWidth());
+  let isDraggingSidebar = $state(false);
+  let dragStartX = 0;
+  let dragStartWidth = 0;
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
@@ -487,6 +490,33 @@
       SIDEBAR_MAX_WIDTH,
       sidebarWidth + SIDEBAR_WIDTH_STEP,
     );
+    saveSidebarWidth(sidebarWidth);
+  }
+
+  function handleSidebarDragStart(e: MouseEvent): void {
+    isDraggingSidebar = true;
+    dragStartX = e.clientX;
+    dragStartWidth = sidebarWidth;
+    document.body.style.cursor = "col-resize";
+    document.body.classList.add("select-none");
+    e.preventDefault();
+  }
+
+  function handleSidebarDragMove(e: MouseEvent): void {
+    if (!isDraggingSidebar) return;
+    const delta = e.clientX - dragStartX;
+    const newWidth = Math.max(
+      SIDEBAR_MIN_WIDTH,
+      Math.min(SIDEBAR_MAX_WIDTH, dragStartWidth + delta),
+    );
+    sidebarWidth = newWidth;
+  }
+
+  function handleSidebarDragEnd(): void {
+    if (!isDraggingSidebar) return;
+    isDraggingSidebar = false;
+    document.body.style.cursor = "";
+    document.body.classList.remove("select-none");
     saveSidebarWidth(sidebarWidth);
   }
 
@@ -979,13 +1009,17 @@
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
+    const isTextInput = (el: EventTarget | Element | null): boolean =>
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLTextAreaElement ||
+      (el instanceof HTMLElement && el.isContentEditable);
+
     const isInTextBox =
-      event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement;
+      isTextInput(event.target) || isTextInput(document.activeElement);
 
     // Escape blurs focused text boxes
     if (isInTextBox && event.key === "Escape") {
-      (event.target as HTMLElement).blur();
+      (document.activeElement as HTMLElement | null)?.blur();
       return;
     }
 
@@ -1229,6 +1263,8 @@
     connectWebSocket();
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("hashchange", handleHashChange);
+    window.addEventListener("mousemove", handleSidebarDragMove);
+    window.addEventListener("mouseup", handleSidebarDragEnd);
 
     // Set initial hash if empty
     if (
@@ -1242,6 +1278,8 @@
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("mousemove", handleSidebarDragMove);
+      window.removeEventListener("mouseup", handleSidebarDragEnd);
       disconnectWebSocket();
       if (sessionPollTimer !== null) {
         clearInterval(sessionPollTimer);
@@ -1597,6 +1635,18 @@
               </div>
             {/if}
           </aside>
+
+          {#if !sidebarCollapsed}
+            <!-- Sidebar resize handle -->
+            <div
+              class="absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-accent-emphasis/50 transition-colors"
+              style:right="0px"
+              role="separator"
+              aria-orientation="vertical"
+              onmousedown={handleSidebarDragStart}
+              class:bg-accent-emphasis={isDraggingSidebar}
+            ></div>
+          {/if}
         {/if}
         <!-- Sidebar toggle tag -->
         <button
