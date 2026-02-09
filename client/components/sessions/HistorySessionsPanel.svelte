@@ -4,19 +4,20 @@
    *
    * Merges completed QraftBox sessions with Claude CLI sessions into
    * a single chronologically sorted list with date grouping,
-   * search, filtering, and pagination.
+   * search, and pagination.
    *
    * Props:
+   * - contextId: Context ID for API calls
    * - completedSessions: Completed/failed/cancelled QraftBox sessions
    * - onResumeSession: Callback for resuming claude-cli sessions
    * - onSelectSession: Callback for viewing session details
+   * - onClearCompleted: Callback to clear completed QraftBox sessions
    *
    * Features:
    * - Merged chronological list from two data sources
    * - Date grouping (Today, Yesterday, Older)
-   * - Search via SearchInput (reused from claude-sessions)
-   * - FilterPanel for source, project, branch (reused from claude-sessions)
-   * - UnifiedSessionCard for rendering each item
+   * - Search via SearchInput
+   * - Accordion list with inline transcript viewer
    * - Pagination with "Load More" button
    * - Loading and error states
    * - "Clear Completed" button for QraftBox completed sessions
@@ -27,13 +28,10 @@
   import type { AISession } from "../../../src/types/ai";
   import type {
     ExtendedSessionEntry,
-    ProjectInfo,
     SessionFilters,
   } from "../../../src/types/claude-session";
   import type { UnifiedSessionItem } from "../../src/types/unified-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
-  import FilterPanel from "../claude-sessions/FilterPanel.svelte";
-  import UnifiedSessionCard from "./UnifiedSessionCard.svelte";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
 
   interface Props {
@@ -42,7 +40,6 @@
     onResumeSession: (sessionId: string) => void;
     onSelectSession: (sessionId: string) => void;
     onClearCompleted?: (() => void) | undefined;
-    onCountChange?: ((count: number) => void) | undefined;
   }
 
   const {
@@ -51,7 +48,6 @@
     onResumeSession,
     onSelectSession,
     onClearCompleted = undefined,
-    onCountChange = undefined,
   }: Props = $props();
 
   /**
@@ -67,7 +63,6 @@
    */
   let cliSessions = $state<readonly ExtendedSessionEntry[]>([]);
   let cliTotal = $state(0);
-  let cliProjects = $state<readonly ProjectInfo[]>([]);
   let cliIsLoading = $state(false);
   let cliError = $state<string | null>(null);
   let cliFilters = $state<SessionFilters>({});
@@ -78,7 +73,6 @@
   function syncFromStore(): void {
     cliSessions = claudeSessionsStore.sessions;
     cliTotal = claudeSessionsStore.total;
-    cliProjects = claudeSessionsStore.projects;
     cliIsLoading = claudeSessionsStore.isLoading;
     cliError = claudeSessionsStore.error;
     cliFilters = claudeSessionsStore.filters;
@@ -184,38 +178,12 @@
   const totalCount = $derived(completedSessions.length + cliTotal);
 
   /**
-   * Notify parent when total count changes
-   */
-  $effect(() => {
-    if (onCountChange !== undefined) {
-      onCountChange(totalCount);
-    }
-  });
-
-  /**
    * Handle search input
    */
   function handleSearch(query: string): void {
     localSearchQuery = query;
     claudeSessionsStore.setFilters({ searchQuery: query || undefined });
     // setFilters triggers fetchSessions internally; sync after a tick
-    setTimeout(syncFromStore, 100);
-  }
-
-  /**
-   * Handle filter changes
-   */
-  function handleFilterChange(filters: Partial<SessionFilters>): void {
-    claudeSessionsStore.setFilters(filters);
-    setTimeout(syncFromStore, 100);
-  }
-
-  /**
-   * Handle clear all filters
-   */
-  function handleClearFilters(): void {
-    localSearchQuery = "";
-    claudeSessionsStore.clearFilters();
     setTimeout(syncFromStore, 100);
   }
 
@@ -282,8 +250,6 @@
    * Load initial data on mount
    */
   onMount(async () => {
-    await claudeSessionsStore.fetchProjects();
-    syncFromStore();
     await claudeSessionsStore.fetchSessions();
     syncFromStore();
   });
@@ -295,45 +261,45 @@
   role="region"
   aria-label="Session history"
 >
-  <!-- Search and Count Header -->
-  <div class="px-6 py-4 border-b border-bg-border bg-bg-secondary">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-sm text-text-tertiary">
-        {#if totalCount > 0}
-          {totalCount} session{totalCount !== 1 ? "s" : ""}
-          {#if mergedSessions.length !== totalCount}
-            (showing {mergedSessions.length})
-          {/if}
+  <!-- Header: count, clear button, and compact search -->
+  <div
+    class="flex items-center gap-3 px-6 py-3 border-b border-bg-border bg-bg-secondary"
+  >
+    <div class="text-sm text-text-tertiary shrink-0">
+      {#if totalCount > 0}
+        {totalCount} session{totalCount !== 1 ? "s" : ""}
+        {#if mergedSessions.length !== totalCount}
+          (showing {mergedSessions.length})
         {/if}
-      </div>
-
-      <!-- Clear Completed Button -->
-      {#if completedSessions.length > 0 && onClearCompleted !== undefined}
-        <button
-          type="button"
-          onclick={onClearCompleted}
-          class="px-3 py-1.5 text-xs font-medium rounded-md
-                 bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-danger-fg
-                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
-                 transition-colors duration-150"
-          aria-label="Clear completed QraftBox sessions"
-        >
-          Clear Completed
-        </button>
       {/if}
     </div>
 
-    <!-- Search Bar -->
-    <SearchInput value={cliFilters.searchQuery ?? ""} onSearch={handleSearch} />
-  </div>
+    <!-- Clear Completed Button -->
+    {#if completedSessions.length > 0 && onClearCompleted !== undefined}
+      <button
+        type="button"
+        onclick={onClearCompleted}
+        class="shrink-0 px-3 py-1.5 text-xs font-medium rounded-md
+               bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-danger-fg
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+               transition-colors duration-150"
+        aria-label="Clear completed QraftBox sessions"
+      >
+        Clear Completed
+      </button>
+    {/if}
 
-  <!-- Filter Panel -->
-  <FilterPanel
-    filters={cliFilters}
-    projects={cliProjects}
-    onFilterChange={handleFilterChange}
-    onClearFilters={handleClearFilters}
-  />
+    <!-- Spacer pushes search to right -->
+    <div class="flex-1"></div>
+
+    <!-- Compact search bar, right-aligned -->
+    <div class="w-48">
+      <SearchInput
+        value={cliFilters.searchQuery ?? ""}
+        onSearch={handleSearch}
+      />
+    </div>
+  </div>
 
   <!-- Error Banner -->
   {#if cliError}
@@ -447,10 +413,10 @@
         </svg>
         <p class="text-text-secondary text-lg mb-2">No sessions found</p>
         <p class="text-text-tertiary text-sm">
-          {#if cliFilters.searchQuery || cliFilters.source || cliFilters.branch || cliFilters.workingDirectoryPrefix}
-            Try adjusting your filters or search query.
+          {#if cliFilters.searchQuery}
+            Try adjusting your search query.
           {:else}
-            No completed sessions yet.
+            No sessions found for this project.
           {/if}
         </p>
       </div>

@@ -68,6 +68,41 @@
   let autocompleteQuery = $state("");
 
   /**
+   * Draft persistence (multi-draft, stored as array in localStorage)
+   */
+  const DRAFT_STORAGE_KEY = "qraftbox-ai-prompt-drafts";
+  const DRAFT_PREVIEW_LEN = 50;
+
+  interface DraftData {
+    id: string;
+    prompt: string;
+    fileRefs: FileReference[];
+    savedAt: string;
+  }
+
+  let showDraftDropdown = $state(false);
+  let drafts = $state<DraftData[]>([]);
+
+  function loadDraftsFromStorage(): void {
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (raw !== null) {
+        drafts = JSON.parse(raw) as DraftData[];
+      } else {
+        drafts = [];
+      }
+    } catch {
+      drafts = [];
+    }
+  }
+
+  function persistDrafts(): void {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(drafts));
+  }
+
+  loadDraftsFromStorage();
+
+  /**
    * Reference to textarea for focus management (expanded mode)
    */
   let textareaRef: HTMLTextAreaElement | null = null;
@@ -90,7 +125,7 @@
     if (queueStatus.queuedCount > 0) {
       return `${queueStatus.queuedCount} queued`;
     }
-    return "No active sessions";
+    return "";
   });
 
   /**
@@ -139,10 +174,14 @@
       }
     }
 
-    // Close dropdown on Escape
+    // Close dropdowns on Escape
     if (event.key === "Escape" && showDropdown) {
       event.preventDefault();
       showDropdown = false;
+    }
+    if (event.key === "Escape" && showDraftDropdown) {
+      event.preventDefault();
+      showDraftDropdown = false;
     }
   }
 
@@ -150,11 +189,12 @@
    * Handle clicks outside dropdown to close it
    */
   function handleWindowClick(event: MouseEvent): void {
-    if (showDropdown) {
-      const target = event.target as HTMLElement;
-      if (!target.closest(".split-button-container")) {
-        showDropdown = false;
-      }
+    const target = event.target as HTMLElement;
+    if (showDropdown && !target.closest(".split-button-container")) {
+      showDropdown = false;
+    }
+    if (showDraftDropdown && !target.closest(".draft-button-container")) {
+      showDraftDropdown = false;
     }
   }
 
@@ -318,6 +358,51 @@
   }
 
   /**
+   * Save current prompt as a new draft
+   */
+  function saveDraft(): void {
+    if (prompt.trim().length === 0) return;
+    const entry: DraftData = {
+      id: crypto.randomUUID(),
+      prompt,
+      fileRefs: [...fileRefs],
+      savedAt: new Date().toISOString(),
+    };
+    drafts = [entry, ...drafts];
+    persistDrafts();
+    showDraftDropdown = false;
+  }
+
+  /**
+   * Load a draft by id into the prompt and remove it from the list
+   */
+  function loadDraftById(id: string): void {
+    const target = drafts.find((d) => d.id === id);
+    if (target === undefined) return;
+    prompt = target.prompt;
+    fileRefs = target.fileRefs;
+    drafts = drafts.filter((d) => d.id !== id);
+    persistDrafts();
+    showDraftDropdown = false;
+  }
+
+  /**
+   * Toggle draft dropdown
+   */
+  function toggleDraftDropdown(): void {
+    showDraftDropdown = !showDraftDropdown;
+  }
+
+  /**
+   * Preview text for a draft entry
+   */
+  function draftPreview(d: DraftData): string {
+    const text = d.prompt.replaceAll("\n", " ");
+    if (text.length <= DRAFT_PREVIEW_LEN) return text;
+    return text.slice(0, DRAFT_PREVIEW_LEN) + "...";
+  }
+
+  /**
    * Store textarea reference
    */
   function setTextareaRef(element: HTMLTextAreaElement): void {
@@ -413,9 +498,71 @@
       {/if}
 
       <!-- Queue status -->
-      <span class="shrink-0 text-xs text-text-tertiary hidden sm:inline">
-        {queueStatusText}
-      </span>
+      {#if queueStatusText}
+        <span class="shrink-0 text-xs text-text-tertiary hidden sm:inline">
+          {queueStatusText}
+        </span>
+      {/if}
+
+      <!-- Draft button for collapsed mode -->
+      <div class="draft-button-container relative shrink-0">
+        <button
+          type="button"
+          onclick={toggleDraftDropdown}
+          class="h-9 px-3
+                 bg-bg-tertiary hover:bg-bg-hover
+                 text-text-secondary text-sm font-medium rounded
+                 border border-border-default
+                 transition-all duration-150
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+          aria-label="Draft options"
+          aria-haspopup="true"
+          aria-expanded={showDraftDropdown}
+        >
+          Draft{drafts.length > 0 ? ` (${drafts.length})` : ""}
+        </button>
+
+        {#if showDraftDropdown}
+          <div
+            class="absolute bottom-full right-0 mb-1 w-64
+                   bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50
+                   max-h-72 flex flex-col"
+          >
+            <!-- Save Draft -->
+            <button
+              type="button"
+              onclick={saveDraft}
+              disabled={prompt.trim().length === 0}
+              class="shrink-0 w-full px-3 py-2 text-left text-sm text-text-primary
+                     hover:bg-bg-tertiary
+                     border-b border-border-default
+                     disabled:opacity-50 disabled:cursor-not-allowed
+                     transition-colors duration-150
+                     {drafts.length === 0 ? 'rounded-lg' : 'rounded-t-lg'}"
+            >
+              Save Draft
+            </button>
+
+            <!-- Draft list -->
+            {#if drafts.length > 0}
+              <div class="overflow-y-auto flex-1">
+                {#each drafts as draft, i (draft.id)}
+                  <button
+                    type="button"
+                    onclick={() => loadDraftById(draft.id)}
+                    class="w-full px-3 py-2 text-left text-sm text-text-primary
+                           hover:bg-bg-tertiary
+                           transition-colors duration-150
+                           {i === drafts.length - 1 ? 'rounded-b-lg' : ''}"
+                  >
+                    <span class="block truncate">{draftPreview(draft)}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
 
       <!-- Compact split button for collapsed mode -->
       <div class="split-button-container relative shrink-0 flex">
@@ -504,9 +651,11 @@
 
       <div class="flex items-center gap-3">
         <!-- Queue status -->
-        <span class="text-xs text-text-tertiary">
-          {queueStatusText}
-        </span>
+        {#if queueStatusText}
+          <span class="text-xs text-text-tertiary">
+            {queueStatusText}
+          </span>
+        {/if}
       </div>
     </div>
 
@@ -614,8 +763,68 @@
           {/if}
         </div>
 
-        <!-- Controls: Split button -->
+        <!-- Controls: Draft + Split button -->
         <div class="flex flex-col gap-3 w-32">
+          <!-- Draft button -->
+          <div class="draft-button-container relative">
+            <button
+              type="button"
+              onclick={toggleDraftDropdown}
+              class="w-full min-h-[36px]
+                     bg-bg-tertiary hover:bg-bg-hover
+                     text-text-secondary text-sm font-medium rounded
+                     border border-border-default
+                     transition-all duration-150
+                     focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+              aria-label="Draft options"
+              aria-haspopup="true"
+              aria-expanded={showDraftDropdown}
+            >
+              Draft{drafts.length > 0 ? ` (${drafts.length})` : ""}
+            </button>
+
+            {#if showDraftDropdown}
+              <div
+                class="absolute bottom-full right-0 mb-1 w-64
+                       bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50
+                       max-h-72 flex flex-col"
+              >
+                <!-- Save Draft -->
+                <button
+                  type="button"
+                  onclick={saveDraft}
+                  disabled={prompt.trim().length === 0}
+                  class="shrink-0 w-full px-3 py-2 text-left text-sm text-text-primary
+                         hover:bg-bg-tertiary
+                         border-b border-border-default
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors duration-150
+                         {drafts.length === 0 ? 'rounded-lg' : 'rounded-t-lg'}"
+                >
+                  Save Draft
+                </button>
+
+                <!-- Draft list -->
+                {#if drafts.length > 0}
+                  <div class="overflow-y-auto flex-1">
+                    {#each drafts as draft, i (draft.id)}
+                      <button
+                        type="button"
+                        onclick={() => loadDraftById(draft.id)}
+                        class="w-full px-3 py-2 text-left text-sm text-text-primary
+                               hover:bg-bg-tertiary
+                               transition-colors duration-150
+                               {i === drafts.length - 1 ? 'rounded-b-lg' : ''}"
+                      >
+                        <span class="block truncate">{draftPreview(draft)}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+
           <div class="split-button-container relative flex-1 flex flex-col">
             <div class="flex min-h-[44px]">
               <!-- Main Submit button -->

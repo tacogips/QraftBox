@@ -4,9 +4,6 @@
  *
  * Screen for browsing and managing registered tools (builtin and plugin).
  *
- * Props:
- * - onBack: Callback to navigate back to previous screen
- *
  * Features:
  * - Lists all registered tools with type badges
  * - Expandable tool details with schema info
@@ -46,11 +43,7 @@ interface ToolsReloadResponse {
   }[];
 }
 
-interface Props {
-  onBack: () => void;
-}
-
-const { onBack }: Props = $props();
+// No props
 
 /**
  * Component state
@@ -157,108 +150,73 @@ $effect(() => {
   role="main"
   aria-label="Tools management"
 >
-  <!-- Header -->
-  <header
-    class="flex items-center justify-between px-4 py-3
-           bg-bg-secondary border-b border-border-default"
-  >
-    <div class="flex items-center gap-3">
-      <!-- Back button -->
+  <!-- Summary bar with reload button -->
+  {#if !loading && error === null}
+    <div class="flex items-center justify-between px-4 py-2 border-b border-border-default bg-bg-secondary">
+      <div class="text-sm text-text-secondary">
+        <span class="font-medium text-text-primary">{counts.total}</span>
+        tool{counts.total !== 1 ? "s" : ""}
+        <span class="text-text-tertiary ml-1">
+          ({counts.builtin} builtin, {counts.plugin} plugin)
+        </span>
+      </div>
+
+      <!-- Reload Plugins button -->
       <button
         type="button"
-        onclick={onBack}
-        class="p-2 min-w-[44px] min-h-[44px]
-               text-text-secondary hover:text-text-primary
-               hover:bg-bg-hover rounded-lg
-               transition-colors
-               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-        aria-label="Back to previous screen"
+        onclick={() => void handleReload()}
+        disabled={reloading}
+        class="px-3 py-1.5 text-sm font-medium
+               bg-bg-secondary hover:bg-bg-hover text-text-primary
+               border border-border-default hover:border-accent-muted
+               disabled:opacity-50 disabled:cursor-not-allowed
+               rounded-lg transition-colors
+               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+               flex items-center gap-2"
+        aria-label="Reload plugin tools from disk"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
-
-      <h1 class="text-lg font-semibold text-text-primary">Tools</h1>
-    </div>
-
-    <!-- Reload Plugins button -->
-    <button
-      type="button"
-      onclick={() => void handleReload()}
-      disabled={reloading}
-      class="px-3 py-1.5 text-sm font-medium
-             bg-bg-secondary hover:bg-bg-hover text-text-primary
-             border border-border-default hover:border-accent-muted
-             disabled:opacity-50 disabled:cursor-not-allowed
-             rounded-lg transition-colors
-             focus:outline-none focus:ring-2 focus:ring-accent-emphasis
-             flex items-center gap-2"
-      aria-label="Reload plugin tools from disk"
-    >
-      {#if reloading}
-        <svg
-          class="animate-spin h-4 w-4"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <circle
-            class="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
+        {#if reloading}
+          <svg
+            class="animate-spin h-4 w-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          Reloading...
+        {:else}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
             stroke="currentColor"
-            stroke-width="4"
-          />
-          <path
-            class="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-          />
-        </svg>
-        Reloading...
-      {:else}
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="23 4 23 10 17 10" />
-          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-        </svg>
-        Reload Plugins
-      {/if}
-    </button>
-  </header>
-
-  <!-- Summary bar -->
-  {#if !loading && error === null}
-    <div class="px-4 py-2 border-b border-border-default bg-bg-secondary text-sm text-text-secondary">
-      <span class="font-medium text-text-primary">{counts.total}</span>
-      tool{counts.total !== 1 ? "s" : ""}
-      <span class="text-text-tertiary ml-1">
-        ({counts.builtin} builtin, {counts.plugin} plugin)
-      </span>
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+          Reload Plugins
+        {/if}
+      </button>
     </div>
   {/if}
 

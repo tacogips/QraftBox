@@ -969,7 +969,6 @@
           <UnifiedSessionsScreen
             {contextId}
             {projectPath}
-            onBack={() => navigateToScreen("diff")}
           />
         {/if}
       </main>
@@ -977,20 +976,20 @@
       <!-- Commits Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <CommitsScreen {contextId} onBack={() => navigateToScreen("diff")} />
+          <CommitsScreen {contextId} />
         {/if}
       </main>
     {:else if currentScreen === "worktree"}
       <!-- Worktree Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <WorktreeScreen {contextId} onBack={() => navigateToScreen("diff")} />
+          <WorktreeScreen {contextId} />
         {/if}
       </main>
     {:else if currentScreen === "tools"}
       <!-- Tools Screen -->
       <main class="flex-1 overflow-hidden">
-        <ToolsScreen onBack={() => navigateToScreen("diff")} />
+        <ToolsScreen />
       </main>
     {/if}
   </div>

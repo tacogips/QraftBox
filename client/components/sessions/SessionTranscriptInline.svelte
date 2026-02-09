@@ -57,6 +57,7 @@
   let viewMode: ViewMode = $state("chat");
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
+  let chatScrollContainer: HTMLDivElement | null = $state(null);
 
   /**
    * Filter events to only show user and assistant messages
@@ -112,11 +113,27 @@
   });
 
   /**
-   * Reset carousel index when switching modes
+   * Default to last message when switching to carousel mode
    */
   $effect(() => {
-    if (viewMode === "carousel") {
-      currentIndex = 0;
+    if (viewMode === "carousel" && chatEvents.length > 0) {
+      currentIndex = chatEvents.length - 1;
+    }
+  });
+
+  /**
+   * Scroll chat view to bottom when data loads or when switching to chat mode
+   */
+  $effect(() => {
+    if (
+      viewMode === "chat" &&
+      loadingState.status === "success" &&
+      chatScrollContainer !== null
+    ) {
+      const container = chatScrollContainer;
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
     }
   });
 
@@ -301,6 +318,13 @@
   }
 
   /**
+   * Navigate to a specific carousel card by index
+   */
+  function handleGoToIndex(index: number): void {
+    currentIndex = index;
+  }
+
+  /**
    * Handle keyboard navigation in carousel mode
    */
   function handleKeyDown(e: KeyboardEvent): void {
@@ -395,8 +419,11 @@
         </p>
       </div>
     {:else if viewMode === "chat"}
-      <!-- Chat mode: vertical scrollable list -->
-      <div class="max-h-[600px] overflow-y-auto space-y-2">
+      <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
+      <div
+        bind:this={chatScrollContainer}
+        class="max-h-[600px] overflow-y-auto space-y-2"
+      >
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
           {@const textContent = extractTextContent(event)}
@@ -448,18 +475,18 @@
         {/each}
       </div>
     {:else if viewMode === "carousel"}
-      <!-- Carousel mode: one card at a time with navigation -->
-      {@const currentEvent = chatEvents[currentIndex]}
-      {@const textContent =
-        currentEvent !== undefined ? extractTextContent(currentEvent) : ""}
-
-      <div class="relative flex items-center min-h-[200px]">
-        <!-- Left arrow -->
+      <!-- Carousel mode: narrower cards with neighbors visible on sides -->
+      <div class="relative min-h-[200px]">
+        <!-- Navigation arrows (overlaid on top of cards) -->
         <button
           type="button"
           onclick={handlePrevious}
           disabled={currentIndex === 0}
-          class="absolute left-0 w-8 h-8 flex items-center justify-center rounded-full bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          class="absolute left-1 top-1/2 -translate-y-1/2 z-10
+                 w-8 h-8 flex items-center justify-center rounded-full
+                 bg-bg-tertiary/80 hover:bg-bg-hover text-text-secondary hover:text-text-primary
+                 disabled:opacity-30 disabled:cursor-not-allowed
+                 transition-all shadow-sm"
           aria-label="Previous message"
         >
           <svg
@@ -477,12 +504,15 @@
           </svg>
         </button>
 
-        <!-- Right arrow -->
         <button
           type="button"
           onclick={handleNext}
           disabled={currentIndex === chatEvents.length - 1}
-          class="absolute right-0 w-8 h-8 flex items-center justify-center rounded-full bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+          class="absolute right-1 top-1/2 -translate-y-1/2 z-10
+                 w-8 h-8 flex items-center justify-center rounded-full
+                 bg-bg-tertiary/80 hover:bg-bg-hover text-text-secondary hover:text-text-primary
+                 disabled:opacity-30 disabled:cursor-not-allowed
+                 transition-all shadow-sm"
           aria-label="Next message"
         >
           <svg
@@ -500,40 +530,60 @@
           </svg>
         </button>
 
-        <!-- Center card -->
-        {#if currentEvent !== undefined}
-          <div class="flex-1 mx-10">
-            <div
-              class="rounded-lg border border-border-default bg-bg-secondary p-4 shadow-sm"
-            >
-              <!-- Card header -->
-              <div class="flex items-center justify-between mb-3">
-                <span
-                  class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
-                    currentEvent.type,
-                  )}"
-                >
-                  {currentEvent.type}
-                </span>
-                <span class="text-xs text-text-tertiary">
-                  {formatTimestamp(currentEvent.timestamp)}
-                </span>
-              </div>
+        <!-- Horizontal card track -->
+        <div class="overflow-hidden">
+          <div
+            class="flex gap-3 transition-transform duration-300 ease-in-out"
+            style="transform: translateX(calc(17.5% - {currentIndex * 65}% - {currentIndex * 12}px))"
+          >
+            {#each chatEvents as event, index (getEventId(event, index))}
+              {@const textContent = extractTextContent(event)}
+              {@const isCurrent = index === currentIndex}
 
-              <!-- Card content -->
-              <div
-                class="max-h-[400px] overflow-y-auto text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+              <!-- Each card: 65% width, neighbors peek from sides -->
+              <button
+                type="button"
+                onclick={() => handleGoToIndex(index)}
+                class="w-[65%] shrink-0 text-left transition-all duration-300
+                       {isCurrent ? 'opacity-100 scale-100' : 'opacity-40 scale-95'}"
+                aria-label="Message {index + 1}: {event.type}"
               >
-                {textContent}
-              </div>
-            </div>
-          </div>
-        {/if}
-      </div>
+                <div
+                  class="rounded-lg border bg-bg-secondary p-4 shadow-sm h-full
+                         {isCurrent
+                    ? 'border-accent-emphasis/40'
+                    : 'border-border-default'}"
+                >
+                  <!-- Card header -->
+                  <div class="flex items-center justify-between mb-3">
+                    <span
+                      class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
+                        event.type,
+                      )}"
+                    >
+                      {event.type}
+                    </span>
+                    <span class="text-xs text-text-tertiary">
+                      {formatTimestamp(event.timestamp)}
+                    </span>
+                  </div>
 
-      <!-- Counter -->
-      <div class="text-xs text-text-tertiary text-center mt-2">
-        {currentIndex + 1} / {chatEvents.length}
+                  <!-- Card content -->
+                  <div
+                    class="max-h-[300px] overflow-y-auto text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                  >
+                    {textContent}
+                  </div>
+                </div>
+              </button>
+            {/each}
+          </div>
+        </div>
+
+        <!-- Counter -->
+        <div class="text-xs text-text-tertiary text-center mt-2">
+          {currentIndex + 1} / {chatEvents.length}
+        </div>
       </div>
     {/if}
   {/if}

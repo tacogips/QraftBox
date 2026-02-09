@@ -41,30 +41,8 @@
 
 <div class="active-sessions-panel space-y-6">
   {#if isEmpty}
-    <!-- Empty state -->
-    <div class="flex flex-col items-center justify-center py-12 text-center">
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="48"
-        height="48"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="text-text-quaternary mb-4"
-        aria-hidden="true"
-      >
-        <path
-          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
-        />
-      </svg>
-      <p class="text-text-secondary mb-1">No active sessions</p>
-      <p class="text-sm text-text-tertiary">
-        Submit a prompt from the Diff view to start one.
-      </p>
-    </div>
+    <!-- Empty state - intentionally minimal -->
+    <div class="py-6"></div>
   {:else}
     <!-- Running Section -->
     {#if running.length > 0}

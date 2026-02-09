@@ -10,10 +10,9 @@
 
   interface Props {
     contextId: string;
-    onBack: () => void;
   }
 
-  const { contextId, onBack }: Props = $props();
+  const { contextId }: Props = $props();
 
   /**
    * Commit list state
@@ -304,21 +303,6 @@
 </script>
 
 <div class="flex flex-col h-full bg-bg-primary text-text-primary">
-  <!-- Header -->
-  <div
-    class="flex items-center gap-3 px-4 py-3 border-b border-border-default bg-bg-secondary shrink-0"
-  >
-    <button
-      type="button"
-      class="px-2 py-1 text-sm rounded hover:bg-bg-tertiary transition-colors text-text-secondary"
-      onclick={onBack}
-      aria-label="Go back"
-    >
-      &lt;
-    </button>
-    <h2 class="text-lg font-semibold">Commit Log</h2>
-  </div>
-
   <!-- Search -->
   <div class="px-4 py-3 border-b border-border-default shrink-0">
     <input

@@ -7,7 +7,6 @@
    *
    * Props:
    * - contextId: Current workspace context ID
-   * - onBack: Callback to navigate back to previous screen
    */
 
   interface WorktreeInfo {
@@ -35,10 +34,9 @@
 
   interface Props {
     contextId: string;
-    onBack: () => void;
   }
 
-  const { contextId, onBack }: Props = $props();
+  const { contextId }: Props = $props();
 
   // State
   let worktrees = $state<WorktreeInfo[]>([]);
@@ -223,39 +221,6 @@
   role="main"
   aria-label="Worktree management"
 >
-  <!-- Header -->
-  <header class="px-6 py-4 border-b border-border-default bg-bg-secondary">
-    <div class="flex items-center gap-3">
-      <button
-        type="button"
-        onclick={onBack}
-        class="p-2 min-w-[44px] min-h-[44px]
-               text-text-secondary hover:text-text-primary
-               hover:bg-bg-tertiary rounded-lg
-               transition-colors
-               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-        aria-label="Back to previous screen"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-      </button>
-
-      <h1 class="text-2xl font-bold text-text-primary">Worktrees</h1>
-    </div>
-  </header>
-
   <!-- Content Area -->
   <div class="flex-1 overflow-y-auto px-6 py-4">
     {#if loading}

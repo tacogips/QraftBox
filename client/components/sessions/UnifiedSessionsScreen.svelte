@@ -2,27 +2,27 @@
   /**
    * UnifiedSessionsScreen Component
    *
-   * Main screen that unifies active (running/queued) sessions and history
-   * (completed QraftBox + Claude CLI sessions) into a single tabbed view.
+   * Main screen showing all sessions for the current project directory
+   * in a single scrollable view. Running/queued sessions appear at the top,
+   * followed by the full session history list.
    *
    * Props:
-   * - onBack: Callback to navigate back to diff view
+   * - contextId: Context ID for API calls
+   * - projectPath: Current project directory path
    */
 
   import type { AISession } from "../../../src/types/ai";
   import { createQueueStore } from "../../src/stores/queue";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
-  import SubTabNav from "./SubTabNav.svelte";
   import ActiveSessionsPanel from "./ActiveSessionsPanel.svelte";
   import HistorySessionsPanel from "./HistorySessionsPanel.svelte";
 
   interface Props {
     contextId: string;
     projectPath: string;
-    onBack: () => void;
   }
 
-  const { contextId, projectPath, onBack }: Props = $props();
+  const { contextId, projectPath }: Props = $props();
 
   /**
    * Queue store instance
@@ -50,26 +50,11 @@
   });
 
   /**
-   * Default sub-tab: "active" if running or queued sessions exist, else "history"
+   * Whether there are any active (running/queued) sessions
    */
-  const defaultTab = $derived<"active" | "history">(
-    queueStore.running.length > 0 || queueStore.queued.length > 0
-      ? "active"
-      : "history",
+  const hasActiveSessions = $derived(
+    queueStore.running.length > 0 || queueStore.queued.length > 0,
   );
-
-  let currentSubTab = $state<"active" | "history" | null>(null);
-
-  /**
-   * Effective tab: use user selection if set, otherwise default
-   */
-  const effectiveTab = $derived(currentSubTab ?? defaultTab);
-
-  /**
-   * History count: updated by HistorySessionsPanel via callback
-   * (claudeSessionsStore.total is not Svelte-reactive)
-   */
-  let historyCount = $state(0);
 
   /**
    * Handle session selection from ActiveSessionsPanel
@@ -139,54 +124,11 @@
   role="main"
   aria-label="Sessions"
 >
-  <!-- Header -->
-  <header
-    class="flex items-center gap-3 px-4 py-3
-             bg-bg-secondary border-b border-border-default"
-  >
-    <!-- Back button -->
-    <button
-      type="button"
-      onclick={onBack}
-      class="p-2 min-w-[44px] min-h-[44px]
-               text-text-secondary hover:text-text-primary
-               hover:bg-bg-hover rounded-lg
-               transition-colors
-               focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-      aria-label="Back to diff view"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <polyline points="15 18 9 12 15 6" />
-      </svg>
-    </button>
-
-    <h1 class="text-lg font-semibold text-text-primary">Sessions</h1>
-  </header>
-
-  <!-- Sub-tab navigation -->
-  <SubTabNav
-    activeTab={effectiveTab}
-    onTabChange={(tab) => (currentSubTab = tab)}
-    runningCount={queueStore.running.length}
-    queuedCount={queueStore.queued.length}
-    {historyCount}
-  />
-
-  <!-- Content based on sub-tab -->
+  <!-- Single scrollable content area -->
   <div class="flex-1 overflow-y-auto">
-    {#if effectiveTab === "active"}
-      <div class="px-4 py-4">
+    <!-- Active sessions (running/queued) shown at top when present -->
+    {#if hasActiveSessions}
+      <div class="px-4 py-4 border-b border-border-default">
         <ActiveSessionsPanel
           running={queueStore.running}
           queued={queueStore.queued}
@@ -196,15 +138,15 @@
           onRemoveFromQueue={(id) => void handleRemoveFromQueue(id)}
         />
       </div>
-    {:else}
-      <HistorySessionsPanel
-        {contextId}
-        completedSessions={queueStore.completed}
-        onResumeSession={handleResumeSession}
-        onSelectSession={() => {}}
-        onClearCompleted={handleClearCompleted}
-        onCountChange={(count) => (historyCount = count)}
-      />
     {/if}
+
+    <!-- Session history list (always visible) -->
+    <HistorySessionsPanel
+      {contextId}
+      completedSessions={queueStore.completed}
+      onResumeSession={handleResumeSession}
+      onSelectSession={() => {}}
+      onClearCompleted={handleClearCompleted}
+    />
   </div>
 </div>
