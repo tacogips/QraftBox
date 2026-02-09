@@ -362,7 +362,12 @@ export class ClaudeSessionReader {
     const jsonlPath = entry.fullPath;
     if (!existsSync(jsonlPath)) {
       // File doesn't exist, use stripped summary as fallback
-      entry.firstPrompt = stripSystemTags(entry.summary);
+      const strippedSummary = stripSystemTags(entry.summary);
+      entry.firstPrompt = strippedSummary;
+      // Mark as no user prompt if summary is also empty
+      if (strippedSummary.length === 0) {
+        entry.hasUserPrompt = false;
+      }
       return;
     }
 
@@ -374,6 +379,7 @@ export class ClaudeSessionReader {
       const MAX_FILE_SIZE = 10 * 1024 * 1024;
       if (fileSize > MAX_FILE_SIZE) {
         entry.firstPrompt = "(Large session - content not indexed)";
+        entry.hasUserPrompt = false;
         return;
       }
 
@@ -383,12 +389,19 @@ export class ClaudeSessionReader {
         .split("\n")
         .filter((line) => line.trim().length > 0);
 
-      // Search for the first real user message
+      // Search for the first real user message and track assistant activity
+      let hasAssistantMessage = false;
       for (const line of lines) {
         try {
           const event: unknown = JSON.parse(line);
           if (typeof event === "object" && event !== null) {
             const obj = event as Record<string, unknown>;
+
+            // Track assistant messages to detect agent-driven sessions
+            if (obj["type"] === "assistant") {
+              hasAssistantMessage = true;
+            }
+
             if (obj["type"] === "user" && typeof obj["message"] === "object") {
               const message = obj["message"] as Record<string, unknown>;
 
@@ -433,11 +446,20 @@ export class ClaudeSessionReader {
         }
       }
 
-      // No real prompt found, use stripped summary as fallback
-      entry.firstPrompt = stripSystemTags(entry.summary);
+      // No real user prompt found, use stripped summary as fallback
+      const strippedSummary = stripSystemTags(entry.summary);
+      entry.firstPrompt =
+        strippedSummary.length > 0 ? strippedSummary : "(No user prompt found)";
+      // Only mark as empty if there are no assistant messages and no summary
+      if (!hasAssistantMessage && strippedSummary.length === 0) {
+        entry.hasUserPrompt = false;
+      }
     } catch (error: unknown) {
       // Error reading file, use stripped summary as fallback
-      entry.firstPrompt = stripSystemTags(entry.summary);
+      const strippedSummary = stripSystemTags(entry.summary);
+      entry.firstPrompt =
+        strippedSummary.length > 0 ? strippedSummary : "(No user prompt found)";
+      entry.hasUserPrompt = false;
     }
   }
 
@@ -505,6 +527,7 @@ export class ClaudeSessionReader {
         gitBranch: "",
         projectPath,
         isSidechain: false,
+        hasUserPrompt: false,
       };
     }
 
@@ -579,12 +602,19 @@ export class ClaudeSessionReader {
 
     // If first line wasn't a user message (or was entirely system tags),
     // search for the first real user event
+    let hasAssistantMessage = false;
     if (firstPrompt === "") {
       for (const line of lines) {
         try {
           const event: unknown = JSON.parse(line);
           if (typeof event === "object" && event !== null) {
             const obj = event as Record<string, unknown>;
+
+            // Track assistant messages to detect agent-driven sessions
+            if (obj["type"] === "assistant") {
+              hasAssistantMessage = true;
+            }
+
             if (obj["type"] === "user" && typeof obj["message"] === "object") {
               const message = obj["message"] as Record<string, unknown>;
               if (typeof message["content"] === "string") {
@@ -664,6 +694,7 @@ export class ClaudeSessionReader {
       gitBranch,
       projectPath,
       isSidechain,
+      hasUserPrompt: firstPrompt.length > 0 || hasAssistantMessage,
     };
   }
 
@@ -702,6 +733,11 @@ export class ClaudeSessionReader {
     session: ExtendedSessionEntry,
     options: ListSessionsOptions,
   ): boolean {
+    // Exclude sessions without user prompts (undefined treated as true for backward compat)
+    if (session.hasUserPrompt === false) {
+      return false;
+    }
+
     // Source filter
     if (options.source !== undefined && session.source !== options.source) {
       return false;

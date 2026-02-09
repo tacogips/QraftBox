@@ -51,9 +51,20 @@
           id="running-heading"
           class="text-sm font-semibold text-text-secondary mb-3 flex items-center gap-2"
         >
-          <span
-            class="inline-block w-2 h-2 rounded-full bg-accent-emphasis animate-pulse"
-          />
+          <svg
+            class="animate-spin-smooth h-4 w-4 text-accent-fg shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
           RUNNING ({running.length})
         </h2>
         <div class="space-y-3">

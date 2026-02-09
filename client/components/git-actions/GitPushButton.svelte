@@ -2,13 +2,14 @@
   /**
    * GitPushButton Component
    *
-   * Displays a "Git Push" button and a 3-dot menu in the project root panel.
-   * - "Git Push" button: runs AI commit prompt then push prompt sequentially.
-   * - 3-dot menu: Commit with custom prompt, Push with custom prompt,
+   * Displays a "Commit & Push" button and a 3-dot menu for git operations.
+   * - "Commit & Push" button: runs commit via Claude CLI then git push sequentially.
+   * - 3-dot menu: Commit with custom ctx, Push with custom ctx,
    *   Fetch, Merge, Create PR, Open current PR in Browser, Merge PR.
    *
-   * The dropdown uses position:fixed and is rendered via <svelte:body>
-   * to escape any overflow clipping from parent containers.
+   * Commit and Create PR use Claude Code agent (claude CLI).
+   * Push uses direct git commands.
+   * Success/error notifications shown as toast from top.
    */
 
   interface Props {
@@ -20,10 +21,10 @@
 
   // Menu state
   let menuOpen = $state(false);
-  let customPromptAction = $state<
+  let customCtxAction = $state<
     "commit" | "push" | "fetch" | "merge" | null
   >(null);
-  let customPromptText = $state("");
+  let customCtxText = $state("");
 
   // Dropdown position (fixed, viewport-relative)
   let menuTop = $state(0);
@@ -34,9 +35,42 @@
 
   // Operation state
   let operating = $state(false);
-  let operationMessage = $state<{ success: boolean; text: string } | null>(
-    null,
-  );
+
+  // Toast state for notifications
+  let toastMessage = $state<string | null>(null);
+  let toastType = $state<"success" | "error">("success");
+  let toastVisible = $state(false);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Show a toast notification from the top
+   */
+  function showToast(message: string, type: "success" | "error"): void {
+    if (toastTimer !== null) {
+      clearTimeout(toastTimer);
+    }
+    toastMessage = message;
+    toastType = type;
+    toastVisible = true;
+    const duration = type === "error" ? 5000 : 3000;
+    toastTimer = setTimeout(() => {
+      toastVisible = false;
+      setTimeout(() => {
+        toastMessage = null;
+      }, 300);
+    }, duration);
+  }
+
+  function dismissToast(): void {
+    if (toastTimer !== null) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+    toastVisible = false;
+    setTimeout(() => {
+      toastMessage = null;
+    }, 300);
+  }
 
   // PR info for "Open PR in Browser"
   let currentPRUrl = $state<string | null>(null);
@@ -48,6 +82,13 @@
   let showCreatePR = $state(false);
   let selectedCreateBaseBranch = $state("");
   let creatingPR = $state(false);
+
+  /** Server response type from git-actions endpoints */
+  interface GitActionResult {
+    success: boolean;
+    output: string;
+    error?: string;
+  }
 
   /**
    * Calculate dropdown position from the 3-dot button
@@ -66,8 +107,8 @@
     e.stopPropagation();
     if (menuOpen) {
       menuOpen = false;
-      customPromptAction = null;
-      customPromptText = "";
+      customCtxAction = null;
+      customCtxText = "";
     } else {
       updateMenuPosition();
       menuOpen = true;
@@ -112,159 +153,106 @@
   }
 
   /**
-   * Execute AI commit prompt then push prompt sequentially
+   * Execute commit via Claude CLI then push via git sequentially
    */
   async function handleGitPush(): Promise<void> {
     operating = true;
-    operationMessage = null;
     try {
-      // Step 1: Commit via AI prompt
-      const commitResp = await fetch("/api/ai/prompt", {
+      // Step 1: Commit via Claude CLI
+      const commitResp = await fetch("/api/git-actions/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt:
-            "Please commit all staged changes with an appropriate commit message. If there are no staged changes, stage all modified and untracked files first, then commit.",
-          context: {
-            references: [],
-          },
-          options: {
-            projectPath,
-            sessionMode: "new",
-            immediate: true,
-          },
-        }),
+        body: JSON.stringify({ projectPath }),
       });
       if (!commitResp.ok) {
-        throw new Error(`Commit prompt failed: ${commitResp.status}`);
+        const errData = (await commitResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Commit failed: ${commitResp.status}`);
       }
-      const commitData = (await commitResp.json()) as {
-        sessionId: string;
-      };
+      const commitResult = (await commitResp.json()) as GitActionResult;
+      if (!commitResult.success) {
+        throw new Error(commitResult.error ?? "Commit failed");
+      }
 
-      // Wait for commit session to complete
-      await waitForSession(commitData.sessionId);
-
-      // Step 2: Push via AI prompt
-      const pushResp = await fetch("/api/ai/prompt", {
+      // Step 2: Push via git
+      const pushResp = await fetch("/api/git-actions/push", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: "Please push the current branch to the remote repository.",
-          context: {
-            references: [],
-          },
-          options: {
-            projectPath,
-            sessionMode: "new",
-            immediate: true,
-          },
-        }),
+        body: JSON.stringify({ projectPath }),
       });
       if (!pushResp.ok) {
-        throw new Error(`Push prompt failed: ${pushResp.status}`);
+        const errData = (await pushResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Push failed: ${pushResp.status}`);
+      }
+      const pushResult = (await pushResp.json()) as GitActionResult;
+      if (!pushResult.success) {
+        throw new Error(pushResult.error ?? "Push failed");
       }
 
-      operationMessage = {
-        success: true,
-        text: "Commit and push completed",
-      };
+      showToast("Commit & Push completed", "success");
     } catch (e) {
-      operationMessage = {
-        success: false,
-        text: e instanceof Error ? e.message : "Operation failed",
-      };
+      const msg = e instanceof Error ? e.message : "Operation failed";
+      showToast(msg, "error");
     } finally {
       operating = false;
     }
   }
 
   /**
-   * Wait for an AI session to complete (polling)
+   * Execute action with optional custom ctx
    */
-  async function waitForSession(sessionId: string): Promise<void> {
-    const maxAttempts = 120; // 2 minutes max
-    for (let i = 0; i < maxAttempts; i++) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      try {
-        const resp = await fetch(`/api/ai/sessions/${sessionId}`);
-        if (resp.ok) {
-          const data = (await resp.json()) as {
-            session: { status: string };
-          };
-          if (
-            data.session.status === "completed" ||
-            data.session.status === "failed"
-          ) {
-            if (data.session.status === "failed") {
-              throw new Error("AI session failed");
-            }
-            return;
-          }
-        }
-      } catch (e) {
-        if (e instanceof Error && e.message === "AI session failed") {
-          throw e;
-        }
-        // Retry on network errors
-      }
-    }
-    throw new Error("Session timed out");
-  }
-
-  /**
-   * Execute commit or push with custom prompt
-   */
-  async function handleCustomPromptSubmit(): Promise<void> {
-    if (customPromptAction === null) return;
+  async function handleCustomCtxSubmit(): Promise<void> {
+    if (customCtxAction === null) return;
 
     operating = true;
-    operationMessage = null;
-    const action = customPromptAction;
-    const prompt = customPromptText.trim();
+    const action = customCtxAction;
+    const customCtx = customCtxText.trim();
 
     try {
-      let actionPrompt: string;
+      let result: GitActionResult;
+
       if (action === "commit") {
-        actionPrompt =
-          prompt.length > 0
-            ? `Please commit the changes with the following instructions: ${prompt}`
-            : "Please commit all staged changes with an appropriate commit message. If there are no staged changes, stage all modified and untracked files first, then commit.";
+        const resp = await fetch("/api/git-actions/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectPath,
+            ...(customCtx.length > 0 ? { customCtx } : {}),
+          }),
+        });
+        if (!resp.ok) {
+          const errData = (await resp.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(errData.error ?? `Commit failed: ${resp.status}`);
+        }
+        result = (await resp.json()) as GitActionResult;
       } else if (action === "push") {
-        actionPrompt =
-          prompt.length > 0
-            ? `Please push the current branch with the following instructions: ${prompt}`
-            : "Please push the current branch to the remote repository.";
-      } else if (action === "fetch") {
-        actionPrompt =
-          prompt.length > 0
-            ? `Please run git fetch with the following instructions: ${prompt}`
-            : "Please run git fetch to update all remote tracking branches.";
+        const resp = await fetch("/api/git-actions/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectPath }),
+        });
+        if (!resp.ok) {
+          const errData = (await resp.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(errData.error ?? `Push failed: ${resp.status}`);
+        }
+        result = (await resp.json()) as GitActionResult;
       } else {
-        // merge
-        actionPrompt =
-          prompt.length > 0
-            ? `Please run git merge with the following instructions: ${prompt}`
-            : "Please merge the upstream tracking branch into the current branch.";
+        // fetch / merge - not yet wired to git-actions endpoints
+        const actionLabel = action === "fetch" ? "Fetch" : "Merge";
+        throw new Error(
+          `${actionLabel} is not yet available via git-actions endpoint`,
+        );
       }
 
-      const resp = await fetch("/api/ai/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: actionPrompt,
-          context: {
-            references: [],
-          },
-          options: {
-            projectPath,
-            sessionMode: "new",
-            immediate: true,
-          },
-        }),
-      });
-      if (!resp.ok) {
-        throw new Error(`${action} prompt failed: ${resp.status}`);
+      if (!result.success) {
+        throw new Error(result.error ?? `${action} failed`);
       }
 
       const actionLabel =
@@ -275,18 +263,13 @@
             : action === "fetch"
               ? "Fetch"
               : "Merge";
-      operationMessage = {
-        success: true,
-        text: `${actionLabel} prompt submitted`,
-      };
-      customPromptAction = null;
-      customPromptText = "";
+      showToast(`${actionLabel} completed`, "success");
+      customCtxAction = null;
+      customCtxText = "";
       menuOpen = false;
     } catch (e) {
-      operationMessage = {
-        success: false,
-        text: e instanceof Error ? e.message : "Operation failed",
-      };
+      const msg = e instanceof Error ? e.message : "Operation failed";
+      showToast(msg, "error");
     } finally {
       operating = false;
     }
@@ -303,42 +286,39 @@
   }
 
   /**
-   * Create a new PR
+   * Create a new PR via Claude CLI
    */
   async function handleCreatePR(): Promise<void> {
     if (selectedCreateBaseBranch === "") return;
     creatingPR = true;
     try {
-      const resp = await fetch(`/api/ctx/${contextId}/pr/${contextId}`, {
+      const resp = await fetch("/api/git-actions/create-pr", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          promptTemplateId: "default",
+          projectPath,
           baseBranch: selectedCreateBaseBranch,
         }),
       });
       if (!resp.ok) {
-        const errData = (await resp.json().catch(() => null)) as {
+        const errData = (await resp.json().catch(() => ({}))) as {
           error?: string;
-        } | null;
+        };
         throw new Error(
-          errData !== null && errData.error !== undefined
-            ? errData.error
-            : `Create PR failed: ${resp.status}`,
+          errData.error ?? `Create PR failed: ${resp.status}`,
         );
       }
-      operationMessage = {
-        success: true,
-        text: "PR creation initiated via AI",
-      };
+      const result = (await resp.json()) as GitActionResult;
+      if (!result.success) {
+        throw new Error(result.error ?? "Create PR failed");
+      }
+      showToast("PR created", "success");
       showCreatePR = false;
       menuOpen = false;
       await fetchPRStatus();
     } catch (e) {
-      operationMessage = {
-        success: false,
-        text: e instanceof Error ? e.message : "Create PR failed",
-      };
+      const msg = e instanceof Error ? e.message : "Create PR failed";
+      showToast(msg, "error");
     } finally {
       creatingPR = false;
     }
@@ -351,7 +331,6 @@
     if (prNumber === null) return;
 
     operating = true;
-    operationMessage = null;
     menuOpen = false;
 
     try {
@@ -373,14 +352,12 @@
             : `Merge failed: ${resp.status}`,
         );
       }
-      operationMessage = { success: true, text: `PR #${prNumber} merged` };
+      showToast(`PR #${prNumber} merged`, "success");
       prNumber = null;
       currentPRUrl = null;
     } catch (e) {
-      operationMessage = {
-        success: false,
-        text: e instanceof Error ? e.message : "Merge failed",
-      };
+      const msg = e instanceof Error ? e.message : "Merge failed";
+      showToast(msg, "error");
     } finally {
       operating = false;
     }
@@ -396,9 +373,9 @@
       !target.closest(".git-actions-dropdown")
     ) {
       menuOpen = false;
-      if (customPromptAction !== null) {
-        customPromptAction = null;
-        customPromptText = "";
+      if (customCtxAction !== null) {
+        customCtxAction = null;
+        customCtxText = "";
       }
     }
   }
@@ -412,27 +389,32 @@
 <svelte:window onclick={handleWindowClick} />
 
 <div class="flex items-center gap-1 git-actions-menu-container">
-  <!-- Operation result message -->
-  {#if operationMessage !== null}
-    <span
-      class="text-xs px-2 py-1 rounded {operationMessage.success
-        ? 'text-success-fg'
-        : 'text-danger-fg'}"
-    >
-      {operationMessage.text}
-    </span>
-  {/if}
-
-  <!-- Git Push button -->
+  <!-- Commit & Push button -->
   <button
     type="button"
     class="px-3 py-1 text-xs font-medium border border-border-default rounded
            bg-success-emphasis text-white hover:opacity-90
-           transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center gap-1.5"
     onclick={() => void handleGitPush()}
     disabled={operating}
   >
-    {operating ? "Running..." : "Git Push"}
+    {#if operating}
+      <svg
+        class="animate-spin"
+        width="12"
+        height="12"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
+      </svg>
+      Running...
+    {:else}
+      Commit & Push
+    {/if}
   </button>
 
   <!-- 3-dot menu button -->
@@ -462,25 +444,25 @@
     onkeydown={(e) => e.stopPropagation()}
     role="menu"
   >
-    <!-- Commit with custom prompt -->
+    <!-- Commit with custom ctx -->
     <button
       type="button"
       role="menuitem"
       class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             text-text-primary {customPromptAction === 'commit'
+             text-text-primary {customCtxAction === 'commit'
         ? 'bg-bg-tertiary'
         : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction = customPromptAction === "commit" ? null : "commit";
-        customPromptText = "";
+        customCtxAction = customCtxAction === "commit" ? null : "commit";
+        customCtxText = "";
       }}
       disabled={operating}
     >
-      Commit with custom prompt
+      Commit with custom ctx
     </button>
 
-    {#if customPromptAction === "commit"}
+    {#if customCtxAction === "commit"}
       <div
         class="px-3 py-2 border-t border-border-default bg-bg-primary"
         role="presentation"
@@ -489,15 +471,15 @@
           class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
                  rounded text-text-primary font-mono resize-y
                  focus:outline-none focus:border-accent-emphasis"
-          placeholder="Enter commit instructions..."
-          bind:value={customPromptText}
+          placeholder="Enter additional context for commit..."
+          bind:value={customCtxText}
           disabled={operating}
         ></textarea>
         <button
           type="button"
           class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
                  hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomPromptSubmit()}
+          onclick={() => void handleCustomCtxSubmit()}
           disabled={operating}
         >
           {operating ? "Running..." : "Commit"}
@@ -505,24 +487,24 @@
       </div>
     {/if}
 
-    <!-- Push with custom prompt -->
+    <!-- Push with custom ctx -->
     <button
       type="button"
       role="menuitem"
       class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
              text-text-primary border-t border-border-default
-             {customPromptAction === 'push' ? 'bg-bg-tertiary' : ''}"
+             {customCtxAction === 'push' ? 'bg-bg-tertiary' : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction = customPromptAction === "push" ? null : "push";
-        customPromptText = "";
+        customCtxAction = customCtxAction === "push" ? null : "push";
+        customCtxText = "";
       }}
       disabled={operating}
     >
-      Push with custom prompt
+      Push with custom ctx
     </button>
 
-    {#if customPromptAction === "push"}
+    {#if customCtxAction === "push"}
       <div
         class="px-3 py-2 border-t border-border-default bg-bg-primary"
         role="presentation"
@@ -531,15 +513,15 @@
           class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
                  rounded text-text-primary font-mono resize-y
                  focus:outline-none focus:border-accent-emphasis"
-          placeholder="Enter push instructions..."
-          bind:value={customPromptText}
+          placeholder="Push runs git push directly (no AI)."
+          bind:value={customCtxText}
           disabled={operating}
         ></textarea>
         <button
           type="button"
           class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
                  hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomPromptSubmit()}
+          onclick={() => void handleCustomCtxSubmit()}
           disabled={operating}
         >
           {operating ? "Running..." : "Push"}
@@ -547,24 +529,24 @@
       </div>
     {/if}
 
-    <!-- Fetch with custom prompt -->
+    <!-- Fetch -->
     <button
       type="button"
       role="menuitem"
       class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
              text-text-primary border-t border-border-default
-             {customPromptAction === 'fetch' ? 'bg-bg-tertiary' : ''}"
+             {customCtxAction === 'fetch' ? 'bg-bg-tertiary' : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction = customPromptAction === "fetch" ? null : "fetch";
-        customPromptText = "";
+        customCtxAction = customCtxAction === "fetch" ? null : "fetch";
+        customCtxText = "";
       }}
       disabled={operating}
     >
       Fetch
     </button>
 
-    {#if customPromptAction === "fetch"}
+    {#if customCtxAction === "fetch"}
       <div
         class="px-3 py-2 border-t border-border-default bg-bg-primary"
         role="presentation"
@@ -574,14 +556,14 @@
                  rounded text-text-primary font-mono resize-y
                  focus:outline-none focus:border-accent-emphasis"
           placeholder="Enter fetch instructions (e.g. specific remote)..."
-          bind:value={customPromptText}
+          bind:value={customCtxText}
           disabled={operating}
         ></textarea>
         <button
           type="button"
           class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
                  hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomPromptSubmit()}
+          onclick={() => void handleCustomCtxSubmit()}
           disabled={operating}
         >
           {operating ? "Running..." : "Fetch"}
@@ -589,24 +571,24 @@
       </div>
     {/if}
 
-    <!-- Merge with custom prompt -->
+    <!-- Merge -->
     <button
       type="button"
       role="menuitem"
       class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
              text-text-primary border-t border-border-default
-             {customPromptAction === 'merge' ? 'bg-bg-tertiary' : ''}"
+             {customCtxAction === 'merge' ? 'bg-bg-tertiary' : ''}"
       onclick={(e) => {
         e.stopPropagation();
-        customPromptAction = customPromptAction === "merge" ? null : "merge";
-        customPromptText = "";
+        customCtxAction = customCtxAction === "merge" ? null : "merge";
+        customCtxText = "";
       }}
       disabled={operating}
     >
       Merge
     </button>
 
-    {#if customPromptAction === "merge"}
+    {#if customCtxAction === "merge"}
       <div
         class="px-3 py-2 border-t border-border-default bg-bg-primary"
         role="presentation"
@@ -616,14 +598,14 @@
                  rounded text-text-primary font-mono resize-y
                  focus:outline-none focus:border-accent-emphasis"
           placeholder="Enter merge instructions (e.g. branch name, --no-ff)..."
-          bind:value={customPromptText}
+          bind:value={customCtxText}
           disabled={operating}
         ></textarea>
         <button
           type="button"
           class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
                  hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomPromptSubmit()}
+          onclick={() => void handleCustomCtxSubmit()}
           disabled={operating}
         >
           {operating ? "Running..." : "Merge"}
@@ -726,3 +708,126 @@
     </button>
   </div>
 {/if}
+
+<!-- Toast notification (fixed at top of viewport) -->
+{#if toastMessage !== null}
+  <div
+    class="toast-overlay"
+    class:toast-visible={toastVisible}
+    class:toast-hidden={!toastVisible}
+  >
+    <div
+      class="toast-content"
+      class:toast-success={toastType === "success"}
+      class:toast-error={toastType === "error"}
+    >
+      {#if toastType === "error"}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          class="shrink-0 mt-0.5"
+        >
+          <path
+            d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575ZM8 5a.75.75 0 0 0-.75.75v2.5a.75.75 0 0 0 1.5 0v-2.5A.75.75 0 0 0 8 5Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+          />
+        </svg>
+      {:else}
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          class="shrink-0 mt-0.5"
+        >
+          <path
+            d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16Zm3.78-9.72a.751.751 0 0 0-1.06-1.06L7 8.94 5.28 7.22a.751.751 0 0 0-1.06 1.06l2.25 2.25a.75.75 0 0 0 1.06 0Z"
+          />
+        </svg>
+      {/if}
+      <span class="toast-text">{toastMessage}</span>
+      <button type="button" class="toast-dismiss" onclick={dismissToast}>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+          <path
+            d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+          />
+        </svg>
+      </button>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .toast-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    z-index: 10000;
+    pointer-events: none;
+    padding: 12px 16px;
+  }
+
+  .toast-content {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 480px;
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    pointer-events: auto;
+    transition:
+      transform 0.3s ease,
+      opacity 0.3s ease;
+  }
+
+  .toast-error {
+    background: var(--color-danger-muted, #3d0c11);
+    border: 1px solid var(--color-danger-emphasis, #da3633);
+    color: var(--color-danger-fg, #f85149);
+  }
+
+  .toast-success {
+    background: var(--color-success-muted, #0d1b0e);
+    border: 1px solid var(--color-success-emphasis, #238636);
+    color: var(--color-success-fg, #3fb950);
+  }
+
+  .toast-visible .toast-content {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .toast-hidden .toast-content {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  .toast-text {
+    flex: 1;
+    word-break: break-word;
+  }
+
+  .toast-dismiss {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    padding: 2px;
+    opacity: 0.7;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .toast-dismiss:hover {
+    opacity: 1;
+  }
+</style>

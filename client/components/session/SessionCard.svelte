@@ -144,9 +144,11 @@ function handleActionClick(
 </script>
 
 <div
-  class="session-card group relative bg-bg-secondary border border-border-default
+  class="session-card group relative border
          rounded-lg overflow-hidden
-         hover:border-accent-emphasis/50 hover:bg-bg-hover
+         {variant === 'running'
+           ? 'animate-session-glow border-accent-emphasis/50'
+           : 'bg-bg-secondary border-border-default hover:border-accent-emphasis/50 hover:bg-bg-hover'}
          transition-colors duration-150"
   role="article"
   aria-label={`Session: ${truncatePrompt(session.prompt, 50)}`}
@@ -162,10 +164,28 @@ function handleActionClick(
     <div class="flex items-start justify-between gap-3 mb-2">
       <!-- Status indicator -->
       <div class="flex items-center gap-2 flex-shrink-0">
-        <span
-          class="inline-block w-2 h-2 rounded-full {getStatusColor(session.state)}"
-          aria-hidden="true"
-        />
+        {#if variant === "running"}
+          <!-- Spinning arrow for active sessions -->
+          <svg
+            class="animate-spin-smooth h-4 w-4 text-accent-fg shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="23 4 23 10 17 10" />
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+          </svg>
+        {:else}
+          <span
+            class="inline-block w-2 h-2 rounded-full {getStatusColor(session.state)}"
+            aria-hidden="true"
+          />
+        {/if}
         <span class="text-xs font-medium text-text-secondary">
           {getStatusText(session.state)}
         </span>

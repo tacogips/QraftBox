@@ -9,7 +9,7 @@
  */
 
 const SYSTEM_TAG_PATTERN =
-  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder)[^>]*>[\s\S]*?<\/\1>/g;
+  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder|qraftbox-system-prompt)[^>]*>[\s\S]*?<\/\1>/g;
 
 /**
  * Remove system command XML tags and their content from text.

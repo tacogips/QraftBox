@@ -29,6 +29,7 @@ import { createToolRoutes } from "./tools.js";
 import { createLocalPromptRoutes } from "./local-prompts.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { PromptStore } from "../../types/local-prompt.js";
+import { createGitActionsRoutes } from "./git-actions.js";
 
 /**
  * Route group definition
@@ -199,6 +200,11 @@ export function getNonContextRouteGroups(
           },
         ]
       : []),
+    // Git actions routes - POST /api/git-actions
+    {
+      prefix: "/git-actions",
+      routes: createGitActionsRoutes(),
+    },
   ];
 }
 
@@ -319,7 +325,10 @@ function createCommitsRoutes(): Hono<{ Variables: ContextVariables }> {
     const commitRoutes = createCommitHistoryRoutes(serverContext);
 
     // Forward the request with URL rewritten to be relative to mount point
-    return commitRoutes.fetch(createRelativeRequest(c.req.raw, "/commits"), c.env);
+    return commitRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/commits"),
+      c.env,
+    );
   });
 
   return app;
@@ -350,7 +359,10 @@ function createSearchRoutesWithMiddleware(): Hono<{
     };
 
     const searchRoutes = createSearchRoutesImpl(searchContext as any);
-    return searchRoutes.fetch(createRelativeRequest(c.req.raw, "/search"), c.env);
+    return searchRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/search"),
+      c.env,
+    );
   });
 
   return app;
@@ -374,7 +386,10 @@ function createStatusRoutesWithMiddleware(): Hono<{
     }
 
     const statusRoutes = createStatusRoutesImpl(serverContext);
-    return statusRoutes.fetch(createRelativeRequest(c.req.raw, "/status"), c.env);
+    return statusRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/status"),
+      c.env,
+    );
   });
 
   return app;

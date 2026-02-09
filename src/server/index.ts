@@ -15,6 +15,7 @@ import { createStaticMiddleware, createSPAFallback } from "./static";
 import { mountAllRoutes } from "./routes/index";
 import { createSessionManager } from "./ai/session-manager";
 import { createPromptStore } from "./prompts/prompt-store";
+import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
 
 /**
@@ -85,6 +86,12 @@ export function createServer(options: ServerOptions): Hono {
   // Mount all API routes (workspace, browse, context-scoped routes)
   const sessionManager = createSessionManager();
   const promptStore = createPromptStore();
+
+  // Initialize system prompt files (fire and forget)
+  void ensureSystemPromptFiles().catch((e) => {
+    console.error("Failed to initialize system prompt files:", e);
+  });
+
   mountAllRoutes(app, {
     contextManager: options.contextManager,
     sessionManager,
@@ -127,7 +134,10 @@ export function startServer(
     const manager = wsManager;
 
     const server = Bun.serve({
-      fetch(req: Request, server: import("bun").Server): Response | Promise<Response> | undefined {
+      fetch(
+        req: Request,
+        server: import("bun").Server,
+      ): Response | Promise<Response> | undefined {
         const url = new URL(req.url);
         if (url.pathname === "/ws") {
           if (server.upgrade(req)) {
