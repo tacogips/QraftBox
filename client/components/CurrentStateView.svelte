@@ -161,6 +161,15 @@ function isBlockExpanded(blockId: string): boolean {
  * Handle keyboard navigation
  */
 function handleKeydown(event: KeyboardEvent): void {
+  const isInTextBox =
+    event.target instanceof HTMLInputElement ||
+    event.target instanceof HTMLTextAreaElement;
+
+  // Skip shortcuts while typing in text boxes
+  if (isInTextBox) {
+    return;
+  }
+
   // j/k for line navigation (vim-style)
   if (event.key === "j" && selectedLine !== undefined) {
     const nextLine = currentStateLines.find((l) => l.lineNumber > selectedLine!);

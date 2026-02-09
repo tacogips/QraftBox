@@ -393,9 +393,39 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       const newOffset = state.pagination.offset + state.pagination.limit;
       updateState({
         pagination: { ...state.pagination, offset: newOffset },
+        isLoading: true,
+        error: null,
       });
 
-      await this.fetchSessions();
+      try {
+        if (storeContextId === null) {
+          updateState({ error: "Context ID not set", isLoading: false });
+          return;
+        }
+        const params = buildQueryParams();
+        const response = await fetch(
+          `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to load sessions: ${response.statusText}`);
+        }
+
+        const data = (await response.json()) as SessionListResponse;
+        updateState({
+          sessions: [...state.sessions, ...data.sessions],
+          total: data.total,
+          pagination: {
+            offset: data.offset,
+            limit: data.limit,
+          },
+          isLoading: false,
+        });
+      } catch (e) {
+        const errorMessage =
+          e instanceof Error ? e.message : "Failed to load more sessions";
+        updateState({ error: errorMessage, isLoading: false });
+      }
     },
 
     async resumeSession(

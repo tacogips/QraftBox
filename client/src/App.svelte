@@ -477,10 +477,18 @@
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
-    if (
+    const isInTextBox =
       event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
-    ) {
+      event.target instanceof HTMLTextAreaElement;
+
+    // Escape blurs focused text boxes
+    if (isInTextBox && event.key === "Escape") {
+      (event.target as HTMLElement).blur();
+      return;
+    }
+
+    // Skip shortcuts while typing in text boxes
+    if (isInTextBox) {
       return;
     }
     if (event.key === "b" && !event.ctrlKey && !event.metaKey) {

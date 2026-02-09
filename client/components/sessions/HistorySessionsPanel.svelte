@@ -18,6 +18,7 @@
    * - Date grouping (Today, Yesterday, Older)
    * - Search via SearchInput
    * - Accordion list with inline transcript viewer
+   * - Session summary with tool usage, files modified, and tasks
    * - Pagination with "Load More" button
    * - Loading and error states
    * - "Clear Completed" button for QraftBox completed sessions
@@ -33,6 +34,32 @@
   import type { UnifiedSessionItem } from "../../src/types/unified-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
+
+  /**
+   * Session summary types (matching server response)
+   */
+  interface ToolUsageEntry {
+    readonly name: string;
+    readonly count: number;
+  }
+
+  interface SessionTask {
+    readonly id: string;
+    readonly subject: string;
+    readonly status: string;
+  }
+
+  interface FileModEntry {
+    readonly path: string;
+    readonly tool: string;
+  }
+
+  interface SessionSummaryData {
+    readonly sessionId: string;
+    readonly toolUsage: readonly ToolUsageEntry[];
+    readonly tasks: readonly SessionTask[];
+    readonly filesModified: readonly FileModEntry[];
+  }
 
   interface Props {
     contextId: string;
@@ -54,6 +81,26 @@
    * Expanded session IDs for accordion
    */
   let expandedSessionIds = $state<Set<string>>(new Set());
+
+  /**
+   * Session summaries keyed by session ID
+   */
+  let sessionSummaries = $state<Map<string, SessionSummaryData>>(new Map());
+
+  /**
+   * Session IDs currently loading summaries
+   */
+  let summaryLoading = $state<Set<string>>(new Set());
+
+  /**
+   * Session IDs with expanded task lists
+   */
+  let expandedSummaryTasks = $state<Set<string>>(new Set());
+
+  /**
+   * Session IDs with expanded file lists
+   */
+  let expandedSummaryFiles = $state<Set<string>>(new Set());
 
   /**
    * Reactive snapshots of store state.
@@ -223,8 +270,74 @@
       newSet.delete(sessionId);
     } else {
       newSet.add(sessionId);
+      // Fetch summary when expanding
+      void fetchSessionSummary(sessionId);
     }
     expandedSessionIds = newSet;
+  }
+
+  /**
+   * Fetch session summary from API
+   */
+  async function fetchSessionSummary(sessionId: string): Promise<void> {
+    if (sessionSummaries.has(sessionId) || summaryLoading.has(sessionId)) {
+      return;
+    }
+
+    summaryLoading = new Set([...summaryLoading, sessionId]);
+
+    try {
+      const response = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/summary`,
+      );
+      if (response.ok) {
+        const data = (await response.json()) as SessionSummaryData;
+        const newMap = new Map(sessionSummaries);
+        newMap.set(sessionId, data);
+        sessionSummaries = newMap;
+      }
+    } catch {
+      // Silently ignore summary fetch errors
+    } finally {
+      const newLoading = new Set(summaryLoading);
+      newLoading.delete(sessionId);
+      summaryLoading = newLoading;
+    }
+  }
+
+  /**
+   * Toggle task list expansion in summary
+   */
+  function toggleSummaryTasks(sessionId: string): void {
+    const newSet = new Set(expandedSummaryTasks);
+    if (newSet.has(sessionId)) {
+      newSet.delete(sessionId);
+    } else {
+      newSet.add(sessionId);
+    }
+    expandedSummaryTasks = newSet;
+  }
+
+  /**
+   * Toggle file list expansion in summary
+   */
+  function toggleSummaryFiles(sessionId: string): void {
+    const newSet = new Set(expandedSummaryFiles);
+    if (newSet.has(sessionId)) {
+      newSet.delete(sessionId);
+    } else {
+      newSet.add(sessionId);
+    }
+    expandedSummaryFiles = newSet;
+  }
+
+  /**
+   * Get short file name from full path
+   */
+  function shortPath(fullPath: string): string {
+    const parts = fullPath.split("/");
+    if (parts.length <= 2) return fullPath;
+    return ".../" + parts.slice(-2).join("/");
   }
 
   /**
@@ -244,6 +357,20 @@
     if (diffDays === 1) return "yesterday";
     if (diffDays < 7) return `${diffDays}d ago`;
     return `${Math.floor(diffDays / 7)}w ago`;
+  }
+
+  /**
+   * Get task status dot color
+   */
+  function getTaskStatusColor(status: string): string {
+    switch (status) {
+      case "completed":
+        return "bg-success-emphasis";
+      case "in_progress":
+        return "bg-attention-emphasis";
+      default:
+        return "bg-border-default";
+    }
   }
 
   /**
@@ -423,6 +550,242 @@
     {:else}
       <!-- Session List (Grouped by Date) -->
       <div class="session-list space-y-6" role="list">
+        <!-- Reusable accordion row snippet -->
+        {#snippet sessionRow(item: UnifiedSessionItem)}
+          {@const itemId =
+            item.kind === "qraftbox"
+              ? item.session.id
+              : item.session.sessionId}
+          {@const isExpanded = expandedSessionIds.has(itemId)}
+          {@const summary = sessionSummaries.get(itemId)}
+          {@const isLoadingSummary = summaryLoading.has(itemId)}
+          {@const hasSummaryContent =
+            summary !== undefined &&
+            (summary.toolUsage.length > 0 ||
+              summary.filesModified.length > 0 ||
+              summary.tasks.length > 0)}
+
+          <!-- Accordion Row -->
+          <div
+            class="rounded-lg border border-border-default overflow-hidden {isExpanded
+              ? 'border-accent-emphasis/40'
+              : ''}"
+          >
+            <!-- Header Row (clickable) -->
+            <button
+              type="button"
+              onclick={() => toggleSessionExpansion(itemId)}
+              class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
+            >
+              <!-- Expand/Collapse chevron -->
+              <svg
+                class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
+                  ? 'rotate-90'
+                  : ''}"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path
+                  d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
+                />
+              </svg>
+
+              <!-- Source badge -->
+              <span
+                class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
+                'qraftbox'
+                  ? 'bg-accent-muted text-accent-fg'
+                  : 'bg-bg-tertiary text-text-secondary'}"
+              >
+                {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
+              </span>
+
+              <!-- Title (first prompt) -->
+              <span class="flex-1 text-sm text-text-primary truncate">
+                {item.kind === "qraftbox"
+                  ? item.session.prompt
+                  : item.session.firstPrompt}
+              </span>
+
+              <!-- Message count -->
+              {#if item.kind === "claude-cli"}
+                <span class="text-xs text-text-tertiary shrink-0">
+                  {item.session.messageCount} msgs
+                </span>
+              {/if}
+
+              <!-- Relative time -->
+              <span class="text-xs text-text-tertiary shrink-0">
+                {getRelativeTime(getSortDate(item))}
+              </span>
+            </button>
+
+            <!-- Expanded Content -->
+            {#if isExpanded}
+              <div class="border-t border-border-default">
+                <!-- Resume button row -->
+                <div
+                  class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
+                >
+                  <button
+                    type="button"
+                    onclick={() => onResumeSession(itemId)}
+                    class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                  >
+                    Resume
+                  </button>
+                  {#if item.kind === "claude-cli" && item.session.summary}
+                    <span class="text-xs text-text-secondary truncate"
+                      >{item.session.summary}</span
+                    >
+                  {/if}
+                </div>
+
+                <!-- Session Summary Bar -->
+                {#if isLoadingSummary}
+                  <div
+                    class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 border-t border-border-default"
+                  >
+                    <svg
+                      class="animate-spin h-3 w-3 text-text-tertiary"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        class="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        stroke-width="4"
+                      />
+                      <path
+                        class="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span class="text-xs text-text-tertiary"
+                      >Loading summary...</span
+                    >
+                  </div>
+                {:else if hasSummaryContent && summary !== undefined}
+                  <div
+                    class="px-4 py-2 bg-bg-tertiary/30 border-t border-border-default"
+                  >
+                    <!-- Tool usage pills + counts row -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <!-- Tool pills (top 6) -->
+                      {#each summary.toolUsage.slice(0, 6) as tool}
+                        <span
+                          class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary"
+                        >
+                          {tool.name}<span class="text-text-tertiary"
+                            >:{tool.count}</span
+                          >
+                        </span>
+                      {/each}
+                      {#if summary.toolUsage.length > 6}
+                        <span class="text-[10px] text-text-tertiary"
+                          >+{summary.toolUsage.length - 6} more</span
+                        >
+                      {/if}
+
+                      <!-- Separator -->
+                      {#if summary.filesModified.length > 0 || summary.tasks.length > 0}
+                        <span class="text-text-tertiary text-xs mx-1">|</span>
+                      {/if}
+
+                      <!-- Files modified -->
+                      {#if summary.filesModified.length > 0}
+                        <button
+                          type="button"
+                          onclick={() => toggleSummaryFiles(itemId)}
+                          class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
+                        >
+                          {summary.filesModified.length} file{summary
+                            .filesModified.length !== 1
+                            ? "s"
+                            : ""}
+                        </button>
+                      {/if}
+
+                      <!-- Tasks -->
+                      {#if summary.tasks.length > 0}
+                        {#if summary.filesModified.length > 0}
+                          <span class="text-text-tertiary text-xs">|</span>
+                        {/if}
+                        <button
+                          type="button"
+                          onclick={() => toggleSummaryTasks(itemId)}
+                          class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
+                        >
+                          {summary.tasks.length} task{summary.tasks.length !== 1
+                            ? "s"
+                            : ""}
+                        </button>
+                      {/if}
+                    </div>
+
+                    <!-- Expandable file list -->
+                    {#if expandedSummaryFiles.has(itemId) && summary.filesModified.length > 0}
+                      <div class="mt-2 space-y-0.5">
+                        {#each summary.filesModified as file}
+                          <div
+                            class="flex items-center gap-2 py-0.5 text-[11px]"
+                          >
+                            <span
+                              class="shrink-0 px-1 rounded text-[9px] font-bold {file.tool ===
+                              'Edit'
+                                ? 'bg-attention-muted text-attention-fg'
+                                : 'bg-success-muted text-success-fg'}"
+                            >
+                              {file.tool === "Edit" ? "M" : "A"}
+                            </span>
+                            <span
+                              class="text-text-secondary font-mono truncate"
+                              title={file.path}
+                            >
+                              {shortPath(file.path)}
+                            </span>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+
+                    <!-- Expandable task list -->
+                    {#if expandedSummaryTasks.has(itemId) && summary.tasks.length > 0}
+                      <div class="mt-2 space-y-0.5">
+                        {#each summary.tasks as task}
+                          <div
+                            class="flex items-center gap-2 py-0.5 text-[11px]"
+                          >
+                            <span
+                              class="shrink-0 w-2 h-2 rounded-full {getTaskStatusColor(
+                                task.status,
+                              )}"
+                            ></span>
+                            <span class="text-text-primary truncate"
+                              >{task.subject}</span
+                            >
+                            <span class="text-text-tertiary shrink-0"
+                              >{task.status}</span
+                            >
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+
+                <!-- Inline Transcript -->
+                <SessionTranscriptInline sessionId={itemId} {contextId} />
+              </div>
+            {/if}
+          </div>
+        {/snippet}
+
         <!-- Today -->
         {#if groupedSessions.today.length > 0}
           <section aria-labelledby="history-today-heading">
@@ -434,92 +797,7 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.today as item (getItemKey(item))}
-                {@const itemId =
-                  item.kind === "qraftbox"
-                    ? item.session.id
-                    : item.session.sessionId}
-                {@const isExpanded = expandedSessionIds.has(itemId)}
-
-                <!-- Accordion Row -->
-                <div
-                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
-                    ? 'border-accent-emphasis/40'
-                    : ''}"
-                >
-                  <!-- Header Row (clickable) -->
-                  <button
-                    type="button"
-                    onclick={() => toggleSessionExpansion(itemId)}
-                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
-                  >
-                    <!-- Expand/Collapse chevron -->
-                    <svg
-                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
-                        ? 'rotate-90'
-                        : ''}"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-                      />
-                    </svg>
-
-                    <!-- Source badge -->
-                    <span
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
-                      'qraftbox'
-                        ? 'bg-accent-muted text-accent-fg'
-                        : 'bg-bg-tertiary text-text-secondary'}"
-                    >
-                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
-                    </span>
-
-                    <!-- Title (first prompt) -->
-                    <span class="flex-1 text-sm text-text-primary truncate">
-                      {item.kind === "qraftbox"
-                        ? item.session.prompt
-                        : item.session.firstPrompt}
-                    </span>
-
-                    <!-- Message count -->
-                    {#if item.kind === "claude-cli"}
-                      <span class="text-xs text-text-tertiary shrink-0">
-                        {item.session.messageCount} msgs
-                      </span>
-                    {/if}
-
-                    <!-- Relative time -->
-                    <span class="text-xs text-text-tertiary shrink-0">
-                      {getRelativeTime(getSortDate(item))}
-                    </span>
-                  </button>
-
-                  <!-- Expanded Content -->
-                  {#if isExpanded}
-                    <div class="border-t border-border-default">
-                      <!-- Resume button row -->
-                      <div
-                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
-                      >
-                        <button
-                          type="button"
-                          onclick={() => onResumeSession(itemId)}
-                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
-                        >
-                          Resume
-                        </button>
-                        {#if item.kind === "claude-cli" && item.session.summary}
-                          <span class="text-xs text-text-secondary truncate"
-                            >{item.session.summary}</span
-                          >
-                        {/if}
-                      </div>
-                      <!-- Inline Transcript -->
-                      <SessionTranscriptInline sessionId={itemId} {contextId} />
-                    </div>
-                  {/if}
-                </div>
+                {@render sessionRow(item)}
               {/each}
             </div>
           </section>
@@ -536,92 +814,7 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.yesterday as item (getItemKey(item))}
-                {@const itemId =
-                  item.kind === "qraftbox"
-                    ? item.session.id
-                    : item.session.sessionId}
-                {@const isExpanded = expandedSessionIds.has(itemId)}
-
-                <!-- Accordion Row -->
-                <div
-                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
-                    ? 'border-accent-emphasis/40'
-                    : ''}"
-                >
-                  <!-- Header Row (clickable) -->
-                  <button
-                    type="button"
-                    onclick={() => toggleSessionExpansion(itemId)}
-                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
-                  >
-                    <!-- Expand/Collapse chevron -->
-                    <svg
-                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
-                        ? 'rotate-90'
-                        : ''}"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-                      />
-                    </svg>
-
-                    <!-- Source badge -->
-                    <span
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
-                      'qraftbox'
-                        ? 'bg-accent-muted text-accent-fg'
-                        : 'bg-bg-tertiary text-text-secondary'}"
-                    >
-                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
-                    </span>
-
-                    <!-- Title (first prompt) -->
-                    <span class="flex-1 text-sm text-text-primary truncate">
-                      {item.kind === "qraftbox"
-                        ? item.session.prompt
-                        : item.session.firstPrompt}
-                    </span>
-
-                    <!-- Message count -->
-                    {#if item.kind === "claude-cli"}
-                      <span class="text-xs text-text-tertiary shrink-0">
-                        {item.session.messageCount} msgs
-                      </span>
-                    {/if}
-
-                    <!-- Relative time -->
-                    <span class="text-xs text-text-tertiary shrink-0">
-                      {getRelativeTime(getSortDate(item))}
-                    </span>
-                  </button>
-
-                  <!-- Expanded Content -->
-                  {#if isExpanded}
-                    <div class="border-t border-border-default">
-                      <!-- Resume button row -->
-                      <div
-                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
-                      >
-                        <button
-                          type="button"
-                          onclick={() => onResumeSession(itemId)}
-                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
-                        >
-                          Resume
-                        </button>
-                        {#if item.kind === "claude-cli" && item.session.summary}
-                          <span class="text-xs text-text-secondary truncate"
-                            >{item.session.summary}</span
-                          >
-                        {/if}
-                      </div>
-                      <!-- Inline Transcript -->
-                      <SessionTranscriptInline sessionId={itemId} {contextId} />
-                    </div>
-                  {/if}
-                </div>
+                {@render sessionRow(item)}
               {/each}
             </div>
           </section>
@@ -638,92 +831,7 @@
             </h2>
             <div class="space-y-3">
               {#each groupedSessions.older as item (getItemKey(item))}
-                {@const itemId =
-                  item.kind === "qraftbox"
-                    ? item.session.id
-                    : item.session.sessionId}
-                {@const isExpanded = expandedSessionIds.has(itemId)}
-
-                <!-- Accordion Row -->
-                <div
-                  class="rounded-lg border border-border-default overflow-hidden {isExpanded
-                    ? 'border-accent-emphasis/40'
-                    : ''}"
-                >
-                  <!-- Header Row (clickable) -->
-                  <button
-                    type="button"
-                    onclick={() => toggleSessionExpansion(itemId)}
-                    class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
-                  >
-                    <!-- Expand/Collapse chevron -->
-                    <svg
-                      class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
-                        ? 'rotate-90'
-                        : ''}"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                    >
-                      <path
-                        d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-                      />
-                    </svg>
-
-                    <!-- Source badge -->
-                    <span
-                      class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
-                      'qraftbox'
-                        ? 'bg-accent-muted text-accent-fg'
-                        : 'bg-bg-tertiary text-text-secondary'}"
-                    >
-                      {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
-                    </span>
-
-                    <!-- Title (first prompt) -->
-                    <span class="flex-1 text-sm text-text-primary truncate">
-                      {item.kind === "qraftbox"
-                        ? item.session.prompt
-                        : item.session.firstPrompt}
-                    </span>
-
-                    <!-- Message count -->
-                    {#if item.kind === "claude-cli"}
-                      <span class="text-xs text-text-tertiary shrink-0">
-                        {item.session.messageCount} msgs
-                      </span>
-                    {/if}
-
-                    <!-- Relative time -->
-                    <span class="text-xs text-text-tertiary shrink-0">
-                      {getRelativeTime(getSortDate(item))}
-                    </span>
-                  </button>
-
-                  <!-- Expanded Content -->
-                  {#if isExpanded}
-                    <div class="border-t border-border-default">
-                      <!-- Resume button row -->
-                      <div
-                        class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
-                      >
-                        <button
-                          type="button"
-                          onclick={() => onResumeSession(itemId)}
-                          class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
-                        >
-                          Resume
-                        </button>
-                        {#if item.kind === "claude-cli" && item.session.summary}
-                          <span class="text-xs text-text-secondary truncate"
-                            >{item.session.summary}</span
-                          >
-                        {/if}
-                      </div>
-                      <!-- Inline Transcript -->
-                      <SessionTranscriptInline sessionId={itemId} {contextId} />
-                    </div>
-                  {/if}
-                </div>
+                {@render sessionRow(item)}
               {/each}
             </div>
           </section>

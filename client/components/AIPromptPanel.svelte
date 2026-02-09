@@ -132,56 +132,59 @@
    * Handle global keyboard shortcuts
    */
   function handleGlobalKeydown(event: KeyboardEvent): void {
+    const activeEl = document.activeElement;
+    const isInTextBox =
+      activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
+    const isOwnInput = activeEl === inputRef || activeEl === textareaRef;
+
+    // Close dropdowns on Escape (always)
+    if (event.key === "Escape" && showDropdown) {
+      event.preventDefault();
+      showDropdown = false;
+      return;
+    }
+    if (event.key === "Escape" && showDraftDropdown) {
+      event.preventDefault();
+      showDraftDropdown = false;
+      return;
+    }
+
+    // Skip shortcuts while typing in text boxes (except own inputs for 'a' toggle)
+    if (isInTextBox && !isOwnInput) {
+      return;
+    }
+
     // 'A' key behavior:
-    // - If collapsed and input NOT focused: focus the single-line input
-    // - If collapsed and input focused: expand to multi-line
-    // - If expanded: collapse back to single-line
+    // - If not in any text box: focus the single-line input (collapsed) or collapse (expanded)
+    // - If in own input: toggle between collapsed/expanded
     if (
       event.key === "a" &&
       !event.ctrlKey &&
       !event.metaKey &&
       !event.altKey
     ) {
-      const activeEl = document.activeElement;
-      const isInInput =
-        activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
-
-      if (!isInInput) {
+      if (!isInTextBox) {
         event.preventDefault();
         if (collapsed) {
-          // Focus the single-line input
           setTimeout(() => {
             inputRef?.focus();
           }, 100);
         } else {
-          // Collapse to single-line
           onToggle();
         }
       } else if (collapsed && activeEl === inputRef) {
-        // Input is focused - expand to multi-line
         event.preventDefault();
         onToggle();
         setTimeout(() => {
           textareaRef?.focus();
         }, 100);
       } else if (!collapsed && activeEl === textareaRef) {
-        // Textarea is focused - collapse to single-line
         event.preventDefault();
         onToggle();
         setTimeout(() => {
           inputRef?.focus();
         }, 100);
       }
-    }
-
-    // Close dropdowns on Escape
-    if (event.key === "Escape" && showDropdown) {
-      event.preventDefault();
-      showDropdown = false;
-    }
-    if (event.key === "Escape" && showDraftDropdown) {
-      event.preventDefault();
-      showDraftDropdown = false;
     }
   }
 
