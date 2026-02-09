@@ -98,22 +98,6 @@
   let headerMenuOpen = $state(false);
   let pathCopied = $state(false);
 
-  // PR creation state (hamburger menu)
-  let prMenuLoading = $state(false);
-  let prMenuCanCreate = $state(false);
-  let prMenuNumber = $state<number | null>(null);
-  let prMenuAvailableBranches = $state<string[]>([]);
-  let prMenuSelectedBaseBranch = $state("");
-  let prMenuShowForm = $state(false);
-  let prMenuCreating = $state(false);
-  let prMenuCurrentPRUrl = $state<string | null>(null);
-
-  // Toast state for hamburger menu operations
-  let hmToastMessage = $state<string | null>(null);
-  let hmToastType = $state<"success" | "error">("success");
-  let hmToastVisible = $state(false);
-  let hmToastTimer: ReturnType<typeof setTimeout> | null = null;
-
   // AI prompt state
   let aiPanelCollapsed = $state(true);
   let queueStatus = $state<QueueStatus>({
@@ -907,15 +891,6 @@
   });
 
   /**
-   * Fetch PR status when hamburger menu opens
-   */
-  $effect(() => {
-    if (headerMenuOpen) {
-      void fetchPRMenuStatus();
-    }
-  });
-
-  /**
    * Cancel a running/queued session from the CurrentSessionPanel
    */
   async function handleCancelActiveSession(sessionId: string): Promise<void> {
@@ -1062,116 +1037,6 @@
         pathCopied = false;
       }, 1500);
     });
-  }
-
-  /**
-   * Show toast notification for hamburger menu operations
-   */
-  function showHmToast(message: string, type: "success" | "error"): void {
-    if (hmToastTimer !== null) {
-      clearTimeout(hmToastTimer);
-    }
-    hmToastMessage = message;
-    hmToastType = type;
-    hmToastVisible = true;
-    const duration = type === "error" ? 5000 : 3000;
-    hmToastTimer = setTimeout(() => {
-      hmToastVisible = false;
-      setTimeout(() => {
-        hmToastMessage = null;
-      }, 300);
-    }, duration);
-  }
-
-  /**
-   * Dismiss hamburger menu toast notification
-   */
-  function dismissHmToast(): void {
-    if (hmToastTimer !== null) {
-      clearTimeout(hmToastTimer);
-      hmToastTimer = null;
-    }
-    hmToastVisible = false;
-    setTimeout(() => {
-      hmToastMessage = null;
-    }, 300);
-  }
-
-  /**
-   * Fetch PR status for hamburger menu Create PR feature
-   */
-  async function fetchPRMenuStatus(): Promise<void> {
-    if (contextId === null) return;
-    prMenuLoading = true;
-    try {
-      const resp = await fetch(`/api/ctx/${contextId}/pr/${contextId}/status`);
-      if (resp.ok) {
-        const data = (await resp.json()) as {
-          status: {
-            hasPR: boolean;
-            pr: { url: string; number: number; state: string } | null;
-            canCreatePR: boolean;
-            baseBranch: string;
-            availableBaseBranches: string[];
-          };
-        };
-        if (data.status.hasPR && data.status.pr !== null) {
-          prMenuCurrentPRUrl = data.status.pr.url;
-          prMenuNumber = data.status.pr.number;
-        } else {
-          prMenuCurrentPRUrl = null;
-          prMenuNumber = null;
-        }
-        prMenuCanCreate = data.status.canCreatePR;
-        prMenuAvailableBranches = data.status.availableBaseBranches;
-        prMenuSelectedBaseBranch = data.status.baseBranch;
-      }
-    } catch {
-      // Silently ignore - PR status is non-critical
-    } finally {
-      prMenuLoading = false;
-    }
-  }
-
-  /**
-   * Create PR from hamburger menu
-   */
-  async function handleHmCreatePR(): Promise<void> {
-    if (prMenuSelectedBaseBranch === "") return;
-    prMenuCreating = true;
-    try {
-      const resp = await fetch("/api/git-actions/create-pr", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectPath,
-          baseBranch: prMenuSelectedBaseBranch,
-        }),
-      });
-      if (!resp.ok) {
-        const errData = (await resp.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(errData.error ?? `Create PR failed: ${resp.status}`);
-      }
-      const result = (await resp.json()) as {
-        success: boolean;
-        output: string;
-        error?: string;
-      };
-      if (!result.success) {
-        throw new Error(result.error ?? "Create PR failed");
-      }
-      showHmToast("PR created", "success");
-      prMenuShowForm = false;
-      headerMenuOpen = false;
-      await fetchPRMenuStatus();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Create PR failed";
-      showHmToast(msg, "error");
-    } finally {
-      prMenuCreating = false;
-    }
   }
 
   /**
@@ -1369,88 +1234,6 @@
           >
             System Info
           </button>
-
-          <!-- Separator -->
-          <div class="border-t border-border-default my-1"></div>
-
-          <!-- Create PR -->
-          <button
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                   {prMenuCanCreate && prMenuNumber === null
-              ? 'text-text-primary'
-              : 'text-text-tertiary cursor-not-allowed'}
-                   {prMenuShowForm ? 'bg-bg-tertiary' : ''}"
-            onclick={(e) => {
-              e.stopPropagation();
-              if (prMenuCanCreate && prMenuNumber === null) {
-                prMenuShowForm = !prMenuShowForm;
-              }
-            }}
-            disabled={!prMenuCanCreate ||
-              prMenuNumber !== null ||
-              prMenuLoading}
-          >
-            Create PR
-            {#if prMenuLoading}
-              <span class="text-xs text-text-tertiary ml-1">(loading...)</span>
-            {:else if prMenuNumber !== null}
-              <span class="text-xs text-text-tertiary ml-1"
-                >(PR #{prMenuNumber})</span
-              >
-            {:else if !prMenuCanCreate}
-              <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
-            {/if}
-          </button>
-
-          {#if prMenuShowForm && prMenuCanCreate}
-            <div
-              class="px-4 py-2 border-t border-border-default bg-bg-primary"
-              role="presentation"
-              onclick={(e) => e.stopPropagation()}
-            >
-              <div class="flex items-center gap-2 mb-2">
-                <label
-                  for="hm-pr-base"
-                  class="text-xs text-text-secondary whitespace-nowrap"
-                  >Base:</label
-                >
-                <select
-                  id="hm-pr-base"
-                  class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
-                  bind:value={prMenuSelectedBaseBranch}
-                >
-                  {#each prMenuAvailableBranches as branch}
-                    <option value={branch}>{branch}</option>
-                  {/each}
-                </select>
-              </div>
-              <button
-                type="button"
-                class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={() => void handleHmCreatePR()}
-                disabled={prMenuCreating || prMenuSelectedBaseBranch === ""}
-              >
-                {prMenuCreating ? "Creating..." : "Create PR"}
-              </button>
-            </div>
-          {/if}
-
-          <!-- Open current PR -->
-          {#if prMenuCurrentPRUrl !== null}
-            <button
-              type="button"
-              class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors text-text-primary"
-              onclick={() => {
-                if (prMenuCurrentPRUrl !== null) {
-                  window.open(prMenuCurrentPRUrl, "_blank");
-                }
-                headerMenuOpen = false;
-              }}
-            >
-              Open PR #{prMenuNumber}
-            </button>
-          {/if}
         </div>
       {/if}
     </div>
@@ -1464,37 +1247,6 @@
       onkeydown={() => {}}
       role="presentation"
     ></div>
-  {/if}
-
-  <!-- Hamburger menu toast notification -->
-  {#if hmToastMessage !== null}
-    <div
-      class="fixed top-0 left-0 right-0 flex justify-center z-[10000] transition-all duration-300"
-      class:opacity-100={hmToastVisible}
-      class:translate-y-0={hmToastVisible}
-      class:opacity-0={!hmToastVisible}
-      class:-translate-y-full={!hmToastVisible}
-    >
-      <div
-        class="mt-2 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 text-sm max-w-md
-               {hmToastType === 'success'
-          ? 'bg-success-emphasis text-white'
-          : 'bg-danger-emphasis text-white'}"
-      >
-        <span>{hmToastMessage}</span>
-        <button
-          type="button"
-          class="ml-2 opacity-70 hover:opacity-100"
-          onclick={dismissHmToast}
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path
-              d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
-            />
-          </svg>
-        </button>
-      </div>
-    </div>
   {/if}
 
   <!-- Tab Bar -->
