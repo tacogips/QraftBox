@@ -135,7 +135,6 @@
     const activeEl = document.activeElement;
     const isInTextBox =
       activeEl?.tagName === "INPUT" || activeEl?.tagName === "TEXTAREA";
-    const isOwnInput = activeEl === inputRef || activeEl === textareaRef;
 
     // Close dropdowns on Escape (always)
     if (event.key === "Escape" && showDropdown) {
@@ -149,41 +148,25 @@
       return;
     }
 
-    // Skip shortcuts while typing in text boxes (except own inputs for 'a' toggle)
-    if (isInTextBox && !isOwnInput) {
+    // Skip shortcuts while typing in any text box
+    if (isInTextBox) {
       return;
     }
 
-    // 'A' key behavior:
-    // - If not in any text box: focus the single-line input (collapsed) or collapse (expanded)
-    // - If in own input: toggle between collapsed/expanded
+    // 'A' key: focus collapsed input or toggle expanded panel
     if (
       event.key === "a" &&
       !event.ctrlKey &&
       !event.metaKey &&
       !event.altKey
     ) {
-      if (!isInTextBox) {
-        event.preventDefault();
-        if (collapsed) {
-          setTimeout(() => {
-            inputRef?.focus();
-          }, 100);
-        } else {
-          onToggle();
-        }
-      } else if (collapsed && activeEl === inputRef) {
-        event.preventDefault();
-        onToggle();
-        setTimeout(() => {
-          textareaRef?.focus();
-        }, 100);
-      } else if (!collapsed && activeEl === textareaRef) {
-        event.preventDefault();
-        onToggle();
+      event.preventDefault();
+      if (collapsed) {
         setTimeout(() => {
           inputRef?.focus();
         }, 100);
+      } else {
+        onToggle();
       }
     }
   }
