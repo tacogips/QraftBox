@@ -21,9 +21,9 @@
 
   // Menu state
   let menuOpen = $state(false);
-  let customCtxAction = $state<
-    "commit" | "push" | "fetch" | "merge" | null
-  >(null);
+  let customCtxAction = $state<"commit" | "push" | "fetch" | "merge" | null>(
+    null,
+  );
   let customCtxText = $state("");
 
   // Dropdown position (fixed, viewport-relative)
@@ -35,6 +35,9 @@
 
   // Operation state
   let operating = $state(false);
+  let operationPhase = $state<"idle" | "checking" | "committing" | "pushing">(
+    "idle",
+  );
 
   // Toast state for notifications
   let toastMessage = $state<string | null>(null);
@@ -88,6 +91,16 @@
     success: boolean;
     output: string;
     error?: string;
+  }
+
+  /** Status response from /api/ctx/{contextId}/status */
+  interface StatusData {
+    clean: boolean;
+    staged: string[];
+    modified: string[];
+    untracked: string[];
+    conflicts: string[];
+    branch: string;
   }
 
   /**
@@ -154,50 +167,73 @@
 
   /**
    * Execute commit via Claude CLI then push via git sequentially
+   * Checks status first to decide whether to commit or push
    */
   async function handleGitPush(): Promise<void> {
     operating = true;
+    operationPhase = "checking";
     try {
-      // Step 1: Commit via Claude CLI
-      const commitResp = await fetch("/api/git-actions/commit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath }),
-      });
-      if (!commitResp.ok) {
-        const errData = (await commitResp.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(errData.error ?? `Commit failed: ${commitResp.status}`);
+      // Step 1: Check status to determine if we need to commit or push
+      const statusResp = await fetch(`/api/ctx/${contextId}/status`);
+      if (!statusResp.ok) {
+        throw new Error(`Status check failed: ${statusResp.status}`);
       }
-      const commitResult = (await commitResp.json()) as GitActionResult;
-      if (!commitResult.success) {
-        throw new Error(commitResult.error ?? "Commit failed");
-      }
+      const statusData = (await statusResp.json()) as StatusData;
 
-      // Step 2: Push via git
-      const pushResp = await fetch("/api/git-actions/push", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath }),
-      });
-      if (!pushResp.ok) {
-        const errData = (await pushResp.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(errData.error ?? `Push failed: ${pushResp.status}`);
-      }
-      const pushResult = (await pushResp.json()) as GitActionResult;
-      if (!pushResult.success) {
-        throw new Error(pushResult.error ?? "Push failed");
-      }
+      // If working tree is not clean, commit
+      if (
+        !statusData.clean ||
+        statusData.staged.length > 0 ||
+        statusData.modified.length > 0 ||
+        statusData.untracked.length > 0
+      ) {
+        operationPhase = "committing";
+        const commitResp = await fetch("/api/git-actions/commit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectPath }),
+        });
+        if (!commitResp.ok) {
+          const errData = (await commitResp.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(
+            errData.error ?? `Commit failed: ${commitResp.status}`,
+          );
+        }
+        const commitResult = (await commitResp.json()) as GitActionResult;
+        if (!commitResult.success) {
+          throw new Error(commitResult.error ?? "Commit failed");
+        }
 
-      showToast("Commit & Push completed", "success");
+        showToast("Commit completed", "success");
+      } else {
+        // If working tree is clean, push
+        operationPhase = "pushing";
+        const pushResp = await fetch("/api/git-actions/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectPath }),
+        });
+        if (!pushResp.ok) {
+          const errData = (await pushResp.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          throw new Error(errData.error ?? `Push failed: ${pushResp.status}`);
+        }
+        const pushResult = (await pushResp.json()) as GitActionResult;
+        if (!pushResult.success) {
+          throw new Error(pushResult.error ?? "Push failed");
+        }
+
+        showToast("Push completed", "success");
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Operation failed";
       showToast(msg, "error");
     } finally {
       operating = false;
+      operationPhase = "idle";
     }
   }
 
@@ -304,9 +340,7 @@
         const errData = (await resp.json().catch(() => ({}))) as {
           error?: string;
         };
-        throw new Error(
-          errData.error ?? `Create PR failed: ${resp.status}`,
-        );
+        throw new Error(errData.error ?? `Create PR failed: ${resp.status}`);
       }
       const result = (await resp.json()) as GitActionResult;
       if (!result.success) {
@@ -411,7 +445,15 @@
       >
         <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
       </svg>
-      Running...
+      {#if operationPhase === "checking"}
+        Checking...
+      {:else if operationPhase === "committing"}
+        Committing...
+      {:else if operationPhase === "pushing"}
+        Pushing...
+      {:else}
+        Running...
+      {/if}
     {:else}
       Commit & Push
     {/if}

@@ -787,7 +787,7 @@
       <HeaderStatusBadges {contextId} />
     {/if}
 
-    <!-- Diff / Commits / Sessions tabs -->
+    <!-- Changes / Commits / Sessions tabs -->
     <nav class="flex items-center gap-0 h-full">
       <button
         type="button"
@@ -797,7 +797,7 @@
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("diff")}
       >
-        Diff
+        Changes
       </button>
       <button
         type="button"

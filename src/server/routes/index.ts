@@ -30,6 +30,7 @@ import { createLocalPromptRoutes } from "./local-prompts.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { PromptStore } from "../../types/local-prompt.js";
 import { createGitActionsRoutes } from "./git-actions.js";
+import { createBranchRoutes } from "./branches.js";
 
 /**
  * Route group definition
@@ -145,6 +146,12 @@ export function getContextScopedRouteGroups(
       prefix: "/prompts",
       routes: createPromptsRoutes(),
     },
+    // Branch routes - GET /api/ctx/:contextId/branches
+    // Supports middleware context extraction via c.get("serverContext")
+    {
+      prefix: "/branches",
+      routes: createBranchRoutes(),
+    },
   ];
 }
 
@@ -233,6 +240,7 @@ export function getNonContextRouteGroups(
  * - /api/ctx/:contextId/pr - Pull request management
  * - /api/ctx/:contextId/claude-sessions - Claude session management
  * - /api/ctx/:contextId/prompts - Prompt management
+ * - /api/ctx/:contextId/branches - Branch listing, search, checkout
  *
  * @param app - Main Hono app instance
  * @param config - Mount routes configuration

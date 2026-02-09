@@ -2,7 +2,7 @@
   /**
    * HeaderStatusBadges Component
    *
-   * Displays git status badges in the project header bar, showing branch name
+   * Displays git status badges in the project header bar, showing branch selector
    * and PR number.
    *
    * Props:
@@ -14,7 +14,10 @@
    * - Auto-refreshes every 30 seconds
    * - Uses GitHub Primer color tokens
    * - Compact inline display with separators
+   * - Branch name is clickable via BranchSelector component
    */
+
+  import BranchSelector from "./BranchSelector.svelte";
 
   interface Props {
     contextId: string;
@@ -62,6 +65,11 @@
    * Branch name from status
    */
   const branchName = $derived(status?.branch ?? "");
+
+  /**
+   * Whether working tree has uncommitted changes
+   */
+  const hasUncommittedChanges = $derived(status !== null && !status.clean);
 
   /**
    * PR number and URL (only if PR exists and is open)
@@ -126,9 +134,13 @@
 </script>
 
 <div class="flex items-center gap-3 text-sm">
-  <!-- Branch name -->
+  <!-- Branch selector (clickable) -->
   {#if branchName.length > 0}
-    <span class="font-mono text-accent-fg">{branchName}</span>
+    <BranchSelector
+      {contextId}
+      currentBranch={branchName}
+      {hasUncommittedChanges}
+    />
   {/if}
 
   <!-- Separator -->

@@ -339,6 +339,28 @@
   }
 
   /**
+   * Navigate to the first message
+   */
+  function handleGoToFirst(): void {
+    if (viewMode === "carousel") {
+      currentIndex = 0;
+    } else if (chatScrollContainer !== null) {
+      chatScrollContainer.scrollTop = 0;
+    }
+  }
+
+  /**
+   * Navigate to the last message
+   */
+  function handleGoToLast(): void {
+    if (viewMode === "carousel") {
+      currentIndex = chatEvents.length - 1;
+    } else if (chatScrollContainer !== null) {
+      chatScrollContainer.scrollTop = chatScrollContainer.scrollHeight;
+    }
+  }
+
+  /**
    * Handle keyboard navigation in carousel mode
    */
   function handleKeyDown(e: KeyboardEvent): void {
@@ -349,6 +371,12 @@
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
         handleNext();
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        handleGoToFirst();
+      } else if (e.key === "End") {
+        e.preventDefault();
+        handleGoToLast();
       }
     }
   }
@@ -357,8 +385,8 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 <div class="session-transcript-inline px-4 py-3">
-  <!-- View mode toggle -->
-  <div class="flex justify-center mb-3">
+  <!-- View mode toggle with navigation -->
+  <div class="flex items-center justify-center gap-2 mb-3">
     <div class="flex bg-bg-tertiary rounded-md p-0.5">
       <button
         type="button"
@@ -383,6 +411,56 @@
         Carousel
       </button>
     </div>
+
+    <!-- Jump to first/last buttons -->
+    {#if chatEvents.length > 0}
+      <div class="flex items-center gap-0.5">
+        <button
+          type="button"
+          onclick={handleGoToFirst}
+          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+          aria-label="Jump to first message"
+          title="Jump to first message"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="11 17 6 12 11 7" />
+            <polyline points="18 17 13 12 18 7" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onclick={handleGoToLast}
+          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+          aria-label="Jump to last message"
+          title="Jump to last message"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="13 17 18 12 13 7" />
+            <polyline points="6 17 11 12 6 7" />
+          </svg>
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- Content area -->
@@ -548,7 +626,8 @@
         <div class="overflow-hidden">
           <div
             class="flex gap-3 transition-transform duration-300 ease-in-out"
-            style="transform: translateX(calc(17.5% - {currentIndex * 65}% - {currentIndex * 12}px))"
+            style="transform: translateX(calc(17.5% - {currentIndex *
+              65}% - {currentIndex * 12}px))"
           >
             {#each chatEvents as event, index (getEventId(event, index))}
               {@const textContent = extractTextContent(event)}
@@ -559,7 +638,9 @@
                 type="button"
                 onclick={() => handleGoToIndex(index)}
                 class="w-[65%] shrink-0 text-left transition-all duration-300
-                       {isCurrent ? 'opacity-100 scale-100' : 'opacity-40 scale-95'}"
+                       {isCurrent
+                  ? 'opacity-100 scale-100'
+                  : 'opacity-40 scale-95'}"
                 aria-label="Message {index + 1}: {event.type}"
               >
                 <div

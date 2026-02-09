@@ -55,11 +55,19 @@
     readonly tool: string;
   }
 
+  interface SessionUsage {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly cacheCreationTokens: number;
+    readonly cacheReadTokens: number;
+  }
+
   interface SessionSummaryData {
     readonly sessionId: string;
     readonly toolUsage: readonly ToolUsageEntry[];
     readonly tasks: readonly SessionTask[];
     readonly filesModified: readonly FileModEntry[];
+    readonly usage: SessionUsage;
   }
 
   interface Props {
@@ -377,6 +385,19 @@
   }
 
   /**
+   * Format token count with k/M suffixes
+   */
+  function formatTokenCount(count: number): string {
+    if (count >= 1_000_000) {
+      return `${(count / 1_000_000).toFixed(1)}M`;
+    }
+    if (count >= 1_000) {
+      return `${(count / 1_000).toFixed(1)}k`;
+    }
+    return count.toString();
+  }
+
+  /**
    * Load initial data on mount
    */
   onMount(async () => {
@@ -423,10 +444,7 @@
     <div class="flex-1"></div>
 
     <!-- Compact search bar, right-aligned -->
-    <SearchInput
-      value={cliFilters.searchQuery ?? ""}
-      onSearch={handleSearch}
-    />
+    <SearchInput value={cliFilters.searchQuery ?? ""} onSearch={handleSearch} />
   </div>
 
   <!-- Error Banner -->
@@ -554,9 +572,7 @@
         <!-- Reusable accordion row snippet -->
         {#snippet sessionRow(item: UnifiedSessionItem, isFirst: boolean)}
           {@const itemId =
-            item.kind === "qraftbox"
-              ? item.session.id
-              : item.session.sessionId}
+            item.kind === "qraftbox" ? item.session.id : item.session.sessionId}
           {@const isExpanded = expandedSessionIds.has(itemId)}
           {@const summary = sessionSummaries.get(itemId)}
           {@const isLoadingSummary = summaryLoading.has(itemId)}
@@ -608,11 +624,12 @@
 
               <!-- Title (first user prompt; server strips system tags) -->
               <span class="flex-1 text-sm text-text-primary truncate">
-                {displayTitle || stripSystemTags(
-                  item.kind === "claude-cli"
-                    ? item.session.summary || item.session.firstPrompt
-                    : item.session.prompt,
-                )}
+                {displayTitle ||
+                  stripSystemTags(
+                    item.kind === "claude-cli"
+                      ? item.session.summary || item.session.firstPrompt
+                      : item.session.prompt,
+                  )}
               </span>
 
               <!-- Message count -->
@@ -630,30 +647,22 @@
 
             <!-- Expanded Content -->
             {#if isExpanded}
-              <div class="border-x border-b border-accent-emphasis/40 rounded-b-lg overflow-hidden">
-                <!-- Resume button row -->
-                <div
-                  class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
-                >
-                  <button
-                    type="button"
-                    onclick={() => onResumeSession(itemId)}
-                    class="px-3 py-1 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
-                  >
-                    Resume
-                  </button>
-                  {#if item.kind === "claude-cli" && item.session.summary}
-                    <span class="text-xs text-text-secondary truncate"
-                      >{item.session.summary}</span
-                    >
-                  {/if}
-                </div>
-
-                <!-- Session Summary Bar -->
+              <div
+                class="border-x border-b border-accent-emphasis/40 rounded-b-lg overflow-hidden"
+              >
+                <!-- Session Summary / Resume Bar -->
                 {#if isLoadingSummary}
                   <div
-                    class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 border-t border-border-default"
+                    class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
                   >
+                    <button
+                      type="button"
+                      onclick={() => onResumeSession(itemId)}
+                      class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                    >
+                      Resume
+                    </button>
+                    <span class="text-text-tertiary text-xs">|</span>
                     <svg
                       class="animate-spin h-3 w-3 text-text-tertiary"
                       xmlns="http://www.w3.org/2000/svg"
@@ -678,13 +687,24 @@
                       >Loading summary...</span
                     >
                   </div>
-                {:else if hasSummaryContent && summary !== undefined}
+                {:else if summary !== undefined}
                   <div
-                    class="px-4 py-2 bg-bg-tertiary/30 border-t border-border-default"
+                    class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
                   >
-                    <!-- Tool usage pills + counts row -->
+                    <!-- Top row: Resume + tool pills + counts -->
                     <div class="flex items-center gap-2 flex-wrap">
-                      <!-- Tool pills (top 6) -->
+                      <button
+                        type="button"
+                        onclick={() => onResumeSession(itemId)}
+                        class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                      >
+                        Resume
+                      </button>
+
+                      {#if hasSummaryContent}
+                        <span class="text-text-tertiary text-xs">|</span>
+                      {/if}
+
                       {#each summary.toolUsage.slice(0, 6) as tool}
                         <span
                           class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary"
@@ -700,12 +720,10 @@
                         >
                       {/if}
 
-                      <!-- Separator -->
                       {#if summary.filesModified.length > 0 || summary.tasks.length > 0}
                         <span class="text-text-tertiary text-xs mx-1">|</span>
                       {/if}
 
-                      <!-- Files modified -->
                       {#if summary.filesModified.length > 0}
                         <button
                           type="button"
@@ -719,7 +737,6 @@
                         </button>
                       {/if}
 
-                      <!-- Tasks -->
                       {#if summary.tasks.length > 0}
                         {#if summary.filesModified.length > 0}
                           <span class="text-text-tertiary text-xs">|</span>
@@ -735,6 +752,38 @@
                         </button>
                       {/if}
                     </div>
+
+                    <!-- Token usage display -->
+                    {#if summary.usage.inputTokens > 0 || summary.usage.outputTokens > 0}
+                      <div
+                        class="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-text-tertiary"
+                      >
+                        <span
+                          >in:{formatTokenCount(
+                            summary.usage.inputTokens,
+                          )}</span
+                        >
+                        <span
+                          >out:{formatTokenCount(
+                            summary.usage.outputTokens,
+                          )}</span
+                        >
+                        {#if summary.usage.cacheCreationTokens > 0}
+                          <span
+                            >cache-w:{formatTokenCount(
+                              summary.usage.cacheCreationTokens,
+                            )}</span
+                          >
+                        {/if}
+                        {#if summary.usage.cacheReadTokens > 0}
+                          <span
+                            >cache-r:{formatTokenCount(
+                              summary.usage.cacheReadTokens,
+                            )}</span
+                          >
+                        {/if}
+                      </div>
+                    {/if}
 
                     <!-- Expandable file list -->
                     {#if expandedSummaryFiles.has(itemId) && summary.filesModified.length > 0}
@@ -784,6 +833,19 @@
                         {/each}
                       </div>
                     {/if}
+                  </div>
+                {:else}
+                  <!-- No summary yet (not loading) - just show Resume button -->
+                  <div
+                    class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
+                  >
+                    <button
+                      type="button"
+                      onclick={() => onResumeSession(itemId)}
+                      class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
+                    >
+                      Resume
+                    </button>
                   </div>
                 {/if}
 

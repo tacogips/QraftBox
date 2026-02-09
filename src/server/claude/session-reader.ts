@@ -23,6 +23,8 @@ import {
 } from "../../types/claude-session";
 import { SessionRegistry } from "./session-registry";
 import { stripSystemTags } from "../../utils/strip-system-tags";
+import { SessionReader as AgentSessionReader } from "../../../../claude-code-agent/src/sdk/index";
+import { createProductionContainer } from "../../../../claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
@@ -59,10 +61,13 @@ export interface ListSessionsOptions {
 export class ClaudeSessionReader {
   private readonly projectsDir: string;
   private readonly sessionRegistry: SessionRegistry;
+  private readonly agentSessionReader: AgentSessionReader;
 
   constructor(projectsDir?: string, sessionRegistry?: SessionRegistry) {
     this.projectsDir = projectsDir ?? CLAUDE_PROJECTS_DIR;
     this.sessionRegistry = sessionRegistry ?? new SessionRegistry();
+    const container = createProductionContainer();
+    this.agentSessionReader = new AgentSessionReader(container);
   }
 
   /**
@@ -881,11 +886,32 @@ export class ClaudeSessionReader {
     // Skip files larger than 10MB to avoid memory issues
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (fileSize > MAX_FILE_SIZE) {
+      // Still fetch usage from library even for large files
+      const largeFileUsageResult =
+        await this.agentSessionReader.readSessionUsage(sessionId);
+      const largeFileUsage = largeFileUsageResult.isOk()
+        ? largeFileUsageResult.value
+        : undefined;
+
       return {
         sessionId,
         toolUsage: [],
         tasks: [],
         filesModified: [],
+        usage:
+          largeFileUsage !== undefined
+            ? {
+                inputTokens: largeFileUsage.input,
+                outputTokens: largeFileUsage.output,
+                cacheCreationTokens: largeFileUsage.cacheWrite ?? 0,
+                cacheReadTokens: largeFileUsage.cacheRead ?? 0,
+              }
+            : {
+                inputTokens: 0,
+                outputTokens: 0,
+                cacheCreationTokens: 0,
+                cacheReadTokens: 0,
+              },
       };
     }
 
@@ -1013,6 +1039,11 @@ export class ClaudeSessionReader {
       }
     }
 
+    // Get token usage from claude-code-agent library
+    const usageResult =
+      await this.agentSessionReader.readSessionUsage(sessionId);
+    const tokenUsage = usageResult.isOk() ? usageResult.value : undefined;
+
     // Also check ~/.claude/todos/{sessionId}-agent-*.json files
     const todosDir = join(homedir(), ".claude", "todos");
     if (existsSync(todosDir)) {
@@ -1077,6 +1108,20 @@ export class ClaudeSessionReader {
       toolUsage,
       tasks,
       filesModified,
+      usage:
+        tokenUsage !== undefined
+          ? {
+              inputTokens: tokenUsage.input,
+              outputTokens: tokenUsage.output,
+              cacheCreationTokens: tokenUsage.cacheWrite ?? 0,
+              cacheReadTokens: tokenUsage.cacheRead ?? 0,
+            }
+          : {
+              inputTokens: 0,
+              outputTokens: 0,
+              cacheCreationTokens: 0,
+              cacheReadTokens: 0,
+            },
     };
   }
 }
@@ -1118,6 +1163,16 @@ export interface FileModEntry {
 }
 
 /**
+ * Token usage data for a session
+ */
+export interface SessionUsage {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cacheCreationTokens: number;
+  readonly cacheReadTokens: number;
+}
+
+/**
  * Session summary with activity details
  */
 export interface SessionSummary {
@@ -1125,4 +1180,5 @@ export interface SessionSummary {
   readonly toolUsage: readonly ToolUsageEntry[];
   readonly tasks: readonly SessionTask[];
   readonly filesModified: readonly FileModEntry[];
+  readonly usage: SessionUsage;
 }
