@@ -1,76 +1,84 @@
 <script lang="ts">
-/**
- * SessionDetailView Component
- *
- * Displays detailed session information with conversation history.
- *
- * Props:
- * - session: The AI session to display
- * - viewMode: Current view mode (chat or carousel)
- * - onViewModeChange: Callback when view mode changes
- * - onBack: Callback to navigate back to queue
- *
- * Design:
- * - Session header with prompt summary
- * - View mode toggle (chat/carousel)
- * - Conversation display
- * - Session stats footer
- */
+  /**
+   * SessionDetailView Component
+   *
+   * Displays detailed session information with conversation history.
+   *
+   * Props:
+   * - session: The AI session to display
+   * - viewMode: Current view mode (chat or carousel)
+   * - onViewModeChange: Callback when view mode changes
+   * - onBack: Callback to navigate back to queue
+   *
+   * Design:
+   * - Session header with prompt summary
+   * - View mode toggle (chat/carousel)
+   * - Conversation display
+   * - Session stats footer
+   */
 
-import type { AISession, ConversationViewMode } from "../../../src/types/ai";
-import ConversationChatView from "./ConversationChatView.svelte";
-import ConversationCarousel from "./ConversationCarousel.svelte";
-import SessionStats from "./SessionStats.svelte";
+  import type { AISession, ConversationViewMode } from "../../../src/types/ai";
+  import ConversationChatView from "./ConversationChatView.svelte";
+  import ConversationCarousel from "./ConversationCarousel.svelte";
+  import SessionStats from "./SessionStats.svelte";
 
-interface Props {
-  session: AISession;
-  viewMode: ConversationViewMode;
-  onViewModeChange: (mode: ConversationViewMode) => void;
-  onBack: () => void;
-}
-
-// Svelte 5 props syntax
-const { session, viewMode, onViewModeChange, onBack }: Props = $props();
-
-/**
- * Current carousel index (for carousel mode)
- */
-let carouselIndex = $state(0);
-
-/**
- * Handle carousel index change
- */
-function handleCarouselIndexChange(index: number): void {
-  carouselIndex = index;
-}
-
-/**
- * Get status badge info
- */
-const statusBadge = $derived.by(() => {
-  switch (session.state) {
-    case "running":
-      return { text: "Running", color: "bg-accent-emphasis", animate: true };
-    case "queued":
-      return { text: "Queued", color: "bg-attention-emphasis", animate: false };
-    case "completed":
-      return { text: "Completed", color: "bg-success-emphasis", animate: false };
-    case "failed":
-      return { text: "Failed", color: "bg-danger-emphasis", animate: false };
-    case "cancelled":
-      return { text: "Cancelled", color: "bg-bg-emphasis", animate: false };
-    default:
-      return { text: "Unknown", color: "bg-bg-emphasis", animate: false };
+  interface Props {
+    session: AISession;
+    viewMode: ConversationViewMode;
+    onViewModeChange: (mode: ConversationViewMode) => void;
+    onBack: () => void;
   }
-});
 
-/**
- * Format prompt for display in header
- */
-function truncatePrompt(prompt: string, maxLength = 100): string {
-  if (prompt.length <= maxLength) return prompt;
-  return prompt.slice(0, maxLength) + "...";
-}
+  // Svelte 5 props syntax
+  const { session, viewMode, onViewModeChange, onBack }: Props = $props();
+
+  /**
+   * Current carousel index (for carousel mode)
+   */
+  let carouselIndex = $state(0);
+
+  /**
+   * Handle carousel index change
+   */
+  function handleCarouselIndexChange(index: number): void {
+    carouselIndex = index;
+  }
+
+  /**
+   * Get status badge info
+   */
+  const statusBadge = $derived.by(() => {
+    switch (session.state) {
+      case "running":
+        return { text: "Running", color: "bg-accent-emphasis", animate: true };
+      case "queued":
+        return {
+          text: "Queued",
+          color: "bg-attention-emphasis",
+          animate: false,
+        };
+      case "completed":
+        return {
+          text: "Completed",
+          color: "bg-success-emphasis",
+          animate: false,
+        };
+      case "failed":
+        return { text: "Failed", color: "bg-danger-emphasis", animate: false };
+      case "cancelled":
+        return { text: "Cancelled", color: "bg-bg-emphasis", animate: false };
+      default:
+        return { text: "Unknown", color: "bg-bg-emphasis", animate: false };
+    }
+  });
+
+  /**
+   * Format prompt for display in header
+   */
+  function truncatePrompt(prompt: string, maxLength = 100): string {
+    if (prompt.length <= maxLength) return prompt;
+    return prompt.slice(0, maxLength) + "...";
+  }
 </script>
 
 <div
@@ -116,7 +124,9 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
                  text-xs font-medium text-white {statusBadge.color}"
         >
           {#if statusBadge.animate}
-            <span class="w-1.5 h-1.5 rounded-full bg-bg-primary animate-pulse" />
+            <span
+              class="w-1.5 h-1.5 rounded-full bg-bg-primary animate-pulse"
+            />
           {/if}
           {statusBadge.text}
         </span>
@@ -134,8 +144,8 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
           class="px-3 py-1.5 text-sm rounded-md transition-colors
                  focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  {viewMode === 'chat'
-                   ? 'bg-bg-secondary text-text-primary shadow-sm'
-                   : 'text-text-secondary hover:text-text-primary'}"
+            ? 'bg-bg-secondary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
           role="tab"
           aria-selected={viewMode === "chat"}
           aria-controls="conversation-content"
@@ -153,7 +163,9 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
             class="inline-block mr-1"
             aria-hidden="true"
           >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            />
           </svg>
           Chat
         </button>
@@ -163,8 +175,8 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
           class="px-3 py-1.5 text-sm rounded-md transition-colors
                  focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                  {viewMode === 'carousel'
-                   ? 'bg-bg-secondary text-text-primary shadow-sm'
-                   : 'text-text-secondary hover:text-text-primary'}"
+            ? 'bg-bg-secondary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
           role="tab"
           aria-selected={viewMode === "carousel"}
           aria-controls="conversation-content"
@@ -197,18 +209,15 @@ function truncatePrompt(prompt: string, maxLength = 100): string {
       </p>
       {#if session.context.primaryFile !== undefined}
         <p class="text-xs text-text-tertiary mt-1">
-          {session.context.primaryFile.path}:{session.context.primaryFile.startLine}-{session.context.primaryFile.endLine}
+          {session.context.primaryFile.path}:{session.context.primaryFile
+            .startLine}-{session.context.primaryFile.endLine}
         </p>
       {/if}
     </div>
   </header>
 
   <!-- Conversation content -->
-  <div
-    id="conversation-content"
-    class="flex-1 overflow-hidden"
-    role="tabpanel"
-  >
+  <div id="conversation-content" class="flex-1 overflow-hidden" role="tabpanel">
     {#if viewMode === "chat"}
       <ConversationChatView turns={session.turns} />
     {:else}

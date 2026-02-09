@@ -303,11 +303,14 @@
 
     <!-- Current session card -->
     {#if displayMode !== "none"}
-      <button
-        type="button"
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
         onclick={toggleSession}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSession(); } }}
+        role="button"
+        tabindex={0}
         class="w-full flex items-center gap-2 px-4 py-2
-               hover:bg-bg-hover transition-colors text-left"
+               hover:bg-bg-hover transition-colors text-left cursor-pointer select-none"
       >
         <!-- Chevron -->
         <svg
@@ -334,6 +337,18 @@
             Running
           </span>
         {:else}
+          <!-- Resume button (always visible for CLI, no expand needed) -->
+          <button
+            type="button"
+            onclick={(e: MouseEvent) => { e.stopPropagation(); if (recentCliSession !== null) { onResumeSession(recentCliSession.sessionId); } }}
+            class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
+                   bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
+                   border border-accent-emphasis/30 hover:border-accent-emphasis/60
+                   transition-colors"
+            title="Resume this session"
+          >
+            Resume
+          </button>
           <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary">
             CLI
           </span>
@@ -361,7 +376,7 @@
             {getRelativeTime(recentCliSession.modified)}
           </span>
         {/if}
-      </button>
+      </div>
 
       <!-- Expanded content -->
       {#if sessionExpanded}
@@ -484,7 +499,7 @@
               {/if}
             </div>
 
-            <SessionTranscriptInline sessionId={recentCliSession.sessionId} {contextId} />
+            <SessionTranscriptInline sessionId={recentCliSession.sessionId} {contextId} maxMessages={3} />
           {/if}
         </div>
       {/if}

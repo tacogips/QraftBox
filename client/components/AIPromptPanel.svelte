@@ -432,12 +432,12 @@
 >
   <!-- Collapsed single-line input bar -->
   {#if collapsed}
-    <div class="h-14 px-4 flex items-center gap-3">
+    <div class="h-14 px-4 flex items-center gap-2">
       <!-- Expand button (replaces AI icon position) -->
       <button
         type="button"
         onclick={onToggle}
-        class="shrink-0 h-9 w-9 flex items-center justify-center
+        class="shrink-0 h-6 w-6 flex items-center justify-center
                hover:bg-bg-hover rounded transition-colors duration-150
                focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
         aria-expanded={!collapsed}
@@ -445,8 +445,8 @@
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -669,7 +669,7 @@
         <button
           type="button"
           onclick={onToggle}
-          class="shrink-0 h-9 w-9 flex items-center justify-center self-start mt-0.5
+          class="shrink-0 h-6 w-6 flex items-center justify-center self-start mt-0.5
                  hover:bg-bg-hover rounded transition-colors duration-150
                  focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
           aria-expanded={!collapsed}
@@ -677,8 +677,8 @@
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
+            width="12"
+            height="12"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

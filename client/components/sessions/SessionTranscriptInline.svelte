@@ -13,11 +13,13 @@
   interface Props {
     sessionId: string;
     contextId: string;
+    /** When set, only show the last N messages (compact mode) */
+    maxMessages?: number | undefined;
   }
 
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
 
-  const { sessionId, contextId }: Props = $props();
+  const { sessionId, contextId, maxMessages = undefined }: Props = $props();
 
   /**
    * Transcript event structure (matches server response)
@@ -66,7 +68,7 @@
    * Excludes user messages that consist entirely of system tags
    * (e.g., local-command-caveat, command-name, system-reminder).
    */
-  const chatEvents = $derived(
+  const allChatEvents = $derived(
     loadingState.status === "success"
       ? loadingState.data.filter((event) => {
           if (event.type !== "user" && event.type !== "assistant") return false;
@@ -76,6 +78,15 @@
         })
       : [],
   );
+
+  /** When maxMessages is set, only show the last N messages */
+  const chatEvents = $derived(
+    maxMessages !== undefined && allChatEvents.length > maxMessages
+      ? allChatEvents.slice(-maxMessages)
+      : allChatEvents,
+  );
+
+  const isCompact = $derived(maxMessages !== undefined);
 
   /**
    * Fetch transcript events from API
@@ -384,8 +395,9 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="session-transcript-inline px-4 py-3">
-  <!-- View mode toggle with navigation -->
+<div class="session-transcript-inline {isCompact ? 'px-4 py-1.5' : 'px-4 py-3'}">
+  <!-- View mode toggle with navigation (hidden in compact mode) -->
+  {#if !isCompact}
   <div class="flex items-center justify-center gap-2 mb-3">
     <div class="flex bg-bg-tertiary rounded-md p-0.5">
       <button
@@ -462,6 +474,7 @@
       </div>
     {/if}
   </div>
+  {/if}
 
   <!-- Content area -->
   {#if loadingState.status === "loading"}
@@ -514,7 +527,7 @@
       <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
       <div
         bind:this={chatScrollContainer}
-        class="max-h-[600px] overflow-y-auto space-y-2"
+        class="{isCompact ? 'max-h-[120px]' : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
       >
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}

@@ -590,10 +590,13 @@
           <!-- Accordion Row (contents = layout-invisible wrapper for sticky) -->
           <div class="contents">
             <!-- Header Row (clickable, sticky) -->
-            <button
-              type="button"
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
               onclick={() => toggleSessionExpansion(itemId)}
-              class="sticky top-0 z-10 w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm {isFirst
+              onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSessionExpansion(itemId); } }}
+              role="button"
+              tabindex={0}
+              class="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm cursor-pointer select-none {isFirst
                 ? ''
                 : 'mt-3'} {isExpanded
                 ? 'rounded-t-lg border-accent-emphasis/40'
@@ -601,7 +604,7 @@
             >
               <!-- Expand/Collapse chevron -->
               <svg
-                class="w-4 h-4 text-text-tertiary transition-transform {isExpanded
+                class="w-4 h-4 text-text-tertiary transition-transform shrink-0 {isExpanded
                   ? 'rotate-90'
                   : ''}"
                 viewBox="0 0 16 16"
@@ -611,6 +614,19 @@
                   d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
                 />
               </svg>
+
+              <!-- Resume button (always visible, no expand needed) -->
+              <button
+                type="button"
+                onclick={(e: MouseEvent) => { e.stopPropagation(); onResumeSession(itemId); }}
+                class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
+                       bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
+                       border border-accent-emphasis/30 hover:border-accent-emphasis/60
+                       transition-colors"
+                title="Resume this session"
+              >
+                Resume
+              </button>
 
               <!-- Source badge -->
               <span
@@ -643,7 +659,7 @@
               <span class="text-xs text-text-tertiary shrink-0">
                 {getRelativeTime(getSortDate(item))}
               </span>
-            </button>
+            </div>
 
             <!-- Expanded Content -->
             {#if isExpanded}

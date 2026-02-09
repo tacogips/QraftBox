@@ -1,154 +1,154 @@
 <script lang="ts">
-/**
- * SessionCard Component
- *
- * Displays a session summary with variant-specific actions.
- *
- * Props:
- * - session: The AI session to display
- * - variant: running | queued | completed
- * - onSelect: Callback when card is selected
- * - onCancel: Callback to cancel session (running/queued)
- * - onRunNow: Callback to run immediately (queued only)
- * - onRemove: Callback to remove (queued/completed)
- *
- * Design:
- * - Compact card with session summary
- * - Status indicator
- * - Context info (file, lines)
- * - Touch-friendly tap target
- */
+  /**
+   * SessionCard Component
+   *
+   * Displays a session summary with variant-specific actions.
+   *
+   * Props:
+   * - session: The AI session to display
+   * - variant: running | queued | completed
+   * - onSelect: Callback when card is selected
+   * - onCancel: Callback to cancel session (running/queued)
+   * - onRunNow: Callback to run immediately (queued only)
+   * - onRemove: Callback to remove (queued/completed)
+   *
+   * Design:
+   * - Compact card with session summary
+   * - Status indicator
+   * - Context info (file, lines)
+   * - Touch-friendly tap target
+   */
 
-import type { AISession, SessionState } from "../../../src/types/ai";
+  import type { AISession, SessionState } from "../../../src/types/ai";
 
-interface Props {
-  session: AISession;
-  variant: "running" | "queued" | "completed";
-  onSelect: () => void;
-  onCancel?: (() => void) | undefined;
-  onRunNow?: (() => void) | undefined;
-  onRemove?: (() => void) | undefined;
-}
-
-// Svelte 5 props syntax
-const {
-  session,
-  variant,
-  onSelect,
-  onCancel = undefined,
-  onRunNow = undefined,
-  onRemove = undefined,
-}: Props = $props();
-
-/**
- * Get status color based on state
- */
-function getStatusColor(state: SessionState): string {
-  switch (state) {
-    case "running":
-      return "bg-accent-emphasis";
-    case "queued":
-      return "bg-attention-emphasis";
-    case "completed":
-      return "bg-success-emphasis";
-    case "failed":
-      return "bg-danger-emphasis";
-    case "cancelled":
-      return "bg-bg-emphasis";
-    default:
-      return "bg-bg-emphasis";
+  interface Props {
+    session: AISession;
+    variant: "running" | "queued" | "completed";
+    onSelect: () => void;
+    onCancel?: (() => void) | undefined;
+    onRunNow?: (() => void) | undefined;
+    onRemove?: (() => void) | undefined;
   }
-}
 
-/**
- * Get status text
- */
-function getStatusText(state: SessionState): string {
-  switch (state) {
-    case "running":
-      return "Running";
-    case "queued":
-      return "Queued";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    case "cancelled":
-      return "Cancelled";
-    default:
-      return "Unknown";
+  // Svelte 5 props syntax
+  const {
+    session,
+    variant,
+    onSelect,
+    onCancel = undefined,
+    onRunNow = undefined,
+    onRemove = undefined,
+  }: Props = $props();
+
+  /**
+   * Get status color based on state
+   */
+  function getStatusColor(state: SessionState): string {
+    switch (state) {
+      case "running":
+        return "bg-accent-emphasis";
+      case "queued":
+        return "bg-attention-emphasis";
+      case "completed":
+        return "bg-success-emphasis";
+      case "failed":
+        return "bg-danger-emphasis";
+      case "cancelled":
+        return "bg-bg-emphasis";
+      default:
+        return "bg-bg-emphasis";
+    }
   }
-}
 
-/**
- * Get relative time string
- */
-function getRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  return `${diffDay}d ago`;
-}
-
-/**
- * Truncate prompt for display
- */
-function truncatePrompt(prompt: string, maxLength = 100): string {
-  if (prompt.length <= maxLength) return prompt;
-  return prompt.slice(0, maxLength) + "...";
-}
-
-/**
- * Get context summary
- */
-const contextSummary = $derived.by(() => {
-  if (session.context.primaryFile !== undefined) {
-    const pf = session.context.primaryFile;
-    const lineRange =
-      pf.startLine === pf.endLine
-        ? `L${pf.startLine}`
-        : `L${pf.startLine}-${pf.endLine}`;
-    return `${pf.path}:${lineRange}`;
+  /**
+   * Get status text
+   */
+  function getStatusText(state: SessionState): string {
+    switch (state) {
+      case "running":
+        return "Running";
+      case "queued":
+        return "Queued";
+      case "completed":
+        return "Completed";
+      case "failed":
+        return "Failed";
+      case "cancelled":
+        return "Cancelled";
+      default:
+        return "Unknown";
+    }
   }
-  if (session.context.references.length > 0) {
-    const first = session.context.references[0]!;
-    const more =
-      session.context.references.length > 1
-        ? ` +${session.context.references.length - 1}`
-        : "";
-    return `${first.path}${more}`;
-  }
-  return null;
-});
 
-/**
- * Handle action button clicks (stop propagation)
- */
-function handleActionClick(
-  event: MouseEvent,
-  callback: (() => void) | undefined
-): void {
-  event.stopPropagation();
-  if (callback !== undefined) {
-    callback();
+  /**
+   * Get relative time string
+   */
+  function getRelativeTime(dateStr: string): string {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+
+    if (diffSec < 60) return "just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    if (diffHour < 24) return `${diffHour}h ago`;
+    return `${diffDay}d ago`;
   }
-}
+
+  /**
+   * Truncate prompt for display
+   */
+  function truncatePrompt(prompt: string, maxLength = 100): string {
+    if (prompt.length <= maxLength) return prompt;
+    return prompt.slice(0, maxLength) + "...";
+  }
+
+  /**
+   * Get context summary
+   */
+  const contextSummary = $derived.by(() => {
+    if (session.context.primaryFile !== undefined) {
+      const pf = session.context.primaryFile;
+      const lineRange =
+        pf.startLine === pf.endLine
+          ? `L${pf.startLine}`
+          : `L${pf.startLine}-${pf.endLine}`;
+      return `${pf.path}:${lineRange}`;
+    }
+    if (session.context.references.length > 0) {
+      const first = session.context.references[0]!;
+      const more =
+        session.context.references.length > 1
+          ? ` +${session.context.references.length - 1}`
+          : "";
+      return `${first.path}${more}`;
+    }
+    return null;
+  });
+
+  /**
+   * Handle action button clicks (stop propagation)
+   */
+  function handleActionClick(
+    event: MouseEvent,
+    callback: (() => void) | undefined,
+  ): void {
+    event.stopPropagation();
+    if (callback !== undefined) {
+      callback();
+    }
+  }
 </script>
 
 <div
   class="session-card group relative border
          rounded-lg overflow-hidden
          {variant === 'running'
-           ? 'animate-session-glow border-accent-emphasis/50'
-           : 'bg-bg-secondary border-border-default hover:border-accent-emphasis/50 hover:bg-bg-hover'}
+    ? 'animate-session-glow border-accent-emphasis/50'
+    : 'bg-bg-secondary border-border-default hover:border-accent-emphasis/50 hover:bg-bg-hover'}
          transition-colors duration-150"
   role="article"
   aria-label={`Session: ${truncatePrompt(session.prompt, 50)}`}
@@ -182,7 +182,9 @@ function handleActionClick(
           </svg>
         {:else}
           <span
-            class="inline-block w-2 h-2 rounded-full {getStatusColor(session.state)}"
+            class="inline-block w-2 h-2 rounded-full {getStatusColor(
+              session.state,
+            )}"
             aria-hidden="true"
           />
         {/if}
@@ -223,7 +225,9 @@ function handleActionClick(
           class="text-text-tertiary"
           aria-hidden="true"
         >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path
+            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          />
           <polyline points="14 2 14 8 20 8" />
         </svg>
         <span class="text-xs text-text-tertiary truncate">
@@ -349,7 +353,9 @@ function handleActionClick(
           aria-hidden="true"
         >
           <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <path
+            d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+          />
         </svg>
       </button>
     {/if}
@@ -357,11 +363,11 @@ function handleActionClick(
 </div>
 
 <style>
-/* Line clamp for prompt truncation */
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
+  /* Line clamp for prompt truncation */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
 </style>

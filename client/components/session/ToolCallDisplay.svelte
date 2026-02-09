@@ -1,106 +1,113 @@
 <script lang="ts">
-/**
- * ToolCallDisplay Component
- *
- * Displays a single tool call with name, status, and expandable details.
- *
- * Props:
- * - toolCall: The tool call to display
- *
- * Design:
- * - Tool name and status icon
- * - Collapsed by default
- * - Expand to see input/output
- * - Truncate long output
- */
+  /**
+   * ToolCallDisplay Component
+   *
+   * Displays a single tool call with name, status, and expandable details.
+   *
+   * Props:
+   * - toolCall: The tool call to display
+   *
+   * Design:
+   * - Tool name and status icon
+   * - Collapsed by default
+   * - Expand to see input/output
+   * - Truncate long output
+   */
 
-import type { ToolCall } from "../../../src/types/ai";
+  import type { ToolCall } from "../../../src/types/ai";
 
-interface Props {
-  toolCall: ToolCall;
-}
-
-// Svelte 5 props syntax
-const { toolCall }: Props = $props();
-
-/**
- * Whether details are expanded
- */
-let expanded = $state(false);
-
-/**
- * Maximum length for displaying output before truncation
- */
-const MAX_OUTPUT_LENGTH = 500;
-
-/**
- * Get status icon and color
- */
-const statusDisplay = $derived.by(() => {
-  switch (toolCall.status) {
-    case "pending":
-      return { icon: "clock", color: "text-attention-fg", label: "Pending" };
-    case "running":
-      return { icon: "loader", color: "text-accent-fg", label: "Running" };
-    case "completed":
-      return { icon: "check", color: "text-success-fg", label: "Completed" };
-    case "failed":
-      return { icon: "x", color: "text-danger-fg", label: "Failed" };
-    default:
-      return { icon: "circle", color: "text-text-tertiary", label: "Unknown" };
+  interface Props {
+    toolCall: ToolCall;
   }
-});
 
-/**
- * Format JSON for display
- */
-function formatJson(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
+  // Svelte 5 props syntax
+  const { toolCall }: Props = $props();
 
-/**
- * Truncate long output
- */
-function truncateOutput(value: unknown): { text: string; truncated: boolean } {
-  const formatted = formatJson(value);
-  if (formatted.length <= MAX_OUTPUT_LENGTH) {
-    return { text: formatted, truncated: false };
-  }
-  return {
-    text: formatted.slice(0, MAX_OUTPUT_LENGTH) + "...",
-    truncated: true,
-  };
-}
+  /**
+   * Whether details are expanded
+   */
+  let expanded = $state(false);
 
-/**
- * Toggle expanded state
- */
-function toggle(): void {
-  expanded = !expanded;
-}
+  /**
+   * Maximum length for displaying output before truncation
+   */
+  const MAX_OUTPUT_LENGTH = 500;
 
-/**
- * Calculate duration if timing is available
- */
-const duration = $derived.by(() => {
-  if (
-    toolCall.startedAt === undefined ||
-    toolCall.completedAt === undefined
-  ) {
-    return null;
+  /**
+   * Get status icon and color
+   */
+  const statusDisplay = $derived.by(() => {
+    switch (toolCall.status) {
+      case "pending":
+        return { icon: "clock", color: "text-attention-fg", label: "Pending" };
+      case "running":
+        return { icon: "loader", color: "text-accent-fg", label: "Running" };
+      case "completed":
+        return { icon: "check", color: "text-success-fg", label: "Completed" };
+      case "failed":
+        return { icon: "x", color: "text-danger-fg", label: "Failed" };
+      default:
+        return {
+          icon: "circle",
+          color: "text-text-tertiary",
+          label: "Unknown",
+        };
+    }
+  });
+
+  /**
+   * Format JSON for display
+   */
+  function formatJson(value: unknown): string {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
   }
-  const start = new Date(toolCall.startedAt).getTime();
-  const end = new Date(toolCall.completedAt).getTime();
-  const ms = end - start;
-  if (ms < 1000) {
-    return `${ms}ms`;
+
+  /**
+   * Truncate long output
+   */
+  function truncateOutput(value: unknown): {
+    text: string;
+    truncated: boolean;
+  } {
+    const formatted = formatJson(value);
+    if (formatted.length <= MAX_OUTPUT_LENGTH) {
+      return { text: formatted, truncated: false };
+    }
+    return {
+      text: formatted.slice(0, MAX_OUTPUT_LENGTH) + "...",
+      truncated: true,
+    };
   }
-  return `${(ms / 1000).toFixed(1)}s`;
-});
+
+  /**
+   * Toggle expanded state
+   */
+  function toggle(): void {
+    expanded = !expanded;
+  }
+
+  /**
+   * Calculate duration if timing is available
+   */
+  const duration = $derived.by(() => {
+    if (
+      toolCall.startedAt === undefined ||
+      toolCall.completedAt === undefined
+    ) {
+      return null;
+    }
+    const start = new Date(toolCall.startedAt).getTime();
+    const end = new Date(toolCall.completedAt).getTime();
+    const ms = end - start;
+    if (ms < 1000) {
+      return `${ms}ms`;
+    }
+    return `${(ms / 1000).toFixed(1)}s`;
+  });
 </script>
 
 <div
@@ -235,7 +242,9 @@ const duration = $derived.by(() => {
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
-      class="text-text-tertiary transition-transform {expanded ? 'rotate-180' : ''}"
+      class="text-text-tertiary transition-transform {expanded
+        ? 'rotate-180'
+        : ''}"
       aria-hidden="true"
     >
       <polyline points="6 9 12 15 18 9" />
@@ -250,8 +259,9 @@ const duration = $derived.by(() => {
         <h4 class="text-xs font-semibold text-text-secondary mb-1">Input</h4>
         <pre
           class="text-xs font-mono text-text-tertiary bg-bg-primary
-                 rounded p-2 overflow-x-auto max-h-40"
-        >{formatJson(toolCall.input)}</pre>
+                 rounded p-2 overflow-x-auto max-h-40">{formatJson(
+            toolCall.input,
+          )}</pre>
       </div>
 
       <!-- Output section (if available) -->
@@ -261,8 +271,7 @@ const duration = $derived.by(() => {
           <h4 class="text-xs font-semibold text-text-secondary mb-1">Output</h4>
           <pre
             class="text-xs font-mono text-text-tertiary bg-bg-primary
-                   rounded p-2 overflow-x-auto max-h-40"
-          >{outputDisplay.text}</pre>
+                   rounded p-2 overflow-x-auto max-h-40">{outputDisplay.text}</pre>
           {#if outputDisplay.truncated}
             <p class="text-xs text-text-tertiary mt-1 italic">
               Output truncated ({MAX_OUTPUT_LENGTH} characters shown)
@@ -277,8 +286,7 @@ const duration = $derived.by(() => {
           <h4 class="text-xs font-semibold text-danger-fg mb-1">Error</h4>
           <pre
             class="text-xs font-mono text-danger-fg bg-danger-subtle
-                   rounded p-2 overflow-x-auto"
-          >{toolCall.error}</pre>
+                   rounded p-2 overflow-x-auto">{toolCall.error}</pre>
         </div>
       {/if}
     </div>
