@@ -98,9 +98,10 @@
     totalCount: 0,
   });
 
-  // Running/queued sessions for CurrentSessionPanel
+  // Running/queued/recently-completed sessions for CurrentSessionPanel
   let runningSessions = $state<AISession[]>([]);
   let queuedSessions = $state<AISession[]>([]);
+  let recentlyCompletedSessions = $state<AISession[]>([]);
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
 
   // Local prompt queue for tracking submitted prompts
@@ -632,6 +633,9 @@
 
       const running: AISession[] = [];
       const queued: AISession[] = [];
+      const recentCompleted: AISession[] = [];
+      const now = Date.now();
+      const RECENT_WINDOW_MS = 60_000; // Show completed sessions for 60 seconds
 
       for (const info of data.sessions) {
         const session: AISession = {
@@ -645,11 +649,23 @@
           running.push(session);
         } else if (session.state === "queued") {
           queued.push(session);
+        } else if (
+          (session.state === "completed" || session.state === "failed") &&
+          session.completedAt !== undefined
+        ) {
+          const completedTime = new Date(session.completedAt).getTime();
+          if (now - completedTime < RECENT_WINDOW_MS) {
+            recentCompleted.push(session);
+          }
         }
       }
 
       runningSessions = running;
       queuedSessions = queued;
+      recentlyCompletedSessions = recentCompleted;
+
+      // Also refresh queue status to avoid stale display
+      void fetchQueueStatus();
 
       // Auto-dispatch next pending prompt if nothing is running
       if (running.length === 0 && queued.length === 0 && pendingPrompts.length > 0) {
@@ -715,13 +731,16 @@
   }
 
   /**
-   * Manage polling interval for active sessions and pending prompts
+   * Manage polling interval for active sessions and pending prompts.
+   * Also polls while recently completed sessions exist so their display
+   * eventually clears and queue status stays accurate.
    */
   function manageSessionPolling(): void {
     const hasActive =
       runningSessions.length > 0 ||
       queuedSessions.length > 0 ||
-      pendingPrompts.length > 0;
+      pendingPrompts.length > 0 ||
+      recentlyCompletedSessions.length > 0;
 
     if (hasActive && sessionPollTimer === null) {
       sessionPollTimer = setInterval(() => {
@@ -736,7 +755,7 @@
 
   // Re-evaluate polling when state changes
   $effect(() => {
-    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length];
+    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length, recentlyCompletedSessions.length];
     manageSessionPolling();
   });
 
@@ -1441,6 +1460,7 @@
           {contextId}
           running={runningSessions}
           queued={queuedSessions}
+          recentlyCompleted={recentlyCompletedSessions}
           {pendingPrompts}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
           onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}

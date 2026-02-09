@@ -35,12 +35,13 @@
     contextId: string | null;
     running: readonly AISession[];
     queued: readonly AISession[];
+    recentlyCompleted: readonly AISession[];
     pendingPrompts: readonly LocalPrompt[];
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
   }
 
-  const { contextId, running, queued, pendingPrompts, onCancelSession, onResumeSession }: Props = $props();
+  const { contextId, running, queued, recentlyCompleted, pendingPrompts, onCancelSession, onResumeSession }: Props = $props();
 
   /**
    * Most recent CLI session (shown when nothing else is active)
@@ -65,6 +66,11 @@
    * Currently running QraftBox session
    */
   const runningSession = $derived(running.length > 0 ? running[0] : null);
+
+  /**
+   * Most recently completed QraftBox session
+   */
+  const completedSession = $derived(recentlyCompleted.length > 0 ? recentlyCompleted[0] : null);
 
   /**
    * Whether something is actively running
@@ -94,14 +100,16 @@
    * Whether the panel has anything to show
    */
   const hasContent = $derived(
-    isRunning || queueCount > 0 || recentCliSession !== null,
+    isRunning || queueCount > 0 || completedSession !== null || recentCliSession !== null,
   );
 
   /**
-   * What kind of session to display in the main card
+   * What kind of session to display in the main card.
+   * Priority: running > completed (recent QraftBox) > cli
    */
   const displayMode = $derived.by(() => {
     if (isRunning) return "running" as const;
+    if (completedSession !== null) return "completed" as const;
     if (recentCliSession !== null) return "cli" as const;
     return "none" as const;
   });
@@ -112,6 +120,9 @@
   const displayTitle = $derived.by(() => {
     if (runningSession !== null && runningSession !== undefined) {
       return stripSystemTags(runningSession.prompt);
+    }
+    if (completedSession !== null) {
+      return stripSystemTags(completedSession.prompt);
     }
     if (recentCliSession !== null) {
       return stripSystemTags(recentCliSession.firstPrompt || recentCliSession.summary);
@@ -336,6 +347,24 @@
           <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-fg">
             Running
           </span>
+        {:else if displayMode === "completed"}
+          <!-- Completed checkmark -->
+          <svg
+            class="h-3.5 w-3.5 text-success-fg shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold
+                       {completedSession?.state === 'failed' ? 'bg-danger-subtle text-danger-fg' : 'bg-success-muted text-success-fg'}">
+            {completedSession?.state === "failed" ? "Failed" : "Done"}
+          </span>
         {:else}
           <!-- Resume button (always visible for CLI, no expand needed) -->
           <button
@@ -367,6 +396,10 @@
           {/if}
           <span class="text-xs font-mono text-text-tertiary tabular-nums shrink-0">
             {elapsedFormatted}
+          </span>
+        {:else if displayMode === "completed" && completedSession !== null}
+          <span class="text-[10px] text-text-tertiary shrink-0">
+            {completedSession.completedAt !== undefined ? getRelativeTime(completedSession.completedAt) : ""}
           </span>
         {:else if recentCliSession !== null}
           <span class="text-[10px] text-text-tertiary shrink-0">
@@ -406,6 +439,17 @@
                   Cancel
                 </button>
               </div>
+            </div>
+          {:else if displayMode === "completed" && completedSession !== null}
+            <div class="px-4 py-2">
+              <p class="text-xs text-text-primary whitespace-pre-wrap mb-2">
+                {stripSystemTags(completedSession.prompt)}
+              </p>
+              {#if completedSession.state === "failed"}
+                <p class="text-xs text-danger-fg">Session failed.</p>
+              {:else}
+                <p class="text-xs text-success-fg">Session completed.</p>
+              {/if}
             </div>
           {:else if recentCliSession !== null && contextId !== null}
             <div class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default">
