@@ -41,6 +41,26 @@
      * Context ID for fetching git status (uncommitted count)
      */
     contextId?: string | null;
+
+    /**
+     * Callback to narrow the sidebar width
+     */
+    onNarrow?: () => void;
+
+    /**
+     * Callback to widen the sidebar width
+     */
+    onWiden?: () => void;
+
+    /**
+     * Whether the sidebar can be narrowed further
+     */
+    canNarrow?: boolean;
+
+    /**
+     * Whether the sidebar can be widened further
+     */
+    canWiden?: boolean;
   }
 
   const {
@@ -51,6 +71,10 @@
     onModeChange,
     changedCount = undefined,
     contextId = null,
+    onNarrow = undefined,
+    onWiden = undefined,
+    canNarrow = true,
+    canWiden = true,
   }: Props = $props();
 
   /**
@@ -639,7 +663,38 @@
         {uncommittedCount} uncommitted
       </span>
     {/if}
-    <div class="ml-auto flex items-center">
+    <div class="ml-auto flex items-center gap-0.5">
+      <!-- Narrow sidebar -->
+      {#if onNarrow}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canNarrow ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          onclick={onNarrow}
+          disabled={!canNarrow}
+          title="Narrow panel"
+          aria-label="Narrow file tree panel"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M9.78 4.22a.75.75 0 010 1.06L7.56 7.5h6.69a.75.75 0 010 1.5H7.56l2.22 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zM2.75 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5A.75.75 0 012.75 3z" />
+          </svg>
+        </button>
+      {/if}
+      <!-- Widen sidebar -->
+      {#if onWiden}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canWiden ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          onclick={onWiden}
+          disabled={!canWiden}
+          title="Widen panel"
+          aria-label="Widen file tree panel"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z" />
+          </svg>
+        </button>
+      {/if}
+      <span class="w-px h-3 bg-border-default mx-0.5"></span>
       <!-- Expand All -->
       <button
         type="button"

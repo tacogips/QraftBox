@@ -57,6 +57,28 @@
   let viewMode = $state<ViewMode>("side-by-side");
   let fileTreeMode = $state<"diff" | "all">("diff");
   let sidebarCollapsed = $state(false);
+
+  const SIDEBAR_MIN_WIDTH = 160;
+  const SIDEBAR_MAX_WIDTH = 480;
+  const SIDEBAR_WIDTH_STEP = 64;
+  const SIDEBAR_DEFAULT_WIDTH = 256;
+
+  function loadSidebarWidth(): number {
+    try {
+      const stored = localStorage.getItem("qraftbox-sidebar-width");
+      if (stored !== null) {
+        const w = Number(stored);
+        if (!Number.isNaN(w) && w >= SIDEBAR_MIN_WIDTH && w <= SIDEBAR_MAX_WIDTH) {
+          return w;
+        }
+      }
+    } catch {
+      // localStorage unavailable
+    }
+    return SIDEBAR_DEFAULT_WIDTH;
+  }
+
+  let sidebarWidth = $state(loadSidebarWidth());
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
@@ -397,6 +419,24 @@
     sidebarCollapsed = !sidebarCollapsed;
   }
 
+  function saveSidebarWidth(w: number): void {
+    try {
+      localStorage.setItem("qraftbox-sidebar-width", String(w));
+    } catch {
+      // localStorage unavailable
+    }
+  }
+
+  function narrowSidebar(): void {
+    sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth - SIDEBAR_WIDTH_STEP);
+    saveSidebarWidth(sidebarWidth);
+  }
+
+  function widenSidebar(): void {
+    sidebarWidth = Math.min(SIDEBAR_MAX_WIDTH, sidebarWidth + SIDEBAR_WIDTH_STEP);
+    saveSidebarWidth(sidebarWidth);
+  }
+
   /**
    * Navigate to a specific screen and update URL hash
    */
@@ -604,6 +644,29 @@
     navigateToScreen("diff");
     void fetchActiveSessions();
     void fetchQueueStatus();
+  }
+
+  /**
+   * Resume a Claude CLI session from CurrentSessionPanel
+   */
+  async function handleResumeCliSession(sessionId: string): Promise<void> {
+    if (contextId === null) return;
+    try {
+      const resp = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/resume`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      if (resp.ok) {
+        void fetchActiveSessions();
+        void fetchQueueStatus();
+      }
+    } catch (e) {
+      console.error("Failed to resume CLI session:", e);
+    }
   }
 
   /**
@@ -972,7 +1035,8 @@
       <div class="relative flex shrink-0">
         {#if !sidebarCollapsed}
           <aside
-            class="w-64 border-r border-border-default bg-bg-secondary overflow-auto"
+            class="border-r border-border-default bg-bg-secondary overflow-auto"
+            style:width="{sidebarWidth}px"
           >
             {#if loading}
               <div class="p-4 text-sm text-text-secondary">
@@ -998,6 +1062,10 @@
                     void fetchAllFiles(contextId);
                   }
                 }}
+                onNarrow={narrowSidebar}
+                onWiden={widenSidebar}
+                canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
+                canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
               />
             {:else}
               <div class="p-4 text-sm text-text-secondary">
@@ -1233,9 +1301,11 @@
 
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
+          {contextId}
           running={runningSessions}
           queued={queuedSessions}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
+          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
