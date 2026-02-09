@@ -3,13 +3,9 @@
    * BranchSelector Component
    *
    * Clickable branch name that expands into a filterable branch list dropdown.
-   * Uses fixed positioning so the dropdown escapes overflow-hidden/auto ancestors
-   * (same pattern as the hamburger menu in App.svelte).
-   *
-   * Props:
-   * - contextId: Context ID for API requests
-   * - currentBranch: Current branch name from status
-   * - hasUncommittedChanges: Whether the working tree has uncommitted changes
+   * Uses fixed positioning so the dropdown escapes overflow-hidden/auto ancestors.
+   * Loads 30 branches at a time with infinite scroll.
+   * Sorted by latest commit date desc, default branch pinned at top.
    */
 
   interface Props {
@@ -43,6 +39,9 @@
     readonly branches: readonly BranchInfo[];
     readonly current: string;
     readonly defaultBranch: string;
+    readonly total: number;
+    readonly offset: number;
+    readonly limit: number;
   }
 
   interface CheckoutResponse {
@@ -53,17 +52,31 @@
     readonly error?: string | undefined;
   }
 
+  const PAGE_SIZE = 30;
+
   /** Whether dropdown is open */
   let isOpen = $state(false);
 
   /** Filter input value */
   let filterQuery = $state("");
 
-  /** All branches from API */
-  let branches = $state<readonly BranchInfo[]>([]);
+  /** Loaded branches (accumulated across pages) */
+  let branches = $state<BranchInfo[]>([]);
 
-  /** Loading state */
+  /** Total branch count from server */
+  let totalCount = $state(0);
+
+  /** Current offset for pagination */
+  let currentOffset = $state(0);
+
+  /** Loading initial page */
   let loading = $state(false);
+
+  /** Loading more (infinite scroll) */
+  let loadingMore = $state(false);
+
+  /** Whether there are more branches to load */
+  const hasMore = $derived(branches.length < totalCount);
 
   /** Checkout in progress */
   let checkingOut = $state(false);
@@ -71,7 +84,7 @@
   /** Error message */
   let errorMessage = $state<string | null>(null);
 
-  /** Success message (briefly shown after checkout) */
+  /** Success message */
   let successMessage = $state<string | null>(null);
 
   /** Reference to the filter input for focusing */
@@ -83,12 +96,15 @@
   /** Reference to trigger button for position calculation */
   let triggerRef: HTMLButtonElement | undefined = $state(undefined);
 
+  /** Reference to the scroll container for infinite scroll */
+  let scrollContainerRef: HTMLDivElement | undefined = $state(undefined);
+
   /** Dropdown fixed position */
   let dropdownTop = $state(0);
   let dropdownLeft = $state(0);
 
   /**
-   * Filtered branches based on query
+   * Filtered branches based on query (client-side filter on loaded data)
    */
   const filteredBranches = $derived.by(() => {
     if (filterQuery.trim().length === 0) {
@@ -99,16 +115,32 @@
   });
 
   /**
-   * Fetch all branches from API
+   * Fetch branches from API with pagination
    */
-  async function fetchBranches(): Promise<void> {
-    loading = true;
+  async function fetchBranches(offset: number, append: boolean): Promise<void> {
+    if (append) {
+      loadingMore = true;
+    } else {
+      loading = true;
+    }
     errorMessage = null;
     try {
-      const resp = await fetch(`/api/ctx/${contextId}/branches`);
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(PAGE_SIZE),
+      });
+      const resp = await fetch(
+        `/api/ctx/${contextId}/branches?${params.toString()}`,
+      );
       if (resp.ok) {
         const data = (await resp.json()) as BranchListResponse;
-        branches = data.branches;
+        if (append) {
+          branches = [...branches, ...data.branches];
+        } else {
+          branches = [...data.branches];
+        }
+        totalCount = data.total;
+        currentOffset = offset + data.branches.length;
       } else {
         errorMessage = "Failed to load branches";
       }
@@ -116,6 +148,31 @@
       errorMessage = "Failed to load branches";
     } finally {
       loading = false;
+      loadingMore = false;
+    }
+  }
+
+  /**
+   * Load next page of branches
+   */
+  async function loadMore(): Promise<void> {
+    if (loadingMore || !hasMore) {
+      return;
+    }
+    await fetchBranches(currentOffset, true);
+  }
+
+  /**
+   * Handle scroll to detect when near bottom
+   */
+  function handleScroll(): void {
+    if (scrollContainerRef === undefined || loadingMore || !hasMore) {
+      return;
+    }
+    const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef;
+    // Load more when within 100px of the bottom
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      void loadMore();
     }
   }
 
@@ -131,10 +188,9 @@
   }
 
   /**
-   * Open the dropdown and fetch branches
+   * Open the dropdown and fetch first page
    */
   function open(): void {
-    // Calculate fixed position from trigger button
     if (triggerRef !== undefined) {
       const rect = triggerRef.getBoundingClientRect();
       dropdownTop = rect.bottom + 4;
@@ -145,8 +201,10 @@
     focusedIndex = -1;
     errorMessage = null;
     successMessage = null;
-    void fetchBranches();
-    // Focus the filter input after DOM update
+    branches = [];
+    totalCount = 0;
+    currentOffset = 0;
+    void fetchBranches(0, false);
     requestAnimationFrame(() => {
       filterInput?.focus();
     });
@@ -248,7 +306,7 @@
   }
 </script>
 
-<!-- Trigger button (inline in the header flow) -->
+<!-- Trigger button -->
 <button
   bind:this={triggerRef}
   type="button"
@@ -256,7 +314,6 @@
   onclick={toggle}
   title="Click to switch branches"
 >
-  <!-- Branch icon -->
   <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
     <path
       fill-rule="evenodd"
@@ -264,7 +321,6 @@
     />
   </svg>
   <span>{currentBranch}</span>
-  <!-- Chevron -->
   <svg
     class="w-3 h-3 shrink-0 transition-transform {isOpen ? 'rotate-180' : ''}"
     viewBox="0 0 16 16"
@@ -277,10 +333,8 @@
   </svg>
 </button>
 
-<!-- Fixed-position backdrop + dropdown (rendered outside overflow containers) -->
 {#if isOpen}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <!-- Backdrop to close menu on outside click (same pattern as hamburger menu) -->
   <div
     class="fixed inset-0 z-40"
     onclick={() => close()}
@@ -302,7 +356,6 @@
       <div class="text-xs text-text-secondary font-semibold mb-1.5">
         Switch branches
       </div>
-      <!-- Filter input -->
       <input
         bind:this={filterInput}
         type="text"
@@ -354,8 +407,12 @@
       </div>
     {/if}
 
-    <!-- Branch list -->
-    <div class="overflow-y-auto flex-1">
+    <!-- Branch list with infinite scroll -->
+    <div
+      bind:this={scrollContainerRef}
+      class="overflow-y-auto flex-1"
+      onscroll={handleScroll}
+    >
       {#if loading}
         <div class="px-3 py-4 text-sm text-text-secondary text-center">
           Loading branches...
@@ -421,7 +478,6 @@
                   </span>
                 {/if}
               </div>
-              <!-- Commit info -->
               {#if branch.lastCommit.message.length > 0}
                 <div class="text-[11px] text-text-tertiary truncate mt-0.5">
                   {branch.lastCommit.message}
@@ -453,6 +509,13 @@
             {/if}
           </button>
         {/each}
+
+        <!-- Loading more indicator -->
+        {#if loadingMore}
+          <div class="px-3 py-2 text-xs text-text-secondary text-center">
+            Loading more...
+          </div>
+        {/if}
       {/if}
     </div>
 
@@ -460,7 +523,7 @@
     <div
       class="px-3 py-1.5 text-[11px] text-text-tertiary border-t border-border-default"
     >
-      {filteredBranches.length} of {branches.length} branches
+      {branches.length} of {totalCount} branches
     </div>
   </div>
 {/if}

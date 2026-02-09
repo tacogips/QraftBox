@@ -147,10 +147,10 @@ export function getContextScopedRouteGroups(
       routes: createPromptsRoutes(),
     },
     // Branch routes - GET /api/ctx/:contextId/branches
-    // Supports middleware context extraction via c.get("serverContext")
+    // Wrapped to extract context from middleware
     {
       prefix: "/branches",
-      routes: createBranchRoutes(),
+      routes: createBranchRoutesWithMiddleware(),
     },
   ];
 }
@@ -435,4 +435,31 @@ function createFileRoutesWithMiddleware(): Hono<{
 function createPromptsRoutes(): Hono {
   // Prompts routes optionally take configDir
   return createPromptRoutes(undefined);
+}
+
+/**
+ * Create branch routes that get ServerContext from middleware
+ *
+ * Creates a middleware-wrapped version of branch routes that extracts
+ * ServerContext from c.get("serverContext") for each request.
+ */
+function createBranchRoutesWithMiddleware(): Hono<{
+  Variables: ContextVariables;
+}> {
+  const app = new Hono<{ Variables: ContextVariables }>();
+
+  app.use("*", async (c) => {
+    const serverContext = c.get("serverContext");
+    if (serverContext === undefined) {
+      return c.json({ error: "Server context not available", code: 500 }, 500);
+    }
+
+    const branchRoutes = createBranchRoutes(serverContext);
+    return branchRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/branches"),
+      c.env,
+    );
+  });
+
+  return app;
 }

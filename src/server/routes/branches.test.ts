@@ -116,6 +116,9 @@ describe("createBranchRoutes", () => {
       expect(data).toHaveProperty("branches");
       expect(data).toHaveProperty("current", "main");
       expect(data).toHaveProperty("defaultBranch", "main");
+      expect(data).toHaveProperty("total");
+      expect(data).toHaveProperty("offset", 0);
+      expect(data).toHaveProperty("limit", 30);
       expect(data.branches.length).toBeGreaterThanOrEqual(3);
 
       // Verify main branch

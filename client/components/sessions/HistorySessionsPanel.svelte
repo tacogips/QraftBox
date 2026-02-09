@@ -67,7 +67,7 @@
     readonly toolUsage: readonly ToolUsageEntry[];
     readonly tasks: readonly SessionTask[];
     readonly filesModified: readonly FileModEntry[];
-    readonly usage: SessionUsage;
+    readonly usage?: SessionUsage | undefined;
   }
 
   interface Props {
@@ -754,7 +754,7 @@
                     </div>
 
                     <!-- Token usage display -->
-                    {#if summary.usage.inputTokens > 0 || summary.usage.outputTokens > 0}
+                    {#if summary.usage !== undefined && (summary.usage.inputTokens > 0 || summary.usage.outputTokens > 0)}
                       <div
                         class="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-text-tertiary"
                       >

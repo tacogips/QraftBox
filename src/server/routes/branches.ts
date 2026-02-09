@@ -15,8 +15,6 @@ import type {
 } from "../../types/branch.js";
 import {
   listBranches,
-  getCurrentBranch,
-  getDefaultBranch,
   searchBranches,
   checkoutBranch,
 } from "../git/branch.js";
@@ -103,18 +101,28 @@ export function createBranchRoutes(
     const includeRemote =
       includeRemoteParam === "true" || includeRemoteParam === "1";
 
+    // Pagination parameters
+    const offsetParam = c.req.query("offset");
+    const limitParam = c.req.query("limit");
+    const offset =
+      offsetParam !== undefined ? parseInt(offsetParam, 10) : 0;
+    const limit =
+      limitParam !== undefined ? parseInt(limitParam, 10) : 30;
+
     try {
-      // Execute git branch operations
-      const [branches, current, defaultBranch] = await Promise.all([
-        listBranches(serverContext.projectPath, includeRemote),
-        getCurrentBranch(serverContext.projectPath),
-        getDefaultBranch(serverContext.projectPath),
-      ]);
+      const result = await listBranches(
+        serverContext.projectPath,
+        includeRemote,
+        { offset, limit },
+      );
 
       const response: BranchListResponse = {
-        branches,
-        current,
-        defaultBranch,
+        branches: result.branches,
+        current: result.currentBranch,
+        defaultBranch: result.defaultBranch,
+        total: result.total,
+        offset,
+        limit,
       };
 
       return c.json(response);

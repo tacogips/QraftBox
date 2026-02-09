@@ -39,6 +39,9 @@ export interface BranchListResponse {
   readonly branches: readonly BranchInfo[];
   readonly current: string;
   readonly defaultBranch: string;
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
 }
 
 /**
