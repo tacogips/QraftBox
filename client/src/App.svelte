@@ -481,6 +481,7 @@
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
+    const resumeSessionId = currentCliSessionId;
 
     // 1. Optimistic UI: add to pending immediately
     const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -530,8 +531,23 @@
         p.id === optimisticId ? data.prompt : p,
       );
 
-      // 4. If nothing is running/queued in session manager, dispatch immediately
-      if (runningSessions.length === 0 && queuedSessions.length === 0) {
+      // 4. If a current CLI session is selected, always continue that session.
+      if (resumeSessionId !== null) {
+        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            immediate: true,
+            resumeSessionId,
+          }),
+        });
+
+        if (dispatchResp.ok) {
+          // Remove from pending (it's now a session)
+          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
+        }
+      } else if (runningSessions.length === 0 && queuedSessions.length === 0) {
+        // 5. If nothing is running/queued, dispatch immediately.
         const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -543,7 +559,8 @@
           pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
         }
       }
-      // If something is running, prompt stays in pending queue - autoDispatchNext handles it
+      // If something is running and no CLI session is selected, prompt stays in pending queue.
+      // autoDispatchNext handles it.
 
       void fetchQueueStatus();
       void fetchActiveSessions();

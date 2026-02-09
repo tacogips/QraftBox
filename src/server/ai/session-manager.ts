@@ -188,7 +188,8 @@ export function createSessionManager(
             "qraftbox-tools": mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
-          permissionMode: "bypassPermissions",
+          model: config.assistantModel,
+          additionalArgs: [...config.assistantAdditionalArgs],
         });
 
         session.claudeAgent = agent;
@@ -209,7 +210,11 @@ export function createSessionManager(
           // Extract role and content from message
           // CLI stream-json format: { type: "assistant", message: { role: "assistant", content: [{type:"text",text:"..."}] } }
           if (typeof msg === "object" && msg !== null && "type" in msg) {
-            const rawMsg = msg as { type?: string; message?: { role?: string; content?: unknown }; content?: unknown };
+            const rawMsg = msg as {
+              type?: string;
+              message?: { role?: string; content?: unknown };
+              content?: unknown;
+            };
             const msgType = rawMsg.type;
 
             // Only capture assistant messages for lastAssistantMessage
@@ -224,7 +229,12 @@ export function createSessionManager(
               // Content blocks: [{ type: "text", text: "..." }, ...]
               const textParts: string[] = [];
               for (const block of nestedContent) {
-                if (typeof block === "object" && block !== null && "text" in block && typeof (block as { text: unknown }).text === "string") {
+                if (
+                  typeof block === "object" &&
+                  block !== null &&
+                  "text" in block &&
+                  typeof (block as { text: unknown }).text === "string"
+                ) {
                   textParts.push((block as { text: string }).text);
                 }
               }

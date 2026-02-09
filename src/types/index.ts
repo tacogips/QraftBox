@@ -29,6 +29,8 @@ export interface CLIConfig {
   readonly promptModel: string;
   /** Model used for AI assistant interactions */
   readonly assistantModel: string;
+  /** Additional CLI arguments for the AI assistant */
+  readonly assistantAdditionalArgs: readonly string[];
 }
 
 /**

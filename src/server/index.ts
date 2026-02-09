@@ -95,7 +95,15 @@ export function createServer(options: ServerOptions): Hono {
     console.error("Failed to initialize tool registry:", e);
   });
 
-  const sessionManager = createSessionManager(DEFAULT_AI_CONFIG, toolRegistry);
+  const sessionManager = createSessionManager(
+    {
+      ...DEFAULT_AI_CONFIG,
+      enabled: options.config.ai,
+      assistantModel: options.config.assistantModel,
+      assistantAdditionalArgs: [...options.config.assistantAdditionalArgs],
+    },
+    toolRegistry,
+  );
   const promptStore = createPromptStore();
 
   // Initialize system prompt files (fire and forget)

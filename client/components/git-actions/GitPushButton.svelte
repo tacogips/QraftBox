@@ -38,6 +38,8 @@
   let operationPhase = $state<
     "idle" | "committing" | "pushing" | "creating-pr"
   >("idle");
+  let activeActionId = $state<string | null>(null);
+  let cancellingOperation = $state(false);
 
   // Toast state for notifications
   let toastMessage = $state<string | null>(null);
@@ -75,6 +77,16 @@
     }, 300);
   }
 
+  function createActionId(): string {
+    if (
+      typeof crypto !== "undefined" &&
+      typeof crypto.randomUUID === "function"
+    ) {
+      return crypto.randomUUID();
+    }
+    return `action_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   // PR info for "Open PR in Browser"
   let currentPRUrl = $state<string | null>(null);
   let prNumber = $state<number | null>(null);
@@ -84,6 +96,20 @@
   let prAvailableBranches = $state<string[]>([]);
   let showCreatePR = $state(false);
   let selectedCreateBaseBranch = $state("");
+
+  const hasExistingPR = $derived(prNumber !== null);
+  const prPrimaryActionLabel = $derived(
+    hasExistingPR ? "Update PR" : "Create PR",
+  );
+  const canRunPRAction = $derived(
+    !operating && !prLoading && (prCanCreate || hasExistingPR),
+  );
+  const canCancelOperation = $derived(
+    operating &&
+      (operationPhase === "committing" || operationPhase === "creating-pr") &&
+      activeActionId !== null &&
+      !cancellingOperation,
+  );
 
   /** Server response type from git-actions endpoints */
   interface GitActionResult {
@@ -160,13 +186,16 @@
    * Execute commit via Claude CLI
    */
   async function handleCommit(): Promise<void> {
+    const actionId = createActionId();
     operating = true;
     operationPhase = "committing";
+    activeActionId = actionId;
+    cancellingOperation = false;
     try {
       const commitResp = await fetch("/api/git-actions/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectPath }),
+        body: JSON.stringify({ projectPath, actionId }),
       });
       if (!commitResp.ok) {
         const errData = (await commitResp.json().catch(() => ({}))) as {
@@ -187,6 +216,8 @@
     } finally {
       operating = false;
       operationPhase = "idle";
+      activeActionId = null;
+      cancellingOperation = false;
     }
   }
 
@@ -230,9 +261,14 @@
   async function handleCustomCtxSubmit(): Promise<void> {
     if (customCtxAction === null) return;
 
-    operating = true;
     const action = customCtxAction;
     const customCtx = customCtxText.trim();
+    const actionId = action === "commit" ? createActionId() : null;
+
+    operating = true;
+    operationPhase = action === "commit" ? "committing" : "idle";
+    activeActionId = actionId;
+    cancellingOperation = false;
 
     try {
       let result: GitActionResult;
@@ -243,6 +279,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectPath,
+            ...(actionId !== null ? { actionId } : {}),
             ...(customCtx.length > 0 ? { customCtx } : {}),
           }),
         });
@@ -277,6 +314,9 @@
       showToast(msg, "error");
     } finally {
       operating = false;
+      operationPhase = "idle";
+      activeActionId = null;
+      cancellingOperation = false;
     }
   }
 
@@ -299,30 +339,54 @@
   }
 
   /**
-   * Create a new PR via Claude CLI (button action, uses default base branch)
+   * Create or update PR via Claude CLI (button action)
    */
-  async function handleCreatePRButton(): Promise<void> {
-    const baseBranch = prBaseBranch.length > 0 ? prBaseBranch : "main";
+  async function handlePRPrimaryActionButton(): Promise<void> {
+    const isUpdate = prNumber !== null;
+    const baseBranch =
+      selectedCreateBaseBranch.length > 0
+        ? selectedCreateBaseBranch
+        : prBaseBranch.length > 0
+          ? prBaseBranch
+          : "main";
+    const actionId = createActionId();
     operating = true;
     operationPhase = "creating-pr";
+    activeActionId = actionId;
+    cancellingOperation = false;
     try {
-      const resp = await fetch("/api/git-actions/create-pr", {
+      const endpoint = isUpdate
+        ? "/api/git-actions/update-pr"
+        : "/api/git-actions/create-pr";
+      const resp = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectPath,
           baseBranch,
+          actionId,
         }),
       });
       if (!resp.ok) {
-        const errData = (await resp.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(errData.error ?? `Create PR failed: ${resp.status}`);
+        const rawErrorText = await resp.text().catch(() => "");
+        let parsedError: { error?: string } | null = null;
+        try {
+          parsedError = JSON.parse(rawErrorText) as { error?: string };
+        } catch {
+          parsedError = null;
+        }
+        throw new Error(
+          (parsedError !== null && typeof parsedError.error === "string"
+            ? parsedError.error
+            : rawErrorText.trim().length > 0
+              ? rawErrorText
+              : undefined) ??
+            `${isUpdate ? "Update PR" : "Create PR"} failed: ${resp.status}`,
+        );
       }
       const result = (await resp.json()) as GitActionResult;
       if (!result.success) {
-        throw new Error(result.error ?? "Create PR failed");
+        throw new Error(result.error ?? `${isUpdate ? "Update PR" : "Create PR"} failed`);
       }
 
       // Try to extract PR URL from output, fallback to fetching status
@@ -335,64 +399,56 @@
       }
 
       const toastMsg =
-        prUrl !== null ? `PR created: ${prUrl}` : "PR created";
+        prUrl !== null
+          ? `PR ${isUpdate ? "updated" : "created"}: ${prUrl}`
+          : `PR ${isUpdate ? "updated" : "created"}`;
       showToast(toastMsg, "success");
       onSuccess?.();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Create PR failed";
+      const msg =
+        e instanceof Error
+          ? e.message
+          : `${isUpdate ? "Update PR" : "Create PR"} failed`;
       showToast(msg, "error");
     } finally {
       operating = false;
       operationPhase = "idle";
+      activeActionId = null;
+      cancellingOperation = false;
     }
   }
 
   /**
-   * Create a new PR via Claude CLI (dropdown action, uses selected base branch)
+   * Create or update PR via Claude CLI (dropdown action)
    */
-  async function handleCreatePR(): Promise<void> {
-    if (selectedCreateBaseBranch === "") return;
-    operating = true;
-    operationPhase = "creating-pr";
+  async function handlePRDropdownAction(): Promise<void> {
+    if (selectedCreateBaseBranch === "" && prNumber === null) return;
+    await handlePRPrimaryActionButton();
+    showCreatePR = false;
+    menuOpen = false;
+  }
+
+  async function handleCancelCurrentOperation(): Promise<void> {
+    if (!canCancelOperation || activeActionId === null) return;
+
+    cancellingOperation = true;
     try {
-      const resp = await fetch("/api/git-actions/create-pr", {
+      const resp = await fetch("/api/git-actions/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectPath,
-          baseBranch: selectedCreateBaseBranch,
-        }),
+        body: JSON.stringify({ actionId: activeActionId }),
       });
       if (!resp.ok) {
         const errData = (await resp.json().catch(() => ({}))) as {
           error?: string;
         };
-        throw new Error(errData.error ?? `Create PR failed: ${resp.status}`);
+        throw new Error(errData.error ?? `Cancel failed: ${resp.status}`);
       }
-      const result = (await resp.json()) as GitActionResult;
-      if (!result.success) {
-        throw new Error(result.error ?? "Create PR failed");
-      }
-
-      let prUrl = extractPRUrl(result.output);
-      if (prUrl === null) {
-        await fetchPRStatus();
-        prUrl = currentPRUrl;
-      } else {
-        await fetchPRStatus();
-      }
-
-      const toastMsg =
-        prUrl !== null ? `PR created: ${prUrl}` : "PR created";
-      showToast(toastMsg, "success");
-      showCreatePR = false;
-      menuOpen = false;
+      showToast("Cancellation requested", "success");
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Create PR failed";
+      const msg = e instanceof Error ? e.message : "Failed to cancel operation";
       showToast(msg, "error");
-    } finally {
-      operating = false;
-      operationPhase = "idle";
+      cancellingOperation = false;
     }
   }
 
@@ -524,8 +580,8 @@
            bg-done-emphasis text-white hover:opacity-90
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
-    onclick={() => void handleCreatePRButton()}
-    disabled={operating || !prCanCreate || prNumber !== null}
+    onclick={() => void handlePRPrimaryActionButton()}
+    disabled={!canRunPRAction}
   >
     {#if operating && operationPhase === "creating-pr"}
       <svg
@@ -541,9 +597,22 @@
       </svg>
       AI generating...
     {:else}
-      Create PR
+      {prPrimaryActionLabel}
     {/if}
   </button>
+
+  {#if operating && (operationPhase === "committing" || operationPhase === "creating-pr")}
+    <button
+      type="button"
+      class="px-3 py-1 text-xs font-medium border border-border-default rounded
+             bg-danger-emphasis text-white hover:opacity-90
+             transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      onclick={() => void handleCancelCurrentOperation()}
+      disabled={!canCancelOperation}
+    >
+      {cancellingOperation ? "Cancelling..." : "Cancel"}
+    </button>
+  {/if}
 
   <!-- 3-dot menu button -->
   <button
@@ -702,12 +771,12 @@
     <!-- Separator -->
     <div class="border-t border-border-default"></div>
 
-    <!-- Create PR -->
+    <!-- Create/Update PR -->
     <button
       type="button"
       role="menuitem"
       class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             {prCanCreate && prNumber === null
+             {prCanCreate || prNumber !== null
         ? 'text-text-primary'
         : 'text-text-tertiary cursor-not-allowed'}
              {showCreatePR ? 'bg-bg-tertiary' : ''}"
@@ -715,44 +784,46 @@
         e.stopPropagation();
         showCreatePR = !showCreatePR;
       }}
-      disabled={!prCanCreate || prNumber !== null || prLoading}
+      disabled={(!prCanCreate && prNumber === null) || prLoading}
     >
-      Create PR
+      {prPrimaryActionLabel}
       {#if prNumber !== null}
-        <span class="text-xs text-text-tertiary ml-1">(PR exists)</span>
+        <span class="text-xs text-text-tertiary ml-1">(#{prNumber})</span>
       {:else if !prCanCreate && !prLoading}
         <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
       {/if}
     </button>
 
-    {#if showCreatePR && prCanCreate}
+    {#if showCreatePR && (prCanCreate || prNumber !== null)}
       <div
         class="px-3 py-2 border-t border-border-default bg-bg-primary"
         role="presentation"
       >
-        <div class="flex items-center gap-2 mb-2">
-          <label for="create-pr-base" class="text-xs text-text-secondary"
-            >Base:</label
-          >
-          <select
-            id="create-pr-base"
-            class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
-            bind:value={selectedCreateBaseBranch}
-          >
-            {#each prAvailableBranches as branch}
-              <option value={branch}>{branch}</option>
-            {/each}
-          </select>
-        </div>
+        {#if prNumber === null}
+          <div class="flex items-center gap-2 mb-2">
+            <label for="create-pr-base" class="text-xs text-text-secondary"
+              >Base:</label
+            >
+            <select
+              id="create-pr-base"
+              class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
+              bind:value={selectedCreateBaseBranch}
+            >
+              {#each prAvailableBranches as branch}
+                <option value={branch}>{branch}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
         <button
           type="button"
           class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCreatePR()}
-          disabled={operating || selectedCreateBaseBranch === ""}
+          onclick={() => void handlePRDropdownAction()}
+          disabled={operating || (prNumber === null && selectedCreateBaseBranch === "")}
         >
           {operating && operationPhase === "creating-pr"
             ? "AI generating..."
-            : "Create PR"}
+            : prPrimaryActionLabel}
         </button>
       </div>
     {/if}

@@ -420,33 +420,6 @@
   <!-- Collapsed single-line input bar -->
   {#if collapsed}
     <div class="h-14 px-4 flex items-center gap-2">
-      <!-- Expand button (replaces AI icon position) -->
-      <button
-        type="button"
-        onclick={onToggle}
-        class="shrink-0 h-6 w-6 flex items-center justify-center
-               hover:bg-bg-hover rounded transition-colors duration-150
-               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-        aria-expanded={!collapsed}
-        aria-label="Expand to multi-line mode"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="text-text-tertiary"
-          aria-hidden="true"
-        >
-          <polyline points="18 15 12 9 6 15" />
-        </svg>
-      </button>
-
       <!-- Session management icons -->
       {#if onNewSession !== undefined}
         <button
@@ -505,6 +478,33 @@
           </svg>
         </button>
       {/if}
+
+      <!-- Expand button -->
+      <button
+        type="button"
+        onclick={onToggle}
+        class="shrink-0 h-6 w-6 flex items-center justify-center
+               hover:bg-bg-hover rounded transition-colors duration-150
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+        aria-expanded={!collapsed}
+        aria-label="Expand to multi-line mode"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="text-text-tertiary"
+          aria-hidden="true"
+        >
+          <polyline points="18 15 12 9 6 15" />
+        </svg>
+      </button>
 
       <!-- Single-line input -->
       <div class="flex-1 relative min-w-0">
@@ -711,35 +711,8 @@
     <div class="h-52 p-4 flex flex-col">
       <!-- Input area -->
       <div class="flex-1 flex gap-4 min-h-0">
-        <!-- Left icon column: collapse + session icons -->
+        <!-- Left icon column: session icons + collapse -->
         <div class="shrink-0 flex flex-col items-center gap-1 self-start mt-0.5">
-          <!-- Collapse button -->
-          <button
-            type="button"
-            onclick={onToggle}
-            class="h-6 w-6 flex items-center justify-center
-                   hover:bg-bg-hover rounded transition-colors duration-150
-                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-            aria-expanded={!collapsed}
-            aria-label="Collapse to single-line mode"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-text-tertiary transition-transform duration-300 rotate-180"
-              aria-hidden="true"
-            >
-              <polyline points="18 15 12 9 6 15" />
-            </svg>
-          </button>
-
           {#if onNewSession !== undefined}
             <button
               type="button"
@@ -797,6 +770,33 @@
               </svg>
             </button>
           {/if}
+
+          <!-- Collapse button -->
+          <button
+            type="button"
+            onclick={onToggle}
+            class="h-6 w-6 flex items-center justify-center
+                   hover:bg-bg-hover rounded transition-colors duration-150
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+            aria-expanded={!collapsed}
+            aria-label="Collapse to single-line mode"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-text-tertiary transition-transform duration-300 rotate-180"
+              aria-hidden="true"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
         </div>
 
         <!-- Prompt input -->
