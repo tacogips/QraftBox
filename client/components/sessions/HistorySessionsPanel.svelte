@@ -34,6 +34,7 @@
   import type { UnifiedSessionItem } from "../../src/types/unified-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
+  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
 
   /**
    * Session summary types (matching server response)
@@ -165,7 +166,9 @@
     for (const s of completedSessions) {
       if (localSearchQuery.length > 0) {
         const query = localSearchQuery.toLowerCase();
-        const matchesPrompt = s.prompt.toLowerCase().includes(query);
+        const matchesPrompt = stripSystemTags(s.prompt)
+          .toLowerCase()
+          .includes(query);
         if (!matchesPrompt) continue;
       }
       items.push({ kind: "qraftbox", session: s });
@@ -484,7 +487,7 @@
   {/if}
 
   <!-- Content Area -->
-  <div class="content-area flex-1 overflow-y-auto px-6 py-4">
+  <div class="content-area flex-1 overflow-y-auto px-6 pb-4">
     {#if cliIsLoading && !hasSessions}
       <!-- Loading State -->
       <div
@@ -551,7 +554,7 @@
       <!-- Session List (Grouped by Date) -->
       <div class="session-list space-y-6" role="list">
         <!-- Reusable accordion row snippet -->
-        {#snippet sessionRow(item: UnifiedSessionItem)}
+        {#snippet sessionRow(item: UnifiedSessionItem, isFirst: boolean)}
           {@const itemId =
             item.kind === "qraftbox"
               ? item.session.id
@@ -564,18 +567,23 @@
             (summary.toolUsage.length > 0 ||
               summary.filesModified.length > 0 ||
               summary.tasks.length > 0)}
+          {@const displayTitle = stripSystemTags(
+            item.kind === "qraftbox"
+              ? item.session.prompt
+              : item.session.firstPrompt,
+          )}
 
-          <!-- Accordion Row -->
-          <div
-            class="rounded-lg border border-border-default overflow-hidden {isExpanded
-              ? 'border-accent-emphasis/40'
-              : ''}"
-          >
-            <!-- Header Row (clickable) -->
+          <!-- Accordion Row (contents = layout-invisible wrapper for sticky) -->
+          <div class="contents">
+            <!-- Header Row (clickable, sticky) -->
             <button
               type="button"
               onclick={() => toggleSessionExpansion(itemId)}
-              class="w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left"
+              class="sticky top-0 z-10 w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm {isFirst
+                ? ''
+                : 'mt-3'} {isExpanded
+                ? 'rounded-t-lg border-accent-emphasis/40'
+                : 'rounded-lg border-border-default'}"
             >
               <!-- Expand/Collapse chevron -->
               <svg
@@ -600,11 +608,13 @@
                 {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
               </span>
 
-              <!-- Title (first prompt) -->
+              <!-- Title (first user prompt; server strips system tags) -->
               <span class="flex-1 text-sm text-text-primary truncate">
-                {item.kind === "qraftbox"
-                  ? item.session.prompt
-                  : item.session.firstPrompt}
+                {displayTitle || stripSystemTags(
+                  item.kind === "claude-cli"
+                    ? item.session.summary || item.session.firstPrompt
+                    : item.session.prompt,
+                )}
               </span>
 
               <!-- Message count -->
@@ -622,7 +632,7 @@
 
             <!-- Expanded Content -->
             {#if isExpanded}
-              <div class="border-t border-border-default">
+              <div class="border-x border-b border-accent-emphasis/40 rounded-b-lg overflow-hidden">
                 <!-- Resume button row -->
                 <div
                   class="flex items-center gap-2 px-4 py-2 bg-bg-tertiary/50"
@@ -795,9 +805,9 @@
             >
               Today
             </h2>
-            <div class="space-y-3">
-              {#each groupedSessions.today as item (getItemKey(item))}
-                {@render sessionRow(item)}
+            <div>
+              {#each groupedSessions.today as item, index (getItemKey(item))}
+                {@render sessionRow(item, index === 0)}
               {/each}
             </div>
           </section>
@@ -812,9 +822,9 @@
             >
               Yesterday
             </h2>
-            <div class="space-y-3">
-              {#each groupedSessions.yesterday as item (getItemKey(item))}
-                {@render sessionRow(item)}
+            <div>
+              {#each groupedSessions.yesterday as item, index (getItemKey(item))}
+                {@render sessionRow(item, index === 0)}
               {/each}
             </div>
           </section>
@@ -829,9 +839,9 @@
             >
               Older
             </h2>
-            <div class="space-y-3">
-              {#each groupedSessions.older as item (getItemKey(item))}
-                {@render sessionRow(item)}
+            <div>
+              {#each groupedSessions.older as item, index (getItemKey(item))}
+                {@render sessionRow(item, index === 0)}
               {/each}
             </div>
           </section>

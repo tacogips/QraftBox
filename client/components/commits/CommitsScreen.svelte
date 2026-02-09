@@ -7,6 +7,7 @@
   } from "../../../src/types/commit";
   import type { DiffFile, DiffChunk } from "../../src/types/diff";
   import InlineDiff from "../diff/InlineDiff.svelte";
+  import SearchInput from "../claude-sessions/SearchInput.svelte";
 
   interface Props {
     contextId: string;
@@ -28,9 +29,7 @@
   /**
    * Search state
    */
-  let searchInput = $state("");
   let searchQuery = $state("");
-  let searchTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
 
   /**
    * Expanded commit detail state
@@ -51,19 +50,13 @@
   let diffCache = $state<Map<string, readonly DiffFile[]>>(new Map());
 
   /**
-   * Debounce search input
+   * Handle search from SearchInput component (already debounced)
    */
-  function handleSearchInput(value: string): void {
-    searchInput = value;
-    if (searchTimeout !== null) {
-      clearTimeout(searchTimeout);
-    }
-    searchTimeout = setTimeout(() => {
-      searchQuery = value;
-      offset = 0;
-      commits = [];
-      void fetchCommits(false);
-    }, 300);
+  function handleSearch(query: string): void {
+    searchQuery = query;
+    offset = 0;
+    commits = [];
+    void fetchCommits(false);
   }
 
   /**
@@ -303,112 +296,151 @@
 </script>
 
 <div class="flex flex-col h-full bg-bg-primary text-text-primary">
-  <!-- Search -->
-  <div class="px-4 py-3 border-b border-border-default shrink-0">
-    <input
-      type="text"
-      class="w-full px-3 py-2 text-sm border border-border-default rounded bg-bg-primary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-transparent"
-      placeholder="Search by message, author, or hash prefix (4+ chars)..."
-      value={searchInput}
-      oninput={(e) => handleSearchInput(e.currentTarget.value)}
-      aria-label="Search commits"
-    />
+  <!-- Header: count and compact search (matching sessions format) -->
+  <div class="flex items-center gap-3 px-6 py-3 border-b border-bg-border bg-bg-secondary">
+    <div class="text-sm text-text-tertiary shrink-0">
+      {#if commits.length > 0}
+        {commits.length} commit{commits.length !== 1 ? "s" : ""}
+        {#if hasMore}
+          (more available)
+        {/if}
+      {/if}
+    </div>
+
+    <!-- Spacer pushes search to right -->
+    <div class="flex-1"></div>
+
+    <!-- Compact search bar, right-aligned -->
+    <div class="w-48">
+      <SearchInput
+        value={searchQuery}
+        onSearch={handleSearch}
+        placeholder="Search commits..."
+      />
+    </div>
   </div>
 
   <!-- Commit List -->
-  <div class="flex-1 overflow-y-auto">
+  <div class="content-area flex-1 overflow-y-auto px-6 pb-4">
     {#if loading}
       <!-- Loading State -->
-      <div class="flex items-center justify-center p-8 text-text-secondary">
-        <div class="flex flex-col items-center gap-2">
-          <div
-            class="w-6 h-6 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"
-          ></div>
-          <p class="text-sm">Loading commits...</p>
-        </div>
+      <div class="loading-state flex flex-col items-center justify-center h-64" role="status" aria-live="polite">
+        <svg class="animate-spin h-8 w-8 text-accent-fg mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        </svg>
+        <p class="text-text-secondary">Loading commits...</p>
       </div>
     {:else if error !== null && commits.length === 0}
       <!-- Error State -->
-      <div class="flex items-center justify-center p-8">
-        <div class="flex flex-col items-center gap-3 text-center">
-          <p class="text-sm text-danger-fg">{error}</p>
-          <button
-            type="button"
-            class="px-4 py-2 text-sm bg-bg-tertiary text-text-primary border border-border-default rounded hover:bg-bg-hover transition-colors"
-            onclick={handleRetry}
-          >
-            Retry
-          </button>
+      <div class="flex flex-col items-center justify-center h-64">
+        <div class="p-4 rounded-lg border border-danger-emphasis/30 bg-danger-emphasis/10 text-danger-fg max-w-md">
+          <div class="flex items-start gap-3">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="8" x2="12" y2="12" />
+              <line x1="12" y1="16" x2="12.01" y2="16" />
+            </svg>
+            <div class="flex-1">
+              <p class="font-medium">Error Loading Commits</p>
+              <p class="text-sm mt-1">{error}</p>
+            </div>
+          </div>
+          <div class="mt-3 flex justify-end">
+            <button
+              type="button"
+              class="px-4 py-2 text-sm bg-bg-tertiary text-text-primary border border-border-default rounded hover:bg-bg-hover transition-colors"
+              onclick={handleRetry}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     {:else if commits.length === 0}
       <!-- Empty State -->
-      <div class="flex items-center justify-center p-8 text-text-secondary">
-        <p class="text-sm">
+      <div class="empty-state flex flex-col items-center justify-center h-64" role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-tertiary mb-4" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <p class="text-text-secondary text-lg mb-2">
           {searchQuery.trim().length > 0
             ? "No commits match your search"
             : "No commits found"}
         </p>
+        <p class="text-text-tertiary text-sm">
+          {#if searchQuery.trim().length > 0}
+            Try adjusting your search query.
+          {:else}
+            No commits found for this repository.
+          {/if}
+        </p>
       </div>
     {:else}
-      <!-- Commit Items -->
-      {#each commits as commit (commit.hash)}
+      <!-- Commit Items (accordion cards matching sessions format) -->
+      {#each commits as commit, index (commit.hash)}
         {@const isExpanded = expandedHash === commit.hash}
-        <div
-          class="border-b border-border-default {isExpanded
-            ? 'bg-bg-secondary'
-            : ''}"
-        >
-          <!-- Commit Row -->
+        <div class="contents">
+          <!-- Header Row (clickable, sticky) -->
           <button
             type="button"
-            class="w-full text-left px-4 py-3 hover:bg-bg-tertiary transition-colors flex flex-col gap-1"
             onclick={() => void toggleCommit(commit.hash)}
             aria-expanded={isExpanded}
+            class="sticky top-0 z-10 w-full flex items-center gap-3 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm {index === 0 ? '' : 'mt-3'} {isExpanded ? 'rounded-t-lg border-accent-emphasis/40' : 'rounded-lg border-border-default'}"
           >
-            <div class="flex items-center gap-2 text-xs text-text-secondary">
-              <span class="font-mono text-accent-fg"
-                >{commit.shortHash || commit.hash.slice(0, 7)}</span
-              >
-              <span>{formatRelativeDate(commit.date)}</span>
-              <span class="ml-auto">{commit.author.name}</span>
-            </div>
-            <div class="text-sm text-text-primary truncate">
+            <!-- Expand/Collapse chevron -->
+            <svg
+              class="w-4 h-4 text-text-tertiary transition-transform {isExpanded ? 'rotate-90' : ''}"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+            >
+              <path d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z" />
+            </svg>
+
+            <!-- Short hash badge -->
+            <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold font-mono bg-bg-tertiary text-accent-fg">
+              {commit.shortHash || commit.hash.slice(0, 7)}
+            </span>
+
+            <!-- Commit message (first line) -->
+            <span class="flex-1 text-sm truncate text-text-primary">
               {firstLine(commit.message)}
-            </div>
+            </span>
+
+            <!-- Author name -->
+            <span class="text-xs text-text-tertiary shrink-0">
+              {commit.author.name}
+            </span>
+
+            <!-- Relative time -->
+            <span class="text-xs text-text-tertiary shrink-0">
+              {formatRelativeDate(commit.date)}
+            </span>
           </button>
 
           <!-- Expanded Detail -->
           {#if isExpanded}
-            <div class="px-4 pb-4 border-t border-border-default">
+            <div class="border-x border-b border-accent-emphasis/40 rounded-b-lg overflow-hidden">
               {#if loadingDetail}
-                <div
-                  class="flex items-center gap-2 py-3 text-sm text-text-secondary"
-                >
-                  <div
-                    class="w-4 h-4 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"
-                  ></div>
+                <div class="flex items-center gap-2 px-4 py-3 text-sm text-text-secondary">
+                  <div class="w-4 h-4 border-2 border-border-default border-t-accent-emphasis rounded-full animate-spin"></div>
                   Loading detail...
                 </div>
               {:else if detailError !== null}
-                <div class="py-3 text-sm text-danger-fg">{detailError}</div>
+                <div class="px-4 py-3 text-sm text-danger-fg">{detailError}</div>
               {:else if commitDetail !== null}
-                <!-- Full hash -->
-                <div class="py-3 space-y-3">
-                  <div class="text-xs text-text-secondary">
-                    <span class="font-mono select-all"
-                      >{commitDetail.hash}</span
-                    >
+                <div class="px-4 pb-4 space-y-3">
+                  <!-- Full hash -->
+                  <div class="pt-3 text-xs text-text-secondary">
+                    <span class="font-mono select-all">{commitDetail.hash}</span>
                   </div>
 
                   <!-- Full message -->
                   {#if commitDetail.body.trim().length > 0}
-                    <div
-                      class="text-sm text-text-primary whitespace-pre-wrap bg-bg-primary p-3 rounded border border-border-default"
-                    >
-                      {commitDetail.message}{commitDetail.body.trim().length > 0
-                        ? "\n\n" + commitDetail.body
-                        : ""}
+                    <div class="text-sm text-text-primary whitespace-pre-wrap bg-bg-primary p-3 rounded border border-border-default">
+                      {commitDetail.message}{commitDetail.body.trim().length > 0 ? "\n\n" + commitDetail.body : ""}
                     </div>
                   {:else}
                     <div class="text-sm text-text-primary">
@@ -419,30 +451,19 @@
                   <!-- Stats -->
                   <div class="flex items-center gap-4 text-xs">
                     <span class="text-text-secondary">
-                      {commitDetail.stats.filesChanged} file{commitDetail.stats
-                        .filesChanged !== 1
-                        ? "s"
-                        : ""} changed
+                      {commitDetail.stats.filesChanged} file{commitDetail.stats.filesChanged !== 1 ? "s" : ""} changed
                     </span>
-                    <span class="text-success-fg"
-                      >+{commitDetail.stats.additions}</span
-                    >
-                    <span class="text-danger-fg"
-                      >-{commitDetail.stats.deletions}</span
-                    >
+                    <span class="text-success-fg">+{commitDetail.stats.additions}</span>
+                    <span class="text-danger-fg">-{commitDetail.stats.deletions}</span>
                   </div>
 
                   <!-- Changed Files -->
                   {#if commitDetail.files.length > 0}
                     <div class="space-y-1">
-                      <div
-                        class="text-xs font-medium text-text-secondary uppercase tracking-wide"
-                      >
+                      <div class="text-xs font-medium text-text-secondary uppercase tracking-wide">
                         Changed Files
                       </div>
-                      <div
-                        class="bg-bg-primary rounded border border-border-default divide-y divide-border-default"
-                      >
+                      <div class="bg-bg-primary rounded border border-border-default divide-y divide-border-default">
                         {#each commitDetail.files as file (file.path)}
                           {@const isFileExpanded = expandedFilePath === file.path}
                           <div>
@@ -453,22 +474,14 @@
                               aria-expanded={isFileExpanded}
                             >
                               <span class="text-text-secondary shrink-0">{isFileExpanded ? "v" : ">"}</span>
-                              <span class="font-medium {statusClass(file.status)}"
-                                >{statusLabel(file.status)}</span
-                              >
-                              <span class="font-mono text-text-primary truncate text-left"
-                                >{file.path}</span
-                              >
+                              <span class="font-medium {statusClass(file.status)}">{statusLabel(file.status)}</span>
+                              <span class="font-mono text-text-primary truncate text-left">{file.path}</span>
                               <div class="flex items-center gap-2 ml-auto shrink-0">
                                 {#if file.additions > 0}
-                                  <span class="text-success-fg"
-                                    >+{file.additions}</span
-                                  >
+                                  <span class="text-success-fg">+{file.additions}</span>
                                 {/if}
                                 {#if file.deletions > 0}
-                                  <span class="text-danger-fg"
-                                    >-{file.deletions}</span
-                                  >
+                                  <span class="text-danger-fg">-{file.deletions}</span>
                                 {/if}
                               </div>
                             </button>
@@ -502,19 +515,37 @@
 
       <!-- Error banner (non-blocking, when we have some commits loaded) -->
       {#if error !== null && commits.length > 0}
-        <div class="px-4 py-2 text-sm text-danger-fg bg-danger-subtle">{error}</div>
+        <div class="mt-4 p-4 rounded-lg border border-danger-emphasis/30 bg-danger-emphasis/10 text-danger-fg text-sm">
+          {error}
+        </div>
       {/if}
 
       <!-- Load More -->
       {#if hasMore}
-        <div class="p-4">
+        <div class="pagination mt-6 flex justify-center">
           <button
             type="button"
-            class="w-full px-4 py-2 text-sm border border-border-default rounded hover:bg-bg-tertiary transition-colors text-text-secondary"
             onclick={handleLoadMore}
             disabled={loadingMore}
+            class="px-6 py-3 rounded-lg text-sm font-medium
+                   bg-bg-secondary hover:bg-bg-hover text-text-primary
+                   border border-bg-border hover:border-accent-emphasis/30
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                   transition-all duration-150"
+            aria-label="Load more commits"
           >
-            {loadingMore ? "Loading..." : "Load More"}
+            {#if loadingMore}
+              <span class="flex items-center gap-2">
+                <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                </svg>
+                Loading...
+              </span>
+            {:else}
+              Load More
+            {/if}
           </button>
         </div>
       {/if}

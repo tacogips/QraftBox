@@ -22,6 +22,7 @@ import {
   isClaudeSessionEntry,
 } from "../../types/claude-session";
 import { SessionRegistry } from "./session-registry";
+import { stripSystemTags } from "../../utils/strip-system-tags";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
@@ -138,6 +139,9 @@ export class ClaudeSessionReader {
         const index = await this.readSessionIndex(indexPath);
 
         for (const entry of index.entries) {
+          // Strip system tags and fix empty firstPrompt
+          await this.fixSystemTagFirstPrompt(entry);
+
           const extended: ExtendedSessionEntry = {
             ...entry,
             source: await this.detectSource(entry),
@@ -214,6 +218,9 @@ export class ClaudeSessionReader {
         const entry = index.entries.find((e) => e.sessionId === sessionId);
 
         if (entry) {
+          // Strip system tags and fix empty firstPrompt
+          await this.fixSystemTagFirstPrompt(entry);
+
           return {
             ...entry,
             source: await this.detectSource(entry),
@@ -330,6 +337,111 @@ export class ClaudeSessionReader {
   }
 
   /**
+   * Fix firstPrompt that contains only system tags by reading JSONL file
+   * to find the first real user prompt.
+   *
+   * This method:
+   * 1. Strips system tags from entry.firstPrompt
+   * 2. If the stripped result is empty, reads the JSONL file to find the first real user prompt
+   * 3. Updates entry.firstPrompt with the found prompt (already stripped)
+   * 4. If no real prompt found, sets firstPrompt to the stripped summary, or keeps it empty
+   */
+  private async fixSystemTagFirstPrompt(
+    entry: ClaudeSessionEntry,
+  ): Promise<void> {
+    // Strip system tags from firstPrompt
+    const strippedFirstPrompt = stripSystemTags(entry.firstPrompt);
+
+    // If stripped prompt is non-empty, update and return
+    if (strippedFirstPrompt.length > 0) {
+      entry.firstPrompt = strippedFirstPrompt;
+      return;
+    }
+
+    // firstPrompt is empty after stripping - need to search JSONL file
+    const jsonlPath = entry.fullPath;
+    if (!existsSync(jsonlPath)) {
+      // File doesn't exist, use stripped summary as fallback
+      entry.firstPrompt = stripSystemTags(entry.summary);
+      return;
+    }
+
+    try {
+      const fileStat = await stat(jsonlPath);
+      const fileSize = fileStat.size;
+
+      // Skip files larger than 10MB to avoid memory issues
+      const MAX_FILE_SIZE = 10 * 1024 * 1024;
+      if (fileSize > MAX_FILE_SIZE) {
+        entry.firstPrompt = "(Large session - content not indexed)";
+        return;
+      }
+
+      // Read the file content
+      const content = await readFile(jsonlPath, "utf-8");
+      const lines = content
+        .split("\n")
+        .filter((line) => line.trim().length > 0);
+
+      // Search for the first real user message
+      for (const line of lines) {
+        try {
+          const event: unknown = JSON.parse(line);
+          if (typeof event === "object" && event !== null) {
+            const obj = event as Record<string, unknown>;
+            if (obj["type"] === "user" && typeof obj["message"] === "object") {
+              const message = obj["message"] as Record<string, unknown>;
+
+              // Handle string content
+              if (typeof message["content"] === "string") {
+                const stripped = stripSystemTags(message["content"]);
+                if (stripped.length > 0) {
+                  entry.firstPrompt = stripped;
+                  return;
+                }
+              }
+              // Handle array content (content blocks)
+              else if (Array.isArray(message["content"])) {
+                const textBlocks = message["content"].filter(
+                  (block: unknown) =>
+                    typeof block === "object" &&
+                    block !== null &&
+                    (block as Record<string, unknown>)["type"] === "text",
+                );
+
+                // Concatenate all text blocks
+                const allText = textBlocks
+                  .map((block) => {
+                    const textBlock = block as Record<string, unknown>;
+                    return typeof textBlock["text"] === "string"
+                      ? textBlock["text"]
+                      : "";
+                  })
+                  .join("\n");
+
+                const stripped = stripSystemTags(allText);
+                if (stripped.length > 0) {
+                  entry.firstPrompt = stripped;
+                  return;
+                }
+              }
+            }
+          }
+        } catch (error: unknown) {
+          // Skip parse errors
+          continue;
+        }
+      }
+
+      // No real prompt found, use stripped summary as fallback
+      entry.firstPrompt = stripSystemTags(entry.summary);
+    } catch (error: unknown) {
+      // Error reading file, use stripped summary as fallback
+      entry.firstPrompt = stripSystemTags(entry.summary);
+    }
+  }
+
+  /**
    * Build session entries from JSONL files when sessions-index.json is missing
    */
   private async buildEntriesFromJsonlFiles(
@@ -432,11 +544,14 @@ export class ClaudeSessionReader {
             isSidechain = obj["isSidechain"];
           }
 
-          // Extract first user message
+          // Extract first user message (skip if entirely system tags)
           if (obj["type"] === "user" && typeof obj["message"] === "object") {
             const message = obj["message"] as Record<string, unknown>;
             if (typeof message["content"] === "string") {
-              firstPrompt = message["content"];
+              const stripped = stripSystemTags(message["content"]);
+              if (stripped.length > 0) {
+                firstPrompt = stripped;
+              }
             } else if (Array.isArray(message["content"])) {
               // Handle array content (e.g., text blocks)
               const textBlocks = message["content"].filter(
@@ -448,7 +563,10 @@ export class ClaudeSessionReader {
               if (textBlocks.length > 0) {
                 const firstBlock = textBlocks[0] as Record<string, unknown>;
                 if (typeof firstBlock["text"] === "string") {
-                  firstPrompt = firstBlock["text"];
+                  const stripped = stripSystemTags(firstBlock["text"]);
+                  if (stripped.length > 0) {
+                    firstPrompt = stripped;
+                  }
                 }
               }
             }
@@ -459,7 +577,8 @@ export class ClaudeSessionReader {
       }
     }
 
-    // If first line wasn't a user message, search for the first user event
+    // If first line wasn't a user message (or was entirely system tags),
+    // search for the first real user event
     if (firstPrompt === "") {
       for (const line of lines) {
         try {
@@ -469,8 +588,11 @@ export class ClaudeSessionReader {
             if (obj["type"] === "user" && typeof obj["message"] === "object") {
               const message = obj["message"] as Record<string, unknown>;
               if (typeof message["content"] === "string") {
-                firstPrompt = message["content"];
-                break;
+                const stripped = stripSystemTags(message["content"]);
+                if (stripped.length > 0) {
+                  firstPrompt = stripped;
+                  break;
+                }
               } else if (Array.isArray(message["content"])) {
                 const textBlocks = message["content"].filter(
                   (block: unknown) =>
@@ -481,8 +603,11 @@ export class ClaudeSessionReader {
                 if (textBlocks.length > 0) {
                   const firstBlock = textBlocks[0] as Record<string, unknown>;
                   if (typeof firstBlock["text"] === "string") {
-                    firstPrompt = firstBlock["text"];
-                    break;
+                    const stripped = stripSystemTags(firstBlock["text"]);
+                    if (stripped.length > 0) {
+                      firstPrompt = stripped;
+                      break;
+                    }
                   }
                 }
               }
@@ -532,7 +657,7 @@ export class ClaudeSessionReader {
       fullPath: jsonlPath,
       fileMtime: fileStat.mtimeMs,
       firstPrompt: firstPrompt || "(No user prompt found)",
-      summary,
+      summary: stripSystemTags(summary),
       messageCount: lines.length,
       created,
       modified,
@@ -587,13 +712,13 @@ export class ClaudeSessionReader {
       return false;
     }
 
-    // Search filter (case-insensitive)
+    // Search filter (case-insensitive, using stripped text)
     if (options.search !== undefined) {
       const searchLower = options.search.toLowerCase();
-      const matchesPrompt = session.firstPrompt
+      const matchesPrompt = stripSystemTags(session.firstPrompt)
         .toLowerCase()
         .includes(searchLower);
-      const matchesSummary = session.summary
+      const matchesSummary = stripSystemTags(session.summary)
         .toLowerCase()
         .includes(searchLower);
 

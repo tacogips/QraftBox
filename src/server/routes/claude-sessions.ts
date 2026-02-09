@@ -16,6 +16,7 @@ import {
   ClaudeSessionReader,
   type SessionSummary,
 } from "../claude/session-reader";
+import { stripSystemTags } from "../../utils/strip-system-tags";
 
 /**
  * Error response format
@@ -223,6 +224,12 @@ export function createClaudeSessionsRoutes(): Hono {
       const response: SessionListResponse =
         await sessionReader.listSessions(options);
 
+      // Strip system tags from firstPrompt/summary before returning
+      for (const session of response.sessions) {
+        session.firstPrompt = stripSystemTags(session.firstPrompt);
+        session.summary = stripSystemTags(session.summary);
+      }
+
       return c.json(response);
     } catch (e) {
       const errorMessage =
@@ -263,6 +270,8 @@ export function createClaudeSessionsRoutes(): Hono {
         return c.json(errorResponse, 404);
       }
 
+      session.firstPrompt = stripSystemTags(session.firstPrompt);
+      session.summary = stripSystemTags(session.summary);
       return c.json(session);
     } catch (e) {
       const errorMessage =

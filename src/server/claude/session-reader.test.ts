@@ -524,6 +524,183 @@ describe('ClaudeSessionReader', () => {
 
       expect(result.sessions).toHaveLength(0);
     });
+
+    it('should strip system tags from firstPrompt in index entries', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
+      await mkdir(projectDir, { recursive: true });
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: '/g/gits/tacogips/qraftbox',
+        entries: [
+          createMockSessionEntry(
+            'session-with-tags',
+            '2026-02-05T10:00:00Z',
+            '2026-02-05T11:00:00Z',
+            'main',
+            '<local-command-caveat>System command</local-command-caveat>Real user prompt',
+          ),
+        ],
+      };
+
+      await writeFile(join(projectDir, 'sessions-index.json'), JSON.stringify(index, null, 2));
+
+      const result = await reader.listSessions();
+
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.firstPrompt).toBe('Real user prompt');
+    });
+
+    it('should find real user prompt from JSONL when firstPrompt contains only system tags', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
+      await mkdir(projectDir, { recursive: true });
+
+      // Create JSONL file with the real prompt further down
+      const jsonlPath = join(projectDir, 'session-only-tags.jsonl');
+      const jsonlContent = [
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: '<local-command-caveat>System command</local-command-caveat>',
+          },
+          timestamp: '2026-02-05T10:00:00Z',
+        }),
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: 'This is the real user prompt',
+          },
+          timestamp: '2026-02-05T10:01:00Z',
+        }),
+      ].join('\n');
+
+      await writeFile(jsonlPath, jsonlContent);
+
+      // Create index with system-tag-only firstPrompt and correct fullPath
+      const mockEntry = createMockSessionEntry(
+        'session-only-tags',
+        '2026-02-05T10:00:00Z',
+        '2026-02-05T11:00:00Z',
+        'main',
+        '<local-command-caveat>Only system tags here</local-command-caveat>',
+      );
+      mockEntry.fullPath = jsonlPath;
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: '/g/gits/tacogips/qraftbox',
+        entries: [mockEntry],
+      };
+
+      await writeFile(join(projectDir, 'sessions-index.json'), JSON.stringify(index, null, 2));
+
+      const result = await reader.listSessions();
+
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.firstPrompt).toBe('This is the real user prompt');
+    });
+
+    it('should handle array content blocks when finding real user prompt', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
+      await mkdir(projectDir, { recursive: true });
+
+      // Create JSONL file with array content
+      const jsonlPath = join(projectDir, 'session-array-content.jsonl');
+      const jsonlContent = [
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: [
+              {
+                type: 'text',
+                text: '<local-command-caveat>System</local-command-caveat>',
+              },
+            ],
+          },
+          timestamp: '2026-02-05T10:00:00Z',
+        }),
+        JSON.stringify({
+          type: 'user',
+          message: {
+            content: [
+              {
+                type: 'text',
+                text: 'First block text',
+              },
+              {
+                type: 'text',
+                text: 'Second block text',
+              },
+            ],
+          },
+          timestamp: '2026-02-05T10:01:00Z',
+        }),
+      ].join('\n');
+
+      await writeFile(jsonlPath, jsonlContent);
+
+      const mockEntry = createMockSessionEntry(
+        'session-array-content',
+        '2026-02-05T10:00:00Z',
+        '2026-02-05T11:00:00Z',
+        'main',
+        '<local-command-caveat>Only system tags</local-command-caveat>',
+      );
+      mockEntry.fullPath = jsonlPath;
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: '/g/gits/tacogips/qraftbox',
+        entries: [mockEntry],
+      };
+
+      await writeFile(join(projectDir, 'sessions-index.json'), JSON.stringify(index, null, 2));
+
+      const result = await reader.listSessions();
+
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.firstPrompt).toBe('First block text\nSecond block text');
+    });
+
+    it('should fallback to stripped summary when no real prompt found in JSONL', async () => {
+      const projectDir = join(projectsDir, '-g-gits-tacogips-qraftbox');
+      await mkdir(projectDir, { recursive: true });
+
+      // Create JSONL file with only system tag messages
+      const jsonlPath = join(projectDir, 'session-no-prompt.jsonl');
+      const jsonlContent = JSON.stringify({
+        type: 'user',
+        message: {
+          content: '<local-command-caveat>System only</local-command-caveat>',
+        },
+        timestamp: '2026-02-05T10:00:00Z',
+      });
+
+      await writeFile(jsonlPath, jsonlContent);
+
+      const mockEntry = createMockSessionEntry(
+        'session-no-prompt',
+        '2026-02-05T10:00:00Z',
+        '2026-02-05T11:00:00Z',
+        'main',
+        '<local-command-caveat>Only system tags</local-command-caveat>',
+      );
+      mockEntry.fullPath = jsonlPath;
+      mockEntry.summary = '<system-reminder>System note</system-reminder>Summary text';
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: '/g/gits/tacogips/qraftbox',
+        entries: [mockEntry],
+      };
+
+      await writeFile(join(projectDir, 'sessions-index.json'), JSON.stringify(index, null, 2));
+
+      const result = await reader.listSessions();
+
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.firstPrompt).toBe('Summary text');
+    });
   });
 });
 

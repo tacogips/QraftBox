@@ -15,6 +15,8 @@
     contextId: string;
   }
 
+  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+
   const { sessionId, contextId }: Props = $props();
 
   /**
@@ -60,13 +62,18 @@
   let chatScrollContainer: HTMLDivElement | null = $state(null);
 
   /**
-   * Filter events to only show user and assistant messages
+   * Filter events to only show user and assistant messages.
+   * Excludes user messages that consist entirely of system tags
+   * (e.g., local-command-caveat, command-name, system-reminder).
    */
   const chatEvents = $derived(
     loadingState.status === "success"
-      ? loadingState.data.filter(
-          (event) => event.type === "user" || event.type === "assistant",
-        )
+      ? loadingState.data.filter((event) => {
+          if (event.type !== "user" && event.type !== "assistant") return false;
+          const text = extractTextContent(event);
+          if (text.trim().length === 0) return false;
+          return true;
+        })
       : [],
   );
 
@@ -142,6 +149,13 @@
    * Handles user/assistant messages, tool_use, tool_result, and summary events
    */
   function extractTextContent(event: TranscriptEvent): string {
+    return stripSystemTags(extractTextContentRaw(event));
+  }
+
+  /**
+   * Extract raw text content from event (before system tag stripping)
+   */
+  function extractTextContentRaw(event: TranscriptEvent): string {
     const raw = event.raw as Record<string, unknown>;
 
     // User/assistant: content is at raw.message.content

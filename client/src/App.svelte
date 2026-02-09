@@ -32,6 +32,7 @@
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
   let currentScreen = $state<ScreenType>("diff");
+  let headerMenuOpen = $state(false);
 
   // AI prompt state
   let aiPanelCollapsed = $state(true);
@@ -608,12 +609,81 @@
 <div class="flex flex-col h-screen bg-bg-primary text-text-primary">
   <!-- Header -->
   <header
-    class="h-14 border-b border-border-default flex items-center px-4 bg-bg-secondary gap-4"
+    class="h-12 border-b border-border-default flex items-center px-4 bg-bg-secondary gap-4"
   >
     <h1 class="text-lg font-semibold">QraftBox</h1>
 
     <!-- Navigation (GitHub UnderlineNav style) -->
     <nav class="flex items-center gap-0 ml-4 h-full">
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
+               {currentScreen === 'worktree'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => navigateToScreen("worktree")}
+      >
+        Worktree
+      </button>
+    </nav>
+
+    <!-- Hamburger menu -->
+    <div class="ml-auto relative">
+      <button
+        type="button"
+        class="p-2 rounded text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+        onclick={() => (headerMenuOpen = !headerMenuOpen)}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z"></path>
+        </svg>
+      </button>
+      {#if headerMenuOpen}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="absolute right-0 top-full mt-1 w-40 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
+        >
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                   {currentScreen === 'tools' ? 'text-text-primary font-semibold' : 'text-text-secondary'}"
+            onclick={() => { navigateToScreen("tools"); headerMenuOpen = false; }}
+          >
+            Tools
+          </button>
+        </div>
+      {/if}
+    </div>
+  </header>
+  {#if headerMenuOpen}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- Backdrop to close menu -->
+    <div
+      class="fixed inset-0 z-40"
+      onclick={() => (headerMenuOpen = false)}
+      onkeydown={() => {}}
+      role="presentation"
+    ></div>
+  {/if}
+
+  <!-- Tab Bar -->
+  <div
+    class="flex items-center bg-bg-secondary border-b border-border-default px-2 overflow-x-auto"
+  >
+    <!-- Project path and status -->
+    {#if projectPath}
+      <div
+        class="py-2 px-4 text-sm border-b-2 border-accent-emphasis text-text-primary"
+      >
+        {projectPath}
+      </div>
+    {/if}
+    {#if contextId !== null}
+      <HeaderStatusBadges {contextId} />
+    {/if}
+
+    <!-- Diff / Commits / Sessions tabs -->
+    <nav class="flex items-center gap-0 h-full">
       <button
         type="button"
         class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
@@ -644,44 +714,9 @@
       >
         Sessions
       </button>
-      <span class="w-px h-5 bg-border-default mx-1"></span>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-               {currentScreen === 'worktree'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("worktree")}
-      >
-        Worktree
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-               {currentScreen === 'tools'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("tools")}
-      >
-        Tools
-      </button>
     </nav>
-  </header>
 
-  <!-- Tab Bar -->
-  <div
-    class="flex items-center bg-bg-secondary border-b border-border-default px-2 overflow-x-auto"
-  >
-    {#if projectPath}
-      <div
-        class="py-2 px-4 text-sm border-b-2 border-accent-emphasis text-text-primary"
-      >
-        {projectPath}
-      </div>
-    {/if}
-    {#if contextId !== null}
-      <HeaderStatusBadges {contextId} />
-    {/if}
+    <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
         <GitPushButton {contextId} {projectPath} />
@@ -974,10 +1009,7 @@
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <UnifiedSessionsScreen
-            {contextId}
-            {projectPath}
-          />
+          <UnifiedSessionsScreen {contextId} {projectPath} />
         {/if}
       </main>
     {:else if currentScreen === "commits"}

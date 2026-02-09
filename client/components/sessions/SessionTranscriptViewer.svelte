@@ -25,6 +25,8 @@
     onBack: () => void;
   }
 
+  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+
   const { sessionId, sessionTitle, contextId, onBack }: Props = $props();
 
   /**
@@ -62,6 +64,21 @@
   let scrollContainer: HTMLDivElement | null = $state(null);
   let autoScroll = $state(true);
   let expandedEvents = $state<Set<string>>(new Set());
+
+  /**
+   * Filter out events that consist entirely of system tags.
+   * These are system commands (local-command-caveat, command-name, etc.)
+   * that are noise for human review.
+   */
+  const filteredEvents = $derived(
+    loadingState.status === "success"
+      ? loadingState.data.filter((event) => {
+          const text = extractTextContent(event);
+          if (text.trim().length === 0) return false;
+          return true;
+        })
+      : [],
+  );
 
   /**
    * Fetch transcript events from API
@@ -193,6 +210,13 @@
    * is typically undefined. This function looks into `raw` for the actual data.
    */
   function extractTextContent(event: TranscriptEvent): string {
+    return stripSystemTags(extractTextContentRaw(event));
+  }
+
+  /**
+   * Extract raw text content from event (before system tag stripping)
+   */
+  function extractTextContentRaw(event: TranscriptEvent): string {
     const raw = event.raw as Record<string, unknown>;
 
     // User/assistant: content is at raw.message.content
@@ -385,13 +409,13 @@
         </div>
       </div>
     {:else if loadingState.status === "success"}
-      {#if loadingState.data.length === 0}
+      {#if filteredEvents.length === 0}
         <div class="flex items-center justify-center h-full">
           <p class="text-sm text-text-tertiary">No transcript events found</p>
         </div>
       {:else}
         <div class="space-y-3">
-          {#each loadingState.data as event, index (getEventId(event, index))}
+          {#each filteredEvents as event, index (getEventId(event, index))}
             {@const eventId = getEventId(event, index)}
             {@const textContent = extractTextContent(event)}
             {@const isLong = isLongContent(textContent)}
@@ -447,7 +471,7 @@
 
         <!-- Event count footer -->
         <div class="mt-4 text-center text-xs text-text-tertiary">
-          Showing {loadingState.data.length} of {loadingState.total} events
+          Showing {filteredEvents.length} of {loadingState.total} events
         </div>
       {/if}
     {/if}
