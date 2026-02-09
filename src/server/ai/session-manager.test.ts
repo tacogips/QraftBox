@@ -195,6 +195,18 @@ describe("createSessionManager", () => {
       const session = manager.getSession(result.sessionId);
       expect(session?.state).toBe("completed");
     });
+
+    test("keeps cancelled state when cancelling a running session", async () => {
+      const manager = createSessionManager();
+      const result = await manager.submit(createTestRequest());
+
+      await manager.cancel(result.sessionId);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const session = manager.getSession(result.sessionId);
+      expect(session?.state).toBe("cancelled");
+      expect(session?.completedAt).toBeDefined();
+    });
   });
 
   describe("getQueueStatus()", () => {

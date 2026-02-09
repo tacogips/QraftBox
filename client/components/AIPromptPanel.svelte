@@ -34,6 +34,8 @@
       refs: readonly FileReference[],
     ) => void;
     onToggle: () => void;
+    onNewSession?: () => void;
+    onSearchSession?: () => void;
   }
 
   // Svelte 5 props syntax
@@ -44,6 +46,8 @@
     allFiles,
     onSubmit,
     onToggle,
+    onNewSession,
+    onSearchSession,
   }: Props = $props();
 
   /**
@@ -443,6 +447,65 @@
         </svg>
       </button>
 
+      <!-- Session management icons -->
+      {#if onNewSession !== undefined}
+        <button
+          type="button"
+          onclick={onNewSession}
+          class="shrink-0 h-6 w-6 flex items-center justify-center
+                 hover:bg-bg-hover rounded transition-colors duration-150
+                 text-text-tertiary hover:text-text-primary
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+          title="New Session"
+          aria-label="Create new session"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </button>
+      {/if}
+
+      {#if onSearchSession !== undefined}
+        <button
+          type="button"
+          onclick={onSearchSession}
+          class="shrink-0 h-6 w-6 flex items-center justify-center
+                 hover:bg-bg-hover rounded transition-colors duration-150
+                 text-text-tertiary hover:text-text-primary
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+          title="Search Sessions"
+          aria-label="Search and browse sessions"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+        </button>
+      {/if}
+
       <!-- Single-line input -->
       <div class="flex-1 relative min-w-0">
         <input
@@ -648,32 +711,93 @@
     <div class="h-52 p-4 flex flex-col">
       <!-- Input area -->
       <div class="flex-1 flex gap-4 min-h-0">
-        <!-- Collapse button (aligned with expand button in collapsed mode) -->
-        <button
-          type="button"
-          onclick={onToggle}
-          class="shrink-0 h-6 w-6 flex items-center justify-center self-start mt-0.5
-                 hover:bg-bg-hover rounded transition-colors duration-150
-                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-          aria-expanded={!collapsed}
-          aria-label="Collapse to single-line mode"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="text-text-tertiary transition-transform duration-300 rotate-180"
-            aria-hidden="true"
+        <!-- Left icon column: collapse + session icons -->
+        <div class="shrink-0 flex flex-col items-center gap-1 self-start mt-0.5">
+          <!-- Collapse button -->
+          <button
+            type="button"
+            onclick={onToggle}
+            class="h-6 w-6 flex items-center justify-center
+                   hover:bg-bg-hover rounded transition-colors duration-150
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+            aria-expanded={!collapsed}
+            aria-label="Collapse to single-line mode"
           >
-            <polyline points="18 15 12 9 6 15" />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="text-text-tertiary transition-transform duration-300 rotate-180"
+              aria-hidden="true"
+            >
+              <polyline points="18 15 12 9 6 15" />
+            </svg>
+          </button>
+
+          {#if onNewSession !== undefined}
+            <button
+              type="button"
+              onclick={onNewSession}
+              class="h-6 w-6 flex items-center justify-center
+                     hover:bg-bg-hover rounded transition-colors duration-150
+                     text-text-tertiary hover:text-text-primary
+                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+              title="New Session"
+              aria-label="Create new session"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+          {/if}
+
+          {#if onSearchSession !== undefined}
+            <button
+              type="button"
+              onclick={onSearchSession}
+              class="h-6 w-6 flex items-center justify-center
+                     hover:bg-bg-hover rounded transition-colors duration-150
+                     text-text-tertiary hover:text-text-primary
+                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+              title="Search Sessions"
+              aria-label="Search and browse sessions"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+            </button>
+          {/if}
+        </div>
 
         <!-- Prompt input -->
         <div class="flex-1 relative flex flex-col min-w-0">

@@ -572,6 +572,21 @@
                   >
                 </div>
               {/if}
+              {#if runningSession.lastAssistantMessage !== undefined && runningSession.lastAssistantMessage.length > 0}
+                <div
+                  class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1 mb-2"
+                >
+                  <span
+                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
+                    >assistant (live)</span
+                  >
+                  <p
+                    class="text-xs text-text-primary whitespace-pre-wrap font-mono mt-1 max-h-[200px] overflow-y-auto"
+                  >
+                    {stripSystemTags(runningSession.lastAssistantMessage)}
+                  </p>
+                </div>
+              {/if}
               <div class="flex justify-end">
                 <button
                   type="button"

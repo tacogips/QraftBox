@@ -1,17 +1,14 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
-  import type {
-    QueueStatus,
-    FileReference,
-    AISession,
-  } from "../../src/types/ai";
+  import type { QueueStatus, FileReference, AISession } from "../../src/types/ai";
   import type { LocalPrompt } from "../../src/types/local-prompt";
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
   import AIPromptPanel from "../components/AIPromptPanel.svelte";
   import CurrentSessionPanel from "../components/CurrentSessionPanel.svelte";
+  import SessionToolbar from "../components/SessionToolbar.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
@@ -20,6 +17,7 @@
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import CurrentStateView from "../components/CurrentStateView.svelte";
+  import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   /**
    * Screen type for navigation
@@ -72,11 +70,7 @@
       const stored = localStorage.getItem("qraftbox-sidebar-width");
       if (stored !== null) {
         const w = Number(stored);
-        if (
-          !Number.isNaN(w) &&
-          w >= SIDEBAR_MIN_WIDTH &&
-          w <= SIDEBAR_MAX_WIDTH
-        ) {
+        if (!Number.isNaN(w) && w >= SIDEBAR_MIN_WIDTH && w <= SIDEBAR_MAX_WIDTH) {
           return w;
         }
       }
@@ -87,15 +81,13 @@
   }
 
   let sidebarWidth = $state(loadSidebarWidth());
-  let isDraggingSidebar = $state(false);
-  let dragStartX = 0;
-  let dragStartWidth = 0;
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
   let pathCopied = $state(false);
+  let mergeDialogOpen = $state(false);
 
   // AI prompt state
   let aiPanelCollapsed = $state(true);
@@ -111,24 +103,7 @@
   let queuedSessions = $state<AISession[]>([]);
   let recentlyCompletedSessions = $state<AISession[]>([]);
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
-
-  // Selected CLI session ID (when user picks a session from search)
-  let selectedCliSessionId = $state<string | null>(null);
-
-  // Current CLI session ID reported by CurrentSessionPanel
-  let currentCliSessionId = $state<string | null>(null);
-
-  // New session mode (persisted across reload)
-  const NEW_SESSION_MODE_KEY = "qraftbox:newSessionMode";
-  let isNewSessionMode = $state(
-    (() => {
-      try {
-        return localStorage.getItem(NEW_SESSION_MODE_KEY) === "true";
-      } catch {
-        return false;
-      }
-    })(),
-  );
+  let sessionStreams = new Map<string, EventSource>();
 
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
@@ -461,45 +436,12 @@
   }
 
   function narrowSidebar(): void {
-    sidebarWidth = Math.max(
-      SIDEBAR_MIN_WIDTH,
-      sidebarWidth - SIDEBAR_WIDTH_STEP,
-    );
+    sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth - SIDEBAR_WIDTH_STEP);
     saveSidebarWidth(sidebarWidth);
   }
 
   function widenSidebar(): void {
-    sidebarWidth = Math.min(
-      SIDEBAR_MAX_WIDTH,
-      sidebarWidth + SIDEBAR_WIDTH_STEP,
-    );
-    saveSidebarWidth(sidebarWidth);
-  }
-
-  function handleSidebarDragStart(e: MouseEvent): void {
-    isDraggingSidebar = true;
-    dragStartX = e.clientX;
-    dragStartWidth = sidebarWidth;
-    document.body.style.cursor = "col-resize";
-    document.body.classList.add("select-none");
-    e.preventDefault();
-  }
-
-  function handleSidebarDragMove(e: MouseEvent): void {
-    if (!isDraggingSidebar) return;
-    const delta = e.clientX - dragStartX;
-    const newWidth = Math.max(
-      SIDEBAR_MIN_WIDTH,
-      Math.min(SIDEBAR_MAX_WIDTH, dragStartWidth + delta),
-    );
-    sidebarWidth = newWidth;
-  }
-
-  function handleSidebarDragEnd(): void {
-    if (!isDraggingSidebar) return;
-    isDraggingSidebar = false;
-    document.body.style.cursor = "";
-    document.body.classList.remove("select-none");
+    sidebarWidth = Math.min(SIDEBAR_MAX_WIDTH, sidebarWidth + SIDEBAR_WIDTH_STEP);
     saveSidebarWidth(sidebarWidth);
   }
 
@@ -541,11 +483,7 @@
       id: optimisticId,
       prompt,
       description: "",
-      context: {
-        primaryFile: undefined,
-        references: [...refs],
-        diffSummary: undefined,
-      },
+      context: { primaryFile: undefined, references: [...refs], diffSummary: undefined },
       projectPath,
       status: "pending",
       sessionId: null,
@@ -589,28 +527,15 @@
 
       // 4. If nothing is running/queued in session manager, dispatch immediately
       if (runningSessions.length === 0 && queuedSessions.length === 0) {
-        // Determine if we should resume the current CLI session
-        const resumeSessionId =
-          !isNewSessionMode && currentCliSessionId !== null
-            ? currentCliSessionId
-            : undefined;
-
-        const dispatchResp = await fetch(
-          `/api/prompts/${data.prompt.id}/dispatch`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ immediate: true, resumeSessionId }),
-          },
-        );
+        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ immediate: true }),
+        });
 
         if (dispatchResp.ok) {
           // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter(
-            (p) => p.id !== data.prompt.id,
-          );
-          // Clear new session mode after dispatching
-          clearNewSessionMode();
+          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
         }
       }
       // If something is running, prompt stays in pending queue - autoDispatchNext handles it
@@ -688,35 +613,6 @@
   }
 
   /**
-   * localStorage key for persisting the last completed QraftBox session
-   */
-  const LAST_COMPLETED_SESSION_KEY = "qraftbox:lastCompletedSession";
-
-  /**
-   * Save the most recently completed QraftBox session to localStorage
-   */
-  function saveLastCompletedSession(session: AISession): void {
-    try {
-      localStorage.setItem(LAST_COMPLETED_SESSION_KEY, JSON.stringify(session));
-    } catch {
-      // Silently ignore quota errors
-    }
-  }
-
-  /**
-   * Restore the last completed QraftBox session from localStorage
-   */
-  function restoreLastCompletedSession(): AISession | null {
-    try {
-      const raw = localStorage.getItem(LAST_COMPLETED_SESSION_KEY);
-      if (raw === null) return null;
-      return JSON.parse(raw) as AISession;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
    * Fetch running/queued AI sessions for the CurrentSessionPanel
    */
   async function fetchActiveSessions(): Promise<void> {
@@ -733,7 +629,6 @@
           completedAt?: string | undefined;
           context: unknown;
           currentActivity?: string | undefined;
-          lastAssistantMessage?: string | undefined;
         }[];
       };
 
@@ -750,7 +645,6 @@
           context: info.context as AISession["context"],
           turns: [],
           currentActivity: info.currentActivity,
-          lastAssistantMessage: info.lastAssistantMessage,
         };
         if (session.state === "running") {
           running.push(session);
@@ -769,35 +663,147 @@
 
       runningSessions = running;
       queuedSessions = queued;
-
-      // If there are newly completed sessions from the server, use them and save to localStorage
-      if (recentCompleted.length > 0) {
-        recentlyCompletedSessions = recentCompleted;
-        saveLastCompletedSession(recentCompleted[0]!);
-      } else if (recentlyCompletedSessions.length === 0) {
-        // No in-memory sessions at all - on first load, restore from localStorage
-        // Once restored, keep showing it (don't clear on subsequent polls)
-        const restored = restoreLastCompletedSession();
-        if (restored !== null) {
-          recentlyCompletedSessions = [restored];
-        }
-      }
-      // If recentlyCompletedSessions already has content (from prior restore or prior real session),
-      // don't clear it - let it persist until replaced by a new server-side session.
+      recentlyCompletedSessions = recentCompleted;
 
       // Also refresh queue status to avoid stale display
       void fetchQueueStatus();
 
       // Auto-dispatch next pending prompt if nothing is running
-      if (
-        running.length === 0 &&
-        queued.length === 0 &&
-        pendingPrompts.length > 0
-      ) {
+      if (running.length === 0 && queued.length === 0 && pendingPrompts.length > 0) {
         void autoDispatchNext();
       }
     } catch {
       // Silently ignore
+    }
+  }
+
+  /**
+   * Apply SSE progress event to in-memory running session state.
+   */
+  function applySessionProgressEvent(event: {
+    type?: string;
+    sessionId?: string;
+    data?: { content?: unknown };
+  }): void {
+    const content = event.data?.content;
+    if (
+      event.type !== "message" ||
+      typeof event.sessionId !== "string" ||
+      typeof content !== "string"
+    ) {
+      return;
+    }
+    runningSessions = runningSessions.map((session) =>
+      session.id === event.sessionId
+        ? { ...session, lastAssistantMessage: content }
+        : session,
+    );
+  }
+
+  /**
+   * Subscribe to a running session stream for near-realtime updates.
+   */
+  function ensureSessionStream(sessionId: string): void {
+    if (sessionStreams.has(sessionId)) return;
+
+    const es = new EventSource(`/api/ai/sessions/${sessionId}/stream`);
+    es.onmessage = (msg) => {
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    };
+
+    const onTerminalEvent = (): void => {
+      closeSessionStream(sessionId);
+      void reconcileSessionState(sessionId);
+    };
+
+    es.addEventListener("completed", onTerminalEvent);
+    es.addEventListener("failed", onTerminalEvent);
+    es.addEventListener("error", (msg) => {
+      if (!(msg instanceof MessageEvent)) {
+        // Transport-level errors are auto-retried by EventSource.
+        return;
+      }
+      try {
+        const parsed = JSON.parse(msg.data) as {
+          type?: string;
+          sessionId?: string;
+          data?: { content?: unknown };
+        };
+        if (parsed.type === "error") {
+          onTerminalEvent();
+          return;
+        }
+        applySessionProgressEvent(parsed);
+      } catch {
+        onTerminalEvent();
+      }
+    });
+    es.addEventListener("cancelled", onTerminalEvent);
+    es.addEventListener("message", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
+    es.onerror = () => {
+      void reconcileSessionState(sessionId);
+    };
+
+    sessionStreams.set(sessionId, es);
+  }
+
+  /**
+   * Close an active session stream.
+   */
+  function closeSessionStream(sessionId: string): void {
+    const stream = sessionStreams.get(sessionId);
+    if (stream === undefined) return;
+    stream.close();
+    sessionStreams.delete(sessionId);
+  }
+
+  /**
+   * Ensure stream subscriptions exactly match running sessions.
+   */
+  function syncSessionStreams(): void {
+    const runningIds = new Set(runningSessions.map((s) => s.id));
+    for (const [sessionId] of sessionStreams) {
+      if (!runningIds.has(sessionId)) {
+        closeSessionStream(sessionId);
+      }
+    }
+    for (const sessionId of runningIds) {
+      ensureSessionStream(sessionId);
+    }
+  }
+
+  /**
+   * Reconcile client session state after stream terminal/transport events.
+   */
+  async function reconcileSessionState(sessionId: string): Promise<void> {
+    await fetchActiveSessions();
+    await fetchQueueStatus();
+    const stillRunning = runningSessions.some((s) => s.id === sessionId);
+    if (!stillRunning) {
+      closeSessionStream(sessionId);
     }
   }
 
@@ -880,13 +886,14 @@
 
   // Re-evaluate polling when state changes
   $effect(() => {
-    const _deps = [
-      runningSessions.length,
-      queuedSessions.length,
-      pendingPrompts.length,
-      recentlyCompletedSessions.length,
-    ];
+    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length, recentlyCompletedSessions.length];
     manageSessionPolling();
+  });
+
+  // Keep stream subscriptions in sync with running sessions.
+  $effect(() => {
+    const _runningIds = runningSessions.map((s) => s.id).join(",");
+    syncSessionStreams();
   });
 
   /**
@@ -917,17 +924,10 @@
   }
 
   /**
-   * Resume a Claude CLI session from CurrentSessionPanel or SessionToolbar search.
-   * Sets selectedCliSessionId so CurrentSessionPanel displays the chosen session.
+   * Resume a Claude CLI session from CurrentSessionPanel
    */
   async function handleResumeCliSession(sessionId: string): Promise<void> {
     if (contextId === null) return;
-
-    // Immediately switch the displayed CLI session
-    selectedCliSessionId = sessionId;
-    // Clear new session mode since we're resuming a specific session
-    clearNewSessionMode();
-
     try {
       const resp = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/resume`,
@@ -947,69 +947,25 @@
   }
 
   /**
-   * Clear new session mode state
-   */
-  function clearNewSessionMode(): void {
-    isNewSessionMode = false;
-    try {
-      localStorage.removeItem(NEW_SESSION_MODE_KEY);
-    } catch {
-      // Silently ignore
-    }
-  }
-
-  /**
-   * Start a new session by clearing previous session state and expanding the AI prompt panel
+   * Start a new session by expanding the AI prompt panel and focusing it
    */
   function handleNewSession(): void {
-    // Clear previous session state so CurrentSessionPanel resets
-    selectedCliSessionId = null;
-    currentCliSessionId = null;
-    recentlyCompletedSessions = [];
-    isNewSessionMode = true;
-    try {
-      localStorage.removeItem(LAST_COMPLETED_SESSION_KEY);
-      localStorage.setItem(NEW_SESSION_MODE_KEY, "true");
-    } catch {
-      // Silently ignore
-    }
-    // Open the AI prompt panel
     if (aiPanelCollapsed) {
       aiPanelCollapsed = false;
     }
   }
 
   /**
-   * Search session placeholder (to be implemented)
-   */
-  function handleSearchSession(): void {
-    // TODO: Implement session search functionality
-    console.log("Search session requested");
-  }
-
-  /**
-   * Change page placeholder (to be implemented)
-   */
-  function handleChangePage(): void {
-    // TODO: Implement page change functionality
-    console.log("Change page requested");
-  }
-
-  /**
    * Keyboard shortcuts
    */
   function handleKeydown(event: KeyboardEvent): void {
-    const isTextInput = (el: EventTarget | Element | null): boolean =>
-      el instanceof HTMLInputElement ||
-      el instanceof HTMLTextAreaElement ||
-      (el instanceof HTMLElement && el.isContentEditable);
-
     const isInTextBox =
-      isTextInput(event.target) || isTextInput(document.activeElement);
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement;
 
     // Escape blurs focused text boxes
     if (isInTextBox && event.key === "Escape") {
-      (document.activeElement as HTMLElement | null)?.blur();
+      (event.target as HTMLElement).blur();
       return;
     }
 
@@ -1143,8 +1099,6 @@
     connectWebSocket();
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("hashchange", handleHashChange);
-    window.addEventListener("mousemove", handleSidebarDragMove);
-    window.addEventListener("mouseup", handleSidebarDragEnd);
 
     // Set initial hash if empty
     if (
@@ -1158,13 +1112,15 @@
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("hashchange", handleHashChange);
-      window.removeEventListener("mousemove", handleSidebarDragMove);
-      window.removeEventListener("mouseup", handleSidebarDragEnd);
       disconnectWebSocket();
       if (sessionPollTimer !== null) {
         clearInterval(sessionPollTimer);
         sessionPollTimer = null;
       }
+      for (const [, stream] of sessionStreams) {
+        stream.close();
+      }
+      sessionStreams.clear();
     };
   });
 
@@ -1221,7 +1177,7 @@
       {#if headerMenuOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          class="absolute right-0 top-full mt-1 w-56 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
+          class="absolute right-0 top-full mt-1 w-40 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
         >
           <button
             type="button"
@@ -1248,6 +1204,17 @@
             }}
           >
             System Info
+          </button>
+          <div class="border-t border-border-default my-1"></div>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary transition-colors"
+            onclick={() => {
+              mergeDialogOpen = true;
+              headerMenuOpen = false;
+            }}
+          >
+            Merge
           </button>
         </div>
       {/if}
@@ -1346,11 +1313,7 @@
     <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
-        <GitPushButton
-          {contextId}
-          {projectPath}
-          onSuccess={() => void fetchDiff(contextId)}
-        />
+        <GitPushButton {contextId} {projectPath} onSuccess={() => void fetchDiff(contextId)} />
       {/if}
     </div>
   </div>
@@ -1402,18 +1365,6 @@
               </div>
             {/if}
           </aside>
-
-          {#if !sidebarCollapsed}
-            <!-- Sidebar resize handle -->
-            <div
-              class="absolute top-0 bottom-0 w-1 cursor-col-resize z-20 hover:bg-accent-emphasis/50 transition-colors"
-              style:right="0px"
-              role="separator"
-              aria-orientation="vertical"
-              onmousedown={handleSidebarDragStart}
-              class:bg-accent-emphasis={isDraggingSidebar}
-            ></div>
-          {/if}
         {/if}
         <!-- Sidebar toggle tag -->
         <button
@@ -1638,22 +1589,22 @@
           </div>
         </div>
 
+        <!-- Session Toolbar (new session + search session) -->
+        <SessionToolbar
+          {contextId}
+          onNewSession={handleNewSession}
+          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+        />
+
         <!-- Current Session Panel (above AI panel) -->
         <CurrentSessionPanel
           {contextId}
-          {projectPath}
           running={runningSessions}
           queued={queuedSessions}
           recentlyCompleted={recentlyCompletedSessions}
           {pendingPrompts}
-          {selectedCliSessionId}
-          newSessionMode={isNewSessionMode}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
-          onResumeSession={(sessionId) =>
-            void handleResumeCliSession(sessionId)}
-          onCurrentSessionChange={(sessionId) => {
-            currentCliSessionId = sessionId;
-          }}
+          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
@@ -1666,9 +1617,11 @@
           onToggle={() => {
             aiPanelCollapsed = !aiPanelCollapsed;
           }}
+<<<<<<< Updated upstream
+=======
           onNewSession={handleNewSession}
           onSearchSession={handleSearchSession}
-          onChangePage={handleChangePage}
+>>>>>>> Stashed changes
         />
       </div>
     {:else if currentScreen === "commits"}
@@ -1682,11 +1635,7 @@
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <UnifiedSessionsScreen
-            {contextId}
-            {projectPath}
-            onResumeToChanges={handleResumeToChanges}
-          />
+          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
         {/if}
       </main>
     {:else if currentScreen === "worktree"}
@@ -1708,4 +1657,14 @@
       </main>
     {/if}
   </div>
+
+  <!-- Merge Branch Dialog -->
+  {#if mergeDialogOpen && contextId !== null}
+    <MergeBranchDialog
+      {contextId}
+      onClose={() => {
+        mergeDialogOpen = false;
+      }}
+    />
+  {/if}
 </div>

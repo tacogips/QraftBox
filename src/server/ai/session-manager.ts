@@ -41,6 +41,8 @@ interface InternalSession {
   claudeAgent?: ClaudeCodeToolAgent;
 }
 
+const SESSION_CANCEL_TIMEOUT_MS = 3000;
+
 /**
  * Session manager interface
  */
@@ -138,6 +140,10 @@ export function createSessionManager(
   const sessions = new Map<string, InternalSession>();
   const queue: string[] = [];
   let runningCount = 0;
+
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
 
   /**
    * Emit event to session listeners
@@ -314,6 +320,18 @@ export function createSessionManager(
 
         // Wait for completion
         const sessionResult = await toolAgentSession.waitForCompletion();
+        const finalAgentState = toolAgentSession.getState().state;
+
+        // Keep explicit cancellation as cancelled (don't downgrade to failed)
+        const latestSession = sessions.get(sessionId);
+        if (
+          latestSession?.state === "cancelled" ||
+          finalAgentState === "cancelled"
+        ) {
+          session.state = "cancelled";
+          session.completedAt = new Date();
+          return;
+        }
 
         // Mark as completed or failed
         if (sessionResult.success) {
@@ -375,6 +393,11 @@ export function createSessionManager(
         emitEvent(sessionId, createProgressEvent("completed", sessionId));
       }
     } catch (e) {
+      if (session.state === "cancelled") {
+        session.completedAt = session.completedAt ?? new Date();
+        return;
+      }
+
       session.state = "failed";
       session.completedAt = new Date();
 
@@ -470,7 +493,11 @@ export function createSessionManager(
         throw new Error(`Session not found: ${sessionId}`);
       }
 
-      if (session.state === "completed" || session.state === "cancelled") {
+      if (
+        session.state === "completed" ||
+        session.state === "failed" ||
+        session.state === "cancelled"
+      ) {
         return; // Already done
       }
 
@@ -480,20 +507,39 @@ export function createSessionManager(
         queue.splice(queueIndex, 1);
       }
 
+      // Mark cancelled first so UI and executor loop observe terminal state quickly.
+      session.state = "cancelled";
+      session.completedAt = new Date();
+      emitEvent(sessionId, createProgressEvent("cancelled", sessionId));
+
       // Cancel ToolAgentSession if available
       if (session.toolAgentSession !== undefined) {
-        await session.toolAgentSession.cancel();
+        let cancelTimedOut = false;
+        try {
+          await Promise.race([
+            session.toolAgentSession.cancel(),
+            delay(SESSION_CANCEL_TIMEOUT_MS).then(() => {
+              cancelTimedOut = true;
+            }),
+          ]);
+        } catch {
+          cancelTimedOut = true;
+        }
+
+        // Force-abort if graceful cancel did not complete in time
+        if (cancelTimedOut) {
+          try {
+            await session.toolAgentSession.abort();
+          } catch {
+            // Keep cancellation idempotent and continue local cleanup
+          }
+        }
       }
 
       // Abort if running (fallback for old abort controller)
       if (session.abortController !== undefined) {
         session.abortController.abort();
       }
-
-      session.state = "cancelled";
-      session.completedAt = new Date();
-
-      emitEvent(sessionId, createProgressEvent("cancelled", sessionId));
     },
 
     getQueueStatus(): QueueStatus {
