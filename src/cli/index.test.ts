@@ -20,6 +20,8 @@ describe("parseArgs", () => {
       syncMode: "manual",
       ai: true,
       projectPath: ".",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     });
   });
 
@@ -138,6 +140,8 @@ describe("parseArgs", () => {
       syncMode: "auto",
       ai: false,
       projectPath: "/path/to/project",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     });
   });
 

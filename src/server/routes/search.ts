@@ -11,14 +11,8 @@ import type {
   SearchResponse,
   ValidationResult,
 } from "../../types/search";
-import {
-  validateSearchRequest,
-  validatePattern,
-} from "../../types/search";
-import {
-  executeSearch,
-  type DiffTarget,
-} from "../search/index";
+import { validateSearchRequest, validatePattern } from "../../types/search";
+import { executeSearch, type DiffTarget } from "../search/index";
 
 /**
  * Server context provided to routes
@@ -140,7 +134,7 @@ export function createSearchRoutes(context: ServerContext): Hono {
         async (path: string) => {
           const file = Bun.file(path);
           return await file.text();
-        }
+        },
       );
 
       // Build response
@@ -155,8 +149,7 @@ export function createSearchRoutes(context: ServerContext): Hono {
 
       return c.json(response);
     } catch (e) {
-      const errorMessage =
-        e instanceof Error ? e.message : "Search failed";
+      const errorMessage = e instanceof Error ? e.message : "Search failed";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

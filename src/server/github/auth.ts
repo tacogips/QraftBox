@@ -72,13 +72,10 @@ export function clearAuthCache(): void {
   cachedMethod = undefined;
 }
 
-
 /**
  * Create GitHub authentication instance
  */
-export function createGitHubAuth(
-  options: GitHubAuthOptions = {},
-): GitHubAuth {
+export function createGitHubAuth(options: GitHubAuthOptions = {}): GitHubAuth {
   const exec = options.execAsync ?? execAsync;
   const fetchFn = options.fetch ?? globalThis.fetch;
 

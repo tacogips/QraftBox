@@ -25,6 +25,10 @@ export interface CLIConfig {
   readonly syncMode: SyncMode;
   readonly ai: boolean;
   readonly projectPath: string;
+  /** Model used for internal prompts (commit messages, etc.) */
+  readonly promptModel: string;
+  /** Model used for AI assistant interactions */
+  readonly assistantModel: string;
 }
 
 /**

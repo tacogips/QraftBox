@@ -79,16 +79,16 @@ Large features are split into multiple related plans with cross-references.
 
 | Plan | Phase | Status | Design Reference | Last Updated |
 |------|-------|--------|------------------|--------------|
-| 25-server-foundation | 11 | Ready | design-local-diff-viewer.md#architecture-overview | 2026-02-07 |
-| 26-git-core-operations | 11 | Ready | design-local-diff-viewer.md#data-models | 2026-02-07 |
-| 27-diff-file-routes | 11 | Ready | design-local-diff-viewer.md#api-design | 2026-02-07 |
-| 28-file-watcher | 11 | Ready | design-local-diff-viewer.md#file-watching | 2026-02-07 |
-| 29-branch-switching | 11 | Ready | design-local-diff-viewer.md#branch-switching | 2026-02-07 |
-| 30-git-xnotes | 12 | Ready | design-local-diff-viewer.md#comment-system | 2026-02-07 |
-| 31-binary-large-files | 12 | Ready | design-local-diff-viewer.md#binary-and-large-file-handling | 2026-02-07 |
-| 33-unified-sessions | 13 | Ready | design-unified-sessions.md | 2026-02-08 |
+| 25-server-foundation | 11 | Completed | design-local-diff-viewer.md#architecture-overview | 2026-02-08 |
+| 26-git-core-operations | 11 | Completed | design-local-diff-viewer.md#data-models | 2026-02-08 |
+| 27-diff-file-routes | 11 | Completed | design-local-diff-viewer.md#api-design | 2026-02-08 |
+| 28-file-watcher | 11 | Completed | design-local-diff-viewer.md#file-watching | 2026-02-08 |
+| 29-branch-switching | 11 | Completed | design-local-diff-viewer.md#branch-switching | 2026-02-08 |
+| 30-git-xnotes | 12 | Completed | design-local-diff-viewer.md#comment-system | 2026-02-08 |
+| 31-binary-large-files | 12 | Completed | design-local-diff-viewer.md#binary-and-large-file-handling | 2026-02-08 |
+| 33-unified-sessions | 13 | In Progress | design-unified-sessions.md | 2026-02-09 |
 
-**Next Phase**: Phase 11 is ready to start. Plans 25 and 26 can be executed in parallel (no dependencies). Plans 27, 28, 29 depend on 25 and/or 26.
+**Current Focus**: Phase 13 (`33-unified-sessions`) is in progress.
 
 ## Superseded Plans
 
@@ -125,7 +125,13 @@ Plans whose source files were never created (identified by audit). Replaced by P
 | 22-ai-pr | 2026-02-06 | design-ai-commit.md |
 | 23-git-worktree | 2026-02-06 | design-git-worktree.md |
 | 24-claude-session-browser | 2026-02-06 | design-claude-session-browser.md |
-| 33-unified-sessions | - | design-unified-sessions.md |
+| 25-server-foundation | 2026-02-08 | design-local-diff-viewer.md#architecture-overview |
+| 26-git-core-operations | 2026-02-08 | design-local-diff-viewer.md#data-models |
+| 27-diff-file-routes | 2026-02-08 | design-local-diff-viewer.md#api-design |
+| 28-file-watcher | 2026-02-08 | design-local-diff-viewer.md#file-watching |
+| 29-branch-switching | 2026-02-08 | design-local-diff-viewer.md#branch-switching |
+| 30-git-xnotes | 2026-02-08 | design-local-diff-viewer.md#comment-system |
+| 31-binary-large-files | 2026-02-08 | design-local-diff-viewer.md#binary-and-large-file-handling |
 
 ## Phase Dependencies (for impl-exec-auto)
 
@@ -147,9 +153,9 @@ Only plans from eligible phases should be read to minimize context loading.
 | 8 | COMPLETED | GitHub Integration, AI PR | Phase 7 |
 | 9 | COMPLETED | Git Worktree Support | Phase 6 |
 | 10 | COMPLETED | Claude Session Browser | Phase 4 |
-| 11 | READY | Foundation Rebuild - Server, Git Core, Routes, File Watcher, Branch Switching | - |
-| 12 | BLOCKED | Comments & Binary Files - git-xnotes, binary/large file handling | Phase 11 |
-| 13 | READY | Unified Sessions - Merge Queue and Sessions tabs | Phase 4, 10 |
+| 11 | COMPLETED | Foundation Rebuild - Server, Git Core, Routes, File Watcher, Branch Switching | - |
+| 12 | COMPLETED | Comments & Binary Files - git-xnotes, binary/large file handling | Phase 11 |
+| 13 | IN_PROGRESS | Unified Sessions - Merge Queue and Sessions tabs | Phase 4, 10 |
 
 ### Phase to Plans Mapping
 
@@ -194,18 +200,18 @@ PHASE_TO_PLANS = {
   9: ["23-git-worktree.md"],                # COMPLETED
   10: ["24-claude-session-browser.md"],     # COMPLETED
   11: [
-    "25-server-foundation.md",     # READY (no deps)
-    "26-git-core-operations.md",   # READY (no deps)
-    "27-diff-file-routes.md",      # READY (deps: 25, 26)
-    "28-file-watcher.md",          # READY (deps: 25, 26)
-    "29-branch-switching.md"       # READY (deps: 26)
+    "25-server-foundation.md",     # COMPLETED
+    "26-git-core-operations.md",   # COMPLETED
+    "27-diff-file-routes.md",      # COMPLETED
+    "28-file-watcher.md",          # COMPLETED
+    "29-branch-switching.md"       # COMPLETED
   ],
   12: [
-    "30-git-xnotes.md",           # READY (deps: 26, 27)
-    "31-binary-large-files.md"    # READY (deps: 26, 27)
+    "30-git-xnotes.md",           # COMPLETED
+    "31-binary-large-files.md"    # COMPLETED
   ],
   13: [
-    "33-unified-sessions.md"     # READY (deps: 13-session-queue, 24-claude-session-browser)
+    "33-unified-sessions.md"     # IN_PROGRESS (deps: 13-session-queue, 24-claude-session-browser)
   ]
 }
 ```

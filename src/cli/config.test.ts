@@ -21,6 +21,8 @@ describe("DEFAULT_CONFIG", () => {
     expect(DEFAULT_CONFIG.WATCH).toBe(true);
     expect(DEFAULT_CONFIG.SYNC_MODE).toBe("manual");
     expect(DEFAULT_CONFIG.AI).toBe(true);
+    expect(DEFAULT_CONFIG.PROMPT_MODEL).toBe("claude-opus-4-6");
+    expect(DEFAULT_CONFIG.ASSISTANT_MODEL).toBe("claude-opus-4-6");
   });
 
   test("is readonly", () => {
@@ -40,6 +42,8 @@ describe("loadConfig", () => {
     expect(config.watch).toBe(DEFAULT_CONFIG.WATCH);
     expect(config.syncMode).toBe(DEFAULT_CONFIG.SYNC_MODE);
     expect(config.ai).toBe(DEFAULT_CONFIG.AI);
+    expect(config.promptModel).toBe(DEFAULT_CONFIG.PROMPT_MODEL);
+    expect(config.assistantModel).toBe(DEFAULT_CONFIG.ASSISTANT_MODEL);
     expect(path.isAbsolute(config.projectPath)).toBe(true);
   });
 
@@ -139,6 +143,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -154,6 +160,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -171,6 +179,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -188,6 +198,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -205,6 +217,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -219,6 +233,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -233,6 +249,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -248,6 +266,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -263,6 +283,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: "/nonexistent/path/that/does/not/exist",
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -279,6 +301,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -293,6 +317,8 @@ describe("validateConfig", () => {
       syncMode: "auto-push",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -307,6 +333,8 @@ describe("validateConfig", () => {
       syncMode: "auto-pull",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -321,6 +349,8 @@ describe("validateConfig", () => {
       syncMode: "auto",
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -335,6 +365,8 @@ describe("validateConfig", () => {
       syncMode: "invalid-mode" as never,
       ai: true,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config as CLIConfig);
     expect(result.valid).toBe(false);
@@ -350,6 +382,8 @@ describe("validateConfig", () => {
       syncMode: "manual",
       ai: false,
       projectPath: testDir,
+      promptModel: "claude-opus-4-6",
+      assistantModel: "claude-opus-4-6",
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);

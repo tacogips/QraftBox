@@ -39,7 +39,10 @@ beforeAll(async () => {
   await mkdir(testDir, { recursive: true });
 
   // Create a test file
-  await writeFile(join(testDir, "test.txt"), "Hello, World!\nThis is a test file.\n");
+  await writeFile(
+    join(testDir, "test.txt"),
+    "Hello, World!\nThis is a test file.\n",
+  );
 
   // Create a subdirectory with a file (for path traversal tests)
   const subdir = join(testDir, "subdir");

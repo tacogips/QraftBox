@@ -167,6 +167,23 @@ export interface BranchMergeResponse {
 }
 
 /**
+ * Request for creating a new branch
+ */
+export interface BranchCreateRequest {
+  readonly branch: string;
+  readonly startPoint?: string | undefined;
+}
+
+/**
+ * Response from branch creation operation
+ */
+export interface BranchCreateResponse {
+  readonly success: boolean;
+  readonly branch: string;
+  readonly error?: string | undefined;
+}
+
+/**
  * Check if a branch name is valid according to git naming rules
  *
  * Invalid characters include: space, .., ~, ^, :, ?, *, [, \, @{

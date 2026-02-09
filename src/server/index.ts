@@ -17,6 +17,8 @@ import { createSessionManager } from "./ai/session-manager";
 import { createPromptStore } from "./prompts/prompt-store";
 import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
+import { createQraftBoxToolRegistry } from "./tools/registry";
+import { DEFAULT_AI_CONFIG } from "../types/ai";
 
 /**
  * Server options for creating the Hono instance
@@ -84,7 +86,16 @@ export function createServer(options: ServerOptions): Hono {
   });
 
   // Mount all API routes (workspace, browse, context-scoped routes)
-  const sessionManager = createSessionManager();
+  const toolRegistry = createQraftBoxToolRegistry({
+    projectPath: options.config.projectPath,
+  });
+
+  // Initialize tool registry (fire and forget)
+  void toolRegistry.initialize().catch((e) => {
+    console.error("Failed to initialize tool registry:", e);
+  });
+
+  const sessionManager = createSessionManager(DEFAULT_AI_CONFIG, toolRegistry);
   const promptStore = createPromptStore();
 
   // Initialize system prompt files (fire and forget)
@@ -96,6 +107,11 @@ export function createServer(options: ServerOptions): Hono {
     contextManager: options.contextManager,
     sessionManager,
     promptStore,
+    toolRegistry,
+    modelConfig: {
+      promptModel: options.config.promptModel,
+      assistantModel: options.config.assistantModel,
+    },
   });
 
   // Static file serving and SPA fallback

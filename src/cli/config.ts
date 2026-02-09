@@ -21,6 +21,8 @@ export interface ConfigDefaults {
   readonly WATCH: boolean;
   readonly SYNC_MODE: SyncMode;
   readonly AI: boolean;
+  readonly PROMPT_MODEL: string;
+  readonly ASSISTANT_MODEL: string;
 }
 
 /**
@@ -33,6 +35,8 @@ export const DEFAULT_CONFIG: ConfigDefaults = {
   WATCH: true,
   SYNC_MODE: "manual",
   AI: true,
+  PROMPT_MODEL: "claude-opus-4-6",
+  ASSISTANT_MODEL: "claude-opus-4-6",
 } as const;
 
 /**
@@ -58,6 +62,8 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
     syncMode: overrides?.syncMode ?? DEFAULT_CONFIG.SYNC_MODE,
     ai: overrides?.ai ?? DEFAULT_CONFIG.AI,
     projectPath,
+    promptModel: overrides?.promptModel ?? DEFAULT_CONFIG.PROMPT_MODEL,
+    assistantModel: overrides?.assistantModel ?? DEFAULT_CONFIG.ASSISTANT_MODEL,
   };
 }
 

@@ -50,6 +50,8 @@
     disableCurrentBranch?: boolean;
     /** If provided, this branch name is pre-highlighted */
     selectedBranch?: string | undefined;
+    /** Called when a new branch is created; if undefined, create button is hidden */
+    onCreateBranch?: ((branchName: string) => void) | undefined;
   }
 
   const {
@@ -61,6 +63,7 @@
     onSelect,
     disableCurrentBranch = false,
     selectedBranch = undefined,
+    onCreateBranch = undefined,
   }: Props = $props();
 
   const PAGE_SIZE = 30;
@@ -77,6 +80,76 @@
   let focusedIndex = $state(-1);
   let scrollContainerRef: HTMLDivElement | undefined = $state(undefined);
   let defaultBranchName = $state("");
+
+  /** Whether the create branch form is visible */
+  let showCreateForm = $state(false);
+  /** New branch name input value */
+  let newBranchName = $state("");
+  /** Create form error message */
+  let createErrorMessage = $state<string | null>(null);
+  /** Whether branch creation is in progress */
+  let creating = $state(false);
+  /** Reference to the new branch name input */
+  let newBranchInput: HTMLInputElement | undefined = $state(undefined);
+
+  /**
+   * Check if the new branch name already exists (client-side duplicate detection)
+   */
+  const isDuplicateBranch = $derived.by(() => {
+    if (newBranchName.trim().length === 0) return false;
+    const name = newBranchName.trim().toLowerCase();
+    return branches.some((b) => b.name.toLowerCase() === name);
+  });
+
+  /**
+   * Validate branch name against git naming rules (client-side)
+   */
+  function isValidBranchName(name: string): boolean {
+    if (name.trim().length === 0) return false;
+    const invalidChars = /[ ~^:?*[\]\\@{]/;
+    if (invalidChars.test(name)) return false;
+    if (name.includes("..")) return false;
+    if (name.startsWith("/") || name.endsWith("/")) return false;
+    if (name.includes("//")) return false;
+    if (name.endsWith(".lock")) return false;
+    return true;
+  }
+
+  /**
+   * Toggle create branch form visibility
+   */
+  function toggleCreateForm(): void {
+    showCreateForm = !showCreateForm;
+    createErrorMessage = null;
+    newBranchName = "";
+    if (showCreateForm) {
+      requestAnimationFrame(() => {
+        newBranchInput?.focus();
+      });
+    }
+  }
+
+  /**
+   * Handle create branch form submission
+   */
+  function handleCreateBranch(): void {
+    if (onCreateBranch === undefined) return;
+    const name = newBranchName.trim();
+    if (name.length === 0) {
+      createErrorMessage = "Branch name is required";
+      return;
+    }
+    if (!isValidBranchName(name)) {
+      createErrorMessage = "Invalid branch name";
+      return;
+    }
+    if (isDuplicateBranch) {
+      createErrorMessage = `Branch '${name}' already exists`;
+      return;
+    }
+    createErrorMessage = null;
+    onCreateBranch(name);
+  }
 
   /**
    * Filtered branches based on query (client-side filter on loaded data)
@@ -161,6 +234,10 @@
     branches = [];
     totalCount = 0;
     currentOffset = 0;
+    showCreateForm = false;
+    newBranchName = "";
+    createErrorMessage = null;
+    creating = false;
     void fetchBranches(0, false);
     requestAnimationFrame(() => {
       filterInput?.focus();
@@ -225,8 +302,26 @@
 >
   <!-- Header with filter -->
   <div class="px-3 py-2 border-b border-border-default">
-    <div class="text-xs text-text-secondary font-semibold mb-1.5">
-      {headerText}
+    <div class="flex items-center justify-between mb-1.5">
+      <div class="text-xs text-text-secondary font-semibold">
+        {headerText}
+      </div>
+      {#if onCreateBranch !== undefined}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded text-text-secondary
+                 hover:text-accent-fg hover:bg-bg-tertiary transition-colors cursor-pointer"
+          onclick={toggleCreateForm}
+          title="Create new branch"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              fill-rule="evenodd"
+              d="M7.75 2a.75.75 0 01.75.75V7h4.25a.75.75 0 110 1.5H8.5v4.25a.75.75 0 11-1.5 0V8.5H2.75a.75.75 0 010-1.5H7V2.75A.75.75 0 017.75 2z"
+            />
+          </svg>
+        </button>
+      {/if}
     </div>
     <input
       bind:this={filterInput}
@@ -241,6 +336,62 @@
       }}
     />
   </div>
+
+  <!-- Create branch form (hidden by default) -->
+  {#if showCreateForm && onCreateBranch !== undefined}
+    <div class="px-3 py-2 border-b border-border-default bg-bg-secondary">
+      <div class="flex items-center gap-1.5">
+        <input
+          bind:this={newBranchInput}
+          type="text"
+          placeholder="New branch name..."
+          class="flex-1 px-2 py-1 text-sm bg-bg-primary border rounded
+                 text-text-primary placeholder:text-text-placeholder
+                 focus:outline-none focus:ring-1 focus:ring-accent-emphasis
+                 {isDuplicateBranch
+            ? 'border-danger-emphasis'
+            : 'border-border-default focus:border-accent-emphasis'}"
+          bind:value={newBranchName}
+          onkeydown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleCreateBranch();
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              toggleCreateForm();
+            }
+          }}
+          disabled={creating}
+        />
+        <button
+          type="button"
+          class="px-2 py-1 text-xs font-medium rounded transition-colors
+                 {newBranchName.trim().length === 0 ||
+          isDuplicateBranch ||
+          creating
+            ? 'bg-bg-tertiary text-text-placeholder cursor-default'
+            : 'bg-accent-emphasis text-white hover:bg-accent-fg cursor-pointer'}"
+          onclick={handleCreateBranch}
+          disabled={newBranchName.trim().length === 0 ||
+            isDuplicateBranch ||
+            creating}
+        >
+          {creating ? "Creating..." : "Create"}
+        </button>
+      </div>
+      {#if isDuplicateBranch}
+        <div class="text-[11px] text-danger-fg mt-1">
+          Branch '{newBranchName.trim()}' already exists
+        </div>
+      {/if}
+      {#if createErrorMessage !== null && !isDuplicateBranch}
+        <div class="text-[11px] text-danger-fg mt-1">
+          {createErrorMessage}
+        </div>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Warning message -->
   {#if warningMessage !== undefined}

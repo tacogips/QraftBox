@@ -90,7 +90,6 @@ function detectLanguage(filePath: string): string {
   return langMap[ext] ?? "plaintext";
 }
 
-
 /**
  * Count files in a file tree
  *

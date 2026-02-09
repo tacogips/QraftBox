@@ -72,7 +72,7 @@ export interface ValidationResult {
  * @returns Validation result with error message if invalid
  */
 export function validateSearchRequest(
-  request: SearchRequest
+  request: SearchRequest,
 ): ValidationResult {
   // Validate pattern
   if (!request.pattern || request.pattern.trim().length === 0) {

@@ -15,9 +15,20 @@ export interface VersionInfo {
 }
 
 /**
+ * Model configuration for AI operations
+ */
+export interface ModelConfig {
+  /** Model used for internal prompts (commit messages, etc.) */
+  readonly promptModel: string;
+  /** Model used for AI assistant interactions */
+  readonly assistantModel: string;
+}
+
+/**
  * System information including versions of installed tools
  */
 export interface SystemInfo {
   readonly git: VersionInfo;
   readonly claudeCode: VersionInfo;
+  readonly models: ModelConfig;
 }

@@ -69,7 +69,7 @@
   /**
    * Whether working tree has uncommitted changes
    */
-  const hasUncommittedChanges = $derived(status !== null && !status.clean);
+
 
   /**
    * PR number and URL (only if PR exists and is open)
@@ -139,7 +139,6 @@
     <BranchSelector
       {contextId}
       currentBranch={branchName}
-      {hasUncommittedChanges}
     />
   {/if}
 

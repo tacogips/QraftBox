@@ -19,6 +19,10 @@
       readonly version: string | null;
       readonly error: string | null;
     };
+    readonly models: {
+      readonly promptModel: string;
+      readonly assistantModel: string;
+    };
   }
 
   /**
@@ -183,6 +187,31 @@
                   Version information not available
                 </p>
               {/if}
+            </div>
+          </div>
+        </div>
+
+        <!-- Models -->
+        <div
+          class="rounded-lg border border-border-default bg-bg-secondary p-4"
+        >
+          <div class="flex-1">
+            <h3 class="text-sm font-semibold text-text-primary mb-3">
+              Models
+            </h3>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-text-secondary">Prompt Model</span>
+                <span class="text-sm text-text-primary font-mono">
+                  {systemInfo.models.promptModel}
+                </span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-sm text-text-secondary">Assistant Model</span>
+                <span class="text-sm text-text-primary font-mono">
+                  {systemInfo.models.assistantModel}
+                </span>
+              </div>
             </div>
           </div>
         </div>

@@ -59,6 +59,8 @@ export interface CreateLocalPromptRequest {
 export interface DispatchPromptOptions {
   /** If true, attempt immediate execution (skip queue) */
   readonly immediate?: boolean;
+  /** CLI session ID to resume instead of creating a new session */
+  readonly resumeSessionId?: string | undefined;
 }
 
 /**

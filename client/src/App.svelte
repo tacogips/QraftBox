@@ -103,6 +103,7 @@
   let queuedSessions = $state<AISession[]>([]);
   let recentlyCompletedSessions = $state<AISession[]>([]);
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
+  let sessionStreams = new Map<string, EventSource>();
 
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
@@ -677,6 +678,136 @@
   }
 
   /**
+   * Apply SSE progress event to in-memory running session state.
+   */
+  function applySessionProgressEvent(event: {
+    type?: string;
+    sessionId?: string;
+    data?: { content?: unknown };
+  }): void {
+    const content = event.data?.content;
+    if (
+      event.type !== "message" ||
+      typeof event.sessionId !== "string" ||
+      typeof content !== "string"
+    ) {
+      return;
+    }
+    runningSessions = runningSessions.map((session) =>
+      session.id === event.sessionId
+        ? { ...session, lastAssistantMessage: content }
+        : session,
+    );
+  }
+
+  /**
+   * Subscribe to a running session stream for near-realtime updates.
+   */
+  function ensureSessionStream(sessionId: string): void {
+    if (sessionStreams.has(sessionId)) return;
+
+    const es = new EventSource(`/api/ai/sessions/${sessionId}/stream`);
+    es.onmessage = (msg) => {
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    };
+
+    const onTerminalEvent = (): void => {
+      closeSessionStream(sessionId);
+      void reconcileSessionState(sessionId);
+    };
+
+    es.addEventListener("completed", onTerminalEvent);
+    es.addEventListener("failed", onTerminalEvent);
+    es.addEventListener("error", (msg) => {
+      if (!(msg instanceof MessageEvent)) {
+        // Transport-level errors are auto-retried by EventSource.
+        return;
+      }
+      try {
+        const parsed = JSON.parse(msg.data) as {
+          type?: string;
+          sessionId?: string;
+          data?: { content?: unknown };
+        };
+        if (parsed.type === "error") {
+          onTerminalEvent();
+          return;
+        }
+        applySessionProgressEvent(parsed);
+      } catch {
+        onTerminalEvent();
+      }
+    });
+    es.addEventListener("cancelled", onTerminalEvent);
+    es.addEventListener("message", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
+    es.onerror = () => {
+      void reconcileSessionState(sessionId);
+    };
+
+    sessionStreams.set(sessionId, es);
+  }
+
+  /**
+   * Close an active session stream.
+   */
+  function closeSessionStream(sessionId: string): void {
+    const stream = sessionStreams.get(sessionId);
+    if (stream === undefined) return;
+    stream.close();
+    sessionStreams.delete(sessionId);
+  }
+
+  /**
+   * Ensure stream subscriptions exactly match running sessions.
+   */
+  function syncSessionStreams(): void {
+    const runningIds = new Set(runningSessions.map((s) => s.id));
+    for (const [sessionId] of sessionStreams) {
+      if (!runningIds.has(sessionId)) {
+        closeSessionStream(sessionId);
+      }
+    }
+    for (const sessionId of runningIds) {
+      ensureSessionStream(sessionId);
+    }
+  }
+
+  /**
+   * Reconcile client session state after stream terminal/transport events.
+   */
+  async function reconcileSessionState(sessionId: string): Promise<void> {
+    await fetchActiveSessions();
+    await fetchQueueStatus();
+    const stillRunning = runningSessions.some((s) => s.id === sessionId);
+    if (!stillRunning) {
+      closeSessionStream(sessionId);
+    }
+  }
+
+  /**
    * Fetch pending prompts from the local prompt store
    */
   async function fetchPendingPrompts(): Promise<void> {
@@ -757,6 +888,12 @@
   $effect(() => {
     const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length, recentlyCompletedSessions.length];
     manageSessionPolling();
+  });
+
+  // Keep stream subscriptions in sync with running sessions.
+  $effect(() => {
+    const _runningIds = runningSessions.map((s) => s.id).join(",");
+    syncSessionStreams();
   });
 
   /**
@@ -980,6 +1117,10 @@
         clearInterval(sessionPollTimer);
         sessionPollTimer = null;
       }
+      for (const [, stream] of sessionStreams) {
+        stream.close();
+      }
+      sessionStreams.clear();
     };
   });
 

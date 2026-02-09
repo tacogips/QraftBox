@@ -6,7 +6,11 @@
  */
 
 import { Hono } from "hono";
-import type { PRRequest, BranchPRStatus, PRPromptContext } from "../../types/pr.js";
+import type {
+  PRRequest,
+  BranchPRStatus,
+  PRPromptContext,
+} from "../../types/pr.js";
 import type { PRExecutor } from "../pr/executor.js";
 import type { PRService } from "../github/pr-service.js";
 import type { ContextManager } from "../workspace/context-manager.js";
@@ -26,7 +30,10 @@ export function validatePRRequest(
 
   const promptTemplateId = req["promptTemplateId"];
   if (typeof promptTemplateId !== "string" || promptTemplateId.length === 0) {
-    return { valid: false, error: "promptTemplateId must be a non-empty string" };
+    return {
+      valid: false,
+      error: "promptTemplateId must be a non-empty string",
+    };
   }
 
   const baseBranch = req["baseBranch"];
@@ -52,28 +59,46 @@ export function validatePRRequest(
   const labels = req["labels"];
   if (labels !== undefined) {
     if (!Array.isArray(labels) || !labels.every((l) => typeof l === "string")) {
-      return { valid: false, error: "labels must be an array of strings if provided" };
+      return {
+        valid: false,
+        error: "labels must be an array of strings if provided",
+      };
     }
   }
 
   const reviewers = req["reviewers"];
   if (reviewers !== undefined) {
-    if (!Array.isArray(reviewers) || !reviewers.every((r) => typeof r === "string")) {
-      return { valid: false, error: "reviewers must be an array of strings if provided" };
+    if (
+      !Array.isArray(reviewers) ||
+      !reviewers.every((r) => typeof r === "string")
+    ) {
+      return {
+        valid: false,
+        error: "reviewers must be an array of strings if provided",
+      };
     }
   }
 
   const assignees = req["assignees"];
   if (assignees !== undefined) {
-    if (!Array.isArray(assignees) || !assignees.every((a) => typeof a === "string")) {
-      return { valid: false, error: "assignees must be an array of strings if provided" };
+    if (
+      !Array.isArray(assignees) ||
+      !assignees.every((a) => typeof a === "string")
+    ) {
+      return {
+        valid: false,
+        error: "assignees must be an array of strings if provided",
+      };
     }
   }
 
   const customVariables = req["customVariables"];
   if (customVariables !== undefined) {
     if (typeof customVariables !== "object" || customVariables === null) {
-      return { valid: false, error: "customVariables must be an object if provided" };
+      return {
+        valid: false,
+        error: "customVariables must be an object if provided",
+      };
     }
   }
 

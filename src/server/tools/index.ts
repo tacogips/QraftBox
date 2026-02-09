@@ -10,7 +10,11 @@ export {
   type QraftBoxToolRegistryOptions,
 } from "./registry.js";
 
-export { loadPluginTools, type LoadedPluginTool, type PluginLoadResult } from "./plugin-loader.js";
+export {
+  loadPluginTools,
+  type LoadedPluginTool,
+  type PluginLoadResult,
+} from "./plugin-loader.js";
 
 export { createBuiltinTools } from "./builtin/index.js";
 

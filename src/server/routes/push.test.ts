@@ -693,9 +693,7 @@ describe("createPushRoutes", () => {
 
     test("returns 500 on remotes error", async () => {
       // Override getRemotes to throw error
-      deps.mockGetRemotes.mockRejectedValueOnce(
-        new Error("Git remote failed"),
-      );
+      deps.mockGetRemotes.mockRejectedValueOnce(new Error("Git remote failed"));
 
       const app = createPushRoutes(contextManager, deps);
 

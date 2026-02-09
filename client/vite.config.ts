@@ -10,11 +10,11 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "http://localhost:7155",
+        target: "http://localhost:7144",
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:7155",
+        target: "ws://localhost:7144",
         ws: true,
       },
     },

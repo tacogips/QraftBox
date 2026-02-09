@@ -4,6 +4,20 @@
 
 This document describes the design for merging the separate "Queue" and "Sessions" header tabs into a single unified "Sessions" tab. QraftBox-created AI sessions (running, queued, completed) and Claude CLI sessions (from `~/.claude/projects/`) are presented in one cohesive interface with internal sub-navigation.
 
+## Implementation Snapshot (2026-02-09)
+
+Current code implements a shipped v1 of the unified sessions flow:
+
+- Header-level "Queue" tab is removed; `ScreenType` uses `"sessions"` only.
+- `UnifiedSessionsScreen.svelte` is wired in `App.svelte`.
+- Running/queued sessions are shown at top via `ActiveSessionsPanel`.
+- Completed QraftBox sessions and Claude CLI sessions are merged in `HistorySessionsPanel` with date grouping, search, loading/error states, and pagination.
+
+Remaining gap vs this design spec:
+
+- Internal Active/History sub-tab navigation (`SubTabNav`) is implemented but not yet wired as the primary interaction model (current UI uses one continuous scroll view with active section + history section).
+- `UnifiedSessionCard` exists but history rendering is currently custom row based.
+
 ## Problem Statement
 
 The current UI has two separate screens for session-related content:

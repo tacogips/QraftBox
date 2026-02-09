@@ -194,7 +194,10 @@ describe("branch module", () => {
       // Create several branches
       for (let i = 1; i <= 5; i++) {
         await execGit(["checkout", "-b", `page-${i}`], { cwd: repoPath });
-        await writeFile(join(repoPath, `page${String(i)}.txt`), `page ${String(i)}`);
+        await writeFile(
+          join(repoPath, `page${String(i)}.txt`),
+          `page ${String(i)}`,
+        );
         await execGit(["add", "."], { cwd: repoPath });
         await execGit(["commit", "-m", `Page ${String(i)}`], { cwd: repoPath });
       }

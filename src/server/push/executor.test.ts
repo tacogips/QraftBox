@@ -22,7 +22,9 @@ import * as os from "os";
  * Helper to create a temporary git repository for testing
  */
 async function createTestRepo(): Promise<string> {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "qraftbox-push-test-"));
+  const tmpDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), "qraftbox-push-test-"),
+  );
 
   // Initialize git repo
   await Bun.spawn(["git", "init"], { cwd: tmpDir }).exited;
@@ -130,7 +132,11 @@ describe("getRemotes", () => {
 
   test("returns remotes with fetchUrl and pushUrl", async () => {
     await addRemote(repoPath, "origin", "https://github.com/user/repo.git");
-    await addRemote(repoPath, "upstream", "https://github.com/upstream/repo.git");
+    await addRemote(
+      repoPath,
+      "upstream",
+      "https://github.com/upstream/repo.git",
+    );
 
     const remotes = await getRemotes(repoPath);
 

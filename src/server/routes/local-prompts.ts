@@ -71,7 +71,9 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       const prompt = await config.promptStore.create({
         prompt: body.prompt,
-        context: body.context ?? { references: [] },
+        context: body.context !== undefined && body.context !== null
+          ? { ...body.context, references: body.context.references ?? [] }
+          : { references: [] },
         projectPath: body.projectPath ?? "",
       });
 
@@ -94,8 +96,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       const offsetStr = c.req.query("offset");
       const search = c.req.query("search");
 
-      const limit =
-        limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
+      const limit = limitStr !== undefined ? parseInt(limitStr, 10) : undefined;
       const offset =
         offsetStr !== undefined ? parseInt(offsetStr, 10) : undefined;
 
@@ -209,7 +210,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       const id = c.req.param("id");
       const body = await c.req
         .json<DispatchPromptOptions>()
-        .catch(() => ({} as DispatchPromptOptions));
+        .catch(() => ({}) as DispatchPromptOptions);
 
       const prompt = await config.promptStore.get(id);
       if (prompt === null) {
@@ -236,13 +237,18 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       try {
         // Submit to session manager
+        const resumeId =
+          typeof body.resumeSessionId === "string" && body.resumeSessionId.length > 0
+            ? body.resumeSessionId
+            : undefined;
         const result = await config.sessionManager.submit({
           prompt: prompt.prompt,
           context: prompt.context,
           options: {
             projectPath: prompt.projectPath,
-            sessionMode: "new",
+            sessionMode: resumeId !== undefined ? "continue" : "new",
             immediate: body.immediate ?? false,
+            resumeSessionId: resumeId,
           },
         });
 

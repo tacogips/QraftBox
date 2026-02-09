@@ -20,7 +20,11 @@ export interface PRService {
   /**
    * Get a pull request by number
    */
-  getPR(owner: string, repo: string, prNumber: number): Promise<ExistingPR | null>;
+  getPR(
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<ExistingPR | null>;
 
   /**
    * Find a pull request for a specific branch
@@ -135,7 +139,7 @@ function mapPRResponse(pr: {
     baseBranch: pr.base.ref,
     headBranch: pr.head.ref,
     isDraft: pr.draft ?? false,
-    labels: pr.labels.map((l) => (typeof l === "string" ? l : l.name ?? "")),
+    labels: pr.labels.map((l) => (typeof l === "string" ? l : (l.name ?? ""))),
     reviewers: (pr.requested_reviewers ?? []).map((r) => r.login),
     assignees: (pr.assignees ?? []).map((a) => a.login),
     createdAt: new Date(pr.created_at).getTime(),

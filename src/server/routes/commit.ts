@@ -31,7 +31,10 @@ import type { ContextId } from "../../types/workspace";
  */
 export interface CommitRoutesDependencies {
   readonly buildContext: (cwd: string) => Promise<CommitPromptContext>;
-  readonly executeCommit: (cwd: string, message: string) => Promise<CommitResult>;
+  readonly executeCommit: (
+    cwd: string,
+    message: string,
+  ) => Promise<CommitResult>;
   readonly previewCommit: (
     context: CommitPromptContext,
     promptId: string,
@@ -99,7 +102,13 @@ export function createCommitRoutes(
   deps: CommitRoutesDependencies = defaultDependencies,
 ): Hono {
   const app = new Hono();
-  const { buildContext, executeCommit, previewCommit, getStagedFiles, hasStagedChanges } = deps;
+  const {
+    buildContext,
+    executeCommit,
+    previewCommit,
+    getStagedFiles,
+    hasStagedChanges,
+  } = deps;
 
   /**
    * POST /api/ctx/:contextId/commit
