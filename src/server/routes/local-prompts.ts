@@ -235,13 +235,18 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       try {
         // Submit to session manager
+        const resumeId =
+          typeof body.resumeSessionId === "string" && body.resumeSessionId.length > 0
+            ? body.resumeSessionId
+            : undefined;
         const result = await config.sessionManager.submit({
           prompt: prompt.prompt,
           context: prompt.context,
           options: {
             projectPath: prompt.projectPath,
-            sessionMode: "new",
+            sessionMode: resumeId !== undefined ? "continue" : "new",
             immediate: body.immediate ?? false,
+            resumeSessionId: resumeId,
           },
         });
 

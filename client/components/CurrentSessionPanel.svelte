@@ -39,11 +39,13 @@
     recentlyCompleted: readonly AISession[];
     pendingPrompts: readonly LocalPrompt[];
     selectedCliSessionId: string | null;
+    newSessionMode: boolean;
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
+    onCurrentSessionChange: (sessionId: string | null) => void;
   }
 
-  const { contextId, projectPath, running, queued, recentlyCompleted, pendingPrompts, selectedCliSessionId, onCancelSession, onResumeSession }: Props = $props();
+  const { contextId, projectPath, running, queued, recentlyCompleted, pendingPrompts, selectedCliSessionId, newSessionMode, onCancelSession, onResumeSession, onCurrentSessionChange }: Props = $props();
 
   /**
    * Most recent CLI session (shown when nothing else is active)
@@ -276,11 +278,22 @@
 
   $effect(() => {
     if (contextId === null) return;
+    if (newSessionMode) {
+      // In new session mode, clear the displayed CLI session
+      recentCliSession = null;
+      onCurrentSessionChange(null);
+      return;
+    }
     if (selectedCliSessionId !== null) {
       void fetchCliSessionById(selectedCliSessionId);
     } else {
       void fetchRecentCliSession();
     }
+  });
+
+  // Report current CLI session changes to parent
+  $effect(() => {
+    onCurrentSessionChange(recentCliSession?.sessionId ?? null);
   });
 </script>
 

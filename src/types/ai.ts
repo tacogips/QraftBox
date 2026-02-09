@@ -77,6 +77,11 @@ export interface AIPromptOptions {
    * Execute immediately or queue for later
    */
   readonly immediate: boolean;
+
+  /**
+   * CLI session ID to resume (when sessionMode is "continue")
+   */
+  readonly resumeSessionId?: string | undefined;
 }
 
 /**

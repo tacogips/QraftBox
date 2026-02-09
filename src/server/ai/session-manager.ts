@@ -187,10 +187,12 @@ export function createSessionManager(
 
         session.claudeAgent = agent;
 
-        // Start session
-        const toolAgentSession = await agent.startSession({
-          prompt: session.fullPrompt,
-        });
+        // Start or resume session
+        const resumeSessionId = session.request.options.resumeSessionId;
+        const toolAgentSession =
+          resumeSessionId !== undefined
+            ? await agent.resumeSession(resumeSessionId, session.fullPrompt)
+            : await agent.startSession({ prompt: session.fullPrompt });
 
         session.toolAgentSession = toolAgentSession;
 

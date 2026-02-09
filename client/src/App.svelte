@@ -129,6 +129,21 @@
   // Selected CLI session ID (when user picks a session from search)
   let selectedCliSessionId = $state<string | null>(null);
 
+  // Current CLI session ID reported by CurrentSessionPanel
+  let currentCliSessionId = $state<string | null>(null);
+
+  // New session mode (persisted across reload)
+  const NEW_SESSION_MODE_KEY = "qraftbox:newSessionMode";
+  let isNewSessionMode = $state(
+    (() => {
+      try {
+        return localStorage.getItem(NEW_SESSION_MODE_KEY) === "true";
+      } catch {
+        return false;
+      }
+    })(),
+  );
+
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
   let isDispatchingNext = false;
@@ -561,12 +576,18 @@
 
       // 4. If nothing is running/queued in session manager, dispatch immediately
       if (runningSessions.length === 0 && queuedSessions.length === 0) {
+        // Determine if we should resume the current CLI session
+        const resumeSessionId =
+          !isNewSessionMode && currentCliSessionId !== null
+            ? currentCliSessionId
+            : undefined;
+
         const dispatchResp = await fetch(
           `/api/prompts/${data.prompt.id}/dispatch`,
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ immediate: true }),
+            body: JSON.stringify({ immediate: true, resumeSessionId }),
           },
         );
 
@@ -575,6 +596,8 @@
           pendingPrompts = pendingPrompts.filter(
             (p) => p.id !== data.prompt.id,
           );
+          // Clear new session mode after dispatching
+          clearNewSessionMode();
         }
       }
       // If something is running, prompt stays in pending queue - autoDispatchNext handles it
@@ -898,6 +921,8 @@
 
     // Immediately switch the displayed CLI session
     selectedCliSessionId = sessionId;
+    // Clear new session mode since we're resuming a specific session
+    clearNewSessionMode();
 
     try {
       const resp = await fetch(
@@ -918,14 +943,29 @@
   }
 
   /**
+   * Clear new session mode state
+   */
+  function clearNewSessionMode(): void {
+    isNewSessionMode = false;
+    try {
+      localStorage.removeItem(NEW_SESSION_MODE_KEY);
+    } catch {
+      // Silently ignore
+    }
+  }
+
+  /**
    * Start a new session by clearing previous session state and expanding the AI prompt panel
    */
   function handleNewSession(): void {
     // Clear previous session state so CurrentSessionPanel resets
     selectedCliSessionId = null;
+    currentCliSessionId = null;
     recentlyCompletedSessions = [];
+    isNewSessionMode = true;
     try {
       localStorage.removeItem(LAST_COMPLETED_SESSION_KEY);
+      localStorage.setItem(NEW_SESSION_MODE_KEY, "true");
     } catch {
       // Silently ignore
     }
@@ -1800,9 +1840,13 @@
           recentlyCompleted={recentlyCompletedSessions}
           {pendingPrompts}
           {selectedCliSessionId}
+          newSessionMode={isNewSessionMode}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
           onResumeSession={(sessionId) =>
             void handleResumeCliSession(sessionId)}
+          onCurrentSessionChange={(sessionId) => {
+            currentCliSessionId = sessionId;
+          }}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->
