@@ -25,6 +25,11 @@ import {
 import type { StagedFile as GitStagedFile } from "../git/staged";
 import type { ContextManager } from "../workspace/context-manager";
 import type { ContextId } from "../../types/workspace";
+import {
+  withTimeout,
+  isTimeoutError,
+  ROUTE_TIMEOUTS,
+} from "../../utils/timeout";
 
 /**
  * Dependencies for commit routes (for dependency injection in tests)
@@ -185,8 +190,12 @@ export function createCommitRoutes(
     }
 
     try {
-      // Build commit context
-      const commitContext = await buildContext(context.repositoryRoot);
+      // Build commit context with timeout protection
+      const commitContext = await withTimeout(
+        buildContext(context.repositoryRoot),
+        ROUTE_TIMEOUTS.COMMIT,
+        "commit:buildContext",
+      );
 
       // Check if there are staged changes
       if (commitContext.stagedFiles.length === 0) {
@@ -204,14 +213,25 @@ export function createCommitRoutes(
       // Use a simple commit message for now
       const message = `Auto-commit: ${commitContext.stagedFiles.length} files changed`;
 
-      // Execute commit
-      const result = await executeCommit(context.repositoryRoot, message);
+      // Execute commit with timeout protection
+      const result = await withTimeout(
+        executeCommit(context.repositoryRoot, message),
+        ROUTE_TIMEOUTS.COMMIT,
+        "commit:executeCommit",
+      );
 
       const response: CommitResponse = {
         result,
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to execute commit";
       const errorResponse: ErrorResponse = {
@@ -295,8 +315,12 @@ export function createCommitRoutes(
     }
 
     try {
-      // Build commit context
-      const commitContext = await buildContext(context.repositoryRoot);
+      // Build commit context with timeout protection
+      const commitContext = await withTimeout(
+        buildContext(context.repositoryRoot),
+        ROUTE_TIMEOUTS.COMMIT_PREVIEW,
+        "commitPreview:buildContext",
+      );
 
       // Check if there are staged changes
       if (commitContext.stagedFiles.length === 0) {
@@ -307,8 +331,12 @@ export function createCommitRoutes(
         return c.json(errorResponse, 400);
       }
 
-      // Generate preview
-      const preview = await previewCommit(commitContext, request.promptId);
+      // Generate preview with timeout protection
+      const preview = await withTimeout(
+        previewCommit(commitContext, request.promptId),
+        ROUTE_TIMEOUTS.COMMIT_PREVIEW,
+        "commitPreview:previewCommit",
+      );
 
       const response: CommitPreviewResponse = {
         preview,
@@ -316,6 +344,13 @@ export function createCommitRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to generate preview";
       const errorResponse: ErrorResponse = {
@@ -356,11 +391,19 @@ export function createCommitRoutes(
     }
 
     try {
-      // Get staged files from git
-      const gitStagedFiles = await getStagedFiles(context.repositoryRoot);
+      // Get staged files from git with timeout protection
+      const gitStagedFiles = await withTimeout(
+        getStagedFiles(context.repositoryRoot),
+        ROUTE_TIMEOUTS.STAGED_FILES,
+        "stagedFiles:getStagedFiles",
+      );
 
       // Check if there are staged changes
-      const hasChanges = await hasStagedChanges(context.repositoryRoot);
+      const hasChanges = await withTimeout(
+        hasStagedChanges(context.repositoryRoot),
+        ROUTE_TIMEOUTS.STAGED_FILES,
+        "stagedFiles:hasStagedChanges",
+      );
 
       // Map git StagedFile to commit-context StagedFile
       // Map 'C' (Copied) to 'A' (Added) since StagedFileStatus doesn't include 'C'
@@ -377,6 +420,13 @@ export function createCommitRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to get staged files";
       const errorResponse: ErrorResponse = {

@@ -15,6 +15,11 @@ import type { PRExecutor } from "../pr/executor.js";
 import type { PRService } from "../github/pr-service.js";
 import type { ContextManager } from "../workspace/context-manager.js";
 import type { ContextId } from "../../types/workspace.js";
+import {
+  withTimeout,
+  isTimeoutError,
+  ROUTE_TIMEOUTS,
+} from "../../utils/timeout.js";
 
 /**
  * Validate PR request body
@@ -249,13 +254,24 @@ export function createPRRoutes(
     }
 
     try {
-      const status = await executor.getPRStatus(context.repositoryRoot);
+      const status = await withTimeout(
+        executor.getPRStatus(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_STATUS,
+        "prStatus:getPRStatus",
+      );
 
       const response: PRStatusResponse = {
         status,
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to get PR status";
       const errorResponse: ErrorResponse = {
@@ -295,13 +311,24 @@ export function createPRRoutes(
     }
 
     try {
-      const branches = await executor.getBaseBranches(context.repositoryRoot);
+      const branches = await withTimeout(
+        executor.getBaseBranches(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_BRANCHES,
+        "prBranches:getBaseBranches",
+      );
 
       const response: BranchesResponse = {
         branches,
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to get branches";
       const errorResponse: ErrorResponse = {
@@ -379,7 +406,11 @@ export function createPRRoutes(
 
     try {
       // Check if repository info is available
-      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      const repoInfo = await withTimeout(
+        executor.getRepoInfo(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_CREATE,
+        "prCreate:getRepoInfo",
+      );
       if (repoInfo === null) {
         const errorResponse: ErrorResponse = {
           error: "No GitHub repository information available",
@@ -389,7 +420,11 @@ export function createPRRoutes(
       }
 
       // Create PR via executor
-      const result = await executor.createPR(context.repositoryRoot, request);
+      const result = await withTimeout(
+        executor.createPR(context.repositoryRoot, request),
+        ROUTE_TIMEOUTS.PR_CREATE,
+        "prCreate:createPR",
+      );
 
       const response: PRActionResponse = {
         sessionId: result.sessionId,
@@ -397,6 +432,13 @@ export function createPRRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to create PR";
       const errorResponse: ErrorResponse = {
@@ -486,7 +528,11 @@ export function createPRRoutes(
 
     try {
       // Check if repository info is available
-      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      const repoInfo = await withTimeout(
+        executor.getRepoInfo(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_UPDATE,
+        "prUpdate:getRepoInfo",
+      );
       if (repoInfo === null) {
         const errorResponse: ErrorResponse = {
           error: "No GitHub repository information available",
@@ -496,10 +542,14 @@ export function createPRRoutes(
       }
 
       // Update PR via executor
-      const result = await executor.updatePR(
-        context.repositoryRoot,
-        prNumber,
-        request,
+      const result = await withTimeout(
+        executor.updatePR(
+          context.repositoryRoot,
+          prNumber,
+          request,
+        ),
+        ROUTE_TIMEOUTS.PR_UPDATE,
+        "prUpdate:updatePR",
       );
 
       const response: PRActionResponse = {
@@ -508,6 +558,13 @@ export function createPRRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to update PR";
       const errorResponse: ErrorResponse = {
@@ -588,7 +645,11 @@ export function createPRRoutes(
 
     try {
       // Get repository info
-      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      const repoInfo = await withTimeout(
+        executor.getRepoInfo(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_METADATA,
+        "prLabels:getRepoInfo",
+      );
       if (repoInfo === null) {
         const errorResponse: ErrorResponse = {
           error: "No GitHub repository information available",
@@ -598,11 +659,15 @@ export function createPRRoutes(
       }
 
       // Add labels via PR service
-      await prService.addLabels(
-        repoInfo.owner,
-        repoInfo.name,
-        prNumber,
-        request.labels,
+      await withTimeout(
+        prService.addLabels(
+          repoInfo.owner,
+          repoInfo.name,
+          prNumber,
+          request.labels,
+        ),
+        ROUTE_TIMEOUTS.PR_METADATA,
+        "prLabels:addLabels",
       );
 
       const response: SuccessResponse = {
@@ -610,6 +675,13 @@ export function createPRRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to add labels";
       const errorResponse: ErrorResponse = {
@@ -677,7 +749,11 @@ export function createPRRoutes(
 
     try {
       // Get repository info
-      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      const repoInfo = await withTimeout(
+        executor.getRepoInfo(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_MERGE,
+        "prMerge:getRepoInfo",
+      );
       if (repoInfo === null) {
         const errorResponse: ErrorResponse = {
           error: "No GitHub repository information available",
@@ -687,15 +763,26 @@ export function createPRRoutes(
       }
 
       // Merge PR via PR service
-      const result = await prService.mergePR(
-        repoInfo.owner,
-        repoInfo.name,
-        prNumber,
-        mergeMethod,
+      const result = await withTimeout(
+        prService.mergePR(
+          repoInfo.owner,
+          repoInfo.name,
+          prNumber,
+          mergeMethod,
+        ),
+        ROUTE_TIMEOUTS.PR_MERGE,
+        "prMerge:mergePR",
       );
 
       return c.json(result);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to merge PR";
       const errorResponse: ErrorResponse = {
@@ -776,7 +863,11 @@ export function createPRRoutes(
 
     try {
       // Get repository info
-      const repoInfo = await executor.getRepoInfo(context.repositoryRoot);
+      const repoInfo = await withTimeout(
+        executor.getRepoInfo(context.repositoryRoot),
+        ROUTE_TIMEOUTS.PR_METADATA,
+        "prReviewers:getRepoInfo",
+      );
       if (repoInfo === null) {
         const errorResponse: ErrorResponse = {
           error: "No GitHub repository information available",
@@ -786,11 +877,15 @@ export function createPRRoutes(
       }
 
       // Request reviewers via PR service
-      await prService.requestReviewers(
-        repoInfo.owner,
-        repoInfo.name,
-        prNumber,
-        request.reviewers,
+      await withTimeout(
+        prService.requestReviewers(
+          repoInfo.owner,
+          repoInfo.name,
+          prNumber,
+          request.reviewers,
+        ),
+        ROUTE_TIMEOUTS.PR_METADATA,
+        "prReviewers:requestReviewers",
       );
 
       const response: SuccessResponse = {
@@ -798,6 +893,13 @@ export function createPRRoutes(
       };
       return c.json(response);
     } catch (e) {
+      if (isTimeoutError(e)) {
+        const errorResponse: ErrorResponse = {
+          error: `Operation timed out: ${e.operation}`,
+          code: 504,
+        };
+        return c.json(errorResponse, 504);
+      }
       const errorMessage =
         e instanceof Error ? e.message : "Failed to request reviewers";
       const errorResponse: ErrorResponse = {

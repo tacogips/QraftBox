@@ -17,6 +17,7 @@ import type { PRService } from "../github/pr-service.js";
 import { getPushStatus, getUnpushedCommits } from "../git/push.js";
 import { buildPrompt } from "../prompts/builder.js";
 import { loadPromptContent, loadPrompts } from "../prompts/loader.js";
+import { withTimeout, ROUTE_TIMEOUTS } from "../../utils/timeout.js";
 
 /**
  * Error thrown when PR operations fail
@@ -240,11 +241,15 @@ export function createPRExecutor(prService: PRService): PRExecutor {
         };
       }
 
-      // Check if PR exists for this branch
-      const existingPR = await prService.getPRForBranch(
-        repoInfo.owner,
-        repoInfo.name,
-        branch,
+      // Check if PR exists for this branch (GitHub API - can be slow)
+      const existingPR = await withTimeout(
+        prService.getPRForBranch(
+          repoInfo.owner,
+          repoInfo.name,
+          branch,
+        ),
+        ROUTE_TIMEOUTS.GITHUB_API,
+        "getPRStatus:getPRForBranch",
       );
 
       // Get available base branches
@@ -348,11 +353,15 @@ export function createPRExecutor(prService: PRService): PRExecutor {
       // Get commits
       const commits = await getUnpushedCommits(cwd);
 
-      // Check if PR exists
-      const existingPR = await prService.getPRForBranch(
-        repoInfo.owner,
-        repoInfo.name,
-        branch,
+      // Check if PR exists (GitHub API - can be slow)
+      const existingPR = await withTimeout(
+        prService.getPRForBranch(
+          repoInfo.owner,
+          repoInfo.name,
+          branch,
+        ),
+        ROUTE_TIMEOUTS.GITHUB_API,
+        "buildContext:getPRForBranch",
       );
 
       // Get diff summary
@@ -453,11 +462,15 @@ export function createPRExecutor(prService: PRService): PRExecutor {
         );
       }
 
-      // Verify PR exists
-      const existingPR = await prService.getPR(
-        repoInfo.owner,
-        repoInfo.name,
-        prNumber,
+      // Verify PR exists (GitHub API - can be slow)
+      const existingPR = await withTimeout(
+        prService.getPR(
+          repoInfo.owner,
+          repoInfo.name,
+          prNumber,
+        ),
+        ROUTE_TIMEOUTS.GITHUB_API,
+        "updatePR:getPR",
       );
       if (existingPR === null) {
         throw new PRError(`PR #${prNumber} not found`, "PR_NOT_FOUND");
