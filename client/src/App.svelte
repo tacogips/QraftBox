@@ -90,6 +90,8 @@
   >([]);
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
+  let addProjectMenuOpen = $state(false);
+  let recentProjects = $state<Array<{ path: string; name: string; isGitRepo: boolean }>>([]);
   let pathCopied = $state(false);
   let mergeDialogOpen = $state(false);
 
@@ -117,6 +119,13 @@
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
   let isDispatchingNext = false;
+
+  /**
+   * Recent projects filtered to exclude currently open tabs
+   */
+  const availableRecentProjects = $derived(
+    recentProjects.filter((r) => !workspaceTabs.some((t) => t.path === r.path)),
+  );
 
   /**
    * Currently selected diff file
@@ -494,7 +503,9 @@
    */
   async function closeProjectTab(tabId: string, event: MouseEvent): Promise<void> {
     event.stopPropagation();
-    if (workspaceTabs.length <= 1) return; // Don't close last tab
+
+    // Remember the tab being closed for recent projects
+    const closingTab = workspaceTabs.find((t) => t.id === tabId);
 
     try {
       const resp = await fetch(`/api/workspace/tabs/${tabId}`, { method: "DELETE" });
@@ -509,29 +520,135 @@
 
       workspaceTabs = data.workspace.tabs;
 
-      if (tabId === contextId) {
-        // Active tab was closed - switch to server's new active
-        const newActiveId = data.workspace.activeTabId;
-        const newTab =
-          newActiveId !== null
-            ? workspaceTabs.find((t) => t.id === newActiveId)
-            : workspaceTabs[0];
+      // Add closed tab to recent projects (if not already there)
+      if (closingTab !== undefined) {
+        addToRecentProjects(closingTab);
+      }
 
-        if (newTab !== undefined) {
-          contextId = newTab.id;
-          projectPath = newTab.path;
+      if (tabId === contextId) {
+        if (workspaceTabs.length === 0) {
+          // All tabs closed - clear state and show project screen
+          contextId = null;
+          projectPath = "";
           diffFiles = [];
           selectedPath = null;
           allFilesTree = null;
           allFilesTreeStale = false;
           fileContent = null;
-          await fetchDiff(newTab.id);
-          void fetchQueueStatus();
-          void fetchActiveSessions();
+          loading = false;
+          navigateToScreen("project");
+        } else {
+          // Active tab was closed - switch to server's new active
+          const newActiveId = data.workspace.activeTabId;
+          const newTab =
+            newActiveId !== null
+              ? workspaceTabs.find((t) => t.id === newActiveId)
+              : workspaceTabs[0];
+
+          if (newTab !== undefined) {
+            contextId = newTab.id;
+            projectPath = newTab.path;
+            diffFiles = [];
+            selectedPath = null;
+            allFilesTree = null;
+            allFilesTreeStale = false;
+            fileContent = null;
+            await fetchDiff(newTab.id);
+            void fetchQueueStatus();
+            void fetchActiveSessions();
+          }
         }
       }
     } catch (e) {
       console.error("Failed to close project tab:", e);
+    }
+  }
+
+  /**
+   * Add a project to the recent projects list (for previously-closed tabs)
+   */
+  function addToRecentProjects(tab: { path: string; name: string; isGitRepo: boolean }): void {
+    // Don't add if it's still open
+    if (workspaceTabs.some((t) => t.path === tab.path)) return;
+    // Remove duplicate if exists
+    recentProjects = [
+      { path: tab.path, name: tab.name, isGitRepo: tab.isGitRepo },
+      ...recentProjects.filter((r) => r.path !== tab.path),
+    ].slice(0, 20);
+    // Persist to localStorage
+    try {
+      localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Load recent projects from localStorage
+   */
+  function loadRecentProjects(): void {
+    try {
+      const stored = localStorage.getItem("qraftbox:recent-projects");
+      if (stored !== null) {
+        recentProjects = JSON.parse(stored) as Array<{ path: string; name: string; isGitRepo: boolean }>;
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Fetch recent directories from server and merge with local recent projects
+   */
+  async function fetchRecentProjects(): Promise<void> {
+    try {
+      const resp = await fetch("/api/workspace/recent");
+      if (!resp.ok) return;
+      const data = (await resp.json()) as {
+        recent: Array<{ path: string; name: string; isGitRepo: boolean }>;
+      };
+      // Merge server recent with local recent, dedup by path
+      const openPaths = new Set(workspaceTabs.map((t) => t.path));
+      const localPaths = new Set(recentProjects.map((r) => r.path));
+      const merged = [...recentProjects];
+      for (const r of data.recent) {
+        if (!localPaths.has(r.path) && !openPaths.has(r.path)) {
+          merged.push(r);
+        }
+      }
+      recentProjects = merged.slice(0, 20);
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
+   * Open a project from recent projects list
+   */
+  async function openRecentProject(path: string): Promise<void> {
+    addProjectMenuOpen = false;
+    try {
+      const resp = await fetch("/api/workspace/tabs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      if (!resp.ok) return;
+      const data = (await resp.json()) as {
+        tab: ServerTab;
+        workspace: { tabs: ServerTab[] };
+      };
+      workspaceTabs = data.workspace.tabs;
+      // Remove from recent since it's now open
+      recentProjects = recentProjects.filter((r) => r.path !== path);
+      try {
+        localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
+      } catch {
+        // Ignore
+      }
+      await switchProject(data.tab.id);
+    } catch (e) {
+      console.error("Failed to open recent project:", e);
     }
   }
 
@@ -552,6 +669,7 @@
    * Initialize the application
    */
   async function init(): Promise<void> {
+    loadRecentProjects();
     try {
       loading = true;
       error = null;
@@ -560,6 +678,7 @@
       await fetchDiff(ctxId);
       void fetchQueueStatus();
       void fetchActiveSessions();
+      void fetchRecentProjects();
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load";
       console.error("Init error:", e);
@@ -1442,34 +1561,34 @@
     <h1 class="text-lg font-semibold">QraftBox</h1>
 
     <!-- Navigation: Project button + project tabs -->
-    <nav class="flex items-center gap-0 ml-4 h-full flex-1 min-w-0 overflow-x-auto project-tabs-nav">
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0
-               {currentScreen === 'project'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("project")}
-      >
-        Project
-      </button>
-      {#if workspaceTabs.length > 0}
-        <span class="text-border-default mx-1 shrink-0">|</span>
-        {#each workspaceTabs as tab (tab.id)}
-          <div class="flex items-center h-full shrink-0 group">
-            <button
-              type="button"
-              class="pl-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-                     {tab.id === contextId
-                ? 'text-text-primary font-semibold border-accent-emphasis'
-                : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}
-                     {workspaceTabs.length > 1 ? 'pr-1' : 'pr-3'}"
-              onclick={() => void switchProject(tab.id)}
-              title={tab.path}
-            >
-              {tab.name}
-            </button>
-            {#if workspaceTabs.length > 1}
+    <div class="flex items-center ml-4 h-full flex-1 min-w-0">
+      <!-- Scrollable tab area -->
+      <nav class="flex items-center gap-0 h-full overflow-x-auto project-tabs-nav flex-1 min-w-0">
+        <button
+          type="button"
+          class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0
+                 {currentScreen === 'project'
+            ? 'text-text-primary font-semibold border-accent-emphasis'
+            : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+          onclick={() => navigateToScreen("project")}
+        >
+          Project
+        </button>
+        {#if workspaceTabs.length > 0}
+          <span class="text-border-default mx-1 shrink-0">|</span>
+          {#each workspaceTabs as tab (tab.id)}
+            <div class="flex items-center h-full shrink-0 group">
+              <button
+                type="button"
+                class="pl-3 pr-1 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+                       {tab.id === contextId
+                  ? 'text-text-primary font-semibold border-accent-emphasis'
+                  : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+                onclick={() => void switchProject(tab.id)}
+                title={tab.path}
+              >
+                {tab.name}
+              </button>
               <button
                 type="button"
                 class="w-4 h-4 flex items-center justify-center shrink-0 mr-1
@@ -1482,19 +1601,72 @@
                   <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
                 </svg>
               </button>
-            {/if}
-          </div>
-        {/each}
+            </div>
+          {/each}
+        {/if}
+      </nav>
+      <!-- Add project button with dropdown (outside scroll container so dropdown is not clipped) -->
+      <div class="relative shrink-0">
         <button
           type="button"
-          class="px-2 py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors h-full shrink-0"
-          onclick={() => navigateToScreen("project")}
+          class="px-2 py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors h-full"
+          onclick={() => {
+            addProjectMenuOpen = !addProjectMenuOpen;
+            if (addProjectMenuOpen) void fetchRecentProjects();
+          }}
           title="Add project"
         >
           +
         </button>
-      {/if}
-    </nav>
+        {#if addProjectMenuOpen}
+          <div
+            class="absolute right-0 top-full mt-1 w-64 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
+          >
+            <!-- Browse for new path -->
+            <button
+              type="button"
+              class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
+              onclick={() => {
+                addProjectMenuOpen = false;
+                navigateToScreen("project");
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0">
+                <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+              </svg>
+              Browse directory...
+            </button>
+            <!-- Recent projects separator -->
+            {#if availableRecentProjects.length > 0}
+              <div class="border-t border-border-default my-1"></div>
+              <div class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider">
+                Recent Projects
+              </div>
+              {#each availableRecentProjects as recent (recent.path)}
+                <button
+                  type="button"
+                  class="w-full text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
+                  onclick={() => void openRecentProject(recent.path)}
+                  title={recent.path}
+                >
+                  {#if recent.isGitRepo}
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 text-accent-fg">
+                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                    </svg>
+                  {:else}
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 text-text-tertiary">
+                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                    </svg>
+                  {/if}
+                  <span class="truncate">{recent.name}</span>
+                  <span class="text-xs text-text-tertiary truncate ml-auto">{truncatePath(recent.path, 20)}</span>
+                </button>
+              {/each}
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </div>
 
     <!-- Hamburger menu -->
     <div class="ml-auto relative">
@@ -1544,12 +1716,15 @@
       {/if}
     </div>
   </header>
-  {#if headerMenuOpen}
+  {#if headerMenuOpen || addProjectMenuOpen}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- Backdrop to close menu -->
+    <!-- Backdrop to close menus -->
     <div
       class="fixed inset-0 z-40"
-      onclick={() => (headerMenuOpen = false)}
+      onclick={() => {
+        headerMenuOpen = false;
+        addProjectMenuOpen = false;
+      }}
       onkeydown={() => {}}
       role="presentation"
     ></div>
@@ -1974,6 +2149,38 @@
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
           <ProjectScreen {contextId} {projectPath} onProjectChanged={() => void init()} />
+        {:else}
+          <!-- No project open - show add project prompt -->
+          <div class="flex flex-col items-center justify-center h-full gap-6 text-text-secondary">
+            <svg width="48" height="48" viewBox="0 0 16 16" fill="currentColor" class="text-text-tertiary">
+              <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+            </svg>
+            <p class="text-lg">No project open</p>
+            <p class="text-sm text-text-tertiary">Use the + button in the header to add a project, or select from recent projects below.</p>
+            {#if availableRecentProjects.length > 0}
+              <div class="w-full max-w-md">
+                <h3 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2 px-4">Recent Projects</h3>
+                <div class="border border-border-default rounded-lg bg-bg-secondary overflow-hidden">
+                  {#each availableRecentProjects as recent (recent.path)}
+                    <button
+                      type="button"
+                      class="w-full text-left px-4 py-2.5 text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-3 border-b border-border-default last:border-b-0"
+                      onclick={() => void openRecentProject(recent.path)}
+                      title={recent.path}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 {recent.isGitRepo ? 'text-accent-fg' : 'text-text-tertiary'}">
+                        <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                      </svg>
+                      <div class="flex-1 min-w-0">
+                        <span class="text-text-primary font-medium">{recent.name}</span>
+                        <span class="text-xs text-text-tertiary ml-2 truncate">{recent.path}</span>
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </div>
         {/if}
       </main>
     {:else if currentScreen === "tools"}
