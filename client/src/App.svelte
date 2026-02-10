@@ -85,6 +85,9 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
+  let workspaceTabs = $state<
+    Array<{ id: string; path: string; name: string; isGitRepo: boolean }>
+  >([]);
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
   let pathCopied = $state(false);
@@ -394,23 +397,39 @@
   });
 
   /**
-   * Fetch workspace to get context ID
+   * Workspace tab type from server
+   */
+  type ServerTab = { id: string; path: string; name: string; isGitRepo: boolean };
+
+  /**
+   * Fetch workspace to get context ID and all tabs
    */
   async function fetchContext(): Promise<string> {
     const resp = await fetch("/api/workspace");
     if (!resp.ok) throw new Error("Failed to fetch workspace");
     const data = (await resp.json()) as {
-      workspace: { tabs?: Array<{ id: string; path: string }> };
+      workspace: {
+        tabs?: ServerTab[];
+        activeTabId?: string | null;
+      };
     };
     const tabs = data.workspace.tabs;
-    if (tabs !== undefined && tabs.length > 0 && tabs[0] !== undefined) {
-      projectPath = tabs[0].path;
-      return tabs[0].id;
+    if (tabs !== undefined && tabs.length > 0) {
+      workspaceTabs = tabs;
+      // Use activeTabId from server, fallback to first tab
+      const activeId = data.workspace.activeTabId;
+      const activeTab =
+        activeId !== undefined && activeId !== null
+          ? tabs.find((t) => t.id === activeId)
+          : undefined;
+      const selectedTab = activeTab ?? tabs[0];
+      if (selectedTab !== undefined) {
+        projectPath = selectedTab.path;
+        return selectedTab.id;
+      }
     }
 
     // No tabs exist - create one by posting current location
-    // The server's CLI creates an initial context on startup, so this
-    // fallback handles edge cases where the workspace is empty
     const createResp = await fetch("/api/workspace/tabs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -418,15 +437,102 @@
     });
     if (createResp.ok) {
       const createData = (await createResp.json()) as {
-        tab?: { id: string; path: string };
+        tab?: ServerTab;
+        workspace?: { tabs?: ServerTab[] };
       };
       if (createData.tab !== undefined) {
         projectPath = createData.tab.path;
+        workspaceTabs = createData.workspace?.tabs ?? [createData.tab];
         return createData.tab.id;
       }
     }
 
     throw new Error("No workspace tabs available");
+  }
+
+  /**
+   * Switch to a different project tab
+   */
+  async function switchProject(tabId: string): Promise<void> {
+    if (tabId === contextId) return;
+    const tab = workspaceTabs.find((t) => t.id === tabId);
+    if (tab === undefined) return;
+
+    try {
+      // Notify server of active tab change
+      await fetch(`/api/workspace/tabs/${tabId}/activate`, { method: "POST" });
+
+      // Update local state
+      contextId = tabId;
+      projectPath = tab.path;
+
+      // Reset file-related state for new context
+      diffFiles = [];
+      selectedPath = null;
+      allFilesTree = null;
+      allFilesTreeStale = false;
+      fileContent = null;
+      loading = true;
+
+      await fetchDiff(tabId);
+      void fetchQueueStatus();
+      void fetchActiveSessions();
+
+      // Navigate to diff if on project screen
+      if (currentScreen === "project") {
+        navigateToScreen("diff");
+      }
+    } catch (e) {
+      console.error("Failed to switch project:", e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  /**
+   * Close a project tab
+   */
+  async function closeProjectTab(tabId: string, event: MouseEvent): Promise<void> {
+    event.stopPropagation();
+    if (workspaceTabs.length <= 1) return; // Don't close last tab
+
+    try {
+      const resp = await fetch(`/api/workspace/tabs/${tabId}`, { method: "DELETE" });
+      if (!resp.ok) return;
+
+      const data = (await resp.json()) as {
+        workspace: {
+          tabs: ServerTab[];
+          activeTabId: string | null;
+        };
+      };
+
+      workspaceTabs = data.workspace.tabs;
+
+      if (tabId === contextId) {
+        // Active tab was closed - switch to server's new active
+        const newActiveId = data.workspace.activeTabId;
+        const newTab =
+          newActiveId !== null
+            ? workspaceTabs.find((t) => t.id === newActiveId)
+            : workspaceTabs[0];
+
+        if (newTab !== undefined) {
+          contextId = newTab.id;
+          projectPath = newTab.path;
+          diffFiles = [];
+          selectedPath = null;
+          allFilesTree = null;
+          allFilesTreeStale = false;
+          fileContent = null;
+          await fetchDiff(newTab.id);
+          void fetchQueueStatus();
+          void fetchActiveSessions();
+        }
+      }
+    } catch (e) {
+      console.error("Failed to close project tab:", e);
+    }
   }
 
   /**
@@ -1335,11 +1441,11 @@
   >
     <h1 class="text-lg font-semibold">QraftBox</h1>
 
-    <!-- Navigation (GitHub UnderlineNav style) -->
-    <nav class="flex items-center gap-0 ml-4 h-full">
+    <!-- Navigation: Project button + project tabs -->
+    <nav class="flex items-center gap-0 ml-4 h-full flex-1 min-w-0 overflow-x-auto project-tabs-nav">
       <button
         type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0
                {currentScreen === 'project'
           ? 'text-text-primary font-semibold border-accent-emphasis'
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
@@ -1347,6 +1453,47 @@
       >
         Project
       </button>
+      {#if workspaceTabs.length > 0}
+        <span class="text-border-default mx-1 shrink-0">|</span>
+        {#each workspaceTabs as tab (tab.id)}
+          <div class="flex items-center h-full shrink-0 group">
+            <button
+              type="button"
+              class="pl-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+                     {tab.id === contextId
+                ? 'text-text-primary font-semibold border-accent-emphasis'
+                : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}
+                     {workspaceTabs.length > 1 ? 'pr-1' : 'pr-3'}"
+              onclick={() => void switchProject(tab.id)}
+              title={tab.path}
+            >
+              {tab.name}
+            </button>
+            {#if workspaceTabs.length > 1}
+              <button
+                type="button"
+                class="w-4 h-4 flex items-center justify-center shrink-0 mr-1
+                       rounded-sm text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary
+                       opacity-0 group-hover:opacity-100 transition-opacity"
+                onclick={(e) => void closeProjectTab(tab.id, e)}
+                title="Close {tab.name}"
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                </svg>
+              </button>
+            {/if}
+          </div>
+        {/each}
+        <button
+          type="button"
+          class="px-2 py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors h-full shrink-0"
+          onclick={() => navigateToScreen("project")}
+          title="Add project"
+        >
+          +
+        </button>
+      {/if}
     </nav>
 
     <!-- Hamburger menu -->
@@ -1852,3 +1999,14 @@
     />
   {/if}
 </div>
+
+<style>
+  /* Hide scrollbar on project tabs for cleaner appearance */
+  .project-tabs-nav {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .project-tabs-nav::-webkit-scrollbar {
+    display: none;
+  }
+</style>
