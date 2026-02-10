@@ -29,9 +29,10 @@
     contextId: string;
     projectPath: string;
     onWorktreeSwitch: () => void;
+    disabled?: boolean;
   }
 
-  const { contextId, projectPath, onWorktreeSwitch }: Props = $props();
+  const { contextId, projectPath, onWorktreeSwitch, disabled = false }: Props = $props();
 
   // Dropdown list state
   let listOpen = $state(false);
@@ -249,11 +250,14 @@
     type="button"
     bind:this={buttonRef}
     class="px-2 py-1.5 text-sm transition-colors h-full flex items-center gap-1
-           {createOpen
-      ? 'text-text-primary font-semibold'
-      : 'text-text-secondary hover:text-text-primary'}"
-    onclick={() => void toggleCreate()}
-    title="Create new worktree"
+           {disabled
+      ? 'text-text-tertiary cursor-not-allowed opacity-50'
+      : createOpen
+        ? 'text-text-primary font-semibold'
+        : 'text-text-secondary hover:text-text-primary'}"
+    onclick={() => { if (!disabled) void toggleCreate(); }}
+    title={disabled ? "Not a git repository" : "Create new worktree"}
+    {disabled}
   >
     <!-- Git branch icon -->
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0">
@@ -267,11 +271,14 @@
     type="button"
     bind:this={arrowRef}
     class="px-1 py-1.5 text-sm transition-colors h-full flex items-center
-           {listOpen
-      ? 'text-text-primary'
-      : 'text-text-secondary hover:text-text-primary'}"
-    onclick={() => void toggleList()}
-    title="Show worktrees"
+           {disabled
+      ? 'text-text-tertiary cursor-not-allowed opacity-50'
+      : listOpen
+        ? 'text-text-primary'
+        : 'text-text-secondary hover:text-text-primary'}"
+    onclick={() => { if (!disabled) void toggleList(); }}
+    title={disabled ? "Not a git repository" : "Show worktrees"}
+    {disabled}
   >
     <svg
       width="12"

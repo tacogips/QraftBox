@@ -29,6 +29,9 @@ export interface ServerOptions {
   readonly config: CLIConfig;
   readonly contextManager: ContextManager;
   readonly recentStore: RecentDirectoryStore;
+  readonly initialTabs?:
+    | readonly import("../types/workspace").WorkspaceTab[]
+    | undefined;
 }
 
 /**
@@ -159,6 +162,7 @@ export function createServer(options: ServerOptions): Hono {
       promptModel: options.config.promptModel,
       assistantModel: options.config.assistantModel,
     },
+    initialTabs: options.initialTabs,
   });
 
   // Static file serving and SPA fallback

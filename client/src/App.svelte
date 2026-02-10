@@ -158,7 +158,7 @@
   // Session selection/mode state used by SessionToolbar and CurrentSessionPanel
   let selectedCliSessionId = $state<string | null>(null);
   let currentCliSessionId = $state<string | null>(null);
-  let isNewSessionMode = $state(false);
+  let isNewSessionMode = $state(true);
 
   // Local prompt queue for tracking submitted prompts
   let pendingPrompts = $state<LocalPrompt[]>([]);
@@ -169,6 +169,15 @@
    */
   const availableRecentProjects = $derived(
     recentProjects.filter((r) => !workspaceTabs.some((t) => t.path === r.path)),
+  );
+
+  /**
+   * Whether the active tab is a git repository
+   */
+  const activeTabIsGitRepo = $derived(
+    contextId !== null
+      ? (workspaceTabs.find((t) => t.id === contextId)?.isGitRepo ?? false)
+      : false,
   );
 
   /**
@@ -518,7 +527,10 @@
       fileContent = null;
       loading = true;
 
-      await fetchDiff(tabId);
+      // Only fetch diff for git repositories
+      if (tab.isGitRepo) {
+        await fetchDiff(tabId);
+      }
       void fetchQueueStatus();
       void fetchActiveSessions();
 
@@ -850,7 +862,10 @@
         currentScreen = parsed.screen;
       }
 
-      await fetchDiff(contextId);
+      // Only fetch diff for git repositories
+      if (activeTabIsGitRepo) {
+        await fetchDiff(contextId);
+      }
       void fetchQueueStatus();
       void fetchActiveSessions();
       void fetchRecentProjects();
@@ -957,8 +972,9 @@
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
+    const wasNewSessionMode = isNewSessionMode;
     // Capture the current session for resume before any state changes.
-    const resumeSessionId = currentCliSessionId;
+    let resumeSessionId = currentCliSessionId;
     // Exit "new session" mode but keep selectedCliSessionId so the
     // CurrentSessionPanel continues tracking the same session.
     isNewSessionMode = false;
@@ -1015,6 +1031,16 @@
         p.id === optimisticId ? data.prompt : p,
       );
 
+      // If we're not explicitly in "new session" mode and no session is selected yet,
+      // resolve latest session ID first to avoid accidentally splitting the thread.
+      if (resumeSessionId === null && !wasNewSessionMode) {
+        resumeSessionId = await resolveLatestCliSessionId();
+        if (resumeSessionId !== null) {
+          selectedCliSessionId = resumeSessionId;
+          currentCliSessionId = resumeSessionId;
+        }
+      }
+
       // 4. If a current CLI session is selected, always continue that session.
       if (resumeSessionId !== null) {
         const dispatchResp = await fetch(
@@ -1062,6 +1088,38 @@
       console.error("AI prompt submit error:", e);
       // Remove optimistic entry on error
       pendingPrompts = pendingPrompts.filter((p) => p.id !== optimisticId);
+    }
+  }
+
+  /**
+   * Resolve most recent CLI session ID for the current project.
+   */
+  async function resolveLatestCliSessionId(): Promise<string | null> {
+    if (contextId === null) return null;
+    try {
+      const params = new URLSearchParams({
+        offset: "0",
+        limit: "1",
+        sortBy: "modified",
+        sortOrder: "desc",
+      });
+      if (projectPath.length > 0) {
+        params.set("workingDirectoryPrefix", projectPath);
+      }
+      const resp = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
+      );
+      if (!resp.ok) return null;
+      const data = (await resp.json()) as {
+        sessions: Array<{ sessionId?: string }>;
+        total: number;
+      };
+      const sessionId = data.sessions[0]?.sessionId;
+      return typeof sessionId === "string" && sessionId.length > 0
+        ? sessionId
+        : null;
+    } catch {
+      return null;
     }
   }
 
@@ -1456,10 +1514,26 @@
       // Skip optimistic prompts (they'll become real after API creates them)
       if (next.id.startsWith("optimistic_")) return;
 
+      let resumeSessionId = currentCliSessionId;
+      if (resumeSessionId === null && !isNewSessionMode) {
+        resumeSessionId = await resolveLatestCliSessionId();
+        if (resumeSessionId !== null) {
+          selectedCliSessionId = resumeSessionId;
+          currentCliSessionId = resumeSessionId;
+        } else {
+          // Wait until current session is discoverable instead of creating
+          // a new one unintentionally.
+          return;
+        }
+      }
+
       const resp = await fetch(`/api/prompts/${next.id}/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ immediate: true }),
+        body: JSON.stringify({
+          immediate: true,
+          ...(resumeSessionId !== null ? { resumeSessionId } : {}),
+        }),
       });
 
       if (resp.ok) {
@@ -1536,7 +1610,9 @@
   /**
    * Handle resume from Sessions screen: navigate to Changes and refresh sessions
    */
-  function handleResumeToChanges(): void {
+  function handleResumeToChanges(sessionId: string): void {
+    selectedCliSessionId = sessionId;
+    currentCliSessionId = sessionId;
     isNewSessionMode = false;
     navigateToScreen("diff");
     void fetchActiveSessions();
@@ -2081,16 +2157,17 @@
         </button>
       </div>
     {/if}
-    <!-- Worktree button -->
+    <!-- Worktree button (disabled when not a git repo) -->
     {#if contextId !== null}
       <WorktreeButton
         {contextId}
         {projectPath}
         onWorktreeSwitch={() => void init()}
+        disabled={!activeTabIsGitRepo}
       />
     {/if}
 
-    {#if contextId !== null}
+    {#if contextId !== null && activeTabIsGitRepo}
       <HeaderStatusBadges {contextId} {projectPath} />
       <span class="text-border-default mx-1">|</span>
     {/if}
@@ -2129,7 +2206,7 @@
       </button>
     </nav>
 
-    <!-- Git push button -->
+    <!-- Git push button (disabled when not a git repo) -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
         <GitPushButton
@@ -2137,6 +2214,7 @@
           {projectPath}
           hasChanges={diffFiles.length > 0}
           onSuccess={() => void fetchDiff(contextId)}
+          isGitRepo={activeTabIsGitRepo}
         />
       {/if}
     </div>
@@ -2152,7 +2230,11 @@
             class="border-r border-border-default bg-bg-secondary overflow-auto"
             style:width="{sidebarWidth}px"
           >
-            {#if loading}
+            {#if !activeTabIsGitRepo}
+              <div class="p-4 text-sm text-text-tertiary">
+                Not a git repository
+              </div>
+            {:else if loading}
               <div class="p-4 text-sm text-text-secondary">
                 Loading files...
               </div>
@@ -2204,7 +2286,15 @@
       <!-- Content / Diff View + AI Panel -->
       <div class="flex flex-col flex-1 min-w-0">
         <main class="flex-1 overflow-auto bg-bg-primary">
-          {#if loading}
+          {#if !activeTabIsGitRepo}
+            <div class="flex flex-col items-center justify-center h-full text-text-tertiary gap-2">
+              <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.72.22a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 01-1.06-1.06l1-1zm3.78 0a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 11-1.06-1.06l1-1zM1.5 3.25a.75.75 0 01.75-.75h11.5a.75.75 0 01.75.75v2a.75.75 0 01-.75.75H2.25a.75.75 0 01-.75-.75v-2zm.75 7.25a.75.75 0 00-.75.75v2c0 .414.336.75.75.75h11.5a.75.75 0 00.75-.75v-2a.75.75 0 00-.75-.75H2.25z"/>
+              </svg>
+              <span class="text-sm">Not a git repository</span>
+              <span class="text-xs">Changes view is not available for non-git directories</span>
+            </div>
+          {:else if loading}
             <div class="p-8 text-center text-text-secondary">
               Loading diff...
             </div>
@@ -2460,7 +2550,7 @@
       <!-- Commits Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <CommitsScreen {contextId} />
+          <CommitsScreen {contextId} isGitRepo={activeTabIsGitRepo} />
         {/if}
       </main>
     {:else if currentScreen === "sessions"}

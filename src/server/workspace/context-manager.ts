@@ -26,6 +26,7 @@ import { createProjectRegistry } from "./project-registry";
  */
 export interface ServerContext {
   readonly projectPath: string;
+  readonly isGitRepo: boolean;
 }
 
 /**
@@ -347,6 +348,7 @@ class ContextManagerImpl implements ContextManager {
 
     return {
       projectPath: tab.path,
+      isGitRepo: tab.isGitRepo,
     };
   }
 }

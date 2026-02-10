@@ -106,7 +106,7 @@ describe("GET /diff", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createDiffRoutes(context);
   });
 
@@ -221,7 +221,7 @@ describe("GET /diff/file/:path", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createDiffRoutes(context);
   });
 

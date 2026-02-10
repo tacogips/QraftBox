@@ -102,12 +102,24 @@ async function addToRecentDirectories(
  *
  * @param contextManager - Context manager instance
  * @param recentStore - Recent directory store
+ * @param initialTabs - Optional initial tabs to populate workspace at startup
  * @returns Hono app with workspace routes mounted
  */
 export function createWorkspaceRoutes(
   contextManager: ContextManager,
   recentStore: RecentDirectoryStore,
+  initialTabs?: readonly WorkspaceTab[] | undefined,
 ): Hono {
+  // Initialize workspace with initial tabs if provided
+  if (initialTabs !== undefined && initialTabs.length > 0) {
+    const firstTab = initialTabs[0];
+    currentWorkspace = {
+      tabs: [...initialTabs],
+      activeTabId: firstTab !== undefined ? firstTab.id : null,
+      maxTabs: 10,
+    };
+  }
+
   const app = new Hono();
 
   /**

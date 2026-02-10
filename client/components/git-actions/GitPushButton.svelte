@@ -18,9 +18,10 @@
     projectPath: string;
     hasChanges?: boolean;
     onSuccess?: (() => void) | undefined;
+    isGitRepo?: boolean;
   }
 
-  const { contextId, projectPath, hasChanges = true, onSuccess }: Props = $props();
+  const { contextId, projectPath, hasChanges = true, onSuccess, isGitRepo = true }: Props = $props();
 
   // Menu state
   let menuOpen = $state(false);
@@ -457,9 +458,11 @@
     }
   }
 
-  // Fetch PR status on mount
+  // Fetch PR status on mount (only for git repos)
   $effect(() => {
-    void fetchPRStatus();
+    if (isGitRepo) {
+      void fetchPRStatus();
+    }
   });
 </script>
 
@@ -474,7 +477,8 @@
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
     onclick={() => void handleCommit()}
-    disabled={operating || !hasChanges}
+    disabled={!isGitRepo || operating || !hasChanges}
+    title={!isGitRepo ? "Not a git repository" : ""}
   >
     {#if operating && operationPhase === "committing"}
       <svg
@@ -502,7 +506,8 @@
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
     onclick={() => void handlePush()}
-    disabled={operating}
+    disabled={!isGitRepo || operating}
+    title={!isGitRepo ? "Not a git repository" : ""}
   >
     {#if operating && operationPhase === "pushing"}
       <svg
@@ -530,7 +535,8 @@
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
     onclick={() => void handlePRPrimaryActionButton()}
-    disabled={!canRunPRAction}
+    disabled={!isGitRepo || !canRunPRAction}
+    title={!isGitRepo ? "Not a git repository" : ""}
   >
     {#if operating && operationPhase === "creating-pr"}
       <svg
@@ -568,9 +574,12 @@
     type="button"
     bind:this={menuButtonEl}
     class="px-1.5 py-1 text-sm border border-border-default rounded
-           hover:bg-bg-tertiary transition-colors text-text-secondary"
+           hover:bg-bg-tertiary transition-colors text-text-secondary
+           disabled:opacity-50 disabled:cursor-not-allowed"
     onclick={toggleMenu}
     aria-label="More git actions"
+    disabled={!isGitRepo}
+    title={!isGitRepo ? "Not a git repository" : ""}
   >
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
       <circle cx="8" cy="3" r="1.5" />

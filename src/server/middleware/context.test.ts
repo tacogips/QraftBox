@@ -42,7 +42,7 @@ function createMockContextManager(
       if (tab === undefined) {
         throw new Error(`Context not found: ${id}`);
       }
-      return { projectPath: tab.path };
+      return { projectPath: tab.path, isGitRepo: tab.isGitRepo };
     }),
     getProjectRegistry: mock(() => ({
       getOrCreateSlug: async () => "test-abc123",

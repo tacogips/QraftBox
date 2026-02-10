@@ -275,10 +275,12 @@ export async function main(): Promise<void> {
       }
     }
 
-    // Create contexts for project directories
+    // Create contexts for project directories and collect tabs
+    const initialTabs = [];
     for (const dir of dirsToOpen) {
       try {
         const tab = await contextManager.createContext(dir);
+        initialTabs.push(tab);
         await recentStore.add({
           path: tab.path,
           name: tab.name,
@@ -294,7 +296,12 @@ export async function main(): Promise<void> {
     const wsManager = createWebSocketManager();
 
     // Create and start the HTTP server with WebSocket support
-    const app = createServer({ config, contextManager, recentStore });
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      initialTabs,
+    });
     const server = startServer(app, config, wsManager);
 
     logger.info(`Server started on http://${server.hostname}:${server.port}`);

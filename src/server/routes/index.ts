@@ -58,6 +58,9 @@ export interface MountRoutesConfig {
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
   readonly modelConfig?: ModelConfig | undefined;
+  readonly initialTabs?:
+    | readonly import("../../types/workspace").WorkspaceTab[]
+    | undefined;
 }
 
 /**
@@ -176,7 +179,11 @@ export function getNonContextRouteGroups(
     // Workspace management routes - GET /api/workspace
     {
       prefix: "/workspace",
-      routes: createWorkspaceRoutes(config.contextManager, config.recentStore),
+      routes: createWorkspaceRoutes(
+        config.contextManager,
+        config.recentStore,
+        config.initialTabs,
+      ),
     },
     // Directory browsing routes - GET /api/browse
     {
@@ -275,10 +282,40 @@ export function mountAllRoutes(app: Hono, config: MountRoutesConfig): void {
   // This extracts contextId from the route and attaches ServerContext to c.set("serverContext")
   contextApp.use("/:contextId/*", contextMiddleware(config.contextManager));
 
+  // Routes that require a git repository.
+  // Non-git routes (claude-sessions, prompts) are excluded so they work for any directory.
+  const GIT_REQUIRED_PREFIXES: ReadonlySet<string> = new Set([
+    "/diff",
+    "/files",
+    "/status",
+    "/commits",
+    "/search",
+    "/commit",
+    "/push",
+    "/worktree",
+    "/github",
+    "/pr",
+    "/branches",
+  ]);
+
   // Mount context-scoped routes under /:contextId/
+  // Git-requiring routes get a guard middleware that returns 400 for non-git directories.
   const contextGroups = getContextScopedRouteGroups(config);
   for (const group of contextGroups) {
-    contextApp.route(`/:contextId${group.prefix}`, group.routes);
+    if (GIT_REQUIRED_PREFIXES.has(group.prefix)) {
+      const guarded = new Hono<{ Variables: ContextVariables }>();
+      guarded.use("*", async (c, next): Promise<Response | void> => {
+        const serverContext = c.get("serverContext");
+        if (serverContext !== undefined && !serverContext.isGitRepo) {
+          return c.json(NOT_GIT_REPO_RESPONSE, 400);
+        }
+        await next();
+      });
+      guarded.route("/", group.routes);
+      contextApp.route(`/:contextId${group.prefix}`, guarded);
+    } else {
+      contextApp.route(`/:contextId${group.prefix}`, group.routes);
+    }
   }
 
   // Mount the entire context sub-app under /api/ctx
@@ -299,6 +336,16 @@ export function mountAllRoutes(app: Hono, config: MountRoutesConfig): void {
 type ContextVariables = {
   serverContext: ServerContext;
 };
+
+/**
+ * Standard error response for non-git-repo requests to git-only routes.
+ *
+ * Returns 400 with a clear message, preventing 500 errors from failed git commands.
+ */
+const NOT_GIT_REPO_RESPONSE = {
+  error: "Not a git repository. Git operations are not available for this directory.",
+  code: 400,
+} as const;
 
 /**
  * Create a new Request with the URL path rewritten to be relative to the route mount point.

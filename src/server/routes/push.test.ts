@@ -161,6 +161,7 @@ function createMockContextManager(): ContextManager {
     })),
     getServerContext: mock(() => ({
       projectPath: "/test/repo",
+      isGitRepo: true,
     })),
     getProjectRegistry: mock(() => ({
       getOrCreateSlug: async () => "test-abc123",

@@ -21,6 +21,7 @@ import {
   isGitOperationRunning,
   getOperationPhase,
 } from "../git-actions/executor.js";
+import { isGitRepository } from "../git/executor.js";
 
 /**
  * Error response format
@@ -74,6 +75,26 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 /**
+ * Validate that projectPath is a git repository
+ *
+ * @param projectPath - Path to validate
+ * @returns Error response if not a git repo, null if valid
+ */
+async function validateGitRepo(
+  projectPath: string,
+): Promise<ErrorResponse | null> {
+  const isRepo = await isGitRepository(projectPath);
+  if (!isRepo) {
+    return {
+      error:
+        "Not a git repository. Git operations are not available for this directory.",
+      code: 400,
+    };
+  }
+  return null;
+}
+
+/**
  * Create git-actions routes
  *
  * Routes:
@@ -119,6 +140,12 @@ export function createGitActionsRoutes(): Hono {
         return c.json(errorResponse, 400);
       }
 
+      // Validate git repository
+      const gitError = await validateGitRepo(body.projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
+      }
+
       // Execute commit
       const result: GitActionResult = await executeCommit(
         body.projectPath,
@@ -156,6 +183,12 @@ export function createGitActionsRoutes(): Hono {
         return c.json(errorResponse, 400);
       }
 
+      // Validate git repository
+      const gitError = await validateGitRepo(body.projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
+      }
+
       // Execute push
       const result: GitActionResult = await executePush(body.projectPath);
 
@@ -187,6 +220,12 @@ export function createGitActionsRoutes(): Hono {
           code: 400,
         };
         return c.json(errorResponse, 400);
+      }
+
+      // Validate git repository
+      const gitError = await validateGitRepo(body.projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
       }
 
       // Validate baseBranch
@@ -234,6 +273,12 @@ export function createGitActionsRoutes(): Hono {
           code: 400,
         };
         return c.json(errorResponse, 400);
+      }
+
+      // Validate git repository
+      const gitError = await validateGitRepo(body.projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
       }
 
       // Validate baseBranch
@@ -316,6 +361,12 @@ export function createGitActionsRoutes(): Hono {
           code: 400,
         };
         return c.json(errorResponse, 400);
+      }
+
+      // Validate git repository
+      const gitError = await validateGitRepo(projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
       }
 
       // Get PR status

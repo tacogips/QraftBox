@@ -102,7 +102,7 @@ describe("createBranchRoutes", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createBranchRoutes(context);
   });
 
@@ -153,6 +153,7 @@ describe("createBranchRoutes", () => {
     test("handles errors gracefully", async () => {
       const invalidContext: ServerContext = {
         projectPath: "/nonexistent/path",
+        isGitRepo: true,
       };
       const invalidApp = createBranchRoutes(invalidContext);
       const response = await invalidApp.request("/");

@@ -74,6 +74,7 @@ function createMockContextManager(): ContextManager {
       }
       return {
         projectPath: context.repositoryRoot,
+        isGitRepo: true,
       };
     },
     getProjectRegistry: () => ({

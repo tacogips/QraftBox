@@ -11,9 +11,10 @@
 
   interface Props {
     contextId: string;
+    isGitRepo?: boolean;
   }
 
-  const { contextId }: Props = $props();
+  const { contextId, isGitRepo = true }: Props = $props();
 
   /**
    * Commit list state
@@ -289,9 +290,11 @@
     }
   }
 
-  // Fetch commits on mount
+  // Fetch commits on mount (only for git repos)
   $effect(() => {
-    void fetchCommits(false);
+    if (isGitRepo) {
+      void fetchCommits(false);
+    }
   });
 </script>
 
@@ -320,7 +323,19 @@
 
   <!-- Commit List -->
   <div class="content-area flex-1 overflow-y-auto px-6 pb-4">
-    {#if loading}
+    {#if !isGitRepo}
+      <!-- Not a git repository -->
+      <div class="flex flex-col items-center justify-center h-64" role="status">
+        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-text-tertiary mb-4" aria-hidden="true">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+        </svg>
+        <p class="text-text-secondary text-lg mb-2">Not a Git Repository</p>
+        <p class="text-text-tertiary text-sm">
+          The current directory is not managed by git. Commit history is not available.
+        </p>
+      </div>
+    {:else if loading}
       <!-- Loading State -->
       <div class="loading-state flex flex-col items-center justify-center h-64" role="status" aria-live="polite">
         <svg class="animate-spin h-8 w-8 text-accent-fg mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">

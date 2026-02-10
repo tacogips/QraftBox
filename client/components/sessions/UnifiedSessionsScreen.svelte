@@ -22,7 +22,7 @@
   interface Props {
     contextId: string;
     projectPath: string;
-    onResumeToChanges?: (() => void) | undefined;
+    onResumeToChanges?: ((sessionId: string) => void) | undefined;
   }
 
   const {
@@ -168,7 +168,7 @@
     try {
       await claudeSessionsStore.resumeSession(sessionId);
       if (onResumeToChanges !== undefined) {
-        onResumeToChanges();
+        onResumeToChanges(sessionId);
       }
     } catch (e) {
       console.error("Failed to resume session:", e);

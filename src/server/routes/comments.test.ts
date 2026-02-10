@@ -109,6 +109,7 @@ interface SuccessResponse {
 describe("createCommentRoutes", () => {
   const serverContext: ServerContext = {
     projectPath: testRepoPath,
+    isGitRepo: true,
   };
 
   const app = createCommentRoutes(serverContext);
