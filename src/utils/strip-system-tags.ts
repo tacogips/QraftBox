@@ -10,8 +10,7 @@
 
 const REMOVE_WITH_CONTENT_PATTERN =
   /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder)[^>]*>[\s\S]*?<\/\1>/g;
-const UNWRAP_ONLY_PATTERN =
-  /<\/?qraftbox-system-prompt[^>]*>/g;
+const UNWRAP_ONLY_PATTERN = /<\/?qraftbox-system-prompt[^>]*>/g;
 
 /**
  * Remove system command XML tags and their content from text.

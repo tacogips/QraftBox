@@ -34,7 +34,7 @@ function safeSerialize(value: Record<string, unknown> | undefined): string {
   try {
     return ` ${JSON.stringify(value)}`;
   } catch {
-    return " {\"context\":\"unserializable\"}";
+    return ' {"context":"unserializable"}';
   }
 }
 

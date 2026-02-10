@@ -50,12 +50,17 @@ const cancelledActions = new Set<string>();
  * operations (e.g. branch checkout) can be blocked while an operation
  * is in progress.
  */
-let currentOperationPhase: "idle" | "committing" | "pushing" | "creating-pr" = "idle";
+let currentOperationPhase: "idle" | "committing" | "pushing" | "creating-pr" =
+  "idle";
 
 /**
  * Returns the current operation phase.
  */
-export function getOperationPhase(): "idle" | "committing" | "pushing" | "creating-pr" {
+export function getOperationPhase():
+  | "idle"
+  | "committing"
+  | "pushing"
+  | "creating-pr" {
   return currentOperationPhase;
 }
 
@@ -496,7 +501,8 @@ export async function executeCreatePR(
 
     return {
       success: true,
-      output: `${initial.output}\n\n[QraftBox] Placeholder PR content detected and auto-fixed.`.trim(),
+      output:
+        `${initial.output}\n\n[QraftBox] Placeholder PR content detected and auto-fixed.`.trim(),
     };
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);

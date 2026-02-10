@@ -765,6 +765,7 @@ describe("Type definitions", () => {
   test("WorkspaceTab type structure", () => {
     const tab: WorkspaceTab = {
       id: crypto.randomUUID(),
+      projectSlug: "test-abc123",
       path: "/home/user/project",
       name: "project",
       repositoryRoot: "/home/user/project",
@@ -882,6 +883,7 @@ describe("Worktree support", () => {
     test("worktree tab has all required fields", () => {
       const tab: WorkspaceTab = {
         id: crypto.randomUUID(),
+        projectSlug: "test-abc123",
         path: "/home/user/.local/qraftbox/worktrees/project/feature",
         name: "feature",
         repositoryRoot: "/home/user/.local/qraftbox/worktrees/project/feature",
@@ -901,6 +903,7 @@ describe("Worktree support", () => {
     test("main repository tab has all required fields", () => {
       const tab: WorkspaceTab = {
         id: crypto.randomUUID(),
+        projectSlug: "test-abc123",
         path: "/home/user/project",
         name: "project",
         repositoryRoot: "/home/user/project",

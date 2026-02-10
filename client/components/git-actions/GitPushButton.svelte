@@ -16,10 +16,11 @@
   interface Props {
     contextId: string;
     projectPath: string;
+    hasChanges?: boolean;
     onSuccess?: (() => void) | undefined;
   }
 
-  const { contextId, projectPath, onSuccess }: Props = $props();
+  const { contextId, projectPath, hasChanges = true, onSuccess }: Props = $props();
 
   // Menu state
   let menuOpen = $state(false);
@@ -473,7 +474,7 @@
            transition-colors disabled:opacity-50 disabled:cursor-not-allowed
            flex items-center gap-1.5"
     onclick={() => void handleCommit()}
-    disabled={operating}
+    disabled={operating || !hasChanges}
   >
     {#if operating && operationPhase === "committing"}
       <svg

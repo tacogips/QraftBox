@@ -243,11 +243,7 @@ export function createPRExecutor(prService: PRService): PRExecutor {
 
       // Check if PR exists for this branch (GitHub API - can be slow)
       const existingPR = await withTimeout(
-        prService.getPRForBranch(
-          repoInfo.owner,
-          repoInfo.name,
-          branch,
-        ),
+        prService.getPRForBranch(repoInfo.owner, repoInfo.name, branch),
         ROUTE_TIMEOUTS.GITHUB_API,
         "getPRStatus:getPRForBranch",
       );
@@ -355,11 +351,7 @@ export function createPRExecutor(prService: PRService): PRExecutor {
 
       // Check if PR exists (GitHub API - can be slow)
       const existingPR = await withTimeout(
-        prService.getPRForBranch(
-          repoInfo.owner,
-          repoInfo.name,
-          branch,
-        ),
+        prService.getPRForBranch(repoInfo.owner, repoInfo.name, branch),
         ROUTE_TIMEOUTS.GITHUB_API,
         "buildContext:getPRForBranch",
       );
@@ -464,11 +456,7 @@ export function createPRExecutor(prService: PRService): PRExecutor {
 
       // Verify PR exists (GitHub API - can be slow)
       const existingPR = await withTimeout(
-        prService.getPR(
-          repoInfo.owner,
-          repoInfo.name,
-          prNumber,
-        ),
+        prService.getPR(repoInfo.owner, repoInfo.name, prNumber),
         ROUTE_TIMEOUTS.GITHUB_API,
         "updatePR:getPR",
       );

@@ -64,17 +64,21 @@
   }
 
   /**
-   * Set context ID and initial project filter on the claude sessions store synchronously
-   * (must happen before child components mount and call fetchSessions)
+   * Reactively configure the claude sessions store when contextId or projectPath changes.
+   * This runs on initial render AND whenever the user switches projects.
    */
-  if (contextId.length > 0) {
-    claudeSessionsStore.setContextId(contextId);
-  }
-  if (projectPath.length > 0) {
-    claudeSessionsStore.setInitialFilters({
-      workingDirectoryPrefix: projectPath,
-    });
-  }
+  $effect(() => {
+    claudeSessionsStore.reset();
+    if (contextId.length > 0) {
+      claudeSessionsStore.setContextId(contextId);
+    }
+    if (projectPath.length > 0) {
+      claudeSessionsStore.setInitialFilters({
+        workingDirectoryPrefix: projectPath,
+      });
+    }
+    void claudeSessionsStore.fetchSessions();
+  });
 
   /**
    * Load queue and pending prompts on mount

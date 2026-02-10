@@ -44,6 +44,12 @@ function createMockContextManager(
       }
       return { projectPath: tab.path };
     }),
+    getProjectRegistry: mock(() => ({
+      getOrCreateSlug: async () => "test-abc123",
+      resolveSlug: async () => undefined,
+      removeSlug: async () => {},
+      getAllProjects: async () => new Map(),
+    })),
   };
 }
 
@@ -53,6 +59,7 @@ function createMockContextManager(
 function createTestTab(id: string, path: string): WorkspaceTab {
   return {
     id: id as ContextId,
+    projectSlug: "test-abc123",
     path,
     name: "test-repo",
     repositoryRoot: path,

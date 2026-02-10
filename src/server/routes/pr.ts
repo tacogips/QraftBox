@@ -543,11 +543,7 @@ export function createPRRoutes(
 
       // Update PR via executor
       const result = await withTimeout(
-        executor.updatePR(
-          context.repositoryRoot,
-          prNumber,
-          request,
-        ),
+        executor.updatePR(context.repositoryRoot, prNumber, request),
         ROUTE_TIMEOUTS.PR_UPDATE,
         "prUpdate:updatePR",
       );
@@ -764,12 +760,7 @@ export function createPRRoutes(
 
       // Merge PR via PR service
       const result = await withTimeout(
-        prService.mergePR(
-          repoInfo.owner,
-          repoInfo.name,
-          prNumber,
-          mergeMethod,
-        ),
+        prService.mergePR(repoInfo.owner, repoInfo.name, prNumber, mergeMethod),
         ROUTE_TIMEOUTS.PR_MERGE,
         "prMerge:mergePR",
       );

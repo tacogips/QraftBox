@@ -24,7 +24,6 @@
    * - "Clear Completed" button for QraftBox completed sessions
    */
 
-  import { onMount } from "svelte";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import type { AISession } from "../../../src/types/ai";
   import type {
@@ -400,11 +399,17 @@
   }
 
   /**
-   * Load initial data on mount
+   * Subscribe to store changes and sync reactive state.
+   * The parent (UnifiedSessionsScreen) configures and triggers fetches via $effect;
+   * this subscription ensures we update local reactive state whenever the store changes.
    */
-  onMount(async () => {
-    await claudeSessionsStore.fetchSessions();
+  $effect(() => {
+    const unsub = claudeSessionsStore.subscribe(() => syncFromStore());
+    // Initial sync in case the store already has data
     syncFromStore();
+    return () => {
+      unsub();
+    };
   });
 </script>
 

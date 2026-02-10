@@ -44,11 +44,41 @@
   ]);
 
   /**
-   * Parse the URL hash into a ScreenType, defaulting to "diff" for invalid hashes
+   * Parse URL hash into { slug, screen }.
+   * Format: #/{projectSlug}/{page} or #/{page} (legacy)
+   */
+  function parseHash(): { slug: string | null; screen: ScreenType } {
+    const hash = window.location.hash.replace(/^#\/?/, "");
+    const parts = hash.split("/").filter(Boolean);
+
+    if (parts.length >= 2) {
+      // #/{projectSlug}/{page}
+      const slug = parts[0] ?? null;
+      const page = parts[1] ?? "diff";
+      return {
+        slug,
+        screen: VALID_SCREENS.has(page) ? (page as ScreenType) : "diff",
+      };
+    }
+
+    if (parts.length === 1) {
+      const single = parts[0] ?? "";
+      // If it's a known screen name, treat as legacy #/{page}
+      if (VALID_SCREENS.has(single)) {
+        return { slug: null, screen: single as ScreenType };
+      }
+      // Otherwise treat as #/{projectSlug} with default screen
+      return { slug: single, screen: "diff" };
+    }
+
+    return { slug: null, screen: "diff" };
+  }
+
+  /**
+   * Get screen from hash (convenience for initial state)
    */
   function screenFromHash(): ScreenType {
-    const hash = window.location.hash.replace(/^#\/?/, "");
-    return VALID_SCREENS.has(hash) ? (hash as ScreenType) : "diff";
+    return parseHash().screen;
   }
 
   /**
@@ -85,13 +115,17 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let projectPath = $state<string>("");
-  let workspaceTabs = $state<
-    Array<{ id: string; path: string; name: string; isGitRepo: boolean }>
-  >([]);
+  let workspaceTabs = $state<ServerTab[]>([]);
   let currentScreen = $state<ScreenType>(screenFromHash());
   let headerMenuOpen = $state(false);
   let addProjectMenuOpen = $state(false);
+  let addProjectBtnEl = $state<HTMLButtonElement | undefined>(undefined);
   let recentProjects = $state<Array<{ path: string; name: string; isGitRepo: boolean }>>([]);
+  // Add-project state
+  let newProjectPath = $state("");
+  let newProjectError = $state<string | null>(null);
+  let newProjectLoading = $state(false);
+  let pickingDirectory = $state(false);
   let pathCopied = $state(false);
   let mergeDialogOpen = $state(false);
 
@@ -408,7 +442,7 @@
   /**
    * Workspace tab type from server
    */
-  type ServerTab = { id: string; path: string; name: string; isGitRepo: boolean };
+  type ServerTab = { id: string; path: string; name: string; isGitRepo: boolean; projectSlug: string };
 
   /**
    * Fetch workspace to get context ID and all tabs
@@ -487,9 +521,18 @@
       void fetchQueueStatus();
       void fetchActiveSessions();
 
-      // Navigate to diff if on project screen
+      // Navigate to diff if on project screen, otherwise update hash with new slug
       if (currentScreen === "project") {
         navigateToScreen("diff");
+      } else {
+        // Update hash to reflect the new project slug
+        const slug = tab.projectSlug;
+        if (slug.length > 0) {
+          const newHash = `#/${slug}/${currentScreen}`;
+          if (window.location.hash !== newHash) {
+            window.location.hash = newHash;
+          }
+        }
       }
     } catch (e) {
       console.error("Failed to switch project:", e);
@@ -556,6 +599,10 @@
             await fetchDiff(newTab.id);
             void fetchQueueStatus();
             void fetchActiveSessions();
+            // Update hash to reflect new active project
+            if (newTab.projectSlug.length > 0) {
+              window.location.hash = `#/${newTab.projectSlug}/${currentScreen}`;
+            }
           }
         }
       }
@@ -623,32 +670,82 @@
   }
 
   /**
-   * Open a project from recent projects list
+   * Open a project by path (used by both path input and recent list)
    */
-  async function openRecentProject(path: string): Promise<void> {
-    addProjectMenuOpen = false;
+  async function openProjectByPath(path: string): Promise<void> {
+    const trimmed = path.trim();
+    if (trimmed.length === 0) return;
+
+    newProjectLoading = true;
+    newProjectError = null;
     try {
       const resp = await fetch("/api/workspace/tabs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({ path: trimmed }),
       });
-      if (!resp.ok) return;
+      if (!resp.ok) {
+        const errData = (await resp.json()) as { error?: string };
+        newProjectError = errData.error ?? `Failed to open (${resp.status})`;
+        return;
+      }
       const data = (await resp.json()) as {
         tab: ServerTab;
         workspace: { tabs: ServerTab[] };
       };
       workspaceTabs = data.workspace.tabs;
       // Remove from recent since it's now open
-      recentProjects = recentProjects.filter((r) => r.path !== path);
+      recentProjects = recentProjects.filter((r) => r.path !== trimmed);
       try {
         localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
       } catch {
         // Ignore
       }
+      addProjectMenuOpen = false;
+      newProjectPath = "";
       await switchProject(data.tab.id);
     } catch (e) {
-      console.error("Failed to open recent project:", e);
+      newProjectError = e instanceof Error ? e.message : "Failed to open project";
+    } finally {
+      newProjectLoading = false;
+    }
+  }
+
+  /**
+   * Open a project from recent projects list
+   */
+  async function openRecentProject(path: string): Promise<void> {
+    addProjectMenuOpen = false;
+    await openProjectByPath(path);
+  }
+
+  /**
+   * Open native OS directory picker via server-side zenity/kdialog
+   */
+  async function pickDirectory(): Promise<void> {
+    pickingDirectory = true;
+    newProjectError = null;
+    try {
+      const resp = await fetch("/api/browse/pick-directory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startPath: projectPath.length > 0 ? projectPath : undefined }),
+      });
+      if (!resp.ok) {
+        const data = (await resp.json()) as { error?: string };
+        newProjectError = data.error ?? "Failed to open directory picker";
+        return;
+      }
+      const data = (await resp.json()) as { path: string | null };
+      if (data.path === null) {
+        // User cancelled
+        return;
+      }
+      await openProjectByPath(data.path);
+    } catch (e) {
+      newProjectError = e instanceof Error ? e.message : "Failed to open directory picker";
+    } finally {
+      pickingDirectory = false;
     }
   }
 
@@ -673,12 +770,41 @@
     try {
       loading = true;
       error = null;
+
+      // Check if hash contains a project slug to restore
+      const parsed = parseHash();
+
       const ctxId = await fetchContext();
       contextId = ctxId;
-      await fetchDiff(ctxId);
+
+      // If hash has a slug, try to switch to that project
+      if (parsed.slug !== null) {
+        const targetTab = workspaceTabs.find((t) => t.projectSlug === parsed.slug);
+        if (targetTab !== undefined && targetTab.id !== ctxId) {
+          contextId = targetTab.id;
+          projectPath = targetTab.path;
+          await fetch(`/api/workspace/tabs/${targetTab.id}/activate`, { method: "POST" });
+        }
+      }
+
+      // Apply the screen from hash
+      if (parsed.screen !== currentScreen) {
+        currentScreen = parsed.screen;
+      }
+
+      await fetchDiff(contextId);
       void fetchQueueStatus();
       void fetchActiveSessions();
       void fetchRecentProjects();
+
+      // Set the hash to reflect current state
+      const slug = currentProjectSlug();
+      if (slug !== null) {
+        const newHash = `#/${slug}/${currentScreen}`;
+        if (window.location.hash !== newHash) {
+          window.location.hash = newHash;
+        }
+      }
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load";
       console.error("Init error:", e);
@@ -727,11 +853,21 @@
   }
 
   /**
+   * Get the current project slug from workspaceTabs + contextId
+   */
+  function currentProjectSlug(): string | null {
+    if (contextId === null) return null;
+    const tab = workspaceTabs.find((t) => t.id === contextId);
+    return tab?.projectSlug ?? null;
+  }
+
+  /**
    * Navigate to a specific screen and update URL hash
    */
   function navigateToScreen(screen: ScreenType): void {
     currentScreen = screen;
-    const newHash = `#/${screen}`;
+    const slug = currentProjectSlug();
+    const newHash = slug !== null ? `#/${slug}/${screen}` : `#/${screen}`;
     if (window.location.hash !== newHash) {
       window.location.hash = newHash;
     }
@@ -1399,9 +1535,16 @@
    * Handle browser back/forward navigation via hashchange
    */
   function handleHashChange(): void {
-    const screen = screenFromHash();
-    if (screen !== currentScreen) {
-      currentScreen = screen;
+    const parsed = parseHash();
+    if (parsed.screen !== currentScreen) {
+      currentScreen = parsed.screen;
+    }
+    // If hash contains a slug that differs from current project, switch to it
+    if (parsed.slug !== null) {
+      const targetTab = workspaceTabs.find((t) => t.projectSlug === parsed.slug);
+      if (targetTab !== undefined && targetTab.id !== contextId) {
+        void switchProject(targetTab.id);
+      }
     }
   }
 
@@ -1513,15 +1656,6 @@
     window.addEventListener("keydown", handleKeydown);
     window.addEventListener("hashchange", handleHashChange);
 
-    // Set initial hash if empty
-    if (
-      !window.location.hash ||
-      window.location.hash === "#" ||
-      window.location.hash === "#/"
-    ) {
-      window.location.hash = `#/${currentScreen}`;
-    }
-
     return () => {
       window.removeEventListener("keydown", handleKeydown);
       window.removeEventListener("hashchange", handleHashChange);
@@ -1604,68 +1738,24 @@
             </div>
           {/each}
         {/if}
-      </nav>
-      <!-- Add project button with dropdown (outside scroll container so dropdown is not clipped) -->
-      <div class="relative shrink-0">
+        <!-- Add project button (inside scrollable area, next to last tab) -->
         <button
           type="button"
-          class="px-2 py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors h-full"
+          class="px-2 py-1 text-sm text-text-tertiary hover:text-text-primary transition-colors h-full shrink-0"
+          bind:this={addProjectBtnEl}
           onclick={() => {
             addProjectMenuOpen = !addProjectMenuOpen;
-            if (addProjectMenuOpen) void fetchRecentProjects();
+            if (addProjectMenuOpen) {
+              newProjectPath = "";
+              newProjectError = null;
+              void fetchRecentProjects();
+            }
           }}
           title="Add project"
         >
           +
         </button>
-        {#if addProjectMenuOpen}
-          <div
-            class="absolute right-0 top-full mt-1 w-64 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
-          >
-            <!-- Browse for new path -->
-            <button
-              type="button"
-              class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
-              onclick={() => {
-                addProjectMenuOpen = false;
-                navigateToScreen("project");
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0">
-                <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
-              </svg>
-              Browse directory...
-            </button>
-            <!-- Recent projects separator -->
-            {#if availableRecentProjects.length > 0}
-              <div class="border-t border-border-default my-1"></div>
-              <div class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider">
-                Recent Projects
-              </div>
-              {#each availableRecentProjects as recent (recent.path)}
-                <button
-                  type="button"
-                  class="w-full text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
-                  onclick={() => void openRecentProject(recent.path)}
-                  title={recent.path}
-                >
-                  {#if recent.isGitRepo}
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 text-accent-fg">
-                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
-                    </svg>
-                  {:else}
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 text-text-tertiary">
-                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
-                    </svg>
-                  {/if}
-                  <span class="truncate">{recent.name}</span>
-                  <span class="text-xs text-text-tertiary truncate ml-auto">{truncatePath(recent.path, 20)}</span>
-                </button>
-              {/each}
-            {/if}
-          </div>
-        {/if}
-      </div>
+      </nav>
     </div>
 
     <!-- Hamburger menu -->
@@ -1729,6 +1819,90 @@
       role="presentation"
     ></div>
   {/if}
+  <!-- Add project dropdown (rendered outside header to avoid overflow clipping) -->
+  {#if addProjectMenuOpen && addProjectBtnEl !== undefined}
+    {@const rect = addProjectBtnEl.getBoundingClientRect()}
+    <div
+      class="fixed w-80 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
+      style="top: {rect.bottom + 4}px; left: {Math.min(rect.left, window.innerWidth - 336)}px;"
+    >
+      <!-- Path input + file picker icon -->
+      <div class="px-3 py-2">
+        <label class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block">
+          Open Directory
+        </label>
+        <form
+          class="flex items-center gap-1.5"
+          onsubmit={(e) => {
+            e.preventDefault();
+            void openProjectByPath(newProjectPath);
+          }}
+        >
+          <input
+            type="text"
+            bind:value={newProjectPath}
+            class="flex-1 px-2 py-1.5 text-sm rounded border border-border-default
+                   bg-bg-primary text-text-primary font-mono
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                   placeholder:text-text-tertiary"
+            placeholder="/path/to/project"
+            disabled={newProjectLoading || pickingDirectory}
+          />
+          <!-- Native OS file picker button -->
+          <button
+            type="button"
+            disabled={pickingDirectory || newProjectLoading}
+            onclick={() => void pickDirectory()}
+            class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-colors shrink-0"
+            title="Browse directories"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+            </svg>
+          </button>
+          <button
+            type="submit"
+            disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+            class="px-2 py-1.5 rounded text-sm font-medium
+                   bg-bg-tertiary text-text-primary hover:bg-border-default
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-colors shrink-0"
+          >
+            {newProjectLoading ? "..." : "Open"}
+          </button>
+        </form>
+        {#if newProjectError !== null}
+          <p class="mt-1.5 text-xs text-danger-fg">{newProjectError}</p>
+        {/if}
+      </div>
+      <!-- Recent/previous projects -->
+      {#if availableRecentProjects.length > 0}
+        <div class="border-t border-border-default my-1"></div>
+        <div class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider">
+          Previous Projects
+        </div>
+        <div class="max-h-60 overflow-y-auto">
+          {#each availableRecentProjects as recent (recent.path)}
+            <button
+              type="button"
+              class="w-full text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
+              onclick={() => void openRecentProject(recent.path)}
+              title={recent.path}
+            >
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 {recent.isGitRepo ? 'text-accent-fg' : 'text-text-tertiary'}">
+                <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+              </svg>
+              <span class="truncate flex-1">{recent.name}</span>
+              <span class="text-xs text-text-tertiary truncate max-w-[120px]">{truncatePath(recent.path, 20)}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  {/if}
+
 
   <!-- Tab Bar -->
   <div
@@ -1818,7 +1992,7 @@
     <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
-        <GitPushButton {contextId} {projectPath} onSuccess={() => void fetchDiff(contextId)} />
+        <GitPushButton {contextId} {projectPath} hasChanges={diffFiles.length > 0} onSuccess={() => void fetchDiff(contextId)} />
       {/if}
     </div>
   </div>

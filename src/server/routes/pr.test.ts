@@ -55,6 +55,7 @@ function createMockContext(
 ): WorkspaceTab {
   return {
     id,
+    projectSlug: "test-abc123",
     path: repositoryRoot,
     name: "test-repo",
     repositoryRoot,

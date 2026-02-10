@@ -62,6 +62,25 @@
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
+  let copiedEventId: string | null = $state(null);
+
+  /**
+   * Copy event content to clipboard
+   */
+  async function copyToClipboard(
+    text: string,
+    eventId: string,
+  ): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedEventId = eventId;
+      setTimeout(() => {
+        copiedEventId = null;
+      }, 1500);
+    } catch {
+      // Silently fail if clipboard API is unavailable
+    }
+  }
 
   /**
    * Filter events to only show user and assistant messages.
@@ -549,9 +568,55 @@
               >
                 {event.type}
               </span>
-              <span class="text-xs text-text-tertiary">
-                {formatTimestamp(event.timestamp)}
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-tertiary">
+                  {formatTimestamp(event.timestamp)}
+                </span>
+                <!-- Copy to clipboard button -->
+                <button
+                  type="button"
+                  onclick={(e: MouseEvent) => { e.stopPropagation(); copyToClipboard(textContent, eventId); }}
+                  class="p-0.5 hover:bg-bg-hover rounded transition-colors
+                         focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                  aria-label="Copy message to clipboard"
+                  title="Copy to clipboard"
+                >
+                  {#if copiedEventId === eventId}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="text-success-fg"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  {:else}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="text-text-tertiary"
+                      aria-hidden="true"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  {/if}
+                </button>
+              </div>
             </div>
 
             <!-- Message content -->
@@ -671,9 +736,58 @@
                     >
                       {event.type}
                     </span>
-                    <span class="text-xs text-text-tertiary">
-                      {formatTimestamp(event.timestamp)}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-text-tertiary">
+                        {formatTimestamp(event.timestamp)}
+                      </span>
+                      <!-- Copy to clipboard (div+role to avoid nested button) -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div
+                        role="button"
+                        tabindex="0"
+                        onclick={(e: MouseEvent) => { e.stopPropagation(); copyToClipboard(textContent, getEventId(event, index)); }}
+                        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); copyToClipboard(textContent, getEventId(event, index)); } }}
+                        class="p-0.5 hover:bg-bg-hover rounded transition-colors cursor-pointer
+                               focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                        aria-label="Copy message to clipboard"
+                        title="Copy to clipboard"
+                      >
+                        {#if copiedEventId === getEventId(event, index)}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="text-success-fg"
+                            aria-hidden="true"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        {:else}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="text-text-tertiary"
+                            aria-hidden="true"
+                          >
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                        {/if}
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Card content -->

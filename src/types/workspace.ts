@@ -21,6 +21,7 @@ export type ContextId = string;
  */
 export interface WorkspaceTab {
   readonly id: ContextId;
+  readonly projectSlug: string;
   readonly path: string;
   readonly name: string;
   readonly repositoryRoot: string;
@@ -120,6 +121,7 @@ export function createEmptyWorkspace(maxTabs = 10): Workspace {
  * @param isWorktree - Whether this is a git worktree (default: false)
  * @param mainRepositoryPath - Path to main repository if this is a worktree (default: null)
  * @param worktreeName - Name of the worktree if this is a worktree (default: null)
+ * @param projectSlug - URL-safe project slug for routing (default: empty string, to be set by caller)
  * @returns A new workspace tab
  */
 export function createWorkspaceTab(
@@ -130,10 +132,12 @@ export function createWorkspaceTab(
   isWorktree = false,
   mainRepositoryPath: string | null = null,
   worktreeName: string | null = null,
+  projectSlug = "",
 ): WorkspaceTab {
   const now = Date.now();
   return {
     id: crypto.randomUUID(),
+    projectSlug,
     path,
     name,
     repositoryRoot,
@@ -289,6 +293,20 @@ export function findTabById(
   id: ContextId,
 ): WorkspaceTab | undefined {
   return workspace.tabs.find((tab) => tab.id === id);
+}
+
+/**
+ * Find a tab by project slug
+ *
+ * @param workspace - Workspace to search
+ * @param slug - Project slug to find
+ * @returns Tab if found, undefined otherwise
+ */
+export function findTabBySlug(
+  workspace: Workspace,
+  slug: string,
+): WorkspaceTab | undefined {
+  return workspace.tabs.find((tab) => tab.projectSlug === slug);
 }
 
 /**

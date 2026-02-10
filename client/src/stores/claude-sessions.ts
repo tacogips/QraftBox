@@ -118,6 +118,11 @@ export interface ClaudeSessionsActions {
   setContextId(contextId: string): void;
 
   /**
+   * Subscribe to store state changes
+   */
+  subscribe(listener: () => void): () => void;
+
+  /**
    * Reset store to initial state
    */
   reset(): void;
@@ -286,6 +291,13 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
     // Actions
     setContextId(contextId: string): void {
       storeContextId = contextId;
+    },
+
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
 
     async fetchProjects(): Promise<void> {

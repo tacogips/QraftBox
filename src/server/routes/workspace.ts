@@ -20,6 +20,7 @@ import {
   validateDirectoryPath,
   findTabById,
   findTabByPath,
+  findTabBySlug,
   isWorkspaceFull,
   updateTabAccessTime,
   sortRecentDirectories,
@@ -407,6 +408,24 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       recent: sorted.slice(0, MAX_RECENT_DIRECTORIES),
     };
     return c.json(response);
+  });
+
+  /**
+   * GET /api/workspace/by-slug/:slug
+   *
+   * Find a workspace tab by its project slug.
+   * Used by the client to resolve URL hash slugs to context IDs.
+   *
+   * Returns:
+   * - tab: The matching workspace tab (or null if not found)
+   */
+  app.get("/by-slug/:slug", (c) => {
+    const slug = c.req.param("slug");
+    const tab = findTabBySlug(currentWorkspace, slug);
+    if (tab === undefined) {
+      return c.json({ tab: null });
+    }
+    return c.json({ tab });
   });
 
   return app;
