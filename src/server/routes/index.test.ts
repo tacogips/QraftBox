@@ -14,13 +14,20 @@ import {
   getNonContextRouteGroups,
   type MountRoutesConfig,
 } from "./index.js";
+import { createRecentDirectoryStore } from "../workspace/recent-store.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("Route Registry", () => {
   let mockContextManager: ContextManager;
   let mockSessionManager: SessionManager;
   let config: MountRoutesConfig;
+  let testDir: string;
 
   beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+
     // Create minimal mocks
     mockContextManager = {
       createContext: mock(async () => ({
@@ -63,6 +70,7 @@ describe("Route Registry", () => {
 
     config = {
       contextManager: mockContextManager,
+      recentStore: createRecentDirectoryStore({ baseDir: testDir }),
       sessionManager: mockSessionManager,
       configDir: undefined,
     };

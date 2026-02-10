@@ -19,6 +19,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { Workspace, WorkspaceTab } from "../../types/workspace";
+import { createRecentDirectoryStore } from "../workspace/recent-store";
 
 /**
  * Test directory paths
@@ -74,11 +75,18 @@ afterAll(async () => {
 describe("GET /api/workspace", () => {
   let app: ReturnType<typeof createWorkspaceRoutes>;
   let contextManager: ContextManager;
+  let recentStoreTestDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
     contextManager = createContextManager();
-    app = createWorkspaceRoutes(contextManager);
+    const recentStore = createRecentDirectoryStore({
+      baseDir: recentStoreTestDir,
+    });
+    app = createWorkspaceRoutes(contextManager, recentStore);
   });
 
   test("returns empty workspace initially", async () => {
@@ -104,11 +112,18 @@ describe("GET /api/workspace", () => {
 describe("POST /api/workspace/tabs", () => {
   let app: ReturnType<typeof createWorkspaceRoutes>;
   let contextManager: ContextManager;
+  let recentStoreTestDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
     contextManager = createContextManager();
-    app = createWorkspaceRoutes(contextManager);
+    const recentStore = createRecentDirectoryStore({
+      baseDir: recentStoreTestDir,
+    });
+    app = createWorkspaceRoutes(contextManager, recentStore);
   });
 
   test("opens new directory tab", async () => {
@@ -352,11 +367,18 @@ describe("POST /api/workspace/tabs", () => {
 describe("DELETE /api/workspace/tabs/:id", () => {
   let app: ReturnType<typeof createWorkspaceRoutes>;
   let contextManager: ContextManager;
+  let recentStoreTestDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
     contextManager = createContextManager();
-    app = createWorkspaceRoutes(contextManager);
+    const recentStore = createRecentDirectoryStore({
+      baseDir: recentStoreTestDir,
+    });
+    app = createWorkspaceRoutes(contextManager, recentStore);
   });
 
   test("closes tab by ID", async () => {
@@ -477,11 +499,18 @@ describe("DELETE /api/workspace/tabs/:id", () => {
 describe("POST /api/workspace/tabs/:id/activate", () => {
   let app: ReturnType<typeof createWorkspaceRoutes>;
   let contextManager: ContextManager;
+  let recentStoreTestDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
     contextManager = createContextManager();
-    app = createWorkspaceRoutes(contextManager);
+    const recentStore = createRecentDirectoryStore({
+      baseDir: recentStoreTestDir,
+    });
+    app = createWorkspaceRoutes(contextManager, recentStore);
   });
 
   test("activates tab by ID", async () => {
@@ -570,11 +599,18 @@ describe("POST /api/workspace/tabs/:id/activate", () => {
 describe("GET /api/workspace/recent", () => {
   let app: ReturnType<typeof createWorkspaceRoutes>;
   let contextManager: ContextManager;
+  let recentStoreTestDir: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
     contextManager = createContextManager();
-    app = createWorkspaceRoutes(contextManager);
+    const recentStore = createRecentDirectoryStore({
+      baseDir: recentStoreTestDir,
+    });
+    app = createWorkspaceRoutes(contextManager, recentStore);
   });
 
   test("returns empty list initially", async () => {

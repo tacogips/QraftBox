@@ -56,6 +56,11 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
       ? path.resolve(overrides.projectPath)
       : path.resolve(process.cwd());
 
+  // Resolve project directories to absolute paths
+  const projectDirs: readonly string[] = (overrides?.projectDirs ?? []).map(
+    (p) => path.resolve(p),
+  );
+
   return {
     port: overrides?.port ?? DEFAULT_CONFIG.PORT,
     host: overrides?.host ?? DEFAULT_CONFIG.HOST,
@@ -69,6 +74,7 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
     assistantAdditionalArgs:
       overrides?.assistantAdditionalArgs ??
       DEFAULT_CONFIG.ASSISTANT_ADDITIONAL_ARGS,
+    projectDirs,
   };
 }
 

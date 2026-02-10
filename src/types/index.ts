@@ -31,6 +31,8 @@ export interface CLIConfig {
   readonly assistantModel: string;
   /** Additional CLI arguments for the AI assistant */
   readonly assistantAdditionalArgs: readonly string[];
+  /** Optional project directories to open at startup (from --project-dir) */
+  readonly projectDirs: readonly string[];
 }
 
 /**

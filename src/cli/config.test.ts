@@ -149,6 +149,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -167,6 +168,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -187,6 +189,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -207,6 +210,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -227,6 +231,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -244,6 +249,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -261,6 +267,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -279,6 +286,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -297,6 +305,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(false);
@@ -316,6 +325,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -333,6 +343,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -350,6 +361,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -367,6 +379,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);
@@ -384,6 +397,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config as CLIConfig);
     expect(result.valid).toBe(false);
@@ -402,6 +416,7 @@ describe("validateConfig", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
     const result = validateConfig(config);
     expect(result.valid).toBe(true);

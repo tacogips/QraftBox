@@ -1,7 +1,11 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
-  import type { QueueStatus, FileReference, AISession } from "../../src/types/ai";
+  import type {
+    QueueStatus,
+    FileReference,
+    AISession,
+  } from "../../src/types/ai";
   import type { LocalPrompt } from "../../src/types/local-prompt";
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
@@ -101,7 +105,11 @@
       const stored = localStorage.getItem("qraftbox-sidebar-width");
       if (stored !== null) {
         const w = Number(stored);
-        if (!Number.isNaN(w) && w >= SIDEBAR_MIN_WIDTH && w <= SIDEBAR_MAX_WIDTH) {
+        if (
+          !Number.isNaN(w) &&
+          w >= SIDEBAR_MIN_WIDTH &&
+          w <= SIDEBAR_MAX_WIDTH
+        ) {
           return w;
         }
       }
@@ -120,7 +128,9 @@
   let headerMenuOpen = $state(false);
   let addProjectMenuOpen = $state(false);
   let addProjectBtnEl = $state<HTMLButtonElement | undefined>(undefined);
-  let recentProjects = $state<Array<{ path: string; name: string; isGitRepo: boolean }>>([]);
+  let recentProjects = $state<
+    Array<{ path: string; name: string; isGitRepo: boolean }>
+  >([]);
   // Add-project state
   let newProjectPath = $state("");
   let newProjectError = $state<string | null>(null);
@@ -442,7 +452,13 @@
   /**
    * Workspace tab type from server
    */
-  type ServerTab = { id: string; path: string; name: string; isGitRepo: boolean; projectSlug: string };
+  type ServerTab = {
+    id: string;
+    path: string;
+    name: string;
+    isGitRepo: boolean;
+    projectSlug: string;
+  };
 
   /**
    * Fetch workspace to get context ID and all tabs
@@ -472,25 +488,10 @@
       }
     }
 
-    // No tabs exist - create one by posting current location
-    const createResp = await fetch("/api/workspace/tabs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: "." }),
-    });
-    if (createResp.ok) {
-      const createData = (await createResp.json()) as {
-        tab?: ServerTab;
-        workspace?: { tabs?: ServerTab[] };
-      };
-      if (createData.tab !== undefined) {
-        projectPath = createData.tab.path;
-        workspaceTabs = createData.workspace?.tabs ?? [createData.tab];
-        return createData.tab.id;
-      }
-    }
-
-    throw new Error("No workspace tabs available");
+    // No tabs exist - show project selection screen
+    workspaceTabs = [];
+    currentScreen = "project";
+    return "";
   }
 
   /**
@@ -544,14 +545,19 @@
   /**
    * Close a project tab
    */
-  async function closeProjectTab(tabId: string, event: MouseEvent): Promise<void> {
+  async function closeProjectTab(
+    tabId: string,
+    event: MouseEvent,
+  ): Promise<void> {
     event.stopPropagation();
 
     // Remember the tab being closed for recent projects
     const closingTab = workspaceTabs.find((t) => t.id === tabId);
 
     try {
-      const resp = await fetch(`/api/workspace/tabs/${tabId}`, { method: "DELETE" });
+      const resp = await fetch(`/api/workspace/tabs/${tabId}`, {
+        method: "DELETE",
+      });
       if (!resp.ok) return;
 
       const data = (await resp.json()) as {
@@ -614,7 +620,11 @@
   /**
    * Add a project to the recent projects list (for previously-closed tabs)
    */
-  function addToRecentProjects(tab: { path: string; name: string; isGitRepo: boolean }): void {
+  function addToRecentProjects(tab: {
+    path: string;
+    name: string;
+    isGitRepo: boolean;
+  }): void {
     // Don't add if it's still open
     if (workspaceTabs.some((t) => t.path === tab.path)) return;
     // Remove duplicate if exists
@@ -624,7 +634,10 @@
     ].slice(0, 20);
     // Persist to localStorage
     try {
-      localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
+      localStorage.setItem(
+        "qraftbox:recent-projects",
+        JSON.stringify(recentProjects),
+      );
     } catch {
       // Ignore
     }
@@ -637,7 +650,11 @@
     try {
       const stored = localStorage.getItem("qraftbox:recent-projects");
       if (stored !== null) {
-        recentProjects = JSON.parse(stored) as Array<{ path: string; name: string; isGitRepo: boolean }>;
+        recentProjects = JSON.parse(stored) as Array<{
+          path: string;
+          name: string;
+          isGitRepo: boolean;
+        }>;
       }
     } catch {
       // Ignore
@@ -697,7 +714,10 @@
       // Remove from recent since it's now open
       recentProjects = recentProjects.filter((r) => r.path !== trimmed);
       try {
-        localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
+        localStorage.setItem(
+          "qraftbox:recent-projects",
+          JSON.stringify(recentProjects),
+        );
       } catch {
         // Ignore
       }
@@ -705,7 +725,8 @@
       newProjectPath = "";
       await switchProject(data.tab.id);
     } catch (e) {
-      newProjectError = e instanceof Error ? e.message : "Failed to open project";
+      newProjectError =
+        e instanceof Error ? e.message : "Failed to open project";
     } finally {
       newProjectLoading = false;
     }
@@ -720,6 +741,30 @@
   }
 
   /**
+   * Remove a project from the recent projects list (both server and local)
+   */
+  async function removeRecentProject(path: string): Promise<void> {
+    try {
+      await fetch("/api/workspace/recent", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+    } catch {
+      // Ignore server errors
+    }
+    recentProjects = recentProjects.filter((r) => r.path !== path);
+    try {
+      localStorage.setItem(
+        "qraftbox:recent-projects",
+        JSON.stringify(recentProjects),
+      );
+    } catch {
+      // Ignore
+    }
+  }
+
+  /**
    * Open native OS directory picker via server-side zenity/kdialog
    */
   async function pickDirectory(): Promise<void> {
@@ -729,7 +774,9 @@
       const resp = await fetch("/api/browse/pick-directory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startPath: projectPath.length > 0 ? projectPath : undefined }),
+        body: JSON.stringify({
+          startPath: projectPath.length > 0 ? projectPath : undefined,
+        }),
       });
       if (!resp.ok) {
         const data = (await resp.json()) as { error?: string };
@@ -743,7 +790,8 @@
       }
       await openProjectByPath(data.path);
     } catch (e) {
-      newProjectError = e instanceof Error ? e.message : "Failed to open directory picker";
+      newProjectError =
+        e instanceof Error ? e.message : "Failed to open directory picker";
     } finally {
       pickingDirectory = false;
     }
@@ -775,15 +823,25 @@
       const parsed = parseHash();
 
       const ctxId = await fetchContext();
+      if (ctxId === "") {
+        // No tabs - fetch recent projects from server and stay on project selection screen
+        void fetchRecentProjects();
+        loading = false;
+        return;
+      }
       contextId = ctxId;
 
       // If hash has a slug, try to switch to that project
       if (parsed.slug !== null) {
-        const targetTab = workspaceTabs.find((t) => t.projectSlug === parsed.slug);
+        const targetTab = workspaceTabs.find(
+          (t) => t.projectSlug === parsed.slug,
+        );
         if (targetTab !== undefined && targetTab.id !== ctxId) {
           contextId = targetTab.id;
           projectPath = targetTab.path;
-          await fetch(`/api/workspace/tabs/${targetTab.id}/activate`, { method: "POST" });
+          await fetch(`/api/workspace/tabs/${targetTab.id}/activate`, {
+            method: "POST",
+          });
         }
       }
 
@@ -843,12 +901,18 @@
   }
 
   function narrowSidebar(): void {
-    sidebarWidth = Math.max(SIDEBAR_MIN_WIDTH, sidebarWidth - SIDEBAR_WIDTH_STEP);
+    sidebarWidth = Math.max(
+      SIDEBAR_MIN_WIDTH,
+      sidebarWidth - SIDEBAR_WIDTH_STEP,
+    );
     saveSidebarWidth(sidebarWidth);
   }
 
   function widenSidebar(): void {
-    sidebarWidth = Math.min(SIDEBAR_MAX_WIDTH, sidebarWidth + SIDEBAR_WIDTH_STEP);
+    sidebarWidth = Math.min(
+      SIDEBAR_MAX_WIDTH,
+      sidebarWidth + SIDEBAR_WIDTH_STEP,
+    );
     saveSidebarWidth(sidebarWidth);
   }
 
@@ -893,10 +957,11 @@
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
-    // User is composing a fresh prompt, so exit explicit "new session" mode.
-    isNewSessionMode = false;
-    selectedCliSessionId = null;
+    // Capture the current session for resume before any state changes.
     const resumeSessionId = currentCliSessionId;
+    // Exit "new session" mode but keep selectedCliSessionId so the
+    // CurrentSessionPanel continues tracking the same session.
+    isNewSessionMode = false;
 
     // 1. Optimistic UI: add to pending immediately
     const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -904,7 +969,11 @@
       id: optimisticId,
       prompt,
       description: "",
-      context: { primaryFile: undefined, references: [...refs], diffSummary: undefined },
+      context: {
+        primaryFile: undefined,
+        references: [...refs],
+        diffSummary: undefined,
+      },
       projectPath,
       status: "pending",
       sessionId: null,
@@ -948,30 +1017,40 @@
 
       // 4. If a current CLI session is selected, always continue that session.
       if (resumeSessionId !== null) {
-        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            immediate: true,
-            resumeSessionId,
-          }),
-        });
+        const dispatchResp = await fetch(
+          `/api/prompts/${data.prompt.id}/dispatch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              immediate: true,
+              resumeSessionId,
+            }),
+          },
+        );
 
         if (dispatchResp.ok) {
           // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
+          pendingPrompts = pendingPrompts.filter(
+            (p) => p.id !== data.prompt.id,
+          );
         }
       } else if (runningSessions.length === 0 && queuedSessions.length === 0) {
         // 5. If nothing is running/queued, dispatch immediately.
-        const dispatchResp = await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ immediate: true }),
-        });
+        const dispatchResp = await fetch(
+          `/api/prompts/${data.prompt.id}/dispatch`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ immediate: true }),
+          },
+        );
 
         if (dispatchResp.ok) {
           // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter((p) => p.id !== data.prompt.id);
+          pendingPrompts = pendingPrompts.filter(
+            (p) => p.id !== data.prompt.id,
+          );
         }
       }
       // If something is running and no CLI session is selected, prompt stays in pending queue.
@@ -1106,7 +1185,11 @@
       void fetchQueueStatus();
 
       // Auto-dispatch next pending prompt if nothing is running
-      if (running.length === 0 && queued.length === 0 && pendingPrompts.length > 0) {
+      if (
+        running.length === 0 &&
+        queued.length === 0 &&
+        pendingPrompts.length > 0
+      ) {
         void autoDispatchNext();
       }
     } catch {
@@ -1131,7 +1214,11 @@
       if (typeof content !== "string") return;
       runningSessions = runningSessions.map((session) =>
         session.id === event.sessionId
-          ? { ...session, lastAssistantMessage: content, currentActivity: undefined }
+          ? {
+              ...session,
+              lastAssistantMessage: content,
+              currentActivity: undefined,
+            }
           : session,
       );
       return;
@@ -1413,7 +1500,12 @@
 
   // Re-evaluate polling when state changes
   $effect(() => {
-    const _deps = [runningSessions.length, queuedSessions.length, pendingPrompts.length, recentlyCompletedSessions.length];
+    const _deps = [
+      runningSessions.length,
+      queuedSessions.length,
+      pendingPrompts.length,
+      recentlyCompletedSessions.length,
+    ];
     manageSessionPolling();
   });
 
@@ -1457,6 +1549,7 @@
   async function handleResumeCliSession(sessionId: string): Promise<void> {
     if (contextId === null) return;
     selectedCliSessionId = sessionId;
+    currentCliSessionId = sessionId;
     isNewSessionMode = false;
     try {
       const resp = await fetch(
@@ -1541,7 +1634,9 @@
     }
     // If hash contains a slug that differs from current project, switch to it
     if (parsed.slug !== null) {
-      const targetTab = workspaceTabs.find((t) => t.projectSlug === parsed.slug);
+      const targetTab = workspaceTabs.find(
+        (t) => t.projectSlug === parsed.slug,
+      );
       if (targetTab !== undefined && targetTab.id !== contextId) {
         void switchProject(targetTab.id);
       }
@@ -1697,7 +1792,9 @@
     <!-- Navigation: Project button + project tabs -->
     <div class="flex items-center ml-4 h-full flex-1 min-w-0">
       <!-- Scrollable tab area -->
-      <nav class="flex items-center gap-0 h-full overflow-x-auto project-tabs-nav flex-1 min-w-0">
+      <nav
+        class="flex items-center gap-0 h-full overflow-x-auto project-tabs-nav flex-1 min-w-0"
+      >
         <button
           type="button"
           class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0
@@ -1731,8 +1828,15 @@
                 onclick={(e) => void closeProjectTab(tab.id, e)}
                 title="Close {tab.name}"
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <path
+                    d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+                  />
                 </svg>
               </button>
             </div>
@@ -1824,11 +1928,16 @@
     {@const rect = addProjectBtnEl.getBoundingClientRect()}
     <div
       class="fixed w-80 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
-      style="top: {rect.bottom + 4}px; left: {Math.min(rect.left, window.innerWidth - 336)}px;"
+      style="top: {rect.bottom + 4}px; left: {Math.min(
+        rect.left,
+        window.innerWidth - 336,
+      )}px;"
     >
       <!-- Path input + file picker icon -->
       <div class="px-3 py-2">
-        <label class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block">
+        <label
+          class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block"
+        >
           Open Directory
         </label>
         <form
@@ -1859,7 +1968,9 @@
             title="Browse directories"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+              <path
+                d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+              />
             </svg>
           </button>
           <button
@@ -1880,29 +1991,54 @@
       <!-- Recent/previous projects -->
       {#if availableRecentProjects.length > 0}
         <div class="border-t border-border-default my-1"></div>
-        <div class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider">
+        <div
+          class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider"
+        >
           Previous Projects
         </div>
         <div class="max-h-60 overflow-y-auto">
           {#each availableRecentProjects as recent (recent.path)}
-            <button
-              type="button"
-              class="w-full text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors flex items-center gap-2"
-              onclick={() => void openRecentProject(recent.path)}
-              title={recent.path}
-            >
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 {recent.isGitRepo ? 'text-accent-fg' : 'text-text-tertiary'}">
-                <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
-              </svg>
-              <span class="truncate flex-1">{recent.name}</span>
-              <span class="text-xs text-text-tertiary truncate max-w-[120px]">{truncatePath(recent.path, 20)}</span>
-            </button>
+            <div class="flex items-center hover:bg-bg-tertiary transition-colors">
+              <button
+                type="button"
+                class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
+                onclick={() => void openRecentProject(recent.path)}
+                title={recent.path}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  class="shrink-0 {recent.isGitRepo
+                    ? 'text-accent-fg'
+                    : 'text-text-tertiary'}"
+                >
+                  <path
+                    d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+                  />
+                </svg>
+                <span class="truncate flex-1">{recent.name}</span>
+                <span class="text-xs text-text-tertiary truncate max-w-[120px]"
+                  >{truncatePath(recent.path, 20)}</span
+                >
+              </button>
+              <button
+                type="button"
+                class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
+                title="Remove from history"
+                onclick={(e) => { e.stopPropagation(); void removeRecentProject(recent.path); }}
+              >
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                </svg>
+              </button>
+            </div>
           {/each}
         </div>
       {/if}
     </div>
   {/if}
-
 
   <!-- Tab Bar -->
   <div
@@ -1947,7 +2083,11 @@
     {/if}
     <!-- Worktree button -->
     {#if contextId !== null}
-      <WorktreeButton {contextId} {projectPath} onWorktreeSwitch={() => void init()} />
+      <WorktreeButton
+        {contextId}
+        {projectPath}
+        onWorktreeSwitch={() => void init()}
+      />
     {/if}
 
     {#if contextId !== null}
@@ -1992,7 +2132,12 @@
     <!-- Git push button -->
     <div class="ml-auto py-1 px-2">
       {#if contextId !== null}
-        <GitPushButton {contextId} {projectPath} hasChanges={diffFiles.length > 0} onSuccess={() => void fetchDiff(contextId)} />
+        <GitPushButton
+          {contextId}
+          {projectPath}
+          hasChanges={diffFiles.length > 0}
+          onSuccess={() => void fetchDiff(contextId)}
+        />
       {/if}
     </div>
   </div>
@@ -2068,7 +2213,12 @@
           {:else if selectedFile !== null && viewMode === "current-state"}
             <!-- Current State View -->
             <div class="px-2 pb-2">
-              <CurrentStateView file={selectedFile} onCommentSubmit={handleInlineCommentSubmit} onNavigatePrev={navigatePrev} onNavigateNext={navigateNext} />
+              <CurrentStateView
+                file={selectedFile}
+                onCommentSubmit={handleInlineCommentSubmit}
+                onNavigatePrev={navigatePrev}
+                onNavigateNext={navigateNext}
+              />
             </div>
           {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
             <!-- Diff View (side-by-side or inline) -->
@@ -2270,7 +2420,8 @@
           {projectPath}
           excludeSessionId={currentCliSessionId}
           onNewSession={handleNewSession}
-          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+          onResumeSession={(sessionId) =>
+            void handleResumeCliSession(sessionId)}
         />
 
         <!-- Current Session Panel (above AI panel) -->
@@ -2284,7 +2435,8 @@
           {selectedCliSessionId}
           newSessionMode={isNewSessionMode}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
-          onResumeSession={(sessionId) => void handleResumeCliSession(sessionId)}
+          onResumeSession={(sessionId) =>
+            void handleResumeCliSession(sessionId)}
           onCurrentSessionChange={(sessionId) => {
             currentCliSessionId = sessionId;
           }}
@@ -2315,41 +2467,179 @@
       <!-- Unified Sessions Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
+          <UnifiedSessionsScreen
+            {contextId}
+            {projectPath}
+            onResumeToChanges={handleResumeToChanges}
+          />
         {/if}
       </main>
     {:else if currentScreen === "project"}
       <!-- Project Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <ProjectScreen {contextId} {projectPath} onProjectChanged={() => void init()} />
+          <ProjectScreen
+            {contextId}
+            {projectPath}
+            onProjectChanged={() => void init()}
+          />
         {:else}
-          <!-- No project open - show add project prompt -->
-          <div class="flex flex-col items-center justify-center h-full gap-6 text-text-secondary">
-            <svg width="48" height="48" viewBox="0 0 16 16" fill="currentColor" class="text-text-tertiary">
-              <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+          <!-- No project open - show project selection -->
+          <div
+            class="flex flex-col items-center justify-center h-full gap-6 text-text-secondary"
+          >
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              class="text-text-tertiary"
+            >
+              <path
+                d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+              />
             </svg>
             <p class="text-lg">No project open</p>
-            <p class="text-sm text-text-tertiary">Use the + button in the header to add a project, or select from recent projects below.</p>
+            <p class="text-sm text-text-tertiary">
+              Open a project directory to get started.
+            </p>
+
+            <!-- Open project controls -->
+            <div class="w-full max-w-md flex flex-col gap-3">
+              <!-- Native OS file picker button -->
+              <button
+                type="button"
+                disabled={pickingDirectory || newProjectLoading}
+                onclick={() => void pickDirectory()}
+                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium
+                       bg-accent-emphasis hover:brightness-110 text-white
+                       disabled:opacity-50 disabled:cursor-not-allowed
+                       transition-all"
+              >
+                {#if pickingDirectory}
+                  <svg
+                    class="animate-spin h-4 w-4"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Opening file picker...
+                {:else}
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                  </svg>
+                  Choose Directory...
+                {/if}
+              </button>
+
+              <!-- Path input -->
+              <div class="flex items-center gap-2">
+                <div class="h-px flex-1 bg-border-default"></div>
+                <span class="text-xs text-text-tertiary">or enter path</span>
+                <div class="h-px flex-1 bg-border-default"></div>
+              </div>
+              <form
+                class="flex items-center gap-2"
+                onsubmit={(e) => {
+                  e.preventDefault();
+                  if (newProjectPath.trim().length > 0) {
+                    void openProjectByPath(newProjectPath.trim());
+                  }
+                }}
+              >
+                <input
+                  type="text"
+                  bind:value={newProjectPath}
+                  class="flex-1 px-3 py-2 text-sm rounded-lg border border-border-default
+                         bg-bg-secondary text-text-primary font-mono
+                         focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                         placeholder:text-text-tertiary"
+                  placeholder="/path/to/project"
+                />
+                <button
+                  type="submit"
+                  disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+                  class="px-4 py-2 rounded-lg text-sm font-medium
+                         bg-bg-tertiary hover:bg-border-default text-text-primary
+                         border border-border-default
+                         disabled:opacity-50 disabled:cursor-not-allowed
+                         transition-colors"
+                >
+                  {#if newProjectLoading}
+                    Opening...
+                  {:else}
+                    Open
+                  {/if}
+                </button>
+              </form>
+
+              <!-- Error display -->
+              {#if newProjectError !== null}
+                <div
+                  class="p-3 rounded-lg border border-danger-muted bg-danger-subtle text-danger-fg text-sm"
+                  role="alert"
+                >
+                  {newProjectError}
+                </div>
+              {/if}
+            </div>
+
+            <!-- Recent projects -->
             {#if availableRecentProjects.length > 0}
               <div class="w-full max-w-md">
-                <h3 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2 px-4">Recent Projects</h3>
-                <div class="border border-border-default rounded-lg bg-bg-secondary overflow-hidden">
+                <h3
+                  class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-2 px-4"
+                >
+                  Recent Projects
+                </h3>
+                <div
+                  class="border border-border-default rounded-lg bg-bg-secondary overflow-hidden"
+                >
                   {#each availableRecentProjects as recent (recent.path)}
-                    <button
-                      type="button"
-                      class="w-full text-left px-4 py-2.5 text-sm hover:bg-bg-tertiary transition-colors flex items-center gap-3 border-b border-border-default last:border-b-0"
-                      onclick={() => void openRecentProject(recent.path)}
-                      title={recent.path}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0 {recent.isGitRepo ? 'text-accent-fg' : 'text-text-tertiary'}">
-                        <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
-                      </svg>
-                      <div class="flex-1 min-w-0">
-                        <span class="text-text-primary font-medium">{recent.name}</span>
-                        <span class="text-xs text-text-tertiary ml-2 truncate">{recent.path}</span>
-                      </div>
-                    </button>
+                    <div class="flex items-center border-b border-border-default last:border-b-0 hover:bg-bg-tertiary transition-colors">
+                      <button
+                        type="button"
+                        class="flex-1 text-left px-4 py-2.5 text-sm flex items-center gap-3 min-w-0"
+                        onclick={() => void openRecentProject(recent.path)}
+                        title={recent.path}
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="currentColor"
+                          class="shrink-0 {recent.isGitRepo
+                            ? 'text-accent-fg'
+                            : 'text-text-tertiary'}"
+                        >
+                          <path
+                            d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+                          />
+                        </svg>
+                        <div class="flex-1 min-w-0">
+                          <span class="text-text-primary font-medium"
+                            >{recent.name}</span
+                          >
+                          <span class="text-xs text-text-tertiary ml-2 truncate"
+                            >{recent.path}</span
+                          >
+                        </div>
+                      </button>
+                      <button
+                        type="button"
+                        class="shrink-0 p-2 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
+                        title="Remove from recent projects"
+                        onclick={() => void removeRecentProject(recent.path)}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                        </svg>
+                      </button>
+                    </div>
                   {/each}
                 </div>
               </div>

@@ -15,6 +15,10 @@ import { createFileWatcher } from "../server/watcher/index.js";
 import type { FileWatcher } from "../server/watcher/index.js";
 import { createWatcherBroadcaster } from "../server/watcher/broadcast.js";
 import type { WatcherBroadcaster } from "../server/watcher/broadcast.js";
+import { createRecentDirectoryStore } from "../server/workspace/recent-store";
+import { createLogger } from "../server/logger";
+
+const logger = createLogger("CLI");
 
 /**
  * Parse command-line arguments into CLIConfig
@@ -62,6 +66,10 @@ export function parseArgs(args: string[]): CLIConfig {
     .option(
       "--assistant-additional-args <args>",
       "Additional CLI arguments for AI assistant (comma-separated)",
+    )
+    .option(
+      "-d, --project-dir <paths...>",
+      "Project directories to open at startup",
     );
 
   program.parse(args);
@@ -89,6 +97,14 @@ export function parseArgs(args: string[]): CLIConfig {
     );
   }
 
+  // Parse project directories
+  const projectDirs: string[] =
+    options["projectDir"] !== undefined
+      ? Array.isArray(options["projectDir"])
+        ? (options["projectDir"] as string[])
+        : [options["projectDir"] as string]
+      : [];
+
   return {
     port,
     host: options["host"],
@@ -103,6 +119,7 @@ export function parseArgs(args: string[]): CLIConfig {
       options["assistantAdditionalArgs"] !== undefined
         ? (options["assistantAdditionalArgs"] as string).split(",")
         : ["--dangerously-skip-permissions"],
+    projectDirs,
   };
 }
 
@@ -180,15 +197,14 @@ export async function openBrowser(url: string): Promise<void> {
  */
 export function setupShutdownHandlers(cleanup: () => Promise<void>): void {
   const handleShutdown = async (signal: string): Promise<void> => {
-    console.log(`\nReceived ${signal}, shutting down gracefully...`);
+    logger.info(`Received ${signal}, shutting down gracefully...`);
 
     try {
       await cleanup();
-      console.log("Shutdown complete");
+      logger.info("Shutdown complete");
       process.exit(0);
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      console.error(`Error during shutdown: ${errorMessage}`);
+      logger.error("Error during shutdown", e);
       process.exit(1);
     }
   };
@@ -229,29 +245,59 @@ export async function main(): Promise<void> {
     const config = loadConfig(cliConfig);
     const validation = validateConfig(config);
     if (!validation.valid) {
-      console.error(`Invalid configuration: ${validation.error}`);
+      logger.error(`Invalid configuration: ${validation.error}`);
       process.exit(1);
     }
 
-    console.log("qraftbox - All You Need Is Diff");
-    console.log(`Starting server on ${config.host}:${config.port}...`);
-    console.log(`Project path: ${config.projectPath}`);
-    console.log(`Sync mode: ${config.syncMode}`);
-    console.log(`AI features: ${config.ai ? "enabled" : "disabled"}`);
-    console.log(`File watching: ${config.watch ? "enabled" : "disabled"}`);
+    logger.info("qraftbox - All You Need Is Diff");
+    logger.info(`Starting server on ${config.host}:${config.port}...`);
+    logger.info(`Project path: ${config.projectPath}`);
+    logger.info(`Sync mode: ${config.syncMode}`);
+    logger.info(`AI features: ${config.ai ? "enabled" : "disabled"}`);
+    logger.info(`File watching: ${config.watch ? "enabled" : "disabled"}`);
 
-    // Create context manager and initial context
+    // Create context manager
     const contextManager = createContextManager();
-    await contextManager.createContext(config.projectPath);
+
+    // Create recent store for persistent tracking
+    const recentStore = createRecentDirectoryStore();
+
+    // Determine which project directories to open
+    let dirsToOpen = [...config.projectDirs];
+
+    // If no --project-dir specified, restore the most recent project
+    if (dirsToOpen.length === 0) {
+      const recentDirs = await recentStore.getAll();
+      const mostRecent = recentDirs[0];
+      if (mostRecent !== undefined) {
+        logger.info(`Restoring previous project: ${mostRecent.path}`);
+        dirsToOpen.push(mostRecent.path);
+      }
+    }
+
+    // Create contexts for project directories
+    for (const dir of dirsToOpen) {
+      try {
+        const tab = await contextManager.createContext(dir);
+        await recentStore.add({
+          path: tab.path,
+          name: tab.name,
+          lastOpened: Date.now(),
+          isGitRepo: tab.isGitRepo,
+        });
+      } catch (e) {
+        logger.error(`Failed to open project directory: ${dir}`, e);
+      }
+    }
 
     // Create WebSocket manager for realtime updates
     const wsManager = createWebSocketManager();
 
     // Create and start the HTTP server with WebSocket support
-    const app = createServer({ config, contextManager });
+    const app = createServer({ config, contextManager, recentStore });
     const server = startServer(app, config, wsManager);
 
-    console.log(`Server started on http://${server.hostname}:${server.port}`);
+    logger.info(`Server started on http://${server.hostname}:${server.port}`);
 
     // Start file watcher for realtime updates
     if (config.watch) {
@@ -259,7 +305,7 @@ export async function main(): Promise<void> {
       broadcaster = createWatcherBroadcaster(watcher, wsManager);
       broadcaster.start();
       await watcher.start();
-      console.log(
+      logger.info(
         `File watching: enabled (WebSocket at ws://${server.hostname}:${server.port}/ws)`,
       );
     }
@@ -282,8 +328,7 @@ export async function main(): Promise<void> {
       await openBrowser(`http://${server.hostname}:${server.port}`);
     }
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    console.error(`Failed to start server: ${errorMessage}`);
+    logger.error("Failed to start server", e);
     process.exit(1);
   }
 }

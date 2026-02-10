@@ -33,6 +33,7 @@ import { createGitActionsRoutes } from "./git-actions.js";
 import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
+import type { RecentDirectoryStore } from "../workspace/recent-store.js";
 
 /**
  * Route group definition
@@ -51,6 +52,7 @@ export interface RouteGroup {
  */
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
+  readonly recentStore: RecentDirectoryStore;
   readonly sessionManager: SessionManager;
   readonly promptStore?: PromptStore | undefined;
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
@@ -174,7 +176,7 @@ export function getNonContextRouteGroups(
     // Workspace management routes - GET /api/workspace
     {
       prefix: "/workspace",
-      routes: createWorkspaceRoutes(config.contextManager),
+      routes: createWorkspaceRoutes(config.contextManager, config.recentStore),
     },
     // Directory browsing routes - GET /api/browse
     {

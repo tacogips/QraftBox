@@ -20,6 +20,7 @@ import { join } from "path";
 import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
 import { createLogger } from "./logger";
+import type { RecentDirectoryStore } from "./workspace/recent-store";
 
 /**
  * Server options for creating the Hono instance
@@ -27,6 +28,7 @@ import { createLogger } from "./logger";
 export interface ServerOptions {
   readonly config: CLIConfig;
   readonly contextManager: ContextManager;
+  readonly recentStore: RecentDirectoryStore;
 }
 
 /**
@@ -149,6 +151,7 @@ export function createServer(options: ServerOptions): Hono {
 
   mountAllRoutes(app, {
     contextManager: options.contextManager,
+    recentStore: options.recentStore,
     sessionManager,
     promptStore,
     toolRegistry,

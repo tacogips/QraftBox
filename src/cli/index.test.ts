@@ -23,6 +23,7 @@ describe("parseArgs", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     });
   });
 
@@ -144,6 +145,7 @@ describe("parseArgs", () => {
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     });
   });
 

@@ -23,8 +23,8 @@ import {
   findTabBySlug,
   isWorkspaceFull,
   updateTabAccessTime,
-  sortRecentDirectories,
 } from "../../types/workspace";
+import type { RecentDirectoryStore } from "../workspace/recent-store";
 
 /**
  * Error response format
@@ -63,64 +63,31 @@ interface RecentDirectoriesResponse {
 let currentWorkspace: Workspace = createEmptyWorkspace(10);
 
 /**
- * In-memory recent directories
- * In a production app, this would be persisted and per-user
- */
-const recentDirectories: RecentDirectory[] = [];
-
-/**
- * Maximum number of recent directories to track
- */
-const MAX_RECENT_DIRECTORIES = 20;
-
-/**
  * Reset workspace state (for testing)
  *
  * @internal
  */
 export function resetWorkspaceState(): void {
   currentWorkspace = createEmptyWorkspace(10);
-  recentDirectories.length = 0;
 }
 
 /**
  * Add directory to recent list
  *
  * @param tab - Workspace tab to add to recent list
+ * @param recentStore - Recent directory store
+ * @returns Promise that resolves when operation completes
  */
-function addToRecentDirectories(tab: WorkspaceTab): void {
-  const existingIndex = recentDirectories.findIndex(
-    (dir) => dir.path === tab.path,
-  );
-
-  // Update existing entry
-  if (existingIndex !== -1) {
-    const existing = recentDirectories[existingIndex];
-    if (existing !== undefined) {
-      recentDirectories[existingIndex] = {
-        ...existing,
-        lastOpened: Date.now(),
-      };
-    }
-  } else {
-    // Add new entry
-    const newEntry: RecentDirectory = {
-      path: tab.path,
-      name: tab.name,
-      lastOpened: Date.now(),
-      isGitRepo: tab.isGitRepo,
-    };
-
-    recentDirectories.push(newEntry);
-
-    // Trim to max size
-    if (recentDirectories.length > MAX_RECENT_DIRECTORIES) {
-      // Remove oldest entries
-      const sorted = sortRecentDirectories(recentDirectories);
-      recentDirectories.length = 0;
-      recentDirectories.push(...sorted.slice(0, MAX_RECENT_DIRECTORIES));
-    }
-  }
+async function addToRecentDirectories(
+  tab: WorkspaceTab,
+  recentStore: RecentDirectoryStore,
+): Promise<void> {
+  await recentStore.add({
+    path: tab.path,
+    name: tab.name,
+    lastOpened: Date.now(),
+    isGitRepo: tab.isGitRepo,
+  });
 }
 
 /**
@@ -134,9 +101,13 @@ function addToRecentDirectories(tab: WorkspaceTab): void {
  * - GET /api/workspace/recent - Get recent directories
  *
  * @param contextManager - Context manager instance
+ * @param recentStore - Recent directory store
  * @returns Hono app with workspace routes mounted
  */
-export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
+export function createWorkspaceRoutes(
+  contextManager: ContextManager,
+  recentStore: RecentDirectoryStore,
+): Hono {
   const app = new Hono();
 
   /**
@@ -236,7 +207,7 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       };
 
       // Update recent directories (reopening counts as recent access)
-      addToRecentDirectories(updatedTab);
+      await addToRecentDirectories(updatedTab, recentStore);
 
       const response: OpenTabResponse = {
         tab: updatedTab,
@@ -257,7 +228,7 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       };
 
       // Add to recent directories
-      addToRecentDirectories(tab);
+      await addToRecentDirectories(tab, recentStore);
 
       const response: OpenTabResponse = {
         tab,
@@ -402,12 +373,57 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
    *
    * Returns up to 20 most recently opened directories.
    */
-  app.get("/recent", (c) => {
-    const sorted = sortRecentDirectories(recentDirectories);
+  app.get("/recent", async (c) => {
+    const recent = await recentStore.getAll();
     const response: RecentDirectoriesResponse = {
-      recent: sorted.slice(0, MAX_RECENT_DIRECTORIES),
+      recent,
     };
     return c.json(response);
+  });
+
+  /**
+   * DELETE /api/workspace/recent
+   *
+   * Remove a directory from the recent list by path.
+   *
+   * Request body:
+   * - path (required): Absolute path to remove
+   */
+  app.delete("/recent", async (c) => {
+    let requestBody: unknown;
+    try {
+      requestBody = await c.req.json();
+    } catch {
+      const errorResponse: ErrorResponse = {
+        error: "Invalid JSON in request body",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    if (
+      typeof requestBody !== "object" ||
+      requestBody === null ||
+      !("path" in requestBody)
+    ) {
+      const errorResponse: ErrorResponse = {
+        error: "Missing required field: path",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const pathParam = (requestBody as { path: unknown }).path;
+    if (typeof pathParam !== "string" || pathParam.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "path must be a non-empty string",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    await recentStore.remove(pathParam);
+    return c.json({ ok: true });
   });
 
   /**
