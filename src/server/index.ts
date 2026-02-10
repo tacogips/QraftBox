@@ -209,6 +209,7 @@ export function startServer(
       },
       port: config.port,
       hostname: config.host,
+      idleTimeout: 120,
     });
 
     return {
@@ -226,6 +227,7 @@ export function startServer(
     fetch: app.fetch,
     port: config.port,
     hostname: config.host,
+    idleTimeout: 120,
   });
 
   return {

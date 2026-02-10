@@ -181,12 +181,28 @@ export function createAIRoutes(context: AIServerContext): Hono {
       try {
         // Stream events until session is done
         while (true) {
+          let timedOutWaiting = false;
           // Wait for events if queue is empty
           if (eventQueue.length === 0) {
             await new Promise<void>((resolve) => {
               resolveWait = resolve;
               // Timeout to check for client disconnect
-              setTimeout(resolve, 5000);
+              setTimeout(() => {
+                timedOutWaiting = true;
+                resolve();
+              }, 5000);
+            });
+          }
+
+          // Send heartbeat to keep long-lived SSE connections alive
+          // when the agent is still thinking and no events are emitted.
+          if (timedOutWaiting && eventQueue.length === 0) {
+            await stream.writeSSE({
+              event: "ping",
+              data: JSON.stringify({
+                sessionId,
+                timestamp: new Date().toISOString(),
+              }),
             });
           }
 
