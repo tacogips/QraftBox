@@ -21,9 +21,10 @@
 
   interface Props {
     contextId: string;
+    projectPath?: string;
   }
 
-  const { contextId }: Props = $props();
+  const { contextId, projectPath }: Props = $props();
 
   /**
    * Status API response type
@@ -52,6 +53,15 @@
   }
 
   /**
+   * Worktree detection response type
+   */
+  interface WorktreeMainResponse {
+    isWorktree: boolean;
+    mainRepositoryPath: string | null;
+    mainRepositoryName: string | null;
+  }
+
+  /**
    * Git status data
    */
   let status = $state<StatusResponse | null>(null);
@@ -60,6 +70,11 @@
    * PR status data
    */
   let prStatus = $state<PRStatusResponse | null>(null);
+
+  /**
+   * Worktree detection data
+   */
+  let worktreeInfo = $state<WorktreeMainResponse | null>(null);
 
   /**
    * Branch name from status
@@ -111,10 +126,44 @@
   }
 
   /**
+   * Fetch worktree detection from API
+   */
+  async function fetchWorktreeInfo(): Promise<void> {
+    try {
+      const resp = await fetch(
+        `/api/ctx/${contextId}/worktree/${contextId}/worktree/main`,
+      );
+      if (resp.ok) {
+        worktreeInfo = (await resp.json()) as WorktreeMainResponse;
+      }
+    } catch {
+      // Silently handle errors - worktree info is non-critical
+    }
+  }
+
+  /**
+   * Extract directory name from path
+   */
+  function dirName(p: string): string {
+    const parts = p.replace(/\/$/, "").split("/");
+    const last = parts[parts.length - 1];
+    return last !== undefined && last.length > 0 ? last : "/";
+  }
+
+  /**
+   * Current directory display name (worktree name or project name)
+   */
+  const currentDirName = $derived(
+    projectPath !== undefined && projectPath.length > 0
+      ? dirName(projectPath)
+      : null,
+  );
+
+  /**
    * Fetch all data
    */
   async function fetchData(): Promise<void> {
-    await Promise.all([fetchStatus(), fetchPRStatus()]);
+    await Promise.all([fetchStatus(), fetchPRStatus(), fetchWorktreeInfo()]);
   }
 
   /**
@@ -140,6 +189,16 @@
       {contextId}
       currentBranch={branchName}
     />
+  {/if}
+
+  <!-- Worktree indicator (right of branch) -->
+  {#if worktreeInfo?.isWorktree && currentDirName !== null}
+    <span
+      class="px-1.5 py-0.5 text-xs rounded bg-attention-muted text-attention-fg"
+      title="Worktree: {projectPath ?? ''}"
+    >
+      worktree:{currentDirName}
+    </span>
   {/if}
 
   <!-- Separator -->

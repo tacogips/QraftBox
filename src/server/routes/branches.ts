@@ -16,6 +16,7 @@ import type {
   BranchMergeResponse,
   BranchCreateRequest,
   BranchCreateResponse,
+  BranchFetchResponse,
 } from "../../types/branch.js";
 import {
   listBranches,
@@ -23,6 +24,7 @@ import {
   checkoutBranch,
   mergeBranch,
   createBranch,
+  fetchBranch,
 } from "../git/branch.js";
 import {
   isGitOperationRunning,
@@ -457,6 +459,70 @@ export function createBranchRoutes(
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to create branch";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /fetch
+   *
+   * Fetch a branch from the remote (git fetch origin <branch>).
+   *
+   * Request body:
+   * - branch (optional): Branch name to fetch. If omitted, fetches all.
+   *
+   * Returns:
+   * - success: Boolean indicating success
+   * - branch: Branch name that was fetched
+   * - error (optional): Error message if fetch failed
+   */
+  app.post("/fetch", async (c) => {
+    const serverContext = context ?? c.get("serverContext");
+
+    if (serverContext === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: "Server context not available",
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+
+    let branch: string | undefined;
+    try {
+      const body = await c.req.json();
+      branch = (body as { branch?: string }).branch;
+    } catch {
+      // No body or invalid JSON - fetch all
+      branch = undefined;
+    }
+
+    // Block fetch while a git operation is in progress
+    if (isGitOperationRunning()) {
+      const errorResponse: ErrorResponse = {
+        error: `Cannot fetch while a git operation is in progress (${getOperationPhase()})`,
+        code: 409,
+      };
+      return c.json(errorResponse, 409);
+    }
+
+    try {
+      const result = await fetchBranch(serverContext.projectPath, branch);
+
+      const response: BranchFetchResponse = {
+        success: result.success,
+        branch: branch ?? "*",
+        error: result.error,
+      };
+
+      const statusCode = result.success ? 200 : 400;
+      return c.json(response, statusCode);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to fetch branch";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

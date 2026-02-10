@@ -28,6 +28,17 @@
 
   const { node, depth, selected, onSelect }: Props = $props();
 
+  let buttonEl = $state<HTMLButtonElement | null>(null);
+
+  /**
+   * Scroll the selected file node into view when selection changes
+   */
+  $effect(() => {
+    if (selected && buttonEl !== null) {
+      buttonEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+
   /**
    * Get status badge text based on file status
    */

@@ -13,7 +13,8 @@
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import GitPushButton from "../components/git-actions/GitPushButton.svelte";
   import HeaderStatusBadges from "../components/HeaderStatusBadges.svelte";
-  import WorktreeScreen from "../components/worktree/WorktreeScreen.svelte";
+  import ProjectScreen from "../components/project/ProjectScreen.svelte";
+  import WorktreeButton from "../components/worktree/WorktreeButton.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import CurrentStateView from "../components/CurrentStateView.svelte";
@@ -26,7 +27,7 @@
     | "diff"
     | "commits"
     | "sessions"
-    | "worktree"
+    | "project"
     | "tools"
     | "system-info";
 
@@ -37,7 +38,7 @@
     "diff",
     "commits",
     "sessions",
-    "worktree",
+    "project",
     "tools",
     "system-info",
   ]);
@@ -121,6 +122,39 @@
     selectedPath !== null
       ? (diffFiles.find((f) => f.path === selectedPath) ?? null)
       : (diffFiles[0] ?? null),
+  );
+
+  /**
+   * Index of the currently selected file in diffFiles
+   */
+  const selectedFileIndex = $derived(
+    selectedFile !== null
+      ? diffFiles.findIndex((f) => f.path === selectedFile.path)
+      : -1,
+  );
+
+  /**
+   * Navigate to the previous diff file
+   */
+  const navigatePrev = $derived(
+    selectedFileIndex > 0
+      ? () => {
+          const prev = diffFiles[selectedFileIndex - 1];
+          if (prev !== undefined) selectedPath = prev.path;
+        }
+      : undefined,
+  );
+
+  /**
+   * Navigate to the next diff file
+   */
+  const navigateNext = $derived(
+    selectedFileIndex >= 0 && selectedFileIndex < diffFiles.length - 1
+      ? () => {
+          const next = diffFiles[selectedFileIndex + 1];
+          if (next !== undefined) selectedPath = next.path;
+        }
+      : undefined,
   );
 
   /**
@@ -1306,12 +1340,12 @@
       <button
         type="button"
         class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-               {currentScreen === 'worktree'
+               {currentScreen === 'project'
           ? 'text-text-primary font-semibold border-accent-emphasis'
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => navigateToScreen("worktree")}
+        onclick={() => navigateToScreen("project")}
       >
-        Worktree
+        Project
       </button>
     </nav>
 
@@ -1416,7 +1450,13 @@
       </div>
     {/if}
     {#if contextId !== null}
-      <HeaderStatusBadges {contextId} />
+      <HeaderStatusBadges {contextId} {projectPath} />
+    {/if}
+
+    <!-- Worktree button -->
+    {#if contextId !== null}
+      <WorktreeButton {contextId} {projectPath} onWorktreeSwitch={() => void init()} />
+      <span class="text-border-default mx-1">|</span>
     {/if}
 
     <!-- Changes / Commits / Sessions tabs -->
@@ -1532,7 +1572,7 @@
           {:else if selectedFile !== null && viewMode === "current-state"}
             <!-- Current State View -->
             <div class="px-2 pb-2">
-              <CurrentStateView file={selectedFile} onCommentSubmit={handleInlineCommentSubmit} />
+              <CurrentStateView file={selectedFile} onCommentSubmit={handleInlineCommentSubmit} onNavigatePrev={navigatePrev} onNavigateNext={navigateNext} />
             </div>
           {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
             <!-- Diff View (side-by-side or inline) -->
@@ -1541,6 +1581,8 @@
                 file={selectedFile}
                 mode={viewMode === "side-by-side" ? "side-by-side" : "inline"}
                 onCommentSubmit={handleInlineCommentSubmit}
+                onNavigatePrev={navigatePrev}
+                onNavigateNext={navigateNext}
               />
             </div>
           {:else if viewMode === "full-file" && fileContentLoading}
@@ -1780,11 +1822,11 @@
           <UnifiedSessionsScreen {contextId} {projectPath} onResumeToChanges={handleResumeToChanges} />
         {/if}
       </main>
-    {:else if currentScreen === "worktree"}
-      <!-- Worktree Screen -->
+    {:else if currentScreen === "project"}
+      <!-- Project Screen -->
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
-          <WorktreeScreen {contextId} />
+          <ProjectScreen {contextId} {projectPath} onProjectChanged={() => void init()} />
         {/if}
       </main>
     {:else if currentScreen === "tools"}

@@ -5,11 +5,11 @@
    * Displays "Commit" and "Push" buttons and a 3-dot menu for git operations.
    * - "Commit" button: runs commit via Claude CLI
    * - "Push" button: runs git push directly (no AI)
-   * - 3-dot menu: Commit with custom ctx, Fetch, Merge,
-   *   Create PR, Open current PR in Browser, Merge PR.
+   * - 3-dot menu: Commit with custom ctx,
+   *   Create PR, Open current PR in Browser.
    *
    * Commit and Create PR use Claude Code agent (claude CLI).
-   * Push, Fetch, and Merge use direct git commands.
+   * Push uses direct git commands.
    * Success/error notifications shown as toast from top.
    */
 
@@ -23,7 +23,7 @@
 
   // Menu state
   let menuOpen = $state(false);
-  let customCtxAction = $state<"commit" | "fetch" | "merge" | null>(null);
+  let customCtxAction = $state<"commit" | null>(null);
   let customCtxText = $state("");
 
   // Dropdown position (fixed, viewport-relative)
@@ -261,50 +261,37 @@
   async function handleCustomCtxSubmit(): Promise<void> {
     if (customCtxAction === null) return;
 
-    const action = customCtxAction;
     const customCtx = customCtxText.trim();
-    const actionId = action === "commit" ? createActionId() : null;
+    const actionId = createActionId();
 
     operating = true;
-    operationPhase = action === "commit" ? "committing" : "idle";
+    operationPhase = "committing";
     activeActionId = actionId;
     cancellingOperation = false;
 
     try {
-      let result: GitActionResult;
-
-      if (action === "commit") {
-        const resp = await fetch("/api/git-actions/commit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            projectPath,
-            ...(actionId !== null ? { actionId } : {}),
-            ...(customCtx.length > 0 ? { customCtx } : {}),
-          }),
-        });
-        if (!resp.ok) {
-          const errData = (await resp.json().catch(() => ({}))) as {
-            error?: string;
-          };
-          throw new Error(errData.error ?? `Commit failed: ${resp.status}`);
-        }
-        result = (await resp.json()) as GitActionResult;
-      } else {
-        // fetch / merge - not yet wired to git-actions endpoints
-        const actionLabel = action === "fetch" ? "Fetch" : "Merge";
-        throw new Error(
-          `${actionLabel} is not yet available via git-actions endpoint`,
-        );
+      const resp = await fetch("/api/git-actions/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectPath,
+          actionId,
+          ...(customCtx.length > 0 ? { customCtx } : {}),
+        }),
+      });
+      if (!resp.ok) {
+        const errData = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Commit failed: ${resp.status}`);
       }
+      const result = (await resp.json()) as GitActionResult;
 
       if (!result.success) {
-        throw new Error(result.error ?? `${action} failed`);
+        throw new Error(result.error ?? "Commit failed");
       }
 
-      const actionLabel =
-        action === "commit" ? "Commit" : action === "fetch" ? "Fetch" : "Merge";
-      showToast(`${actionLabel} completed`, "success");
+      showToast("Commit completed", "success");
       onSuccess?.();
       customCtxAction = null;
       customCtxText = "";
@@ -449,45 +436,6 @@
       const msg = e instanceof Error ? e.message : "Failed to cancel operation";
       showToast(msg, "error");
       cancellingOperation = false;
-    }
-  }
-
-  /**
-   * Merge the current PR
-   */
-  async function handleMergePR(): Promise<void> {
-    if (prNumber === null) return;
-
-    operating = true;
-    menuOpen = false;
-
-    try {
-      const resp = await fetch(
-        `/api/ctx/${contextId}/pr/${contextId}/${prNumber}/merge`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mergeMethod: "merge" }),
-        },
-      );
-      if (!resp.ok) {
-        const errData = (await resp.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(
-          errData !== null && errData.error !== undefined
-            ? errData.error
-            : `Merge failed: ${resp.status}`,
-        );
-      }
-      showToast(`PR #${prNumber} merged`, "success");
-      prNumber = null;
-      currentPRUrl = null;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Merge failed";
-      showToast(msg, "error");
-    } finally {
-      operating = false;
     }
   }
 
@@ -684,90 +632,6 @@
       </div>
     {/if}
 
-    <!-- Fetch -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             text-text-primary border-t border-border-default
-             {customCtxAction === 'fetch' ? 'bg-bg-tertiary' : ''}"
-      onclick={(e) => {
-        e.stopPropagation();
-        customCtxAction = customCtxAction === "fetch" ? null : "fetch";
-        customCtxText = "";
-      }}
-      disabled={operating}
-    >
-      Fetch
-    </button>
-
-    {#if customCtxAction === "fetch"}
-      <div
-        class="px-3 py-2 border-t border-border-default bg-bg-primary"
-        role="presentation"
-      >
-        <textarea
-          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
-                 rounded text-text-primary font-mono resize-y
-                 focus:outline-none focus:border-accent-emphasis"
-          placeholder="Enter fetch instructions (e.g. specific remote)..."
-          bind:value={customCtxText}
-          disabled={operating}
-        ></textarea>
-        <button
-          type="button"
-          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
-                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomCtxSubmit()}
-          disabled={operating}
-        >
-          {operating ? "Running..." : "Fetch"}
-        </button>
-      </div>
-    {/if}
-
-    <!-- Merge -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             text-text-primary border-t border-border-default
-             {customCtxAction === 'merge' ? 'bg-bg-tertiary' : ''}"
-      onclick={(e) => {
-        e.stopPropagation();
-        customCtxAction = customCtxAction === "merge" ? null : "merge";
-        customCtxText = "";
-      }}
-      disabled={operating}
-    >
-      Merge
-    </button>
-
-    {#if customCtxAction === "merge"}
-      <div
-        class="px-3 py-2 border-t border-border-default bg-bg-primary"
-        role="presentation"
-      >
-        <textarea
-          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
-                 rounded text-text-primary font-mono resize-y
-                 focus:outline-none focus:border-accent-emphasis"
-          placeholder="Enter merge instructions (e.g. branch name, --no-ff)..."
-          bind:value={customCtxText}
-          disabled={operating}
-        ></textarea>
-        <button
-          type="button"
-          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
-                 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomCtxSubmit()}
-          disabled={operating}
-        >
-          {operating ? "Running..." : "Merge"}
-        </button>
-      </div>
-    {/if}
-
     <!-- Separator -->
     <div class="border-t border-border-default"></div>
 
@@ -848,23 +712,6 @@
       {/if}
     </button>
 
-    <!-- Merge PR -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             border-t border-border-default
-             {prNumber !== null
-        ? 'text-text-primary'
-        : 'text-text-tertiary cursor-not-allowed'}"
-      onclick={() => void handleMergePR()}
-      disabled={prNumber === null || operating || prLoading}
-    >
-      Merge PR
-      {#if prNumber !== null}
-        <span class="text-xs text-text-secondary ml-1">(#{prNumber})</span>
-      {/if}
-    </button>
   </div>
 {/if}
 

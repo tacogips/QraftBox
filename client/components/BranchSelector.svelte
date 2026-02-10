@@ -30,6 +30,19 @@
     readonly error?: string | undefined;
   }
 
+  interface FetchResponse {
+    readonly success: boolean;
+    readonly branch: string;
+    readonly error?: string | undefined;
+  }
+
+  interface MergeResponse {
+    readonly success: boolean;
+    readonly mergedBranch: string;
+    readonly currentBranch: string;
+    readonly error?: string | undefined;
+  }
+
   /** Whether dropdown is open */
   let isOpen = $state(false);
 
@@ -191,6 +204,73 @@
   }
 
   /**
+   * Fetch the current branch from remote
+   */
+  async function fetchCurrentBranch(): Promise<void> {
+    await checkGitOperationStatus();
+    if (gitOperationRunning) {
+      errorMessage = `Cannot fetch while ${gitOperationPhase} is in progress`;
+      return;
+    }
+
+    errorMessage = null;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/branches/fetch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: currentBranch }),
+      });
+      const data = (await resp.json()) as FetchResponse;
+      if (data.success) {
+        successMessage = `Fetched ${currentBranch}`;
+        setTimeout(() => {
+          successMessage = null;
+          branchListPanel?.initialize();
+        }, 800);
+      } else {
+        errorMessage = data.error ?? "Fetch failed";
+      }
+    } catch {
+      errorMessage = "Fetch failed";
+    }
+  }
+
+  /**
+   * Merge a branch into the current branch
+   */
+  async function mergeBranchIntoCurrent(branch: {
+    name: string;
+  }): Promise<void> {
+    await checkGitOperationStatus();
+    if (gitOperationRunning) {
+      errorMessage = `Cannot merge while ${gitOperationPhase} is in progress`;
+      return;
+    }
+
+    errorMessage = null;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/branches/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ branch: branch.name }),
+      });
+      const data = (await resp.json()) as MergeResponse;
+      if (data.success) {
+        successMessage = `Merged ${data.mergedBranch} into ${data.currentBranch}`;
+        setTimeout(() => {
+          close();
+          successMessage = null;
+          window.location.reload();
+        }, 1200);
+      } else {
+        errorMessage = data.error ?? "Merge failed";
+      }
+    } catch {
+      errorMessage = "Merge failed";
+    }
+  }
+
+  /**
    * Handle keydown in the dropdown (Escape to close)
    */
   function handleKeydown(event: KeyboardEvent): void {
@@ -287,6 +367,8 @@
       disableCurrentBranch={false}
       selectedBranch={currentBranch}
       onCreateBranch={(name) => void createNewBranch(name)}
+      onFetchBranch={() => void fetchCurrentBranch()}
+      onMergeBranch={(branch) => void mergeBranchIntoCurrent(branch)}
     />
   </div>
 {/if}

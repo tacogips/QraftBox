@@ -393,6 +393,28 @@
   });
 
   /**
+   * Auto-expand ancestor directories when selectedPath changes
+   * so that the selected file is always visible in the tree.
+   */
+  $effect(() => {
+    if (selectedPath === null) return;
+    const segments = selectedPath.split("/");
+    if (segments.length <= 1) return;
+    const newExpanded = new Set(expandedPaths);
+    let changed = false;
+    for (let i = 1; i < segments.length; i++) {
+      const ancestor = segments.slice(0, i).join("/");
+      if (!newExpanded.has(ancestor)) {
+        newExpanded.add(ancestor);
+        changed = true;
+      }
+    }
+    if (changed) {
+      expandedPaths = newExpanded;
+    }
+  });
+
+  /**
    * Click outside handler to close dropdown
    */
   $effect(() => {
