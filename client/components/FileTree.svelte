@@ -127,6 +127,20 @@
     }
   }
 
+  /**
+   * Clear status filter when switching to "all" mode
+   * In "all" mode, status filters would hide most files (unchanged files have no status)
+   */
+  let prevMode: "diff" | "all" = mode;
+  $effect(() => {
+    if (mode !== prevMode) {
+      if (mode === "all") {
+        statusFilter = null;
+      }
+      prevMode = mode;
+    }
+  });
+
   $effect(() => {
     void fetchUncommittedCount();
     const intervalId = setInterval(() => {

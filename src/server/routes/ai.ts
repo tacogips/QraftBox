@@ -9,6 +9,7 @@ import { streamSSE } from "hono/streaming";
 import type { AIPromptRequest, AIProgressEvent } from "../../types/ai";
 import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
+import { createLogger } from "../logger.js";
 
 /**
  * Server context for AI routes
@@ -41,6 +42,7 @@ interface ErrorResponse {
  * @returns Hono app with AI routes
  */
 export function createAIRoutes(context: AIServerContext): Hono {
+  const logger = createLogger("AIRoutes");
   const app = new Hono();
 
   /**
@@ -144,6 +146,8 @@ export function createAIRoutes(context: AIServerContext): Hono {
 
     // Set SSE headers
     return streamSSE(c, async (stream) => {
+      const streamOpenedAt = Date.now();
+      let firstEventLogged = false;
       // Send initial connection event
       await stream.writeSSE({
         event: "connected",
@@ -210,6 +214,14 @@ export function createAIRoutes(context: AIServerContext): Hono {
           while (eventQueue.length > 0) {
             const event = eventQueue.shift();
             if (event !== undefined) {
+              if (!firstEventLogged) {
+                firstEventLogged = true;
+                logger.info("first SSE event", {
+                  sessionId,
+                  type: event.type,
+                  elapsedMs: Date.now() - streamOpenedAt,
+                });
+              }
               await stream.writeSSE({
                 event: event.type,
                 data: JSON.stringify(event),

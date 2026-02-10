@@ -195,6 +195,7 @@
    */
   let allFilesTree = $state<FileNode | null>(null);
   let allFilesLoading = $state(false);
+  let allFilesTreeStale = false;
 
   /**
    * Map of file paths to their diff status
@@ -235,8 +236,9 @@
    * Fetch all files tree from server
    */
   async function fetchAllFiles(ctxId: string): Promise<void> {
-    if (allFilesTree !== null) return;
-    allFilesLoading = true;
+    if (allFilesTree !== null && !allFilesTreeStale) return;
+    allFilesLoading = allFilesTree === null;
+    allFilesTreeStale = false;
     try {
       const resp = await fetch(`/api/ctx/${ctxId}/files?mode=all`);
       if (!resp.ok) throw new Error(`Files API error: ${resp.status}`);
@@ -246,6 +248,21 @@
       console.error("Failed to fetch all files:", e);
     } finally {
       allFilesLoading = false;
+    }
+  }
+
+  /**
+   * Re-fetch all files tree (ignores cache, does not show loading state)
+   */
+  async function refreshAllFiles(ctxId: string): Promise<void> {
+    try {
+      const resp = await fetch(`/api/ctx/${ctxId}/files?mode=all`);
+      if (!resp.ok) throw new Error(`Files API error: ${resp.status}`);
+      const data = (await resp.json()) as { tree: ServerFileNode };
+      allFilesTree = convertServerTree(data.tree);
+      allFilesTreeStale = false;
+    } catch (e) {
+      console.error("Failed to refresh all files:", e);
     }
   }
 
@@ -1177,11 +1194,17 @@
       try {
         const msg = JSON.parse(event.data) as { event: string; data: unknown };
         if (msg.event === "file-change" && contextId !== null) {
+          // Mark all-files cache as stale so next switch re-fetches
+          allFilesTreeStale = true;
           // Debounce refetch: wait 500ms after last event
           if (refetchTimer !== null) clearTimeout(refetchTimer);
           refetchTimer = setTimeout(() => {
             if (contextId !== null) {
               void fetchDiff(contextId);
+              // Re-fetch all-files tree if currently in "all" mode
+              if (fileTreeMode === "all") {
+                void refreshAllFiles(contextId);
+              }
             }
             refetchTimer = null;
           }, 500);
@@ -1335,17 +1358,6 @@
             }}
           >
             System Info
-          </button>
-          <div class="border-t border-border-default my-1"></div>
-          <button
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary transition-colors"
-            onclick={() => {
-              mergeDialogOpen = true;
-              headerMenuOpen = false;
-            }}
-          >
-            Merge
           </button>
         </div>
       {/if}

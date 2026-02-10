@@ -69,6 +69,16 @@
 
   function formatDate(dateStr: string): string {
     try {
+      // Parse YYYY-MM-DD as local date (not UTC) to avoid timezone-induced date shift
+      const parts = dateStr.split("-");
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return d.toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
       const d = new Date(dateStr);
       return d.toLocaleDateString(undefined, {
         year: "numeric",

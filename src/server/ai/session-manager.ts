@@ -226,8 +226,13 @@ export function createSessionManager(
         const resumeSessionId = session.request.options.resumeSessionId;
         const toolAgentSession =
           resumeSessionId !== undefined
-            ? await agent.resumeSession(resumeSessionId, session.fullPrompt)
-            : await agent.startSession({ prompt: session.fullPrompt });
+            ? await agent.startSession({
+                prompt: session.fullPrompt,
+                resumeSessionId,
+              })
+            : await agent.startSession({
+                prompt: session.fullPrompt,
+              });
 
         session.toolAgentSession = toolAgentSession;
         if (resumeSessionId !== undefined && resumeSessionId.length > 0) {
@@ -245,6 +250,7 @@ export function createSessionManager(
         // Session started
 
         // Listen for events
+        let streamedAssistantContent = "";
         toolAgentSession.on("message", (msg: unknown) => {
           const claudeSessionId = extractClaudeSessionId(msg);
           if (
@@ -264,10 +270,35 @@ export function createSessionManager(
           if (typeof msg === "object" && msg !== null && "type" in msg) {
             const rawMsg = msg as {
               type?: string;
+              event?: {
+                type?: string;
+                delta?: { type?: string; text?: string };
+              };
               message?: { role?: string; content?: unknown };
               content?: unknown;
             };
             const msgType = rawMsg.type;
+
+            if (
+              msgType === "stream_event" &&
+              rawMsg.event?.type === "content_block_delta" &&
+              rawMsg.event.delta?.type === "text_delta" &&
+              typeof rawMsg.event.delta.text === "string"
+            ) {
+              streamedAssistantContent += rawMsg.event.delta.text;
+              if (streamedAssistantContent.length > 0) {
+                session.lastAssistantMessage = streamedAssistantContent;
+                session.currentActivity = undefined;
+                emitEvent(
+                  sessionId,
+                  createProgressEvent("message", sessionId, {
+                    role: "assistant",
+                    content: streamedAssistantContent,
+                  }),
+                );
+              }
+              return;
+            }
 
             // Only capture assistant messages for lastAssistantMessage
             if (msgType !== "assistant") return;
@@ -296,6 +327,7 @@ export function createSessionManager(
             }
 
             if (content !== undefined && content.length > 0) {
+              streamedAssistantContent = content;
               session.lastAssistantMessage = content;
               session.currentActivity = undefined;
               emitEvent(
@@ -385,6 +417,14 @@ export function createSessionManager(
 
         // Wait for completion
         const sessionResult = await toolAgentSession.waitForCompletion();
+        logger.info("toolAgentSession.waitForCompletion done", {
+          sessionId,
+          success: sessionResult.success,
+          elapsedFromStartMs:
+            session.startedAt !== undefined
+              ? Date.now() - session.startedAt.getTime()
+              : null,
+        });
         const finalAgentState = toolAgentSession.getState().state;
 
         // Keep explicit cancellation as cancelled (don't downgrade to failed)
