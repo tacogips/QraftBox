@@ -198,6 +198,19 @@
       close();
     }
   }
+
+  /**
+   * Periodic polling for git operation status while dropdown is open
+   */
+  $effect(() => {
+    if (!isOpen) return;
+    const intervalId = setInterval(() => {
+      void checkGitOperationStatus();
+    }, 2000);
+    return () => {
+      clearInterval(intervalId);
+    };
+  });
 </script>
 
 <!-- Trigger button -->
@@ -269,6 +282,7 @@
       warningMessage={gitOperationRunning
         ? `Branch switching disabled while ${gitOperationPhase} is in progress`
         : undefined}
+      disabled={gitOperationRunning}
       onSelect={(branch) => void checkout(branch)}
       disableCurrentBranch={false}
       selectedBranch={currentBranch}
