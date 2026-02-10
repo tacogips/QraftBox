@@ -9,6 +9,7 @@ import { streamSSE } from "hono/streaming";
 import type { AIPromptRequest, AIProgressEvent } from "../../types/ai";
 import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
+import type { PromptStore } from "../../types/local-prompt";
 import { createLogger } from "../logger.js";
 
 /**
@@ -17,6 +18,7 @@ import { createLogger } from "../logger.js";
 export interface AIServerContext {
   readonly projectPath: string;
   readonly sessionManager: SessionManager;
+  readonly promptStore?: PromptStore | undefined;
 }
 
 /**
@@ -25,6 +27,43 @@ export interface AIServerContext {
 interface ErrorResponse {
   readonly error: string;
   readonly code: number;
+}
+
+/**
+ * Subscribe to session events and sync prompt status on terminal events.
+ * Fire-and-forget - errors are silently ignored.
+ */
+function syncPromptWithSession(
+  sessionManager: SessionManager,
+  promptStore: PromptStore,
+  sessionId: string,
+  promptId: string,
+): void {
+  const unsubscribe = sessionManager.subscribe(sessionId, (event) => {
+    if (event.type === "completed") {
+      void promptStore
+        .update(promptId, { status: "completed" })
+        .catch(() => {});
+      unsubscribe();
+    } else if (event.type === "error") {
+      const errorData = event.data as { message?: string };
+      void promptStore
+        .update(promptId, {
+          status: "failed",
+          error:
+            typeof errorData.message === "string"
+              ? errorData.message
+              : "Session failed",
+        })
+        .catch(() => {});
+      unsubscribe();
+    } else if (event.type === "cancelled") {
+      void promptStore
+        .update(promptId, { status: "cancelled" })
+        .catch(() => {});
+      unsubscribe();
+    }
+  });
 }
 
 /**
@@ -73,9 +112,65 @@ export function createAIRoutes(context: AIServerContext): Hono {
         return c.json(errorResponse, 400);
       }
 
-      // Submit to session manager
-      const result = await context.sessionManager.submit(request);
-      return c.json(result);
+      // Auto-persist prompt to local store for crash recovery
+      let localPromptId: string | undefined;
+      if (context.promptStore !== undefined) {
+        try {
+          const localPrompt = await context.promptStore.create({
+            prompt: request.prompt,
+            context: request.context,
+            projectPath: request.options.projectPath,
+          });
+          localPromptId = localPrompt.id;
+          await context.promptStore.update(localPromptId, {
+            status: "dispatching",
+          });
+        } catch {
+          // Non-critical: prompt persistence failure should not block execution
+        }
+      }
+
+      try {
+        // Submit to session manager
+        const result = await context.sessionManager.submit(request);
+
+        // Update prompt with session ID and subscribe for completion sync
+        if (context.promptStore !== undefined && localPromptId !== undefined) {
+          try {
+            await context.promptStore.update(localPromptId, {
+              status: "dispatched",
+              sessionId: result.sessionId,
+            });
+          } catch {
+            // Non-critical
+          }
+
+          // Subscribe to session events for prompt status sync
+          syncPromptWithSession(
+            context.sessionManager,
+            context.promptStore,
+            result.sessionId,
+            localPromptId,
+          );
+        }
+
+        return c.json(result);
+      } catch (submitError) {
+        // Mark prompt as failed if dispatch failed
+        if (context.promptStore !== undefined && localPromptId !== undefined) {
+          const errorMessage =
+            submitError instanceof Error
+              ? submitError.message
+              : "Failed to submit prompt";
+          void context.promptStore
+            .update(localPromptId, {
+              status: "failed",
+              error: errorMessage,
+            })
+            .catch(() => {});
+        }
+        throw submitError;
+      }
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to submit prompt";

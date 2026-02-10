@@ -172,5 +172,54 @@ export function createPromptStore(storageDir?: string): PromptStore {
         throw e;
       }
     },
+
+    async recoverInterrupted(): Promise<number> {
+      await ensureDir();
+
+      // Read all prompts
+      let entries: string[];
+      try {
+        entries = await readdir(dir);
+      } catch (e: unknown) {
+        if (isNotFoundError(e)) {
+          return 0;
+        }
+        throw e;
+      }
+
+      const jsonFiles = entries.filter((entry) => entry.endsWith(".json"));
+      let count = 0;
+
+      for (const filename of jsonFiles) {
+        try {
+          const content = await readFile(join(dir, filename), "utf-8");
+          const prompt = JSON.parse(content) as LocalPrompt;
+
+          if (
+            prompt.status === "dispatching" ||
+            prompt.status === "dispatched"
+          ) {
+            const updated: LocalPrompt = {
+              ...prompt,
+              status: "pending",
+              sessionId: null,
+              error: "Interrupted by server restart",
+              updatedAt: new Date().toISOString(),
+            };
+            await writeFile(
+              join(dir, filename),
+              JSON.stringify(updated, null, 2),
+              "utf-8",
+            );
+            count++;
+          }
+        } catch {
+          // Skip files that cannot be read or parsed
+          continue;
+        }
+      }
+
+      return count;
+    },
   };
 }

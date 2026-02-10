@@ -128,6 +128,20 @@ export function createServer(options: ServerOptions): Hono {
   );
   const promptStore = createPromptStore();
 
+  // Recover prompts interrupted by previous server shutdown
+  void promptStore
+    .recoverInterrupted()
+    .then((count) => {
+      if (count > 0) {
+        logger.info(
+          `Recovered ${count} interrupted prompt(s) to pending state`,
+        );
+      }
+    })
+    .catch((e: unknown) => {
+      logger.error("Failed to recover interrupted prompts", e);
+    });
+
   // Initialize system prompt files (fire and forget)
   void ensureSystemPromptFiles().catch((e) => {
     logger.error("Failed to initialize system prompt files", e);

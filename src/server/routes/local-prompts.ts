@@ -71,9 +71,10 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       const prompt = await config.promptStore.create({
         prompt: body.prompt,
-        context: body.context !== undefined && body.context !== null
-          ? { ...body.context, references: body.context.references ?? [] }
-          : { references: [] },
+        context:
+          body.context !== undefined && body.context !== null
+            ? { ...body.context, references: body.context.references ?? [] }
+            : { references: [] },
         projectPath: body.projectPath ?? "",
       });
 
@@ -238,7 +239,8 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       try {
         // Submit to session manager
         const resumeId =
-          typeof body.resumeSessionId === "string" && body.resumeSessionId.length > 0
+          typeof body.resumeSessionId === "string" &&
+          body.resumeSessionId.length > 0
             ? body.resumeSessionId
             : undefined;
         const result = await config.sessionManager.submit({
@@ -257,6 +259,36 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
           status: "dispatched",
           sessionId: result.sessionId,
         });
+
+        // Subscribe to session events for prompt status sync
+        const unsubscribe = config.sessionManager.subscribe(
+          result.sessionId,
+          (event) => {
+            if (event.type === "completed") {
+              void config.promptStore
+                .update(id, { status: "completed" })
+                .catch(() => {});
+              unsubscribe();
+            } else if (event.type === "error") {
+              const errorData = event.data as { message?: string };
+              void config.promptStore
+                .update(id, {
+                  status: "failed",
+                  error:
+                    typeof errorData.message === "string"
+                      ? errorData.message
+                      : "Session failed",
+                })
+                .catch(() => {});
+              unsubscribe();
+            } else if (event.type === "cancelled") {
+              void config.promptStore
+                .update(id, { status: "cancelled" })
+                .catch(() => {});
+              unsubscribe();
+            }
+          },
+        );
 
         return c.json({ prompt: updated, session: result });
       } catch (dispatchError) {

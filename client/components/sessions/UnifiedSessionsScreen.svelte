@@ -12,10 +12,12 @@
    */
 
   import type { AISession } from "../../../src/types/ai";
+  import type { LocalPrompt } from "../../../src/types/local-prompt";
   import { createQueueStore } from "../../src/stores/queue";
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import ActiveSessionsPanel from "./ActiveSessionsPanel.svelte";
   import HistorySessionsPanel from "./HistorySessionsPanel.svelte";
+  import PendingPromptsPanel from "./PendingPromptsPanel.svelte";
 
   interface Props {
     contextId: string;
@@ -23,7 +25,11 @@
     onResumeToChanges?: (() => void) | undefined;
   }
 
-  const { contextId, projectPath, onResumeToChanges = undefined }: Props = $props();
+  const {
+    contextId,
+    projectPath,
+    onResumeToChanges = undefined,
+  }: Props = $props();
 
   /**
    * Queue store instance
@@ -32,11 +38,29 @@
   let runningSessions = $state<readonly AISession[]>([]);
   let queuedSessions = $state<readonly AISession[]>([]);
   let completedSessions = $state<readonly AISession[]>([]);
+  let pendingPrompts = $state<LocalPrompt[]>([]);
 
   function syncFromQueueStore(): void {
     runningSessions = [...queueStore.running];
     queuedSessions = [...queueStore.queued];
     completedSessions = [...queueStore.completed];
+  }
+
+  /**
+   * Fetch pending prompts from local prompt store
+   */
+  async function fetchPendingPrompts(): Promise<void> {
+    try {
+      const response = await fetch("/api/prompts?status=pending");
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        prompts: LocalPrompt[];
+        total: number;
+      };
+      pendingPrompts = data.prompts;
+    } catch {
+      // Non-critical
+    }
   }
 
   /**
@@ -53,7 +77,7 @@
   }
 
   /**
-   * Load queue on mount
+   * Load queue and pending prompts on mount
    */
   $effect(() => {
     let cancelled = false;
@@ -61,6 +85,7 @@
 
     const refresh = async (): Promise<void> => {
       await queueStore.loadQueue();
+      await fetchPendingPrompts();
       if (!cancelled) {
         syncFromQueueStore();
       }
@@ -80,10 +105,12 @@
   });
 
   /**
-   * Whether there are any active (running/queued) sessions
+   * Whether there are any active (running/queued) sessions or pending prompts
    */
   const hasActiveSessions = $derived(
-    runningSessions.length > 0 || queuedSessions.length > 0,
+    runningSessions.length > 0 ||
+      queuedSessions.length > 0 ||
+      pendingPrompts.length > 0,
   );
 
   /**
@@ -155,6 +182,80 @@
       console.error("Failed to clear completed:", e);
     }
   }
+
+  /**
+   * Handle resume pending prompt - dispatch it
+   */
+  async function handleResumePendingPrompt(promptId: string): Promise<void> {
+    try {
+      const response = await fetch(`/api/prompts/${promptId}/dispatch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ immediate: true }),
+      });
+      if (response.ok) {
+        await fetchPendingPrompts();
+        await queueStore.loadQueue();
+        syncFromQueueStore();
+      }
+    } catch (e) {
+      console.error("Failed to resume prompt:", e);
+    }
+  }
+
+  /**
+   * Handle cancel pending prompt
+   */
+  async function handleCancelPendingPrompt(promptId: string): Promise<void> {
+    try {
+      const response = await fetch(`/api/prompts/${promptId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "cancelled" }),
+      });
+      if (response.ok) {
+        await fetchPendingPrompts();
+      }
+    } catch (e) {
+      console.error("Failed to cancel prompt:", e);
+    }
+  }
+
+  /**
+   * Handle cancel all pending prompts
+   */
+  async function handleCancelAllPendingPrompts(): Promise<void> {
+    try {
+      await Promise.all(
+        pendingPrompts.map((p) =>
+          fetch(`/api/prompts/${p.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: "cancelled" }),
+          }),
+        ),
+      );
+      await fetchPendingPrompts();
+    } catch (e) {
+      console.error("Failed to cancel all pending prompts:", e);
+    }
+  }
+
+  /**
+   * Handle delete pending prompt
+   */
+  async function handleDeletePendingPrompt(promptId: string): Promise<void> {
+    try {
+      const response = await fetch(`/api/prompts/${promptId}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        await fetchPendingPrompts();
+      }
+    } catch (e) {
+      console.error("Failed to delete prompt:", e);
+    }
+  }
 </script>
 
 <div
@@ -164,9 +265,16 @@
 >
   <!-- Single scrollable content area -->
   <div class="flex-1 overflow-y-auto">
-    <!-- Active sessions (running/queued) shown at top when present -->
+    <!-- Active sessions (running/queued) and pending prompts shown at top when present -->
     {#if hasActiveSessions}
       <div class="px-4 py-4 border-b border-border-default">
+        <PendingPromptsPanel
+          prompts={pendingPrompts}
+          onResume={(id) => void handleResumePendingPrompt(id)}
+          onCancel={(id) => void handleCancelPendingPrompt(id)}
+          onCancelAll={() => void handleCancelAllPendingPrompts()}
+          onDelete={(id) => void handleDeletePendingPrompt(id)}
+        />
         <ActiveSessionsPanel
           running={[...runningSessions]}
           queued={[...queuedSessions]}
@@ -181,7 +289,7 @@
     <!-- Session history list (always visible) -->
     <HistorySessionsPanel
       {contextId}
-      completedSessions={completedSessions}
+      {completedSessions}
       onResumeSession={handleResumeSession}
       onSelectSession={() => {}}
       onClearCompleted={handleClearCompleted}

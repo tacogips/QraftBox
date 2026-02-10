@@ -187,6 +187,7 @@ export function getNonContextRouteGroups(
       routes: createAIRoutes({
         projectPath: "", // Will be set by request
         sessionManager: config.sessionManager,
+        promptStore: config.promptStore,
       }),
     },
     // Local prompt management routes - /api/prompts

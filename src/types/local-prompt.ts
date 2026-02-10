@@ -120,6 +120,13 @@ export interface PromptStore {
    * Delete a prompt
    */
   delete(id: string): Promise<boolean>;
+
+  /**
+   * Recover prompts interrupted by server restart.
+   * Resets prompts with status "dispatching" or "dispatched" back to "pending".
+   * @returns Number of recovered prompts
+   */
+  recoverInterrupted(): Promise<number>;
 }
 
 /**
