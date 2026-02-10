@@ -29,6 +29,15 @@
    * Queue store instance
    */
   const queueStore = createQueueStore();
+  let runningSessions = $state<readonly AISession[]>([]);
+  let queuedSessions = $state<readonly AISession[]>([]);
+  let completedSessions = $state<readonly AISession[]>([]);
+
+  function syncFromQueueStore(): void {
+    runningSessions = [...queueStore.running];
+    queuedSessions = [...queueStore.queued];
+    completedSessions = [...queueStore.completed];
+  }
 
   /**
    * Set context ID and initial project filter on the claude sessions store synchronously
@@ -47,14 +56,34 @@
    * Load queue on mount
    */
   $effect(() => {
-    void queueStore.loadQueue();
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const refresh = async (): Promise<void> => {
+      await queueStore.loadQueue();
+      if (!cancelled) {
+        syncFromQueueStore();
+      }
+    };
+
+    void refresh();
+    timer = setInterval(() => {
+      void refresh();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      if (timer !== null) {
+        clearInterval(timer);
+      }
+    };
   });
 
   /**
    * Whether there are any active (running/queued) sessions
    */
   const hasActiveSessions = $derived(
-    queueStore.running.length > 0 || queueStore.queued.length > 0,
+    runningSessions.length > 0 || queuedSessions.length > 0,
   );
 
   /**
@@ -70,6 +99,7 @@
   async function handleCancelSession(sessionId: string): Promise<void> {
     try {
       await queueStore.cancelSession(sessionId);
+      syncFromQueueStore();
     } catch (e) {
       console.error("Failed to cancel session:", e);
     }
@@ -81,6 +111,7 @@
   async function handleRunNow(sessionId: string): Promise<void> {
     try {
       await queueStore.runNow(sessionId);
+      syncFromQueueStore();
     } catch (e) {
       console.error("Failed to run session:", e);
     }
@@ -92,6 +123,7 @@
   async function handleRemoveFromQueue(sessionId: string): Promise<void> {
     try {
       await queueStore.removeFromQueue(sessionId);
+      syncFromQueueStore();
     } catch (e) {
       console.error("Failed to remove session:", e);
     }
@@ -118,6 +150,7 @@
   async function handleClearCompleted(): Promise<void> {
     try {
       await queueStore.clearCompleted();
+      syncFromQueueStore();
     } catch (e) {
       console.error("Failed to clear completed:", e);
     }
@@ -135,8 +168,8 @@
     {#if hasActiveSessions}
       <div class="px-4 py-4 border-b border-border-default">
         <ActiveSessionsPanel
-          running={queueStore.running}
-          queued={queueStore.queued}
+          running={[...runningSessions]}
+          queued={[...queuedSessions]}
           onSelectSession={handleSelectSession}
           onCancelSession={(id) => void handleCancelSession(id)}
           onRunNow={(id) => void handleRunNow(id)}
@@ -148,7 +181,7 @@
     <!-- Session history list (always visible) -->
     <HistorySessionsPanel
       {contextId}
-      completedSessions={queueStore.completed}
+      completedSessions={completedSessions}
       onResumeSession={handleResumeSession}
       onSelectSession={() => {}}
       onClearCompleted={handleClearCompleted}

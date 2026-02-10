@@ -1,0 +1,35 @@
+import { describe, expect, it } from "vitest";
+import { stripSystemTags } from "./strip-system-tags";
+
+describe("stripSystemTags", () => {
+  it("removes command/system metadata tags with content", () => {
+    const input = [
+      "hello",
+      "<command-message>internal</command-message>",
+      "world",
+    ].join("\n");
+
+    expect(stripSystemTags(input)).toBe("hello\n\nworld");
+  });
+
+  it("unwraps qraftbox-system-prompt and keeps inner content", () => {
+    const input = [
+      "<qraftbox-system-prompt>",
+      "Commit this change",
+      "</qraftbox-system-prompt>",
+    ].join("\n");
+
+    expect(stripSystemTags(input)).toBe("Commit this change");
+  });
+
+  it("handles mixed qraftbox wrapper and command metadata tags", () => {
+    const input = [
+      "<qraftbox-system-prompt>",
+      "Please fix tests",
+      "<system-reminder>hidden</system-reminder>",
+      "</qraftbox-system-prompt>",
+    ].join("\n");
+
+    expect(stripSystemTags(input)).toBe("Please fix tests");
+  });
+});

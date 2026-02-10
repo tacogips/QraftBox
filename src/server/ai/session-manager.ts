@@ -17,6 +17,7 @@ import type {
 import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import { SessionRegistry } from "../claude/session-registry.js";
 import {
   ClaudeCodeToolAgent,
   type ToolAgentSession,
@@ -138,6 +139,7 @@ export function createSessionManager(
   toolRegistry?: QraftBoxToolRegistry | undefined,
 ): SessionManager {
   const sessions = new Map<string, InternalSession>();
+  const sessionRegistry = new SessionRegistry();
   const queue: string[] = [];
   let runningCount = 0;
 
@@ -202,6 +204,14 @@ export function createSessionManager(
             : await agent.startSession({ prompt: session.fullPrompt });
 
         session.toolAgentSession = toolAgentSession;
+        try {
+          await sessionRegistry.register(
+            toolAgentSession.sessionId,
+            session.request.options.projectPath,
+          );
+        } catch {
+          // Best-effort registration for source detection.
+        }
 
         // Session started
 

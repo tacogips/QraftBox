@@ -583,6 +583,9 @@
             (summary.toolUsage.length > 0 ||
               summary.filesModified.length > 0 ||
               summary.tasks.length > 0)}
+          {@const isQraftBoxSource =
+            item.kind === "qraftbox" ||
+            (item.kind === "claude-cli" && item.session.source === "qraftbox")}
           {@const displayTitle = stripSystemTags(
             item.kind === "qraftbox"
               ? item.session.prompt
@@ -632,12 +635,11 @@
 
               <!-- Source badge -->
               <span
-                class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {item.kind ===
-                'qraftbox'
+                class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold {isQraftBoxSource
                   ? 'bg-accent-muted text-accent-fg'
                   : 'bg-bg-tertiary text-text-secondary'}"
               >
-                {item.kind === "qraftbox" ? "QraftBox" : "CLI"}
+                {isQraftBoxSource ? "QraftBox" : "CLI"}
               </span>
 
               <!-- Title (first user prompt; server strips system tags) -->

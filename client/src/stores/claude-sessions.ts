@@ -165,6 +165,46 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
   let state: ClaudeSessionsState = createInitialState();
   const listeners: Set<() => void> = new Set();
 
+  async function extractErrorMessage(response: Response): Promise<string> {
+    const hasJson =
+      typeof (response as { json?: unknown }).json === "function";
+    if (!hasJson) {
+      return response.statusText;
+    }
+    const errorData = await response
+      .json()
+      .catch(() => ({ error: response.statusText }));
+    if (
+      typeof errorData === "object" &&
+      errorData !== null &&
+      "error" in errorData &&
+      typeof errorData.error === "string" &&
+      errorData.error.length > 0
+    ) {
+      return errorData.error;
+    }
+    return response.statusText;
+  }
+
+  async function recoverContextIdFromWorkspace(): Promise<boolean> {
+    try {
+      const resp = await fetch("/api/workspace");
+      if (!resp.ok) return false;
+      const data = (await resp.json()) as {
+        workspace?: { tabs?: Array<{ id: string }> };
+      };
+      const tabs = data.workspace?.tabs;
+      const nextId = tabs?.[0]?.id;
+      if (typeof nextId === "string" && nextId.length > 0) {
+        storeContextId = nextId;
+        return true;
+      }
+    } catch {
+      // Ignore and return false
+    }
+    return false;
+  }
+
   /**
    * Notify all listeners of state change
    */
@@ -256,11 +296,25 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
       updateState({ isLoading: true, error: null });
 
       try {
-        const response = await fetch(
+        let response = await fetch(
           `/api/ctx/${storeContextId}/claude-sessions/projects`,
         );
         if (!response.ok) {
-          throw new Error(`Failed to load projects: ${response.statusText}`);
+          const firstError = await extractErrorMessage(response);
+          if (
+            response.status === 404 &&
+            firstError.includes("Context not found") &&
+            (await recoverContextIdFromWorkspace()) &&
+            storeContextId !== null
+          ) {
+            response = await fetch(
+              `/api/ctx/${storeContextId}/claude-sessions/projects`,
+            );
+          }
+        }
+        if (!response.ok) {
+          const errorMessage = await extractErrorMessage(response);
+          throw new Error(`Failed to load projects: ${errorMessage}`);
         }
 
         const data = (await response.json()) as ProjectInfo[];
@@ -291,12 +345,26 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
           return;
         }
         const params = buildQueryParams();
-        const response = await fetch(
+        let response = await fetch(
           `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
         );
+        if (!response.ok) {
+          const firstError = await extractErrorMessage(response);
+          if (
+            response.status === 404 &&
+            firstError.includes("Context not found") &&
+            (await recoverContextIdFromWorkspace()) &&
+            storeContextId !== null
+          ) {
+            response = await fetch(
+              `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
+            );
+          }
+        }
 
         if (!response.ok) {
-          throw new Error(`Failed to load sessions: ${response.statusText}`);
+          const errorMessage = await extractErrorMessage(response);
+          throw new Error(`Failed to load sessions: ${errorMessage}`);
         }
 
         const data = (await response.json()) as SessionListResponse;
@@ -403,12 +471,26 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
           return;
         }
         const params = buildQueryParams();
-        const response = await fetch(
+        let response = await fetch(
           `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
         );
+        if (!response.ok) {
+          const firstError = await extractErrorMessage(response);
+          if (
+            response.status === 404 &&
+            firstError.includes("Context not found") &&
+            (await recoverContextIdFromWorkspace()) &&
+            storeContextId !== null
+          ) {
+            response = await fetch(
+              `/api/ctx/${storeContextId}/claude-sessions/sessions?${params.toString()}`,
+            );
+          }
+        }
 
         if (!response.ok) {
-          throw new Error(`Failed to load sessions: ${response.statusText}`);
+          const errorMessage = await extractErrorMessage(response);
+          throw new Error(`Failed to load sessions: ${errorMessage}`);
         }
 
         const data = (await response.json()) as SessionListResponse;
@@ -438,7 +520,7 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
         if (storeContextId === null) {
           throw new Error("Context ID not set");
         }
-        const response = await fetch(
+        let response = await fetch(
           `/api/ctx/${storeContextId}/claude-sessions/sessions/${sessionId}/resume`,
           {
             method: "POST",
@@ -446,9 +528,28 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
             body: JSON.stringify({ prompt }),
           },
         );
+        if (!response.ok) {
+          const firstError = await extractErrorMessage(response);
+          if (
+            response.status === 404 &&
+            firstError.includes("Context not found") &&
+            (await recoverContextIdFromWorkspace()) &&
+            storeContextId !== null
+          ) {
+            response = await fetch(
+              `/api/ctx/${storeContextId}/claude-sessions/sessions/${sessionId}/resume`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt }),
+              },
+            );
+          }
+        }
 
         if (!response.ok) {
-          throw new Error(`Failed to resume session: ${response.statusText}`);
+          const errorMessage = await extractErrorMessage(response);
+          throw new Error(`Failed to resume session: ${errorMessage}`);
         }
 
         const data = (await response.json()) as {

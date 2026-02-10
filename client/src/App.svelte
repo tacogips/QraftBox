@@ -1430,7 +1430,7 @@
           {:else if selectedFile !== null && viewMode === "current-state"}
             <!-- Current State View -->
             <div class="p-4">
-              <CurrentStateView file={selectedFile} />
+              <CurrentStateView file={selectedFile} onCommentSubmit={handleInlineCommentSubmit} />
             </div>
           {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
             <!-- Diff View (side-by-side or inline) -->

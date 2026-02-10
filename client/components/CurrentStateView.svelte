@@ -13,6 +13,7 @@ import CurrentStateLineComponent from "./current-state/CurrentStateLine.svelte";
 import DeletedMarker from "./current-state/DeletedMarker.svelte";
 import ExpandedDeletedBlock from "./current-state/ExpandedDeletedBlock.svelte";
 import ExpandControls from "./current-state/ExpandControls.svelte";
+import SplitButton from "./common/SplitButton.svelte";
 import { highlightLines } from "../src/lib/highlighter";
 
 /**
@@ -40,10 +41,18 @@ import { highlightLines } from "../src/lib/highlighter";
 interface Props {
   file: DiffFile;
   onLineSelect?: (lineNumber: number) => void;
+  onCommentSubmit?: (
+    startLine: number,
+    endLine: number,
+    side: "old" | "new",
+    filePath: string,
+    prompt: string,
+    immediate: boolean,
+  ) => void;
 }
 
 // Svelte 5 props syntax
-const { file, onLineSelect = undefined }: Props = $props();
+const { file, onLineSelect = undefined, onCommentSubmit = undefined }: Props = $props();
 
 // Create store for managing expanded blocks
 const store: CurrentStateStore = createCurrentStateStore();
@@ -118,6 +127,86 @@ $effect(() => {
 
 // Selected line state
 let selectedLine = $state<number | undefined>(undefined);
+
+// Comment state
+let activeComment = $state<{ startLine: number; endLine: number } | null>(null);
+let commentText = $state("");
+
+/**
+ * Placeholder text showing file + line context
+ */
+const commentPlaceholder = $derived.by(() => {
+  if (activeComment === null) return "";
+  const lineInfo =
+    activeComment.startLine === activeComment.endLine
+      ? `L${activeComment.startLine}`
+      : `L${activeComment.startLine}-L${activeComment.endLine}`;
+  return `Ask AI about ${file.path}:${lineInfo} ...`;
+});
+
+/**
+ * Lines in range for highlighting
+ */
+const commentRangeLines = $derived.by(() => {
+  if (activeComment === null) return [] as number[];
+  const lines: number[] = [];
+  for (let i = activeComment.startLine; i <= activeComment.endLine; i++) {
+    lines.push(i);
+  }
+  return lines;
+});
+
+/**
+ * Line context display string
+ */
+const lineContext = $derived.by(() => {
+  if (activeComment === null) return "";
+  const lineInfo =
+    activeComment.startLine === activeComment.endLine
+      ? `L${activeComment.startLine}`
+      : `L${activeComment.startLine}-L${activeComment.endLine}`;
+  return `${file.path}:${lineInfo}`;
+});
+
+/**
+ * Handle comment open from gutter "+" button.
+ * Shift+click extends existing range.
+ */
+function handleCommentOpen(lineNumber: number, shiftKey: boolean): void {
+  if (shiftKey && activeComment !== null) {
+    const start = Math.min(activeComment.startLine, lineNumber);
+    const end = Math.max(activeComment.endLine, lineNumber);
+    activeComment = { startLine: start, endLine: end };
+  } else {
+    activeComment = { startLine: lineNumber, endLine: lineNumber };
+  }
+}
+
+/**
+ * Handle comment submit
+ */
+function handleCommentSubmitLocal(prompt: string, immediate: boolean): void {
+  if (activeComment !== null && onCommentSubmit !== undefined) {
+    onCommentSubmit(
+      activeComment.startLine,
+      activeComment.endLine,
+      "new",
+      file.path,
+      prompt,
+      immediate,
+    );
+  }
+  activeComment = null;
+  commentText = "";
+}
+
+/**
+ * Handle comment cancel
+ */
+function handleCommentCancel(): void {
+  activeComment = null;
+  commentText = "";
+}
 
 /**
  * Handle line selection
@@ -258,12 +347,51 @@ $effect(() => {
 
           <!-- Render the current state line (skip synthetic EOF lines with empty content) -->
           {#if line.content !== "" || line.changeType !== "unchanged"}
-            <CurrentStateLineComponent
-              {line}
-              highlighted={lineHighlightMap.get(line.lineNumber)}
-              selected={selectedLine === line.lineNumber}
-              onSelect={() => handleLineSelect(line.lineNumber)}
-            />
+            <div class="{commentRangeLines.includes(line.lineNumber) ? 'bg-accent-muted' : ''}">
+              <CurrentStateLineComponent
+                {line}
+                highlighted={lineHighlightMap.get(line.lineNumber)}
+                selected={selectedLine === line.lineNumber}
+                onSelect={() => handleLineSelect(line.lineNumber)}
+                onCommentClick={onCommentSubmit !== undefined ? (shiftKey) => handleCommentOpen(line.lineNumber, shiftKey) : undefined}
+              />
+            </div>
+            {#if activeComment !== null && line.lineNumber === activeComment.endLine}
+              <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
+                <textarea
+                  class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
+                         focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+                  placeholder="Ask AI about this code..."
+                  bind:value={commentText}
+                  onkeydown={(e) => {
+                    if (e.key === "Enter" && e.ctrlKey) {
+                      e.preventDefault();
+                      handleCommentSubmitLocal(commentText, true);
+                    }
+                    if (e.key === "Escape") {
+                      handleCommentCancel();
+                    }
+                  }}
+                ></textarea>
+                <div class="flex items-center justify-between mt-2">
+                  <div class="text-xs text-text-tertiary font-mono">
+                    {lineContext}
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button
+                      type="button"
+                      class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                      onclick={() => handleCommentCancel()}
+                    >Cancel</button>
+                    <SplitButton
+                      disabled={commentText.trim().length === 0}
+                      onPrimaryClick={() => handleCommentSubmitLocal(commentText, false)}
+                      onSecondaryClick={() => handleCommentSubmitLocal(commentText, true)}
+                    />
+                  </div>
+                </div>
+              </div>
+            {/if}
           {/if}
         {/each}
       </div>

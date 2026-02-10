@@ -26,6 +26,7 @@ interface Props {
   selected?: boolean;
   onSelect?: () => void;
   onLongPress?: () => void;
+  onCommentClick?: (shiftKey: boolean) => void;
 }
 
 // Svelte 5 props syntax
@@ -35,6 +36,7 @@ const {
   selected = false,
   onSelect = undefined,
   onLongPress = undefined,
+  onCommentClick = undefined,
 }: Props = $props();
 
 // State for long press detection
@@ -139,7 +141,7 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="flex font-mono text-xs leading-5 cursor-pointer select-none {getBackgroundClass()} {selected
+  class="current-state-line-row flex font-mono text-xs leading-5 cursor-pointer select-none {getBackgroundClass()} {selected
     ? 'ring-2 ring-accent-emphasis ring-inset'
     : ''}"
   onclick={handleClick}
@@ -153,8 +155,19 @@ function handlePointerLeave(): void {
 >
   <!-- Line Number Column -->
   <div
-    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default"
+    class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary border-r border-border-default relative group/gutter"
   >
+    {#if onCommentClick !== undefined}
+      <button
+        type="button"
+        class="comment-trigger absolute left-0 top-1 w-6 h-6 flex items-center justify-center
+               rounded bg-accent-emphasis text-white text-xs font-bold
+               opacity-0 group-hover/gutter:opacity-100
+               hover:bg-accent-fg transition-opacity z-10 cursor-pointer"
+        onclick={(e) => { e.stopPropagation(); onCommentClick?.(e.shiftKey); }}
+        aria-label="Add comment on line {line.lineNumber}"
+      >+</button>
+    {/if}
     <span>{line.lineNumber}</span>
   </div>
 
@@ -190,5 +203,10 @@ pre {
 .highlighted-line {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Show "+" button when hovering anywhere on the row */
+.current-state-line-row:hover .comment-trigger {
+  opacity: 1;
 }
 </style>
