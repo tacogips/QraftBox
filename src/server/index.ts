@@ -19,6 +19,7 @@ import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
 import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
+import { createLogger } from "./logger";
 
 /**
  * Server options for creating the Hono instance
@@ -71,7 +72,28 @@ interface HealthCheckResponse {
  * @returns Hono app instance
  */
 export function createServer(options: ServerOptions): Hono {
+  const logger = createLogger("Server");
   const app = new Hono();
+
+  app.use("*", async (c, next) => {
+    const startedAt = Date.now();
+    try {
+      await next();
+      logger.debug("Request completed", {
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      logger.error("Request failed", error, {
+        method: c.req.method,
+        path: c.req.path,
+        durationMs: Date.now() - startedAt,
+      });
+      throw error;
+    }
+  });
 
   // Mount error handler
   app.onError(createErrorHandler());
@@ -92,7 +114,7 @@ export function createServer(options: ServerOptions): Hono {
 
   // Initialize tool registry (fire and forget)
   void toolRegistry.initialize().catch((e) => {
-    console.error("Failed to initialize tool registry:", e);
+    logger.error("Failed to initialize tool registry", e);
   });
 
   const sessionManager = createSessionManager(
@@ -108,7 +130,7 @@ export function createServer(options: ServerOptions): Hono {
 
   // Initialize system prompt files (fire and forget)
   void ensureSystemPromptFiles().catch((e) => {
-    console.error("Failed to initialize system prompt files:", e);
+    logger.error("Failed to initialize system prompt files", e);
   });
 
   mountAllRoutes(app, {
@@ -153,6 +175,7 @@ export function startServer(
   config: CLIConfig,
   wsManager?: WebSocketManager | undefined,
 ): Server {
+  const logger = createLogger("Server");
   if (wsManager !== undefined) {
     // Capture wsManager in a const for use inside handlers
     const manager = wsManager;
@@ -165,8 +188,10 @@ export function startServer(
         const url = new URL(req.url);
         if (url.pathname === "/ws") {
           if (server.upgrade(req)) {
+            logger.debug("WebSocket upgrade accepted");
             return undefined;
           }
+          logger.error("WebSocket upgrade failed");
           return new Response("WebSocket upgrade failed", { status: 400 });
         }
         return app.fetch(req, server);
@@ -190,6 +215,7 @@ export function startServer(
       port: server.port,
       hostname: server.hostname,
       stop(): void {
+        logger.debug("Stopping server with WebSocket support");
         server.stop();
       },
     };
@@ -206,6 +232,7 @@ export function startServer(
     port: server.port,
     hostname: server.hostname,
     stop(): void {
+      logger.debug("Stopping HTTP-only server");
       server.stop();
     },
   };

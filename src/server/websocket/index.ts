@@ -6,6 +6,7 @@
  */
 
 import type { ServerWebSocket } from "bun";
+import { createLogger } from "../logger";
 
 /**
  * WebSocket client information
@@ -119,6 +120,8 @@ export interface WebSocketManager {
  * @returns WebSocket manager instance
  */
 export function createWebSocketManager(): WebSocketManager {
+  const logger = createLogger("WebSocket");
+
   // Map WebSocket to client ID (weakly referenced to allow GC)
   const wsToId = new WeakMap<ServerWebSocket<unknown>, string>();
 
@@ -137,18 +140,17 @@ export function createWebSocketManager(): WebSocketManager {
       wsToId.set(ws, id);
       clients.set(id, client);
 
-      console.log(
-        `[WebSocket] Client connected: ${id} (total: ${clients.size})`,
-      );
+      logger.debug("Client connected", { clientId: id, total: clients.size });
     },
 
     handleClose(ws: ServerWebSocket<unknown>): void {
       const id = wsToId.get(ws);
       if (id !== undefined) {
         clients.delete(id);
-        console.log(
-          `[WebSocket] Client disconnected: ${id} (total: ${clients.size})`,
-        );
+        logger.debug("Client disconnected", {
+          clientId: id,
+          total: clients.size,
+        });
       }
     },
 
@@ -174,12 +176,12 @@ export function createWebSocketManager(): WebSocketManager {
 
         // Log other messages for debugging
         const id = wsToId.get(ws);
-        console.log(
-          `[WebSocket] Message from ${id ?? "unknown"}: ${parsed.event}`,
-        );
+        logger.debug("Message received", {
+          clientId: id ?? "unknown",
+          event: parsed.event,
+        });
       } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : "Unknown error";
-        console.error(`[WebSocket] Failed to parse message: ${errorMessage}`);
+        logger.error("Failed to parse message", e);
       }
     },
 
@@ -197,20 +199,17 @@ export function createWebSocketManager(): WebSocketManager {
             client.ws.send(messageStr);
             sentCount++;
           } catch (e) {
-            const errorMessage =
-              e instanceof Error ? e.message : "Unknown error";
-            console.error(
-              `[WebSocket] Failed to send to ${client.id}: ${errorMessage}`,
-            );
+            logger.error("Failed to send message to client", e, {
+              clientId: client.id,
+              event,
+            });
           }
         } else {
           skippedCount++;
         }
       }
 
-      console.log(
-        `[WebSocket] Broadcast ${event}: sent=${sentCount}, skipped=${skippedCount}`,
-      );
+      logger.debug("Broadcast complete", { event, sentCount, skippedCount });
     },
 
     getClientCount(): number {
@@ -218,23 +217,20 @@ export function createWebSocketManager(): WebSocketManager {
     },
 
     close(): void {
-      console.log(
-        `[WebSocket] Closing all connections (${clients.size} clients)`,
-      );
+      logger.debug("Closing all connections", { total: clients.size });
 
       for (const client of clients.values()) {
         try {
           client.ws.close();
         } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : "Unknown error";
-          console.error(
-            `[WebSocket] Failed to close ${client.id}: ${errorMessage}`,
-          );
+          logger.error("Failed to close client connection", e, {
+            clientId: client.id,
+          });
         }
       }
 
       clients.clear();
-      console.log("[WebSocket] All connections closed");
+      logger.debug("All connections closed");
     },
   };
 }

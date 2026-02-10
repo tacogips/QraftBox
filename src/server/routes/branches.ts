@@ -24,6 +24,10 @@ import {
   mergeBranch,
   createBranch,
 } from "../git/branch.js";
+import {
+  isGitOperationRunning,
+  getOperationPhase,
+} from "../git-actions/executor.js";
 
 /**
  * Error response format
@@ -269,6 +273,15 @@ export function createBranchRoutes(
       return c.json(errorResponse, 400);
     }
 
+    // Block checkout while a git operation is in progress
+    if (isGitOperationRunning()) {
+      const errorResponse: ErrorResponse = {
+        error: `Cannot switch branches while a git operation is in progress (${getOperationPhase()})`,
+        code: 409,
+      };
+      return c.json(errorResponse, 409);
+    }
+
     try {
       // Execute checkout
       const response: BranchCheckoutResponse = await checkoutBranch(
@@ -338,6 +351,15 @@ export function createBranchRoutes(
         code: 400,
       };
       return c.json(errorResponse, 400);
+    }
+
+    // Block merge while a git operation is in progress
+    if (isGitOperationRunning()) {
+      const errorResponse: ErrorResponse = {
+        error: `Cannot merge branches while a git operation is in progress (${getOperationPhase()})`,
+        code: 409,
+      };
+      return c.json(errorResponse, 409);
     }
 
     try {
@@ -413,6 +435,15 @@ export function createBranchRoutes(
         code: 400,
       };
       return c.json(errorResponse, 400);
+    }
+
+    // Block branch creation while a git operation is in progress
+    if (isGitOperationRunning()) {
+      const errorResponse: ErrorResponse = {
+        error: `Cannot create branches while a git operation is in progress (${getOperationPhase()})`,
+        code: 409,
+      };
+      return c.json(errorResponse, 409);
     }
 
     try {

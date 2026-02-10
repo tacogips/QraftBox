@@ -543,9 +543,12 @@
         <div class="border-t border-border-default/50 bg-bg-primary">
           {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}
             <div class="px-4 py-2">
-              <p class="text-xs text-text-primary whitespace-pre-wrap mb-2">
-                {stripSystemTags(runningSession.prompt)}
-              </p>
+              <div class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2">
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block">user</span>
+                <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
+                  {stripSystemTags(runningSession.prompt)}
+                </p>
+              </div>
               {#if runningSession.context.primaryFile !== undefined}
                 <div
                   class="flex items-center gap-1.5 text-[10px] text-text-tertiary mb-2"
@@ -574,10 +577,10 @@
               {/if}
               {#if runningSession.lastAssistantMessage !== undefined && runningSession.lastAssistantMessage.length > 0}
                 <div
-                  class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1 mb-2"
+                  class="border-l-4 border-success-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1 mb-2"
                 >
                   <span
-                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
+                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-success-muted text-success-fg mb-1 inline-block"
                     >assistant (live)</span
                   >
                   <p
@@ -604,9 +607,12 @@
             </div>
           {:else if displayMode === "completed" && completedSession !== null}
             <div class="px-4 py-2">
-              <p class="text-xs text-text-secondary whitespace-pre-wrap mb-2">
-                {stripSystemTags(completedSession.prompt)}
-              </p>
+              <div class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2">
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block">user</span>
+                <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
+                  {stripSystemTags(completedSession.prompt)}
+                </p>
+              </div>
               {#if completedSession.state === "failed"}
                 <p class="text-xs text-danger-fg">Session failed.</p>
               {:else if completedSession.lastAssistantMessage}

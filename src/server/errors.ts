@@ -6,6 +6,7 @@
  */
 
 import type { Context, ErrorHandler } from "hono";
+import { createLogger } from "./logger";
 
 /**
  * Error codes for API errors
@@ -67,9 +68,28 @@ interface ErrorResponse {
  * @returns Hono error handler
  */
 export function createErrorHandler(): ErrorHandler {
+  const logger = createLogger("ErrorHandler");
+
   return (err: Error, c: Context): Response => {
     // Handle AppError
     if (err instanceof AppError) {
+      if (err.statusCode >= 500) {
+        logger.error("AppError handled as server error", err, {
+          code: err.code,
+          statusCode: err.statusCode,
+          path: c.req.path,
+          method: c.req.method,
+        });
+      } else {
+        logger.debug("AppError handled", {
+          code: err.code,
+          statusCode: err.statusCode,
+          path: c.req.path,
+          method: c.req.method,
+          message: err.message,
+        });
+      }
+
       const errorResponse: ErrorResponse = {
         error: err.message,
         code: err.statusCode,
@@ -80,6 +100,11 @@ export function createErrorHandler(): ErrorHandler {
 
     // Handle standard Error
     if (err instanceof Error) {
+      logger.error("Unhandled server error", err, {
+        path: c.req.path,
+        method: c.req.method,
+      });
+
       const errorResponse: ErrorResponse = {
         error: err.message,
         code: 500,
@@ -88,6 +113,11 @@ export function createErrorHandler(): ErrorHandler {
     }
 
     // Handle unknown error types (shouldn't happen with ErrorHandler type, but be safe)
+    logger.error("Unknown error type handled", err, {
+      path: c.req.path,
+      method: c.req.method,
+    });
+
     const errorResponse: ErrorResponse = {
       error: "Internal server error",
       code: 500,

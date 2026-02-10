@@ -42,6 +42,10 @@
   /** Success message */
   let successMessage = $state<string | null>(null);
 
+  /** Whether a git operation (commit/push/PR) is in progress */
+  let gitOperationRunning = $state(false);
+  let gitOperationPhase = $state("");
+
   /** Reference to trigger button for position calculation */
   let triggerRef: HTMLButtonElement | undefined = $state(undefined);
 
@@ -65,6 +69,27 @@
   }
 
   /**
+   * Check if a git operation is currently running on the server
+   */
+  async function checkGitOperationStatus(): Promise<void> {
+    try {
+      const resp = await fetch("/api/git-actions/operating");
+      if (resp.ok) {
+        const data = (await resp.json()) as {
+          operating: boolean;
+          phase: string;
+        };
+        gitOperationRunning = data.operating;
+        gitOperationPhase = data.phase;
+      }
+    } catch {
+      // Non-critical - allow branch switching if check fails
+      gitOperationRunning = false;
+      gitOperationPhase = "";
+    }
+  }
+
+  /**
    * Open the dropdown and initialize the branch list
    */
   function open(): void {
@@ -76,6 +101,7 @@
     isOpen = true;
     errorMessage = null;
     successMessage = null;
+    void checkGitOperationStatus();
     requestAnimationFrame(() => {
       branchListPanel?.initialize();
     });
@@ -94,6 +120,13 @@
    */
   async function checkout(branch: { name: string }): Promise<void> {
     if (branch.name === currentBranch) {
+      return;
+    }
+
+    // Re-check git operation status before checkout
+    await checkGitOperationStatus();
+    if (gitOperationRunning) {
+      errorMessage = `Cannot switch branches while ${gitOperationPhase} is in progress`;
       return;
     }
 
@@ -127,6 +160,13 @@
    * Create a new branch via API
    */
   async function createNewBranch(branchName: string): Promise<void> {
+    // Re-check git operation status before creating branch
+    await checkGitOperationStatus();
+    if (gitOperationRunning) {
+      errorMessage = `Cannot create branches while ${gitOperationPhase} is in progress`;
+      return;
+    }
+
     errorMessage = null;
     try {
       const resp = await fetch(`/api/ctx/${contextId}/branches/create`, {
@@ -226,6 +266,9 @@
       {contextId}
       {currentBranch}
       headerText="Switch branches"
+      warningMessage={gitOperationRunning
+        ? `Branch switching disabled while ${gitOperationPhase} is in progress`
+        : undefined}
       onSelect={(branch) => void checkout(branch)}
       disableCurrentBranch={false}
       selectedBranch={currentBranch}

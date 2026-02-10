@@ -18,6 +18,8 @@ import {
   executeUpdatePR,
   cancelGitAction,
   getPRStatus,
+  isGitOperationRunning,
+  getOperationPhase,
 } from "../git-actions/executor.js";
 
 /**
@@ -86,6 +88,18 @@ function isNonEmptyString(value: unknown): value is string {
  */
 export function createGitActionsRoutes(): Hono {
   const app = new Hono();
+
+  /**
+   * GET /operating
+   *
+   * Returns whether a git operation is currently running and its phase.
+   */
+  app.get("/operating", (c) => {
+    return c.json({
+      operating: isGitOperationRunning(),
+      phase: getOperationPhase(),
+    });
+  });
 
   /**
    * POST /commit

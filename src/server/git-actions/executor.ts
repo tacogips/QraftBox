@@ -45,6 +45,27 @@ interface CancellableProcess {
 const runningActionProcesses = new Map<string, CancellableProcess>();
 const cancelledActions = new Set<string>();
 
+/**
+ * Track the current git operation phase so that other git-mutating
+ * operations (e.g. branch checkout) can be blocked while an operation
+ * is in progress.
+ */
+let currentOperationPhase: "idle" | "committing" | "pushing" | "creating-pr" = "idle";
+
+/**
+ * Returns the current operation phase.
+ */
+export function getOperationPhase(): "idle" | "committing" | "pushing" | "creating-pr" {
+  return currentOperationPhase;
+}
+
+/**
+ * Returns true when any git-mutating operation is in progress.
+ */
+export function isGitOperationRunning(): boolean {
+  return currentOperationPhase !== "idle";
+}
+
 interface PRView {
   readonly number: number;
   readonly url: string;
@@ -306,6 +327,7 @@ export async function executeCommit(
   customCtx?: string | undefined,
   actionId?: string | undefined,
 ): Promise<GitActionResult> {
+  currentOperationPhase = "committing";
   try {
     // Build prompt with commit system prompt
     const prompt = await buildPrompt("commit", customCtx);
@@ -318,6 +340,8 @@ export async function executeCommit(
       output: "",
       error: `Failed to execute commit: ${errorMessage}`,
     };
+  } finally {
+    currentOperationPhase = "idle";
   }
 }
 
@@ -333,6 +357,7 @@ export async function executeCommit(
 export async function executePush(
   projectPath: string,
 ): Promise<GitActionResult> {
+  currentOperationPhase = "pushing";
   try {
     // First, try standard git push
     let proc = Bun.spawn(["git", "push"], {
@@ -396,6 +421,8 @@ export async function executePush(
       output: "",
       error: `Failed to execute push: ${errorMessage}`,
     };
+  } finally {
+    currentOperationPhase = "idle";
   }
 }
 
@@ -416,6 +443,7 @@ export async function executeCreatePR(
   customCtx?: string | undefined,
   actionId?: string | undefined,
 ): Promise<GitActionResult> {
+  currentOperationPhase = "creating-pr";
   try {
     // Build prompt with create-pr system prompt
     // Append base branch information to custom context
@@ -477,6 +505,8 @@ export async function executeCreatePR(
       output: "",
       error: `Failed to execute create-pr: ${errorMessage}`,
     };
+  } finally {
+    currentOperationPhase = "idle";
   }
 }
 
@@ -496,6 +526,7 @@ export async function executeUpdatePR(
   customCtx?: string | undefined,
   actionId?: string | undefined,
 ): Promise<GitActionResult> {
+  currentOperationPhase = "creating-pr";
   try {
     const currentPR = await getCurrentPRView(projectPath);
     if (currentPR === null) {
@@ -515,6 +546,8 @@ export async function executeUpdatePR(
       output: "",
       error: `Failed to execute update-pr: ${errorMessage}`,
     };
+  } finally {
+    currentOperationPhase = "idle";
   }
 }
 

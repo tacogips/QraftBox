@@ -22,6 +22,7 @@ import { createGitignoreFilter } from "./gitignore.js";
 import type { EventCollector } from "./debounce.js";
 import { createEventCollector } from "./debounce.js";
 import { existsSync, statSync } from "node:fs";
+import { createLogger } from "../logger.js";
 
 /**
  * File watcher interface for monitoring file system changes
@@ -79,6 +80,7 @@ export function createFileWatcher(
   projectPath: string,
   config?: Partial<WatcherConfig>,
 ): FileWatcher {
+  const logger = createLogger("FileWatcher");
   const fullConfig = mergeWatcherConfig(config ?? {});
   let fsWatcher: FSWatcher | undefined = undefined;
   let gitignoreFilter: GitignoreFilter | undefined = undefined;
@@ -133,10 +135,7 @@ export function createFileWatcher(
       }
     } catch (error) {
       // If gitignore check fails, log and skip this event
-      console.error(
-        `Failed to check gitignore for ${relativePath}:`,
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.error("Failed to evaluate gitignore", error, { relativePath });
       return;
     }
 
@@ -164,10 +163,7 @@ export function createFileWatcher(
       try {
         handler(events);
       } catch (error) {
-        console.error(
-          "Error in file change handler:",
-          error instanceof Error ? error.message : String(error),
-        );
+        logger.error("Error in file change handler", error);
       }
     }
   }
@@ -222,6 +218,11 @@ export function createFileWatcher(
 
       isActive = true;
       lastUpdate = Date.now();
+      logger.debug("File watcher started", {
+        projectPath,
+        recursive: fullConfig.recursive,
+        debounceMs: fullConfig.debounceMs,
+      });
     } catch (error) {
       // Cleanup on failure
       if (eventCollector) {
@@ -258,6 +259,7 @@ export function createFileWatcher(
 
     gitignoreFilter = undefined;
     isActive = false;
+    logger.debug("File watcher stopped", { projectPath });
   }
 
   /**
