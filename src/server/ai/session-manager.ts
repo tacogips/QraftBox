@@ -417,14 +417,6 @@ export function createSessionManager(
 
         // Wait for completion
         const sessionResult = await toolAgentSession.waitForCompletion();
-        logger.info("toolAgentSession.waitForCompletion done", {
-          sessionId,
-          success: sessionResult.success,
-          elapsedFromStartMs:
-            session.startedAt !== undefined
-              ? Date.now() - session.startedAt.getTime()
-              : null,
-        });
         const finalAgentState = toolAgentSession.getState().state;
 
         // Keep explicit cancellation as cancelled (don't downgrade to failed)
