@@ -12,7 +12,7 @@ import {
 import CurrentStateLineComponent from "./current-state/CurrentStateLine.svelte";
 import DeletedMarker from "./current-state/DeletedMarker.svelte";
 import ExpandedDeletedBlock from "./current-state/ExpandedDeletedBlock.svelte";
-import ExpandControls from "./current-state/ExpandControls.svelte";
+
 import SplitButton from "./common/SplitButton.svelte";
 import { highlightLines } from "../src/lib/highlighter";
 
@@ -59,22 +59,6 @@ const store: CurrentStateStore = createCurrentStateStore();
 
 // Transform diff to current state format
 const currentStateLines = $derived(transformToCurrentState(file));
-
-// Extract all deleted block IDs for bulk operations
-const allBlockIds = $derived(
-  currentStateLines
-    .filter((line) => line.deletedBefore !== undefined)
-    .map((line) => line.deletedBefore!.id)
-);
-
-// Check expansion states
-const hasDeletedBlocks = $derived(allBlockIds.length > 0);
-const allExpanded = $derived(
-  hasDeletedBlocks && allBlockIds.every((id) => store.isExpanded(id))
-);
-const allCollapsed = $derived(
-  hasDeletedBlocks && allBlockIds.every((id) => !store.isExpanded(id))
-);
 
 // Syntax highlighting maps
 let lineHighlightMap = $state<Map<number, string>>(new Map());
@@ -226,20 +210,6 @@ function handleToggleBlock(blockId: string): void {
 }
 
 /**
- * Handle expand all blocks
- */
-function handleExpandAll(): void {
-  store.expandAll(allBlockIds);
-}
-
-/**
- * Handle collapse all blocks
- */
-function handleCollapseAll(): void {
-  store.collapseAll();
-}
-
-/**
  * Check if a specific block is expanded
  */
 function isBlockExpanded(blockId: string): boolean {
@@ -276,7 +246,6 @@ function handleKeydown(event: KeyboardEvent): void {
       }
     }
   }
-  // zR = expand all, zM = collapse all (handled in ExpandControls)
 }
 
 /**
@@ -298,24 +267,17 @@ $effect(() => {
 >
   <!-- Header with file info and controls -->
   <div
-    class="flex items-center justify-between px-4 py-2 min-h-[48px] bg-bg-secondary border-b border-border-default"
+    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
-    <div class="flex items-center gap-3">
-      <span class="font-medium text-text-primary truncate max-w-[300px]">
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-medium text-text-primary truncate max-w-[300px]">
         {file.path}
       </span>
-      <span class="text-xs text-text-secondary">
+      <span class="text-[10px] text-text-secondary">
         +{file.additions} -{file.deletions}
       </span>
     </div>
 
-    <ExpandControls
-      {hasDeletedBlocks}
-      {allExpanded}
-      {allCollapsed}
-      onExpandAll={handleExpandAll}
-      onCollapseAll={handleCollapseAll}
-    />
   </div>
 
   <!-- Content area -->

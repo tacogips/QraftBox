@@ -708,21 +708,55 @@
   function applySessionProgressEvent(event: {
     type?: string;
     sessionId?: string;
-    data?: { content?: unknown };
+    data?: { content?: unknown; toolName?: unknown };
   }): void {
-    const content = event.data?.content;
-    if (
-      event.type !== "message" ||
-      typeof event.sessionId !== "string" ||
-      typeof content !== "string"
-    ) {
+    if (typeof event.sessionId !== "string") {
       return;
     }
-    runningSessions = runningSessions.map((session) =>
-      session.id === event.sessionId
-        ? { ...session, lastAssistantMessage: content }
-        : session,
-    );
+
+    if (event.type === "message") {
+      const content = event.data?.content;
+      if (typeof content !== "string") return;
+      runningSessions = runningSessions.map((session) =>
+        session.id === event.sessionId
+          ? { ...session, lastAssistantMessage: content, currentActivity: undefined }
+          : session,
+      );
+      return;
+    }
+
+    if (event.type === "thinking" || event.type === "session_started") {
+      runningSessions = runningSessions.map((session) =>
+        session.id === event.sessionId
+          ? { ...session, currentActivity: "Thinking..." }
+          : session,
+      );
+      return;
+    }
+
+    if (event.type === "tool_use") {
+      const toolName = event.data?.toolName;
+      runningSessions = runningSessions.map((session) =>
+        session.id === event.sessionId
+          ? {
+              ...session,
+              currentActivity:
+                typeof toolName === "string" && toolName.length > 0
+                  ? `Using ${toolName}...`
+                  : "Using tool...",
+            }
+          : session,
+      );
+      return;
+    }
+
+    if (event.type === "tool_result") {
+      runningSessions = runningSessions.map((session) =>
+        session.id === event.sessionId
+          ? { ...session, currentActivity: "Processing tool result..." }
+          : session,
+      );
+    }
   }
 
   /**
@@ -738,7 +772,7 @@
           JSON.parse(msg.data) as {
             type?: string;
             sessionId?: string;
-            data?: { content?: unknown };
+            data?: { content?: unknown; toolName?: unknown };
           },
         );
       } catch {
@@ -762,7 +796,7 @@
         const parsed = JSON.parse(msg.data) as {
           type?: string;
           sessionId?: string;
-          data?: { content?: unknown };
+          data?: { content?: unknown; toolName?: unknown };
         };
         if (parsed.type === "error") {
           onTerminalEvent();
@@ -774,6 +808,62 @@
       }
     });
     es.addEventListener("cancelled", onTerminalEvent);
+    es.addEventListener("session_started", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown; toolName?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
+    es.addEventListener("thinking", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown; toolName?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
+    es.addEventListener("tool_use", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown; toolName?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
+    es.addEventListener("tool_result", (msg) => {
+      if (!(msg instanceof MessageEvent)) return;
+      try {
+        applySessionProgressEvent(
+          JSON.parse(msg.data) as {
+            type?: string;
+            sessionId?: string;
+            data?: { content?: unknown; toolName?: unknown };
+          },
+        );
+      } catch {
+        // Ignore malformed event payloads
+      }
+    });
     es.addEventListener("message", (msg) => {
       if (!(msg instanceof MessageEvent)) return;
       try {
@@ -781,7 +871,7 @@
           JSON.parse(msg.data) as {
             type?: string;
             sessionId?: string;
-            data?: { content?: unknown };
+            data?: { content?: unknown; toolName?: unknown };
           },
         );
       } catch {
@@ -1429,12 +1519,12 @@
             <div class="p-8 text-center text-danger-fg">{error}</div>
           {:else if selectedFile !== null && viewMode === "current-state"}
             <!-- Current State View -->
-            <div class="p-4">
+            <div class="px-2 pb-2">
               <CurrentStateView file={selectedFile} onCommentSubmit={handleInlineCommentSubmit} />
             </div>
           {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
             <!-- Diff View (side-by-side or inline) -->
-            <div class="p-4">
+            <div class="px-2 pb-2">
               <DiffView
                 file={selectedFile}
                 mode={viewMode === "side-by-side" ? "side-by-side" : "inline"}

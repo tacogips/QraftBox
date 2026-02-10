@@ -36,10 +36,12 @@ interface InternalSession {
   startedAt?: Date;
   completedAt?: Date;
   lastAssistantMessage?: string;
+  currentActivity: string | undefined;
   listeners: Set<(event: AIProgressEvent) => void>;
   abortController?: AbortController;
   toolAgentSession?: ToolAgentSession;
   claudeAgent?: ClaudeCodeToolAgent;
+  registeredClaudeSessionIds: Set<string>;
 }
 
 const SESSION_CANCEL_TIMEOUT_MS = 3000;
@@ -113,6 +115,28 @@ function createProgressEvent(
 }
 
 /**
+ * Extract a Claude session ID (UUID) from SDK/CLI stream messages.
+ */
+function extractClaudeSessionId(msg: unknown): string | null {
+  if (typeof msg !== "object" || msg === null) return null;
+  const obj = msg as Record<string, unknown>;
+
+  if (typeof obj["sessionId"] === "string" && obj["sessionId"].length > 0) {
+    return obj["sessionId"];
+  }
+
+  if (typeof obj["session_id"] === "string" && obj["session_id"].length > 0) {
+    return obj["session_id"];
+  }
+
+  if (typeof obj["session_id"] === "number") {
+    return String(obj["session_id"]);
+  }
+
+  return null;
+}
+
+/**
  * Convert internal session to public session info
  */
 function toSessionInfo(session: InternalSession): AISessionInfo {
@@ -125,6 +149,7 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
     completedAt: session.completedAt?.toISOString(),
     context: session.request.context,
     lastAssistantMessage: session.lastAssistantMessage,
+    currentActivity: session.currentActivity,
   };
 }
 
@@ -171,6 +196,7 @@ export function createSessionManager(
     if (session === undefined) return;
 
     session.state = "running";
+    session.currentActivity = "Starting session...";
     session.startedAt = new Date();
     runningCount++;
 
@@ -204,19 +230,35 @@ export function createSessionManager(
             : await agent.startSession({ prompt: session.fullPrompt });
 
         session.toolAgentSession = toolAgentSession;
-        try {
-          await sessionRegistry.register(
-            toolAgentSession.sessionId,
-            session.request.options.projectPath,
-          );
-        } catch {
-          // Best-effort registration for source detection.
+        if (resumeSessionId !== undefined && resumeSessionId.length > 0) {
+          try {
+            await sessionRegistry.register(
+              resumeSessionId,
+              session.request.options.projectPath,
+            );
+            session.registeredClaudeSessionIds.add(resumeSessionId);
+          } catch {
+            // Best-effort registration for source detection.
+          }
         }
 
         // Session started
 
         // Listen for events
         toolAgentSession.on("message", (msg: unknown) => {
+          const claudeSessionId = extractClaudeSessionId(msg);
+          if (
+            claudeSessionId !== null &&
+            !session.registeredClaudeSessionIds.has(claudeSessionId)
+          ) {
+            session.registeredClaudeSessionIds.add(claudeSessionId);
+            void sessionRegistry
+              .register(claudeSessionId, session.request.options.projectPath)
+              .catch(() => {
+                // Best-effort registration for source detection.
+              });
+          }
+
           // Extract role and content from message
           // CLI stream-json format: { type: "assistant", message: { role: "assistant", content: [{type:"text",text:"..."}] } }
           if (typeof msg === "object" && msg !== null && "type" in msg) {
@@ -255,6 +297,7 @@ export function createSessionManager(
 
             if (content !== undefined && content.length > 0) {
               session.lastAssistantMessage = content;
+              session.currentActivity = undefined;
               emitEvent(
                 sessionId,
                 createProgressEvent("message", sessionId, {
@@ -286,6 +329,7 @@ export function createSessionManager(
                 input,
               }),
             );
+            session.currentActivity = `Using ${toolName}...`;
           }
         });
 
@@ -311,6 +355,7 @@ export function createSessionManager(
                 isError,
               }),
             );
+            session.currentActivity = `Processing ${toolName} result...`;
           }
         });
 
@@ -356,8 +401,10 @@ export function createSessionManager(
         // Mark as completed or failed
         if (sessionResult.success) {
           session.state = "completed";
+          session.currentActivity = undefined;
         } else {
           session.state = "failed";
+          session.currentActivity = undefined;
           if (sessionResult.error !== undefined) {
             emitEvent(
               sessionId,
@@ -382,6 +429,7 @@ export function createSessionManager(
       } else {
         // Fallback to stubbed behavior if toolRegistry is undefined
         emitEvent(sessionId, createProgressEvent("thinking", sessionId));
+        session.currentActivity = "Thinking...";
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -398,6 +446,7 @@ export function createSessionManager(
           session.fullPrompt.slice(0, 500) +
           (session.fullPrompt.length > 500 ? "..." : "");
         session.lastAssistantMessage = stubbedContent;
+        session.currentActivity = undefined;
 
         emitEvent(
           sessionId,
@@ -409,6 +458,7 @@ export function createSessionManager(
 
         session.state = "completed";
         session.completedAt = new Date();
+        session.currentActivity = undefined;
 
         emitEvent(sessionId, createProgressEvent("completed", sessionId));
       }
@@ -420,6 +470,7 @@ export function createSessionManager(
 
       session.state = "failed";
       session.completedAt = new Date();
+      session.currentActivity = undefined;
 
       const errorMessage = e instanceof Error ? e.message : "Session failed";
       emitEvent(
@@ -468,7 +519,9 @@ export function createSessionManager(
         fullPrompt,
         request,
         createdAt: new Date(),
+        currentActivity: undefined,
         listeners: new Set(),
+        registeredClaudeSessionIds: new Set(),
       };
 
       sessions.set(sessionId, session);
@@ -530,6 +583,7 @@ export function createSessionManager(
       // Mark cancelled first so UI and executor loop observe terminal state quickly.
       session.state = "cancelled";
       session.completedAt = new Date();
+      session.currentActivity = undefined;
       emitEvent(sessionId, createProgressEvent("cancelled", sessionId));
 
       // Cancel ToolAgentSession if available

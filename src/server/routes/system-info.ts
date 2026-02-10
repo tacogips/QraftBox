@@ -115,6 +115,10 @@ interface StatsCacheJson {
     toolCallCount?: number;
     tokensByModel?: Record<string, number>;
   }>;
+  dailyModelTokens?: Array<{
+    date?: string;
+    tokensByModel?: Record<string, number>;
+  }>;
   modelUsage?: Record<
     string,
     {
@@ -202,6 +206,37 @@ async function getClaudeCodeUsage(): Promise<ClaudeCodeUsage | null> {
           allActivity.push(activity);
         }
       }
+    }
+
+    // Build a map of token data by date from dailyModelTokens
+    const tokensByDate = new Map<string, Record<string, number>>();
+    if (Array.isArray(stats.dailyModelTokens)) {
+      for (const entry of stats.dailyModelTokens) {
+        if (entry.date !== undefined && entry.tokensByModel !== undefined) {
+          tokensByDate.set(entry.date, entry.tokensByModel);
+        }
+      }
+    }
+
+    // Merge token data into activity entries
+    for (const activity of allActivity) {
+      const tokens = tokensByDate.get(activity.date);
+      if (tokens !== undefined && activity.tokensByModel === undefined) {
+        // Use type assertion to add the property - safe because we're building the object
+        (activity as { tokensByModel?: Record<string, number> }).tokensByModel =
+          tokens;
+      }
+      // Remove from map after merging
+      tokensByDate.delete(activity.date);
+    }
+
+    // Add remaining dates from dailyModelTokens that weren't in dailyActivity
+    for (const [date, tokens] of tokensByDate) {
+      const activity: DailyActivity = {
+        date,
+        tokensByModel: tokens,
+      };
+      allActivity.push(activity);
     }
 
     // Take last 14 days

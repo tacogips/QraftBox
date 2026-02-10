@@ -69,13 +69,13 @@ function handleKeydown(event: KeyboardEvent): void {
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="flex items-center gap-2 px-2"
+  class="flex items-center gap-1 px-1"
   role="group"
   aria-label="Deleted block expansion controls"
 >
   {#if hasDeletedBlocks}
     <!-- State indicator -->
-    <span class="text-xs text-text-tertiary mr-2" aria-live="polite">
+    <span class="text-[10px] text-text-tertiary mr-1" aria-live="polite">
       {getStateDescription()}
     </span>
 
@@ -84,7 +84,7 @@ function handleKeydown(event: KeyboardEvent): void {
       type="button"
       onclick={onExpandAll}
       disabled={allExpanded}
-      class="px-3 py-2 min-h-[44px] min-w-[44px] text-sm font-medium rounded
+      class="px-1.5 py-0.5 min-h-[24px] min-w-[24px] text-xs font-medium rounded
              {allExpanded
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
@@ -93,11 +93,11 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-label="Expand all deleted blocks (keyboard: zR)"
       aria-disabled={allExpanded}
     >
-      <span class="flex items-center gap-1.5">
+      <span class="flex items-center gap-1">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -118,7 +118,7 @@ function handleKeydown(event: KeyboardEvent): void {
       type="button"
       onclick={onCollapseAll}
       disabled={allCollapsed}
-      class="px-3 py-2 min-h-[44px] min-w-[44px] text-sm font-medium rounded
+      class="px-1.5 py-0.5 min-h-[24px] min-w-[24px] text-xs font-medium rounded
              {allCollapsed
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
@@ -127,11 +127,11 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-label="Collapse all deleted blocks (keyboard: zM)"
       aria-disabled={allCollapsed}
     >
-      <span class="flex items-center gap-1.5">
+      <span class="flex items-center gap-1">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

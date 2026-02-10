@@ -88,6 +88,19 @@
     return modelId;
   }
 
+  function getSortedActivity(activities: DailyActivity[]): DailyActivity[] {
+    return [...activities].sort((a, b) => b.date.localeCompare(a.date));
+  }
+
+  function getDailyTokenTotal(activity: DailyActivity): number {
+    if (activity.tokensByModel === undefined) return 0;
+    return Object.values(activity.tokensByModel).reduce((sum, t) => sum + t, 0);
+  }
+
+  function getTotalRecentTokens(activities: DailyActivity[]): number {
+    return activities.reduce((sum, a) => sum + getDailyTokenTotal(a), 0);
+  }
+
   /**
    * Fetch system info from the server
    */
@@ -300,6 +313,20 @@
                     {formatNumber(systemInfo.claudeCodeUsage.totalMessages)}
                   </span>
                 </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-text-secondary"
+                    >Total Tokens (14 Days)</span
+                  >
+                  <span
+                    class="text-sm text-text-primary font-mono tabular-nums"
+                  >
+                    {formatNumber(
+                      getTotalRecentTokens(
+                        systemInfo.claudeCodeUsage.recentDailyActivity,
+                      ),
+                    )}
+                  </span>
+                </div>
                 {#if systemInfo.claudeCodeUsage.firstSessionDate !== null}
                   <div class="flex items-center justify-between">
                     <span class="text-sm text-text-secondary"
@@ -396,13 +423,17 @@
                             >Sessions</th
                           >
                           <th
-                            class="text-right py-2 pl-2 text-text-secondary font-medium"
+                            class="text-right py-2 px-2 text-text-secondary font-medium"
                             >Tool Calls</th
+                          >
+                          <th
+                            class="text-right py-2 pl-2 text-text-secondary font-medium"
+                            >Tokens</th
                           >
                         </tr>
                       </thead>
                       <tbody>
-                        {#each systemInfo.claudeCodeUsage.recentDailyActivity as activity}
+                        {#each getSortedActivity(systemInfo.claudeCodeUsage.recentDailyActivity) as activity}
                           <tr class="border-b border-border-default/50">
                             <td class="py-2 pr-4 text-text-primary font-mono">
                               {formatDate(activity.date)}
@@ -418,9 +449,14 @@
                               {activity.sessionCount ?? 0}
                             </td>
                             <td
-                              class="py-2 pl-2 text-right text-text-primary font-mono tabular-nums"
+                              class="py-2 px-2 text-right text-text-primary font-mono tabular-nums"
                             >
                               {activity.toolCallCount ?? 0}
+                            </td>
+                            <td
+                              class="py-2 pl-2 text-right text-text-primary font-mono tabular-nums"
+                            >
+                              {formatNumber(getDailyTokenTotal(activity))}
                             </td>
                           </tr>
                         {/each}

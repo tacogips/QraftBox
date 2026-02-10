@@ -198,6 +198,20 @@
 </script>
 
 <div class="diff-view-container w-full h-full flex flex-col">
+  <!-- Header with file info -->
+  <div
+    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
+  >
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-medium text-text-primary truncate max-w-[300px]">
+        {file.path}
+      </span>
+      <span class="text-[10px] text-text-secondary">
+        +{file.additions} -{file.deletions}
+      </span>
+    </div>
+  </div>
+
   {#if file.chunks.length === 0}
     <div
       class="flex items-center justify-center flex-1 text-text-secondary text-sm p-8"
