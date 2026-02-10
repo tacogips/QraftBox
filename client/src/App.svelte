@@ -481,6 +481,9 @@
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
+    // User is composing a fresh prompt, so exit explicit "new session" mode.
+    isNewSessionMode = false;
+    selectedCliSessionId = null;
 
     // 1. Optimistic UI: add to pending immediately
     const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -923,6 +926,7 @@
    * Handle resume from Sessions screen: navigate to Changes and refresh sessions
    */
   function handleResumeToChanges(): void {
+    isNewSessionMode = false;
     navigateToScreen("diff");
     void fetchActiveSessions();
     void fetchQueueStatus();
@@ -933,6 +937,8 @@
    */
   async function handleResumeCliSession(sessionId: string): Promise<void> {
     if (contextId === null) return;
+    selectedCliSessionId = sessionId;
+    isNewSessionMode = false;
     try {
       const resp = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/resume`,
@@ -955,6 +961,10 @@
    * Start a new session by expanding the AI prompt panel and focusing it
    */
   function handleNewSession(): void {
+    // Clear any selected/resolved CLI session and switch panel into fresh mode.
+    selectedCliSessionId = null;
+    currentCliSessionId = null;
+    isNewSessionMode = true;
     if (aiPanelCollapsed) {
       aiPanelCollapsed = false;
     }
@@ -1352,7 +1362,7 @@
               <div class="p-4 text-sm text-text-secondary">
                 Loading all files...
               </div>
-            {:else if fileTree.children !== undefined && fileTree.children.length > 0}
+            {:else}
               <FileTree
                 tree={fileTree}
                 mode={fileTreeMode}
@@ -1371,12 +1381,6 @@
                 canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
                 canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
               />
-            {:else}
-              <div class="p-4 text-sm text-text-secondary">
-                {fileTreeMode === "diff"
-                  ? "No changed files found"
-                  : "No files found"}
-              </div>
             {/if}
           </aside>
         {/if}

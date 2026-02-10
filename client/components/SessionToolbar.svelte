@@ -134,7 +134,7 @@
       }
 
       if (query.length > 0) {
-        params.set("searchQuery", query);
+        params.set("search", query);
       }
 
       const response = await fetch(
