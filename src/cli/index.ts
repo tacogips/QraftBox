@@ -58,7 +58,11 @@ export function parseArgs(args: string[]): CLIConfig {
       "manual",
     )
     .option("--ai", "Enable AI features (default: true)")
-    .option("--no-ai", "Disable AI features");
+    .option("--no-ai", "Disable AI features")
+    .option(
+      "--assistant-additional-args <args>",
+      "Additional CLI arguments for AI assistant (comma-separated)",
+    );
 
   program.parse(args);
 
@@ -95,6 +99,10 @@ export function parseArgs(args: string[]): CLIConfig {
     projectPath,
     promptModel: options["promptModel"] ?? "claude-opus-4-6",
     assistantModel: options["assistantModel"] ?? "claude-opus-4-6",
+    assistantAdditionalArgs:
+      options["assistantAdditionalArgs"] !== undefined
+        ? (options["assistantAdditionalArgs"] as string).split(",")
+        : ["--dangerously-skip-permissions"],
   };
 }
 

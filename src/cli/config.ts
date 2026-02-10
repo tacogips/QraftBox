@@ -23,6 +23,7 @@ export interface ConfigDefaults {
   readonly AI: boolean;
   readonly PROMPT_MODEL: string;
   readonly ASSISTANT_MODEL: string;
+  readonly ASSISTANT_ADDITIONAL_ARGS: readonly string[];
 }
 
 /**
@@ -37,6 +38,7 @@ export const DEFAULT_CONFIG: ConfigDefaults = {
   AI: true,
   PROMPT_MODEL: "claude-opus-4-6",
   ASSISTANT_MODEL: "claude-opus-4-6",
+  ASSISTANT_ADDITIONAL_ARGS: ["--dangerously-skip-permissions"],
 } as const;
 
 /**
@@ -64,6 +66,9 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
     projectPath,
     promptModel: overrides?.promptModel ?? DEFAULT_CONFIG.PROMPT_MODEL,
     assistantModel: overrides?.assistantModel ?? DEFAULT_CONFIG.ASSISTANT_MODEL,
+    assistantAdditionalArgs:
+      overrides?.assistantAdditionalArgs ??
+      DEFAULT_CONFIG.ASSISTANT_ADDITIONAL_ARGS,
   };
 }
 

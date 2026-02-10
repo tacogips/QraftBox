@@ -10,6 +10,30 @@
    * - Loading, error, and empty states
    */
 
+  interface ModelUsageStats {
+    readonly inputTokens: number;
+    readonly outputTokens: number;
+    readonly cacheReadInputTokens: number;
+    readonly cacheCreationInputTokens: number;
+  }
+
+  interface DailyActivity {
+    readonly date: string;
+    readonly messageCount?: number;
+    readonly sessionCount?: number;
+    readonly toolCallCount?: number;
+    readonly tokensByModel?: Record<string, number>;
+  }
+
+  interface ClaudeCodeUsage {
+    readonly totalSessions: number;
+    readonly totalMessages: number;
+    readonly firstSessionDate: string | null;
+    readonly lastComputedDate: string | null;
+    readonly modelUsage: Record<string, ModelUsageStats>;
+    readonly recentDailyActivity: DailyActivity[];
+  }
+
   interface SystemInfo {
     readonly git: {
       readonly version: string | null;
@@ -23,6 +47,7 @@
       readonly promptModel: string;
       readonly assistantModel: string;
     };
+    readonly claudeCodeUsage: ClaudeCodeUsage | null;
   }
 
   /**
@@ -31,6 +56,37 @@
   let systemInfo = $state<SystemInfo | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
+
+  /**
+   * Helper functions
+   */
+  function formatNumber(n: number): string {
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    return n.toString();
+  }
+
+  function formatDate(dateStr: string): string {
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return dateStr;
+    }
+  }
+
+  function getModelShortName(modelId: string): string {
+    if (modelId.includes("opus-4-6")) return "Opus 4.6";
+    if (modelId.includes("opus-4-5")) return "Opus 4.5";
+    if (modelId.includes("sonnet-4-5")) return "Sonnet 4.5";
+    if (modelId.includes("haiku")) return "Haiku";
+    return modelId;
+  }
 
   /**
    * Fetch system info from the server
@@ -196,9 +252,7 @@
           class="rounded-lg border border-border-default bg-bg-secondary p-4"
         >
           <div class="flex-1">
-            <h3 class="text-sm font-semibold text-text-primary mb-3">
-              Models
-            </h3>
+            <h3 class="text-sm font-semibold text-text-primary mb-3">Models</h3>
             <div class="space-y-2">
               <div class="flex items-center justify-between">
                 <span class="text-sm text-text-secondary">Prompt Model</span>
@@ -215,6 +269,169 @@
             </div>
           </div>
         </div>
+
+        <!-- Claude Code Usage -->
+        {#if systemInfo.claudeCodeUsage !== null}
+          <div
+            class="rounded-lg border border-border-default bg-bg-secondary p-4"
+          >
+            <div class="flex-1">
+              <h3 class="text-sm font-semibold text-text-primary mb-3">
+                Claude Code Usage
+              </h3>
+
+              <!-- Overview Stats -->
+              <div class="space-y-2 mb-4 pb-4 border-b border-border-default">
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-text-secondary">Total Sessions</span
+                  >
+                  <span
+                    class="text-sm text-text-primary font-mono tabular-nums"
+                  >
+                    {formatNumber(systemInfo.claudeCodeUsage.totalSessions)}
+                  </span>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span class="text-sm text-text-secondary">Total Messages</span
+                  >
+                  <span
+                    class="text-sm text-text-primary font-mono tabular-nums"
+                  >
+                    {formatNumber(systemInfo.claudeCodeUsage.totalMessages)}
+                  </span>
+                </div>
+                {#if systemInfo.claudeCodeUsage.firstSessionDate !== null}
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-text-secondary"
+                      >First Session</span
+                    >
+                    <span class="text-sm text-text-primary font-mono">
+                      {formatDate(systemInfo.claudeCodeUsage.firstSessionDate)}
+                    </span>
+                  </div>
+                {/if}
+                {#if systemInfo.claudeCodeUsage.lastComputedDate !== null}
+                  <div class="flex items-center justify-between">
+                    <span class="text-sm text-text-secondary"
+                      >Last Computed</span
+                    >
+                    <span class="text-sm text-text-primary font-mono">
+                      {formatDate(systemInfo.claudeCodeUsage.lastComputedDate)}
+                    </span>
+                  </div>
+                {/if}
+              </div>
+
+              <!-- Model Usage -->
+              {#if Object.keys(systemInfo.claudeCodeUsage.modelUsage).length > 0}
+                <div class="mb-4 pb-4 border-b border-border-default">
+                  <h4 class="text-sm font-semibold text-text-primary mb-2">
+                    Model Usage
+                  </h4>
+                  <div class="space-y-3">
+                    {#each Object.entries(systemInfo.claudeCodeUsage.modelUsage) as [modelId, stats]}
+                      <div class="space-y-1">
+                        <div class="text-sm font-medium text-text-primary">
+                          {getModelShortName(modelId)}
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-xs">
+                          <div class="flex justify-between">
+                            <span class="text-text-secondary">Input:</span>
+                            <span
+                              class="text-text-primary font-mono tabular-nums"
+                              >{formatNumber(stats.inputTokens)}</span
+                            >
+                          </div>
+                          <div class="flex justify-between">
+                            <span class="text-text-secondary">Output:</span>
+                            <span
+                              class="text-text-primary font-mono tabular-nums"
+                              >{formatNumber(stats.outputTokens)}</span
+                            >
+                          </div>
+                          <div class="flex justify-between">
+                            <span class="text-text-secondary">Cache Read:</span>
+                            <span
+                              class="text-text-primary font-mono tabular-nums"
+                              >{formatNumber(stats.cacheReadInputTokens)}</span
+                            >
+                          </div>
+                          <div class="flex justify-between">
+                            <span class="text-text-secondary">Cache Write:</span
+                            >
+                            <span
+                              class="text-text-primary font-mono tabular-nums"
+                              >{formatNumber(
+                                stats.cacheCreationInputTokens,
+                              )}</span
+                            >
+                          </div>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+              <!-- Recent Activity -->
+              {#if systemInfo.claudeCodeUsage.recentDailyActivity.length > 0}
+                <div>
+                  <h4 class="text-sm font-semibold text-text-primary mb-2">
+                    Recent Activity (Last 14 Days)
+                  </h4>
+                  <div class="overflow-x-auto">
+                    <table class="w-full text-xs">
+                      <thead>
+                        <tr class="border-b border-border-default">
+                          <th
+                            class="text-left py-2 pr-4 text-text-secondary font-medium"
+                            >Date</th
+                          >
+                          <th
+                            class="text-right py-2 px-2 text-text-secondary font-medium"
+                            >Messages</th
+                          >
+                          <th
+                            class="text-right py-2 px-2 text-text-secondary font-medium"
+                            >Sessions</th
+                          >
+                          <th
+                            class="text-right py-2 pl-2 text-text-secondary font-medium"
+                            >Tool Calls</th
+                          >
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {#each systemInfo.claudeCodeUsage.recentDailyActivity as activity}
+                          <tr class="border-b border-border-default/50">
+                            <td class="py-2 pr-4 text-text-primary font-mono">
+                              {formatDate(activity.date)}
+                            </td>
+                            <td
+                              class="py-2 px-2 text-right text-text-primary font-mono tabular-nums"
+                            >
+                              {activity.messageCount ?? 0}
+                            </td>
+                            <td
+                              class="py-2 px-2 text-right text-text-primary font-mono tabular-nums"
+                            >
+                              {activity.sessionCount ?? 0}
+                            </td>
+                            <td
+                              class="py-2 pl-2 text-right text-text-primary font-mono tabular-nums"
+                            >
+                              {activity.toolCallCount ?? 0}
+                            </td>
+                          </tr>
+                        {/each}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+        {/if}
       </div>
     {/if}
   </div>

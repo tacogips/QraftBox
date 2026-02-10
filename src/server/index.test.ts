@@ -21,6 +21,7 @@ describe("createServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
     };
   });
 
@@ -85,6 +86,7 @@ describe("startServer and stopServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
     };
 
     const contextManager = createContextManager();
@@ -113,6 +115,7 @@ describe("startServer and stopServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
     };
 
     const contextManager = createContextManager();
@@ -150,6 +153,7 @@ describe("Server integration", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
     };
 
     const contextManager = createContextManager();
@@ -183,6 +187,7 @@ describe("Server integration", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
     };
 
     const contextManager = createContextManager();

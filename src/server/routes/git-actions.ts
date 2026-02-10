@@ -15,6 +15,8 @@ import {
   executeCommit,
   executePush,
   executeCreatePR,
+  executeUpdatePR,
+  cancelGitAction,
   getPRStatus,
 } from "../git-actions/executor.js";
 
@@ -32,6 +34,7 @@ interface ErrorResponse {
 interface CommitRequest {
   readonly projectPath: string;
   readonly customCtx?: string;
+  readonly actionId?: string;
 }
 
 /**
@@ -48,6 +51,14 @@ interface CreatePRRequest {
   readonly projectPath: string;
   readonly baseBranch: string;
   readonly customCtx?: string;
+  readonly actionId?: string;
+}
+
+/**
+ * Request body for POST /cancel
+ */
+interface CancelRequest {
+  readonly actionId: string;
 }
 
 /**
@@ -67,6 +78,8 @@ function isNonEmptyString(value: unknown): value is string {
  * - POST /commit - Execute AI-powered commit
  * - POST /push - Execute git push (direct, no AI)
  * - POST /create-pr - Execute AI-powered PR creation
+ * - POST /update-pr - Execute AI-powered PR update
+ * - POST /cancel - Cancel running AI commit/PR action
  * - GET /pr-status - Get PR status for current branch
  *
  * @returns Hono app with git-actions routes
@@ -96,6 +109,7 @@ export function createGitActionsRoutes(): Hono {
       const result: GitActionResult = await executeCommit(
         body.projectPath,
         body.customCtx,
+        body.actionId,
       );
 
       return c.json(result);
@@ -175,12 +189,93 @@ export function createGitActionsRoutes(): Hono {
         body.projectPath,
         body.baseBranch,
         body.customCtx,
+        body.actionId,
       );
 
       return c.json(result);
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to execute create-pr";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /update-pr
+   *
+   * Execute AI-powered pull request update.
+   */
+  app.post("/update-pr", async (c) => {
+    try {
+      const body = await c.req.json<CreatePRRequest>();
+
+      // Validate projectPath
+      if (!isNonEmptyString(body.projectPath)) {
+        const errorResponse: ErrorResponse = {
+          error: "projectPath must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Validate baseBranch
+      if (!isNonEmptyString(body.baseBranch)) {
+        const errorResponse: ErrorResponse = {
+          error: "baseBranch must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      const result: GitActionResult = await executeUpdatePR(
+        body.projectPath,
+        body.baseBranch,
+        body.customCtx,
+        body.actionId,
+      );
+
+      return c.json(result);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to execute update-pr";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /cancel
+   *
+   * Cancel running AI action by action ID.
+   */
+  app.post("/cancel", async (c) => {
+    try {
+      const body = await c.req.json<CancelRequest>();
+
+      if (!isNonEmptyString(body.actionId)) {
+        const errorResponse: ErrorResponse = {
+          error: "actionId must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      const cancelled = await cancelGitAction(body.actionId);
+      return c.json({
+        success: true,
+        actionId: body.actionId,
+        cancelled,
+      });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to cancel action";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

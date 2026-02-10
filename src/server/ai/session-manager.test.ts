@@ -60,6 +60,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 5 * 60 * 1000,
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -92,6 +94,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 5 * 60 * 1000,
         enabled: false,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -108,6 +112,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 1,
         sessionTimeoutMs: 5 * 60 * 1000,
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -147,6 +153,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 5 * 60 * 1000,
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -216,6 +224,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 5 * 60 * 1000,
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -371,6 +381,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 1000, // 1 second timeout
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 
@@ -398,6 +410,8 @@ describe("createSessionManager", () => {
         maxQueueSize: 10,
         sessionTimeoutMs: 1000,
         enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       };
       const manager = createSessionManager(config);
 

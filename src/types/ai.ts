@@ -307,6 +307,16 @@ export interface AIConfig {
    * Whether AI features are enabled
    */
   readonly enabled: boolean;
+
+  /**
+   * Model to use for the AI assistant
+   */
+  readonly assistantModel: string;
+
+  /**
+   * Additional CLI arguments for the AI assistant (e.g., ['--dangerously-skip-permissions'])
+   */
+  readonly assistantAdditionalArgs: readonly string[];
 }
 
 /**
@@ -317,6 +327,8 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   maxQueueSize: 10,
   sessionTimeoutMs: 5 * 60 * 1000, // 5 minutes
   enabled: true,
+  assistantModel: "claude-opus-4-6",
+  assistantAdditionalArgs: ["--dangerously-skip-permissions"],
 };
 
 /**
