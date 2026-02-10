@@ -141,7 +141,7 @@ function handlePointerLeave(): void {
 </script>
 
 <div
-  class="diff-line-row flex font-mono text-xs leading-5 select-none {getBackgroundClass(
+  class="diff-line-row flex font-mono text-xs leading-5 select-none overflow-hidden {getBackgroundClass(
     change.type,
   )} {selected ? 'ring-2 ring-accent-emphasis ring-inset' : ''}"
   onpointerdown={handlePointerDown}
