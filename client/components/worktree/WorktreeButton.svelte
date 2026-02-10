@@ -457,7 +457,7 @@
                 </span>
                 {#if wt.isMain}
                   <span class="px-1.5 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary shrink-0">
-                    main
+                    root
                   </span>
                 {/if}
                 {#if wt.path === projectPath}

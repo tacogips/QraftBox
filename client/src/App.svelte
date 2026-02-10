@@ -1449,13 +1449,13 @@
         </button>
       </div>
     {/if}
-    {#if contextId !== null}
-      <HeaderStatusBadges {contextId} {projectPath} />
-    {/if}
-
     <!-- Worktree button -->
     {#if contextId !== null}
       <WorktreeButton {contextId} {projectPath} onWorktreeSwitch={() => void init()} />
+    {/if}
+
+    {#if contextId !== null}
+      <HeaderStatusBadges {contextId} {projectPath} />
       <span class="text-border-default mx-1">|</span>
     {/if}
 

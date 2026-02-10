@@ -116,6 +116,7 @@
 
 <!-- File Node Button -->
 <button
+  bind:this={buttonEl}
   type="button"
   class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(node.status)}"
   class:bg-accent-subtle={selected && !node.status}
