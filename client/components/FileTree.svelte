@@ -375,11 +375,18 @@
   }
 
   /**
-   * Check if a directory has any changed children (recursive)
+   * Check if a directory has any changed children (recursive).
+   * For lazy-loaded directories (children undefined), checks if the directory
+   * itself was marked with a status by annotateTreeWithStatus.
    */
   function hasChangedChildren(node: FileNode): boolean {
-    if (!node.isDirectory || !node.children) {
+    if (!node.isDirectory) {
       return false;
+    }
+
+    // Lazy-loaded directory marked by annotateTreeWithStatus
+    if (node.children === undefined) {
+      return node.status !== undefined;
     }
 
     for (const child of node.children) {

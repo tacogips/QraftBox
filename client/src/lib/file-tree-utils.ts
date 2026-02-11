@@ -78,6 +78,19 @@ export function annotateTreeWithStatus(
     return changed ? { ...node, children: annotatedChildren } : node;
   }
 
+  // For lazy-loaded directories (children not yet fetched), check if any
+  // changed file path falls under this directory so the indicator dot appears
+  // even before the directory is expanded.
+  if (node.isDirectory && node.children === undefined) {
+    const prefix = node.path === "" ? "" : node.path + "/";
+    for (const key of statusMap.keys()) {
+      if (key.startsWith(prefix)) {
+        return { ...node, status: "modified" };
+      }
+    }
+    return node;
+  }
+
   const status = statusMap.get(node.path);
   if (status !== undefined && node.status === undefined) {
     return { ...node, status };

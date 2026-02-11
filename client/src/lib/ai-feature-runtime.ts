@@ -21,6 +21,23 @@ type GetState<T> = () => T;
 interface AIFeatureDeps {
   getContextId: GetState<string | null>;
   getProjectPath: GetState<string>;
+  /**
+   * The app-wide "current" QraftAiSessionId.
+   *
+   * This is NOT the same as `AIPromptContext.resumeSessionId`.
+   * - `qraftAiSessionId` is the app-level active session. It is set both
+   *   when resuming an existing session (handleResumeCliSession) AND when
+   *   starting a brand-new session (handleNewSession generates a fresh ID).
+   *   It is also used for toolbar display, session data fetching, and
+   *   screen navigation -- purposes unrelated to "resuming".
+   * - `AIPromptContext.resumeSessionId` is a per-prompt override that
+   *   tells submitPrompt which session to continue (or undefined to
+   *   create a new one).
+   *
+   * Renaming this to `resumeSessionId` would be misleading because the
+   * field covers broader app state, not just the resume-a-conversation
+   * use case.
+   */
   getQraftAiSessionId: GetState<QraftAiSessionId>;
   setQraftAiSessionId: SetState<QraftAiSessionId>;
   getRunningSessions: GetState<AISession[]>;
