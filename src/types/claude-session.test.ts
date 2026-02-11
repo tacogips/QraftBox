@@ -8,7 +8,7 @@ import {
   type ClaudeSessionEntry,
   type ExtendedSessionEntry,
 } from "./claude-session";
-import { deriveQraftAiSessionIdFromClaude } from "./ai";
+import { deriveQraftAiSessionIdFromClaude, type ClaudeSessionId } from "./ai";
 
 describe("Type Guards", () => {
   describe("isSessionSource", () => {
@@ -187,7 +187,9 @@ describe("Type Guards", () => {
       isSidechain: false,
       source: "qraftbox",
       projectEncoded: "-g-gits-tacogips-qraftbox",
-      qraftAiSessionId: deriveQraftAiSessionIdFromClaude(sessionId),
+      qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+        sessionId as ClaudeSessionId,
+      ),
     };
 
     test("returns true for valid extended session entry", () => {

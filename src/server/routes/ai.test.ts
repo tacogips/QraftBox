@@ -1,6 +1,7 @@
 import { describe, test, expect, beforeEach, vi, type Mock } from "vitest";
 import { createAIRoutes } from "./ai";
 import type { SessionManager } from "../ai/session-manager";
+import type { PromptId, WorktreeId } from "../../types/ai";
 
 describe("AI Routes", () => {
   let cancelMock: Mock<(sessionId: string) => Promise<void>>;
@@ -23,8 +24,8 @@ describe("AI Routes", () => {
       subscribe: vi.fn(() => () => {}),
       cleanup: vi.fn(),
       submitPrompt: vi.fn(() => ({
-        promptId: "prompt-123",
-        worktreeId: "test_abc123",
+        promptId: "prompt-123" as PromptId,
+        worktreeId: "test_abc123" as WorktreeId,
       })),
       getPromptQueue: vi.fn(() => []),
       cancelPrompt: vi.fn(),

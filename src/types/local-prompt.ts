@@ -5,7 +5,12 @@
  * before dispatching to Claude Code agent.
  */
 
-import type { AIPromptContext } from "./ai";
+import type {
+  AIPromptContext,
+  ClaudeSessionId,
+  PromptId,
+  QraftSessionId,
+} from "./ai";
 
 /**
  * Status of a locally stored prompt
@@ -23,7 +28,7 @@ export type LocalPromptStatus =
  */
 export interface LocalPrompt {
   /** Unique prompt identifier */
-  readonly id: string;
+  readonly id: PromptId;
   /** Raw prompt text from the user */
   readonly prompt: string;
   /** AI-generated summary for searchability */
@@ -35,7 +40,7 @@ export interface LocalPrompt {
   /** Current status */
   readonly status: LocalPromptStatus;
   /** QraftBox internal session ID assigned when the prompt is dispatched */
-  readonly dispatchSessionId: string | null;
+  readonly dispatchSessionId: QraftSessionId | null;
   /** ISO timestamp of creation */
   readonly createdAt: string;
   /** ISO timestamp of last update */
@@ -60,7 +65,7 @@ export interface DispatchPromptOptions {
   /** If true, attempt immediate execution (skip queue) */
   readonly immediate?: boolean;
   /** CLI session ID to resume instead of creating a new session */
-  readonly resumeSessionId?: string | undefined;
+  readonly resumeSessionId?: ClaudeSessionId | undefined;
 }
 
 /**
@@ -87,7 +92,7 @@ export interface LocalPromptListOptions {
 export interface LocalPromptUpdate {
   readonly description?: string;
   readonly status?: LocalPromptStatus;
-  readonly dispatchSessionId?: string | null;
+  readonly dispatchSessionId?: QraftSessionId | null;
   readonly error?: string | null;
   readonly prompt?: string;
 }
@@ -104,7 +109,7 @@ export interface PromptStore {
   /**
    * Get a prompt by ID
    */
-  get(id: string): Promise<LocalPrompt | null>;
+  get(id: PromptId): Promise<LocalPrompt | null>;
 
   /**
    * List prompts with optional filtering
@@ -114,12 +119,12 @@ export interface PromptStore {
   /**
    * Update a prompt's mutable fields
    */
-  update(id: string, updates: LocalPromptUpdate): Promise<LocalPrompt>;
+  update(id: PromptId, updates: LocalPromptUpdate): Promise<LocalPrompt>;
 
   /**
    * Delete a prompt
    */
-  delete(id: string): Promise<boolean>;
+  delete(id: PromptId): Promise<boolean>;
 
   /**
    * Recover prompts interrupted by server restart.
@@ -132,10 +137,10 @@ export interface PromptStore {
 /**
  * Generate a unique prompt ID
  */
-export function generatePromptId(): string {
+export function generatePromptId(): PromptId {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).slice(2, 8);
-  return `prompt_${timestamp}_${random}`;
+  return `prompt_${timestamp}_${random}` as PromptId;
 }
 
 /**

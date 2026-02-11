@@ -10,6 +10,9 @@ import type {
   AIPromptRequest,
   AIConfig,
   AIProgressEvent,
+  ClaudeSessionId,
+  QraftSessionId,
+  WorktreeId,
 } from "../../types/ai.js";
 
 /**
@@ -152,7 +155,7 @@ describe("createSessionManager", () => {
           projectPath: "/tmp/test",
           sessionMode: "continue",
           immediate: true,
-          resumeSessionId: "claude-session-123",
+          resumeSessionId: "claude-session-123" as ClaudeSessionId,
         },
       });
 
@@ -203,9 +206,9 @@ describe("createSessionManager", () => {
     test("throws when cancelling unknown session", async () => {
       const manager = createSessionManager();
 
-      await expect(manager.cancel("nonexistent-session")).rejects.toThrow(
-        "Session not found: nonexistent-session",
-      );
+      await expect(
+        manager.cancel("nonexistent-session" as QraftSessionId),
+      ).rejects.toThrow("Session not found: nonexistent-session");
     });
 
     test("is idempotent for completed sessions", async () => {
@@ -308,7 +311,7 @@ describe("createSessionManager", () => {
     test("returns null for unknown session", () => {
       const manager = createSessionManager();
 
-      const session = manager.getSession("unknown-session");
+      const session = manager.getSession("unknown-session" as QraftSessionId);
       expect(session).toBeNull();
     });
   });
@@ -383,9 +386,12 @@ describe("createSessionManager", () => {
     test("handles unknown session gracefully", () => {
       const manager = createSessionManager();
 
-      const unsubscribe = manager.subscribe("unknown-session", () => {
-        // Should not crash
-      });
+      const unsubscribe = manager.subscribe(
+        "unknown-session" as QraftSessionId,
+        () => {
+          // Should not crash
+        },
+      );
 
       expect(typeof unsubscribe).toBe("function");
       expect(() => unsubscribe()).not.toThrow();
@@ -728,7 +734,7 @@ describe("createSessionManager", () => {
         worktree_id: "worktree_b",
       });
 
-      const queueForA = manager.getPromptQueue("worktree_a");
+      const queueForA = manager.getPromptQueue("worktree_a" as WorktreeId);
       expect(queueForA.length).toBe(1);
       expect(queueForA[0]?.id).toBe(result1.promptId);
       expect(queueForA[0]?.worktree_id).toBe("worktree_a");
@@ -751,8 +757,8 @@ describe("createSessionManager", () => {
         worktree_id: "worktree_b_456",
       });
 
-      const queueA = manager.getPromptQueue("worktree_a_123");
-      const queueB = manager.getPromptQueue("worktree_b_456");
+      const queueA = manager.getPromptQueue("worktree_a_123" as WorktreeId);
+      const queueB = manager.getPromptQueue("worktree_b_456" as WorktreeId);
 
       expect(queueA.length).toBe(1);
       expect(queueB.length).toBe(1);

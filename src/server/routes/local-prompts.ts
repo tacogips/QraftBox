@@ -15,6 +15,7 @@ import type {
   LocalPromptStatus,
 } from "../../types/local-prompt";
 import type { SessionManager } from "../ai/session-manager";
+import type { ClaudeSessionId, PromptId } from "../../types/ai";
 import { createLogger } from "../logger.js";
 
 /**
@@ -130,7 +131,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.get("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const prompt = await config.promptStore.get(id);
 
       if (prompt === null) {
@@ -155,7 +156,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.patch("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const updates = await c.req.json<LocalPromptUpdate>();
 
       const existing = await config.promptStore.get(id);
@@ -182,7 +183,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.delete("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const deleted = await config.promptStore.delete(id);
 
       if (!deleted) {
@@ -210,7 +211,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.post("/:id/dispatch", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const body = await c.req
         .json<DispatchPromptOptions>()
         .catch(() => ({}) as DispatchPromptOptions);
@@ -243,7 +244,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
         const resumeId =
           typeof body.resumeSessionId === "string" &&
           body.resumeSessionId.length > 0
-            ? body.resumeSessionId
+            ? (body.resumeSessionId as ClaudeSessionId)
             : undefined;
         logger.info("Dispatching prompt", {
           promptId: id,
@@ -337,7 +338,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.post("/:id/summarize", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const prompt = await config.promptStore.get(id);
 
       if (prompt === null) {

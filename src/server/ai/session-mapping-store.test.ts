@@ -13,6 +13,8 @@ import {
 import {
   deriveQraftAiSessionIdFromClaude,
   type QraftAiSessionId,
+  type ClaudeSessionId,
+  type WorktreeId,
 } from "../../types/ai.js";
 
 describe("SessionMappingStore", () => {
@@ -24,9 +26,9 @@ describe("SessionMappingStore", () => {
 
   describe("upsert", () => {
     test("creates a new mapping and returns derived QraftAiSessionId", () => {
-      const claudeSessionId = "test-claude-session-123";
+      const claudeSessionId = "test-claude-session-123" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const qraftId = store.upsert(claudeSessionId, projectPath, worktreeId);
 
@@ -34,11 +36,11 @@ describe("SessionMappingStore", () => {
     });
 
     test("updates existing mapping when upserting same claude_session_id", () => {
-      const claudeSessionId = "test-claude-session-123";
+      const claudeSessionId = "test-claude-session-123" as ClaudeSessionId;
       const projectPath1 = "/test/project1";
       const projectPath2 = "/test/project2";
-      const worktreeId1 = "main";
-      const worktreeId2 = "feature";
+      const worktreeId1 = "main" as WorktreeId;
+      const worktreeId2 = "feature" as WorktreeId;
 
       const qraftId1 = store.upsert(claudeSessionId, projectPath1, worktreeId1);
       const qraftId2 = store.upsert(claudeSessionId, projectPath2, worktreeId2);
@@ -54,9 +56,9 @@ describe("SessionMappingStore", () => {
 
   describe("findClaudeSessionId", () => {
     test("returns the most recent claude_session_id for a qraft_ai_session_id", () => {
-      const claudeSessionId = "test-claude-session-456";
+      const claudeSessionId = "test-claude-session-456" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const qraftId = store.upsert(claudeSessionId, projectPath, worktreeId);
 
@@ -72,14 +74,14 @@ describe("SessionMappingStore", () => {
 
     test("returns most recent when multiple mappings share same qraft_ai_session_id", () => {
       // This scenario can occur if the same Claude session is referenced multiple times
-      const claudeSessionId = "test-claude-session-789";
+      const claudeSessionId = "test-claude-session-789" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const qraftId = store.upsert(claudeSessionId, projectPath, worktreeId);
 
       // Upsert again (simulating update)
-      store.upsert(claudeSessionId, projectPath, "feature");
+      store.upsert(claudeSessionId, projectPath, "feature" as WorktreeId);
 
       const found = store.findClaudeSessionId(qraftId);
       expect(found).toBe(claudeSessionId);
@@ -88,9 +90,9 @@ describe("SessionMappingStore", () => {
 
   describe("findByClaudeSessionId", () => {
     test("returns QraftAiSessionId for existing claude_session_id", () => {
-      const claudeSessionId = "test-claude-session-abc";
+      const claudeSessionId = "test-claude-session-abc" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const expectedQraftId = store.upsert(
         claudeSessionId,
@@ -103,7 +105,9 @@ describe("SessionMappingStore", () => {
     });
 
     test("returns undefined for non-existent claude_session_id", () => {
-      const found = store.findByClaudeSessionId("non-existent-session");
+      const found = store.findByClaudeSessionId(
+        "non-existent-session" as ClaudeSessionId,
+      );
       expect(found).toBeUndefined();
     });
   });
@@ -121,29 +125,52 @@ describe("SessionMappingStore", () => {
         "claude-session-3",
       ];
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
-      const qraftId1 = store.upsert(claudeIds[0]!, projectPath, worktreeId);
-      const qraftId2 = store.upsert(claudeIds[1]!, projectPath, worktreeId);
-      const qraftId3 = store.upsert(claudeIds[2]!, projectPath, worktreeId);
+      const qraftId1 = store.upsert(
+        claudeIds[0]! as ClaudeSessionId,
+        projectPath,
+        worktreeId,
+      );
+      const qraftId2 = store.upsert(
+        claudeIds[1]! as ClaudeSessionId,
+        projectPath,
+        worktreeId,
+      );
+      const qraftId3 = store.upsert(
+        claudeIds[2]! as ClaudeSessionId,
+        projectPath,
+        worktreeId,
+      );
 
-      const result = store.batchLookupByClaudeIds(claudeIds);
+      const result = store.batchLookupByClaudeIds(
+        claudeIds as ClaudeSessionId[],
+      );
 
       expect(result.size).toBe(3);
-      expect(result.get("claude-session-1") as string).toBe(qraftId1);
-      expect(result.get("claude-session-2") as string).toBe(qraftId2);
-      expect(result.get("claude-session-3") as string).toBe(qraftId3);
+      expect(result.get("claude-session-1" as ClaudeSessionId) as string).toBe(
+        qraftId1,
+      );
+      expect(result.get("claude-session-2" as ClaudeSessionId) as string).toBe(
+        qraftId2,
+      );
+      expect(result.get("claude-session-3" as ClaudeSessionId) as string).toBe(
+        qraftId3,
+      );
     });
 
     test("handles partial matches (some IDs not in database)", () => {
-      const claudeId1 = "claude-session-found";
-      const claudeId2 = "claude-session-not-found";
+      const claudeId1 = "claude-session-found" as ClaudeSessionId;
+      const claudeId2 = "claude-session-not-found" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const expectedQraftId = store.upsert(claudeId1, projectPath, worktreeId);
 
-      const result = store.batchLookupByClaudeIds([claudeId1, claudeId2]);
+      const result = store.batchLookupByClaudeIds([
+        claudeId1,
+        claudeId2,
+      ] as ClaudeSessionId[]);
 
       expect(result.size).toBe(1);
       expect(result.get(claudeId1)).toBe(expectedQraftId);
@@ -152,20 +179,22 @@ describe("SessionMappingStore", () => {
 
     test("handles large batches (>500 IDs) with chunking", () => {
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       // Create 750 mappings to test chunking
-      const claudeIds: string[] = [];
-      const expectedQraftIds = new Map<string, QraftAiSessionId>();
+      const claudeIds: ClaudeSessionId[] = [];
+      const expectedQraftIds = new Map<ClaudeSessionId, QraftAiSessionId>();
 
       for (let i = 0; i < 750; i++) {
-        const claudeId = `claude-session-${i}`;
+        const claudeId = `claude-session-${i}` as ClaudeSessionId;
         claudeIds.push(claudeId);
         const qraftId = store.upsert(claudeId, projectPath, worktreeId);
         expectedQraftIds.set(claudeId, qraftId);
       }
 
-      const result = store.batchLookupByClaudeIds(claudeIds);
+      const result = store.batchLookupByClaudeIds(
+        claudeIds as ClaudeSessionId[],
+      );
 
       expect(result.size).toBe(750);
 
@@ -185,9 +214,9 @@ describe("SessionMappingStore", () => {
 
   describe("deterministic qraft_ai_session_id derivation", () => {
     test("same claude_session_id always produces same qraft_ai_session_id", () => {
-      const claudeSessionId = "deterministic-test-session";
+      const claudeSessionId = "deterministic-test-session" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const qraftId1 = store.upsert(claudeSessionId, projectPath, worktreeId);
 
@@ -201,10 +230,10 @@ describe("SessionMappingStore", () => {
     });
 
     test("different claude_session_ids produce different qraft_ai_session_ids", () => {
-      const claudeSessionId1 = "session-a";
-      const claudeSessionId2 = "session-b";
+      const claudeSessionId1 = "session-a" as ClaudeSessionId;
+      const claudeSessionId2 = "session-b" as ClaudeSessionId;
       const projectPath = "/test/project";
-      const worktreeId = "main";
+      const worktreeId = "main" as WorktreeId;
 
       const qraftId1 = store.upsert(claudeSessionId1, projectPath, worktreeId);
       const qraftId2 = store.upsert(claudeSessionId2, projectPath, worktreeId);
@@ -243,7 +272,7 @@ describe("SessionMappingStore directory scan fallback", () => {
   }
 
   test("finds claude session via directory scan when not in SQLite", () => {
-    const claudeSessionId = "abc-def-123-456";
+    const claudeSessionId = "abc-def-123-456" as ClaudeSessionId;
     createFakeProject("-test-project", [claudeSessionId]);
 
     const scanStore = createInMemorySessionMappingStore(claudeProjectsDir);
@@ -256,7 +285,7 @@ describe("SessionMappingStore directory scan fallback", () => {
   });
 
   test("persists discovered mapping to SQLite after directory scan", () => {
-    const claudeSessionId = "persist-test-session-789";
+    const claudeSessionId = "persist-test-session-789" as ClaudeSessionId;
     createFakeProject("-test-project", [claudeSessionId]);
 
     const scanStore = createInMemorySessionMappingStore(claudeProjectsDir);
@@ -301,7 +330,7 @@ describe("SessionMappingStore directory scan fallback", () => {
   });
 
   test("scans across multiple project directories", () => {
-    const targetSessionId = "target-session-in-project-b";
+    const targetSessionId = "target-session-in-project-b" as ClaudeSessionId;
     createFakeProject("-project-a", ["session-a1", "session-a2"]);
     createFakeProject("-project-b", ["session-b1", targetSessionId]);
 
@@ -315,13 +344,13 @@ describe("SessionMappingStore directory scan fallback", () => {
   });
 
   test("prefers SQLite over directory scan", () => {
-    const claudeSessionId = "sqlite-preferred-session";
+    const claudeSessionId = "sqlite-preferred-session" as ClaudeSessionId;
     createFakeProject("-test-project", [claudeSessionId]);
 
     const scanStore = createInMemorySessionMappingStore(claudeProjectsDir);
 
     // Pre-populate SQLite
-    scanStore.upsert(claudeSessionId, "/pre-populated", "main");
+    scanStore.upsert(claudeSessionId, "/pre-populated", "main" as WorktreeId);
 
     const qraftId = deriveQraftAiSessionIdFromClaude(claudeSessionId);
     const found = scanStore.findClaudeSessionId(qraftId);
@@ -335,7 +364,7 @@ describe("SessionMappingStore directory scan fallback", () => {
     mkdirSync(projectDir, { recursive: true });
 
     // Create a .jsonl file and some non-.jsonl files
-    const claudeSessionId = "real-session";
+    const claudeSessionId = "real-session" as ClaudeSessionId;
     writeFileSync(join(projectDir, `${claudeSessionId}.jsonl`), "");
     writeFileSync(join(projectDir, "sessions-index.json"), "{}");
     writeFileSync(join(projectDir, "README.md"), "");

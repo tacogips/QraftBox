@@ -10,6 +10,9 @@ import type {
   AIPromptRequest,
   AIProgressEvent,
   AIPromptMessage,
+  QraftSessionId,
+  PromptId,
+  WorktreeId,
 } from "../../types/ai";
 import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
@@ -40,8 +43,8 @@ interface ErrorResponse {
 function syncPromptWithSession(
   sessionManager: SessionManager,
   promptStore: PromptStore,
-  sessionId: string,
-  promptId: string,
+  sessionId: QraftSessionId,
+  promptId: PromptId,
 ): void {
   const unsubscribe = sessionManager.subscribe(sessionId, (event) => {
     if (event.type === "completed") {
@@ -117,7 +120,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
       }
 
       // Auto-persist prompt to local store for crash recovery
-      let localPromptId: string | undefined;
+      let localPromptId: PromptId | undefined;
       if (context.promptStore !== undefined) {
         try {
           const localPrompt = await context.promptStore.create({
@@ -261,7 +264,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
     const worktreeId = c.req.query("worktree_id");
     const prompts = context.sessionManager.getPromptQueue(
       typeof worktreeId === "string" && worktreeId.length > 0
-        ? worktreeId
+        ? (worktreeId as WorktreeId)
         : undefined,
     );
     return c.json({ prompts });
@@ -273,7 +276,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * Cancel a queued prompt.
    */
   app.post("/prompt-queue/:id/cancel", (c) => {
-    const promptId = c.req.param("id");
+    const promptId = c.req.param("id") as PromptId;
     try {
       context.sessionManager.cancelPrompt(promptId);
       return c.json({ success: true, promptId });
@@ -315,7 +318,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * Get details for a specific session.
    */
   app.get("/sessions/:id", (c) => {
-    const sessionId = c.req.param("id");
+    const sessionId = c.req.param("id") as QraftSessionId;
     const session = context.sessionManager.getSession(sessionId);
 
     if (session === null) {
@@ -335,7 +338,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * SSE stream for session progress events.
    */
   app.get("/sessions/:id/stream", async (c) => {
-    const sessionId = c.req.param("id");
+    const sessionId = c.req.param("id") as QraftSessionId;
     const session = context.sessionManager.getSession(sessionId);
 
     if (session === null) {
@@ -463,7 +466,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * Cancel a session.
    */
   app.post("/sessions/:id/cancel", async (c) => {
-    const sessionId = c.req.param("id");
+    const sessionId = c.req.param("id") as QraftSessionId;
 
     try {
       await context.sessionManager.cancel(sessionId);

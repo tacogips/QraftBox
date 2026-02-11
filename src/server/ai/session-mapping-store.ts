@@ -10,7 +10,11 @@ import { Database } from "bun:sqlite";
 import { mkdirSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { QraftAiSessionId } from "../../types/ai.js";
+import type {
+  QraftAiSessionId,
+  ClaudeSessionId,
+  WorktreeId,
+} from "../../types/ai.js";
 import { deriveQraftAiSessionIdFromClaude } from "../../types/ai.js";
 import { createLogger } from "../logger.js";
 
@@ -21,9 +25,9 @@ const logger = createLogger("session-mapping-store");
  */
 export interface SessionMapping {
   readonly qraft_ai_session_id: QraftAiSessionId;
-  readonly claude_session_id: string;
+  readonly claude_session_id: ClaudeSessionId;
   readonly project_path: string;
-  readonly worktree_id: string;
+  readonly worktree_id: WorktreeId;
   readonly created_at: string; // ISO 8601
 }
 
@@ -37,16 +41,18 @@ export interface SessionMappingStore {
    * Returns the derived QraftAiSessionId.
    */
   upsert(
-    claudeSessionId: string,
+    claudeSessionId: ClaudeSessionId,
     projectPath: string,
-    worktreeId: string,
+    worktreeId: WorktreeId,
   ): QraftAiSessionId;
 
   /**
    * Look up the most recent claude_session_id for a given qraft_ai_session_id.
    * Used by resolveResumeSessionId to find the Claude session to resume.
    */
-  findClaudeSessionId(qraftAiSessionId: QraftAiSessionId): string | undefined;
+  findClaudeSessionId(
+    qraftAiSessionId: QraftAiSessionId,
+  ): ClaudeSessionId | undefined;
 
   /**
    * Batch lookup: given an array of claude_session_ids, return a Map
@@ -54,13 +60,15 @@ export interface SessionMappingStore {
    * Used to enrich session list responses with qraft IDs.
    */
   batchLookupByClaudeIds(
-    claudeSessionIds: readonly string[],
-  ): Map<string, QraftAiSessionId>;
+    claudeSessionIds: readonly ClaudeSessionId[],
+  ): Map<ClaudeSessionId, QraftAiSessionId>;
 
   /**
    * Find the QraftAiSessionId for a specific claude_session_id.
    */
-  findByClaudeSessionId(claudeSessionId: string): QraftAiSessionId | undefined;
+  findByClaudeSessionId(
+    claudeSessionId: ClaudeSessionId,
+  ): QraftAiSessionId | undefined;
 
   /**
    * Close the database connection.
@@ -122,9 +130,9 @@ class SessionMappingStoreImpl implements SessionMappingStore {
   }
 
   upsert(
-    claudeSessionId: string,
+    claudeSessionId: ClaudeSessionId,
     projectPath: string,
-    worktreeId: string,
+    worktreeId: WorktreeId,
   ): QraftAiSessionId {
     const qraftId = deriveQraftAiSessionIdFromClaude(claudeSessionId);
     this.stmtUpsert.run(claudeSessionId, qraftId, projectPath, worktreeId);
@@ -137,10 +145,12 @@ class SessionMappingStoreImpl implements SessionMappingStore {
     return qraftId;
   }
 
-  findClaudeSessionId(qraftAiSessionId: QraftAiSessionId): string | undefined {
+  findClaudeSessionId(
+    qraftAiSessionId: QraftAiSessionId,
+  ): ClaudeSessionId | undefined {
     // Fast path: SQLite lookup
     const row = this.stmtFindByQraftId.get(qraftAiSessionId) as
-      | { claude_session_id: string }
+      | { claude_session_id: ClaudeSessionId }
       | undefined
       | null;
     if (row !== undefined && row !== null) {
@@ -161,7 +171,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
    */
   private scanClaudeDirectoryForMatch(
     qraftAiSessionId: QraftAiSessionId,
-  ): string | undefined {
+  ): ClaudeSessionId | undefined {
     try {
       // List all project directories
       const projectDirs = readdirSync(this.claudeProjectsDir, {
@@ -184,7 +194,10 @@ class SessionMappingStoreImpl implements SessionMappingStore {
 
           for (const jsonlFile of jsonlFiles) {
             // Extract session ID from filename (remove .jsonl extension)
-            const claudeSessionId = jsonlFile.name.slice(0, -6); // Remove ".jsonl"
+            const claudeSessionId = jsonlFile.name.slice(
+              0,
+              -6,
+            ) as ClaudeSessionId; // Remove ".jsonl"
             const derivedQraftId =
               deriveQraftAiSessionIdFromClaude(claudeSessionId);
 
@@ -197,7 +210,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
                 claudeSessionId,
                 qraftAiSessionId,
                 decodedProjectPath,
-                "unknown",
+                "unknown" as WorktreeId,
               );
 
               logger.info("Discovered Claude session via directory scan", {
@@ -252,7 +265,9 @@ class SessionMappingStoreImpl implements SessionMappingStore {
     return encoded.replace(/-/g, "/");
   }
 
-  findByClaudeSessionId(claudeSessionId: string): QraftAiSessionId | undefined {
+  findByClaudeSessionId(
+    claudeSessionId: ClaudeSessionId,
+  ): QraftAiSessionId | undefined {
     const row = this.stmtFindByClaudeId.get(claudeSessionId) as
       | { qraft_ai_session_id: string }
       | undefined;
@@ -260,13 +275,13 @@ class SessionMappingStoreImpl implements SessionMappingStore {
   }
 
   batchLookupByClaudeIds(
-    claudeSessionIds: readonly string[],
-  ): Map<string, QraftAiSessionId> {
+    claudeSessionIds: readonly ClaudeSessionId[],
+  ): Map<ClaudeSessionId, QraftAiSessionId> {
     if (claudeSessionIds.length === 0) {
       return new Map();
     }
 
-    const result = new Map<string, QraftAiSessionId>();
+    const result = new Map<ClaudeSessionId, QraftAiSessionId>();
 
     // Process in chunks to avoid SQLite variable limit
     for (let i = 0; i < claudeSessionIds.length; i += BATCH_CHUNK_SIZE) {
@@ -280,7 +295,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
 
       const stmt = this.db.prepare(query);
       const rows = stmt.all(...chunk) as Array<{
-        claude_session_id: string;
+        claude_session_id: ClaudeSessionId;
         qraft_ai_session_id: string;
       }>;
 

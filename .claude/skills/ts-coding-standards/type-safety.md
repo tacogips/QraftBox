@@ -111,6 +111,83 @@ getUser(userId);  // OK
 getUser(orderId); // Error: OrderId not assignable to UserId
 ```
 
+## Mandatory: Branded Types for Domain Identifiers
+
+**RULE**: All domain-specific string identifiers MUST use branded types. Raw `string` is prohibited for IDs, keys, and other values where type confusion could occur.
+
+### When to Use Branded Types
+
+Use a branded type whenever a `string` (or `number`) represents a specific domain concept that should not be interchangeable with other strings:
+
+- Session IDs, request IDs, prompt IDs
+- Entity identifiers (user IDs, order IDs, etc.)
+- Worktree IDs, project identifiers
+- API keys, tokens
+- Any ID that is generated, looked up, or passed between components
+
+### When NOT to Use Branded Types
+
+- Free-form text: prompt content, messages, descriptions, error messages
+- ISO timestamp strings (use `Date` or a date library instead where possible)
+- File content strings
+- Generic configuration values
+
+### Project Branded Types
+
+This project defines the following branded types in `src/types/ai.ts`:
+
+| Type | Format | Purpose |
+|------|--------|---------|
+| `ClaudeSessionId` | UUID from Claude CLI | Claude CLI/SDK session identifier |
+| `QraftAiSessionId` | `qs_{base36_hash}` | Hash-based group key for prompt continuity |
+| `QraftSessionId` | `session_{base36}_{random}` | QraftBox internal session identifier |
+| `PromptId` | `prompt_{base36}_{random}` | Prompt queue/store identifier |
+| `WorktreeId` | `{basename}_{hash}` | Worktree/project scope identifier |
+
+### Adding New Branded Types
+
+When adding a new domain identifier:
+
+1. Define the branded type next to related types:
+```typescript
+export type MyEntityId = string & {
+  readonly __brand: "MyEntityId";
+};
+```
+
+2. Provide a generator function if the ID is created internally:
+```typescript
+export function generateMyEntityId(): MyEntityId {
+  return `entity_${Date.now().toString(36)}` as MyEntityId;
+}
+```
+
+3. Cast at system boundaries (URL params, JSON.parse, external APIs):
+```typescript
+const id = c.req.param("id") as MyEntityId;
+const parsed = JSON.parse(content) as MyEntity; // id field is MyEntityId
+```
+
+4. Never cast within internal business logic -- let types flow from interfaces.
+
+### Anti-Pattern: Raw String for IDs
+
+```typescript
+// BAD - raw string for a domain identifier
+interface Session {
+  id: string;
+  claudeSessionId: string;
+}
+function getSession(id: string): Session { /* ... */ }
+
+// GOOD - branded types prevent confusion
+interface Session {
+  id: QraftSessionId;
+  claudeSessionId: ClaudeSessionId;
+}
+function getSession(id: QraftSessionId): Session { /* ... */ }
+```
+
 ## Type Guards
 
 Narrow types safely at runtime:

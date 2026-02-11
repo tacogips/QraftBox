@@ -19,7 +19,7 @@ import {
 import { stripSystemTags } from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import { generateWorktreeId } from "../ai/session-manager.js";
-import type { QraftAiSessionId } from "../../types/ai.js";
+import type { QraftAiSessionId, ClaudeSessionId } from "../../types/ai.js";
 
 /**
  * Error response format
@@ -254,14 +254,16 @@ export function createClaudeSessionsRoutes(
       // Enrich sessions with qraftAiSessionId via batch SQLite lookup.
       // Auto-register missing mappings so the client always receives a qraft ID.
       if (mappingStore !== undefined && response.sessions.length > 0) {
-        const claudeIds = response.sessions.map((s) => s.sessionId);
+        const claudeIds = response.sessions.map(
+          (s) => s.sessionId as ClaudeSessionId,
+        );
         const mappings = mappingStore.batchLookupByClaudeIds(claudeIds);
         for (const session of response.sessions) {
-          let qraftId = mappings.get(session.sessionId);
+          let qraftId = mappings.get(session.sessionId as ClaudeSessionId);
           if (qraftId === undefined) {
             const worktreeId = generateWorktreeId(session.projectPath);
             qraftId = mappingStore.upsert(
-              session.sessionId,
+              session.sessionId as ClaudeSessionId,
               session.projectPath,
               worktreeId,
             );

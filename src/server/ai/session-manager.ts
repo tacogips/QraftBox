@@ -18,6 +18,10 @@ import type {
   AIQueueUpdate,
   AIPromptContext,
   QraftAiSessionId,
+  ClaudeSessionId,
+  QraftSessionId,
+  PromptId,
+  WorktreeId,
 } from "../../types/ai";
 import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
@@ -35,7 +39,7 @@ import {
  * Internal session representation
  */
 interface InternalSession {
-  id: string;
+  id: QraftSessionId;
   state: SessionState;
   prompt: string;
   fullPrompt: string;
@@ -49,29 +53,29 @@ interface InternalSession {
   abortController?: AbortController;
   toolAgentSession?: ToolAgentSession;
   claudeAgent?: ClaudeCodeToolAgent;
-  registeredClaudeSessionIds: Set<string>;
-  currentClaudeSessionId?: string;
+  registeredClaudeSessionIds: Set<ClaudeSessionId>;
+  currentClaudeSessionId?: ClaudeSessionId;
 }
 
 /**
  * Internal queued prompt representation for server-side queue management
  */
 interface QueuedPrompt {
-  readonly id: string;
+  readonly id: PromptId;
   readonly message: string;
   readonly context: AIPromptContext;
   readonly projectPath: string;
   readonly runImmediately: boolean;
-  readonly worktreeId: string;
+  readonly worktreeId: WorktreeId;
   /** Client-generated group ID for session continuity across queued prompts */
   readonly qraftAiSessionId: QraftAiSessionId | undefined;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  resultClaudeSessionId: string | undefined;
+  resultClaudeSessionId: ClaudeSessionId | undefined;
   currentActivity: string | undefined;
   error: string | undefined;
   readonly createdAt: Date;
   /** QraftBox internal session ID (set when dispatched) */
-  internalSessionId: string | undefined;
+  internalSessionId: QraftSessionId | undefined;
 }
 
 /**
@@ -88,13 +92,13 @@ const SESSION_CANCEL_TIMEOUT_MS = 3000;
  * @param projectPath - Absolute filesystem path to the project/worktree directory
  * @returns URL-safe worktree identifier
  */
-export function generateWorktreeId(projectPath: string): string {
+export function generateWorktreeId(projectPath: string): WorktreeId {
   const base = basename(projectPath)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
   const hash = Bun.hash(projectPath).toString(16).slice(0, 6);
-  return `${base}_${hash}`;
+  return `${base}_${hash}` as WorktreeId;
 }
 
 /**
@@ -109,7 +113,7 @@ export interface SessionManager {
   /**
    * Cancel a session
    */
-  cancel(sessionId: string): Promise<void>;
+  cancel(sessionId: QraftSessionId): Promise<void>;
 
   /**
    * Get queue status for UI
@@ -119,7 +123,7 @@ export interface SessionManager {
   /**
    * Get session info
    */
-  getSession(sessionId: string): AISessionInfo | null;
+  getSession(sessionId: QraftSessionId): AISessionInfo | null;
 
   /**
    * List all sessions
@@ -130,7 +134,7 @@ export interface SessionManager {
    * Subscribe to session progress events
    */
   subscribe(
-    sessionId: string,
+    sessionId: QraftSessionId,
     listener: (event: AIProgressEvent) => void,
   ): () => void;
 
@@ -144,18 +148,21 @@ export interface SessionManager {
    * The server manages session continuity and execution order.
    * Returns the prompt ID and the resolved worktree ID.
    */
-  submitPrompt(msg: AIPromptMessage): { promptId: string; worktreeId: string };
+  submitPrompt(msg: AIPromptMessage): {
+    promptId: PromptId;
+    worktreeId: WorktreeId;
+  };
 
   /**
    * Get the current prompt queue state for display.
    * @param worktreeId - Optional filter to return only prompts for a specific worktree
    */
-  getPromptQueue(worktreeId?: string): readonly QueuedPromptInfo[];
+  getPromptQueue(worktreeId?: WorktreeId): readonly QueuedPromptInfo[];
 
   /**
    * Cancel a queued prompt by its ID.
    */
-  cancelPrompt(promptId: string): void;
+  cancelPrompt(promptId: PromptId): void;
 
   /**
    * Get the session mapping store for batch lookups (undefined if not configured).
@@ -166,10 +173,10 @@ export interface SessionManager {
 /**
  * Generate a unique session ID
  */
-function generateSessionId(): string {
+function generateSessionId(): QraftSessionId {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).slice(2, 8);
-  return `session_${timestamp}_${random}`;
+  return `session_${timestamp}_${random}` as QraftSessionId;
 }
 
 /**
@@ -177,7 +184,7 @@ function generateSessionId(): string {
  */
 function createProgressEvent(
   type: AIProgressEvent["type"],
-  sessionId: string,
+  sessionId: QraftSessionId,
   data: AIProgressEvent["data"] = {},
 ): AIProgressEvent {
   return {
@@ -191,20 +198,20 @@ function createProgressEvent(
 /**
  * Extract a Claude session ID (UUID) from SDK/CLI stream messages.
  */
-function extractClaudeSessionId(msg: unknown): string | null {
+function extractClaudeSessionId(msg: unknown): ClaudeSessionId | null {
   if (typeof msg !== "object" || msg === null) return null;
   const obj = msg as Record<string, unknown>;
 
   if (typeof obj["sessionId"] === "string" && obj["sessionId"].length > 0) {
-    return obj["sessionId"];
+    return obj["sessionId"] as ClaudeSessionId;
   }
 
   if (typeof obj["session_id"] === "string" && obj["session_id"].length > 0) {
-    return obj["session_id"];
+    return obj["session_id"] as ClaudeSessionId;
   }
 
   if (typeof obj["session_id"] === "number") {
-    return String(obj["session_id"]);
+    return String(obj["session_id"]) as ClaudeSessionId;
   }
 
   return null;
@@ -247,9 +254,9 @@ export function createSessionManager(
   mappingStore?: SessionMappingStore | undefined,
 ): SessionManager {
   const logger = createLogger("SessionManager");
-  const sessions = new Map<string, InternalSession>();
+  const sessions = new Map<QraftSessionId, InternalSession>();
   const sessionRegistry = new SessionRegistry();
-  const queue: string[] = [];
+  const queue: QraftSessionId[] = [];
   let runningCount = 0;
 
   /** Server-side prompt queue */
@@ -264,7 +271,7 @@ export function createSessionManager(
   /**
    * Emit event to session listeners
    */
-  function emitEvent(sessionId: string, event: AIProgressEvent): void {
+  function emitEvent(sessionId: QraftSessionId, event: AIProgressEvent): void {
     const session = sessions.get(sessionId);
     if (session !== undefined) {
       for (const listener of session.listeners) {
@@ -280,7 +287,7 @@ export function createSessionManager(
   /**
    * Execute a session with real claude-code-agent integration
    */
-  async function executeSession(sessionId: string): Promise<void> {
+  async function executeSession(sessionId: QraftSessionId): Promise<void> {
     const session = sessions.get(sessionId);
     if (session === undefined) return;
 
@@ -642,10 +649,10 @@ export function createSessionManager(
   /**
    * Generate a unique prompt ID
    */
-  function generatePromptId(): string {
+  function generatePromptId(): PromptId {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).slice(2, 6);
-    return `prompt_${timestamp}_${random}`;
+    return `prompt_${timestamp}_${random}` as PromptId;
   }
 
   /**
@@ -706,7 +713,9 @@ export function createSessionManager(
    * 2. Otherwise, fall back to same-worktree lookup
    * 3. If none found, start a new session (undefined)
    */
-  function resolveResumeSessionId(prompt: QueuedPrompt): string | undefined {
+  function resolveResumeSessionId(
+    prompt: QueuedPrompt,
+  ): ClaudeSessionId | undefined {
     // 0. Persistent SQLite lookup by qraft_ai_session_id
     if (
       mappingStore !== undefined &&
@@ -784,7 +793,7 @@ export function createSessionManager(
     broadcastQueueUpdate();
 
     const resumeSessionId = resolveResumeSessionId(next);
-    logger.info("Dispatching prompt", {
+    logger.info("!!!!Dispatching prompt", {
       promptId: next.id,
       resumeSessionId: resumeSessionId ?? "NEW_SESSION",
     });
@@ -970,7 +979,7 @@ export function createSessionManager(
       }
     },
 
-    async cancel(sessionId: string): Promise<void> {
+    async cancel(sessionId: QraftSessionId): Promise<void> {
       const session = sessions.get(sessionId);
       if (session === undefined) {
         throw new Error(`Session not found: ${sessionId}`);
@@ -1027,7 +1036,7 @@ export function createSessionManager(
     },
 
     getQueueStatus(): QueueStatus {
-      const runningSessionIds: string[] = [];
+      const runningSessionIds: QraftSessionId[] = [];
       for (const session of sessions.values()) {
         if (session.state === "running") {
           runningSessionIds.push(session.id);
@@ -1042,7 +1051,7 @@ export function createSessionManager(
       };
     },
 
-    getSession(sessionId: string): AISessionInfo | null {
+    getSession(sessionId: QraftSessionId): AISessionInfo | null {
       const session = sessions.get(sessionId);
       if (session === undefined) {
         return null;
@@ -1055,7 +1064,7 @@ export function createSessionManager(
     },
 
     subscribe(
-      sessionId: string,
+      sessionId: QraftSessionId,
       listener: (event: AIProgressEvent) => void,
     ): () => void {
       const session = sessions.get(sessionId);
@@ -1092,8 +1101,8 @@ export function createSessionManager(
     },
 
     submitPrompt(msg: AIPromptMessage): {
-      promptId: string;
-      worktreeId: string;
+      promptId: PromptId;
+      worktreeId: WorktreeId;
     } {
       if (!config.enabled) {
         throw new Error("AI features are disabled");
@@ -1103,7 +1112,7 @@ export function createSessionManager(
       const projectPath = msg.project_path ?? "";
       const worktreeId =
         typeof msg.worktree_id === "string" && msg.worktree_id.length > 0
-          ? msg.worktree_id
+          ? (msg.worktree_id as WorktreeId)
           : generateWorktreeId(projectPath);
 
       const qraftAiSessionId: QraftAiSessionId | undefined =
@@ -1143,15 +1152,15 @@ export function createSessionManager(
       return { promptId, worktreeId };
     },
 
-    getPromptQueue(worktreeId?: string): readonly QueuedPromptInfo[] {
+    getPromptQueue(worktreeId?: WorktreeId): readonly QueuedPromptInfo[] {
       const source =
-        typeof worktreeId === "string" && worktreeId.length > 0
+        worktreeId !== undefined
           ? promptQueue.filter((p) => p.worktreeId === worktreeId)
           : promptQueue;
       return source.map(toPromptInfo);
     },
 
-    cancelPrompt(promptId: string): void {
+    cancelPrompt(promptId: PromptId): void {
       const prompt = promptQueue.find((p) => p.id === promptId);
       if (prompt === undefined) {
         throw new Error(`Prompt not found: ${promptId}`);
