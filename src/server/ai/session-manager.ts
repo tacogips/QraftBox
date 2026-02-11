@@ -33,16 +33,18 @@ import {
 import { createLogger } from "../logger.js";
 import { basename } from "node:path";
 import {
-  ClaudeCodeToolAgent,
-  type ToolAgentSession,
-} from "claude-code-agent/src/sdk/index.js";
+  createAgentRunner,
+  type AgentRunner,
+  type AgentExecution,
+  type AgentEvent,
+} from "./agent-runner.js";
 
 /**
  * Runtime session handle - only stores non-serializable runtime state
  */
 interface RuntimeSessionHandle {
   listeners: Set<(event: AIProgressEvent) => void>;
-  toolAgentSession?: ToolAgentSession | undefined;
+  execution?: AgentExecution | undefined;
   registeredClaudeSessionIds: Set<ClaudeSessionId>;
   /** Runtime-only content fields (not persisted to SQLite) */
   prompt: string;
@@ -182,6 +184,7 @@ function createProgressEvent(
  * @param broadcast - Broadcast function for WebSocket events
  * @param mappingStore - Session mapping store for persisting qraft_ai_session_id <-> claude_session_id mappings
  * @param sessionStore - AI session store for persisting session metadata
+ * @param agentRunner - Agent runner for executing prompts (created from config+toolRegistry if not provided)
  * @returns Session manager instance
  */
 export function createSessionManager(
@@ -190,10 +193,12 @@ export function createSessionManager(
   broadcast?: BroadcastFn | undefined,
   mappingStore?: SessionMappingStore | undefined,
   sessionStore?: AiSessionStore | undefined,
+  agentRunner?: AgentRunner | undefined,
 ): SessionManager {
   const logger = createLogger("SessionManager");
   const store = sessionStore ?? createInMemoryAiSessionStore();
   const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
+  const runner = agentRunner ?? createAgentRunner(config, toolRegistry);
 
   function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -317,380 +322,243 @@ export function createSessionManager(
   }
 
   /**
-   * Execute a session with real claude-code-agent integration
+   * Register a mapping in the mapping store (best-effort)
    */
-  async function executeSession(sessionId: QraftAiSessionId): Promise<void> {
+  function registerMapping(
+    claudeSessionId: ClaudeSessionId,
+    session: AiSessionRow,
+  ): void {
+    if (mappingStore === undefined) return;
+    try {
+      mappingStore.upsert(
+        claudeSessionId,
+        session.projectPath,
+        session.worktreeId ?? generateWorktreeId(session.projectPath),
+        "qraftbox",
+      );
+    } catch {
+      // Best-effort registration for source detection
+    }
+  }
+
+  /**
+   * Process a single agent event and update state accordingly.
+   * Explicit switch/case - no hidden side effects.
+   */
+  function processAgentEvent(
+    sessionId: QraftAiSessionId,
+    handle: RuntimeSessionHandle,
+    event: AgentEvent,
+  ): void {
+    switch (event.type) {
+      case "claude_session_detected": {
+        store.updateClaudeSessionId(sessionId, event.claudeSessionId);
+        handle.registeredClaudeSessionIds.add(event.claudeSessionId);
+        // Register in mapping store for cross-restart continuity
+        const session = store.get(sessionId);
+        if (session !== undefined) {
+          registerMapping(event.claudeSessionId, session);
+        }
+        break;
+      }
+
+      case "message": {
+        handle.lastAssistantMessage = event.content;
+        store.updateActivity(sessionId, undefined);
+        emitEvent(
+          sessionId,
+          createProgressEvent("message", sessionId, {
+            role: event.role,
+            content: event.content,
+          }),
+        );
+        break;
+      }
+
+      case "tool_call": {
+        store.updateActivity(sessionId, `Using ${event.toolName}...`);
+        emitEvent(
+          sessionId,
+          createProgressEvent("tool_use", sessionId, {
+            toolName: event.toolName,
+            input: event.input,
+          }),
+        );
+        break;
+      }
+
+      case "tool_result": {
+        store.updateActivity(
+          sessionId,
+          `Processing ${event.toolName} result...`,
+        );
+        emitEvent(
+          sessionId,
+          createProgressEvent("tool_result", sessionId, {
+            toolName: event.toolName,
+            output: event.output,
+            isError: event.isError,
+          }),
+        );
+        break;
+      }
+
+      case "error": {
+        emitEvent(
+          sessionId,
+          createProgressEvent("error", sessionId, {
+            message: event.message,
+          }),
+        );
+        break;
+      }
+
+      case "activity": {
+        store.updateActivity(sessionId, event.activity);
+        break;
+      }
+
+      case "completed": {
+        const completedAt = new Date().toISOString();
+        if (event.success) {
+          store.updateState(sessionId, "completed", { completedAt });
+        } else {
+          store.updateState(sessionId, "failed", { completedAt });
+          if (event.error !== undefined) {
+            store.updateError(sessionId, event.error);
+          }
+        }
+        store.updateActivity(sessionId, undefined);
+        if (event.lastAssistantMessage !== undefined) {
+          handle.lastAssistantMessage = event.lastAssistantMessage;
+        }
+
+        // Persist final mapping
+        const completedSession = store.get(sessionId);
+        if (
+          completedSession?.currentClaudeSessionId !== undefined &&
+          completedSession.worktreeId !== undefined
+        ) {
+          registerMapping(
+            completedSession.currentClaudeSessionId,
+            completedSession,
+          );
+        }
+
+        // Emit terminal event
+        emitEvent(
+          sessionId,
+          createProgressEvent(
+            event.success ? "completed" : "error",
+            sessionId,
+            event.error !== undefined ? { message: event.error } : {},
+          ),
+        );
+        break;
+      }
+    }
+  }
+
+  /**
+   * Finalize session state after execution completes
+   */
+  function finalizeSession(sessionId: QraftAiSessionId): void {
+    const session = store.get(sessionId);
+    if (session === undefined) return;
+
+    // If still running (no completed event received), check if cancelled
+    if (session.state === "running") {
+      const completedAt = new Date().toISOString();
+      store.updateState(sessionId, "cancelled", { completedAt });
+      store.updateActivity(sessionId, undefined);
+    }
+  }
+
+  /**
+   * Handle execution error
+   */
+  function handleExecutionError(
+    sessionId: QraftAiSessionId,
+    error: unknown,
+  ): void {
+    const currentSession = store.get(sessionId);
+    if (currentSession?.state === "cancelled") {
+      return; // Already cancelled, don't overwrite
+    }
+
+    const completedAt = new Date().toISOString();
+    store.updateState(sessionId, "failed", { completedAt });
+    store.updateActivity(sessionId, undefined);
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Session failed";
+    store.updateError(sessionId, errorMessage);
+    emitEvent(
+      sessionId,
+      createProgressEvent("error", sessionId, { message: errorMessage }),
+    );
+  }
+
+  /**
+   * Run a prompt execution via AgentRunner and process the event stream.
+   *
+   * Flow:
+   * 1. Transition session to "running"
+   * 2. Start execution via runner.execute()
+   * 3. Consume event stream, mapping each event to state updates + broadcasts
+   * 4. Finalize state on completion
+   */
+  async function runExecution(sessionId: QraftAiSessionId): Promise<void> {
     const session = store.get(sessionId);
     if (session === undefined) return;
 
     const handle = runtimeHandles.get(sessionId);
     if (handle === undefined) return;
 
-    // Update state to running
+    // 1. Transition to running
     const startedAt = new Date().toISOString();
     store.updateState(sessionId, "running", { startedAt });
     store.updateActivity(sessionId, "Starting session...");
-
-    // Emit session started event
     emitEvent(sessionId, createProgressEvent("session_started", sessionId));
 
+    // 2. Start execution
+    const execution = runner.execute({
+      prompt: handle.fullPrompt,
+      projectPath: session.projectPath,
+      resumeSessionId: session.currentClaudeSessionId,
+    });
+    handle.execution = execution;
+
+    // If resuming, register known Claude session ID
+    if (session.currentClaudeSessionId !== undefined) {
+      handle.registeredClaudeSessionIds.add(session.currentClaudeSessionId);
+      registerMapping(session.currentClaudeSessionId, session);
+    }
+
     try {
-      // If toolRegistry is available, use real ClaudeCodeToolAgent
-      if (toolRegistry !== undefined) {
-        // Create ClaudeCodeToolAgent with tool registry
-        const allowedToolNames = [...toolRegistry.getAllowedToolNames()];
-        const mcpServerConfig = toolRegistry.toMcpServerConfig();
-
-        const agent = new ClaudeCodeToolAgent({
-          cwd: session.projectPath,
-          mcpServers: {
-            "qraftbox-tools": mcpServerConfig as any,
-          },
-          allowedTools: allowedToolNames,
-          model: config.assistantModel,
-          additionalArgs: [...config.assistantAdditionalArgs],
-        });
-
-        // Start or resume session using cached Claude session ID
-        const resumeClaudeId = session.currentClaudeSessionId;
-        const toolAgentSession =
-          resumeClaudeId !== undefined
-            ? await agent.startSession({
-                prompt: handle.fullPrompt,
-                resumeSessionId: resumeClaudeId,
-              })
-            : await agent.startSession({
-                prompt: handle.fullPrompt,
-              });
-
-        handle.toolAgentSession = toolAgentSession;
-        if (resumeClaudeId !== undefined) {
-          logger.info("Resuming Claude session", {
-            qraftAiSessionId: sessionId,
-            claudeSessionId: resumeClaudeId,
-          });
-          handle.registeredClaudeSessionIds.add(resumeClaudeId);
-          try {
-            mappingStore?.upsert(
-              resumeClaudeId,
-              session.projectPath,
-              session.worktreeId ?? generateWorktreeId(session.projectPath),
-              "qraftbox",
-            );
-          } catch {
-            // Best-effort registration for source detection.
-          }
-        }
-
-        // Session started
-
-        // Listen for events
-        let streamedAssistantContent = "";
-        toolAgentSession.on("message", (msg: unknown) => {
-          // Detect Claude session ID once from stream (only for new sessions)
-          const currentSession = store.get(sessionId);
-          if (
-            currentSession !== undefined &&
-            currentSession.currentClaudeSessionId === undefined &&
-            typeof msg === "object" &&
-            msg !== null
-          ) {
-            const obj = msg as Record<string, unknown>;
-            if (
-              typeof obj["sessionId"] === "string" &&
-              obj["sessionId"].length > 0
-            ) {
-              const claudeSessionId = obj["sessionId"] as ClaudeSessionId;
-              store.updateClaudeSessionId(sessionId, claudeSessionId);
-              handle.registeredClaudeSessionIds.add(claudeSessionId);
-              logger.info("Detected Claude session ID from stream", {
-                qraftAiSessionId: sessionId,
-                claudeSessionId,
-              });
-              try {
-                mappingStore?.upsert(
-                  claudeSessionId,
-                  currentSession.projectPath,
-                  currentSession.worktreeId ??
-                    generateWorktreeId(currentSession.projectPath),
-                  "qraftbox",
-                );
-              } catch {
-                // Best-effort registration for source detection.
-              }
-            }
-          }
-
-          // Extract role and content from message
-          // CLI stream-json format: { type: "assistant", message: { role: "assistant", content: [{type:"text",text:"..."}] } }
-          if (typeof msg === "object" && msg !== null && "type" in msg) {
-            const rawMsg = msg as {
-              type?: string;
-              event?: {
-                type?: string;
-                delta?: { type?: string; text?: string };
-              };
-              message?: { role?: string; content?: unknown };
-              content?: unknown;
-            };
-            const msgType = rawMsg.type;
-
-            if (
-              msgType === "stream_event" &&
-              rawMsg.event?.type === "content_block_delta" &&
-              rawMsg.event.delta?.type === "text_delta" &&
-              typeof rawMsg.event.delta.text === "string"
-            ) {
-              streamedAssistantContent += rawMsg.event.delta.text;
-              if (streamedAssistantContent.length > 0) {
-                handle.lastAssistantMessage = streamedAssistantContent;
-                store.updateActivity(sessionId, undefined);
-                emitEvent(
-                  sessionId,
-                  createProgressEvent("message", sessionId, {
-                    role: "assistant",
-                    content: streamedAssistantContent,
-                  }),
-                );
-              }
-              return;
-            }
-
-            // Only capture assistant messages for lastAssistantMessage
-            if (msgType !== "assistant") return;
-
-            // Extract text content from CLI message format
-            let content: string | undefined;
-            const nestedContent = rawMsg.message?.content;
-            if (typeof nestedContent === "string") {
-              content = nestedContent;
-            } else if (Array.isArray(nestedContent)) {
-              // Content blocks: [{ type: "text", text: "..." }, ...]
-              const textParts: string[] = [];
-              for (const block of nestedContent) {
-                if (
-                  typeof block === "object" &&
-                  block !== null &&
-                  "text" in block &&
-                  typeof (block as { text: unknown }).text === "string"
-                ) {
-                  textParts.push((block as { text: string }).text);
-                }
-              }
-              content = textParts.join("\n");
-            } else if (typeof rawMsg.content === "string") {
-              content = rawMsg.content;
-            }
-
-            if (content !== undefined && content.length > 0) {
-              streamedAssistantContent = content;
-              handle.lastAssistantMessage = content;
-              store.updateActivity(sessionId, undefined);
-              emitEvent(
-                sessionId,
-                createProgressEvent("message", sessionId, {
-                  role: "assistant",
-                  content,
-                }),
-              );
-            }
-          }
-        });
-
-        toolAgentSession.on("toolCall", (call: unknown) => {
-          // Extract tool name and input
-          if (typeof call === "object" && call !== null) {
-            const toolCall = call as {
-              name?: string;
-              input?: Record<string, unknown>;
-            };
-            const toolName =
-              typeof toolCall.name === "string" ? toolCall.name : "unknown";
-            const input =
-              typeof toolCall.input === "object" && toolCall.input !== null
-                ? toolCall.input
-                : {};
-            emitEvent(
-              sessionId,
-              createProgressEvent("tool_use", sessionId, {
-                toolName,
-                input,
-              }),
-            );
-            store.updateActivity(sessionId, `Using ${toolName}...`);
-          }
-        });
-
-        toolAgentSession.on("toolResult", (result: unknown) => {
-          // Extract tool result data
-          if (typeof result === "object" && result !== null) {
-            const toolResult = result as {
-              name?: string;
-              output?: unknown;
-              isError?: boolean;
-            };
-            const toolName =
-              typeof toolResult.name === "string" ? toolResult.name : "unknown";
-            const isError =
-              typeof toolResult.isError === "boolean"
-                ? toolResult.isError
-                : false;
-            emitEvent(
-              sessionId,
-              createProgressEvent("tool_result", sessionId, {
-                toolName,
-                output: toolResult.output,
-                isError,
-              }),
-            );
-            store.updateActivity(sessionId, `Processing ${toolName} result...`);
-          }
-        });
-
-        toolAgentSession.on("error", (err: unknown) => {
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          emitEvent(
-            sessionId,
-            createProgressEvent("error", sessionId, {
-              message: errorMessage,
-            }),
-          );
-        });
-
-        // Iterate messages until completion
-        for await (const _msg of toolAgentSession.messages()) {
-          // Check if cancelled
-          const currentSession = store.get(sessionId);
-          if (
-            currentSession === undefined ||
-            currentSession.state === "cancelled"
-          ) {
-            break;
-          }
-        }
-
-        // Wait for completion
-        const sessionResult = await toolAgentSession.waitForCompletion();
-        const finalAgentState = toolAgentSession.getState().state;
-
-        // Keep explicit cancellation as cancelled (don't downgrade to failed)
-        const latestSession = store.get(sessionId);
-        if (
-          latestSession?.state === "cancelled" ||
-          finalAgentState === "cancelled"
-        ) {
-          const completedAt = new Date().toISOString();
-          store.updateState(sessionId, "cancelled", { completedAt });
-          store.updateActivity(sessionId, undefined);
-          return;
-        }
-
-        // Mark as completed or failed
-        const completedAt = new Date().toISOString();
-        if (sessionResult.success) {
-          store.updateState(sessionId, "completed", { completedAt });
-          store.updateActivity(sessionId, undefined);
-        } else {
-          store.updateState(sessionId, "failed", { completedAt });
-          store.updateActivity(sessionId, undefined);
-          // Store error message in session
-          if (sessionResult.error !== undefined) {
-            store.updateError(sessionId, sessionResult.error.message);
-            emitEvent(
-              sessionId,
-              createProgressEvent("error", sessionId, {
-                message: sessionResult.error.message,
-              }),
-            );
-          }
-        }
-
-        // Persist final mapping to SQLite for cross-restart continuity
-        const completedSession = store.get(sessionId);
-        if (
-          mappingStore !== undefined &&
-          completedSession?.currentClaudeSessionId !== undefined &&
-          completedSession.worktreeId !== undefined
-        ) {
-          try {
-            mappingStore.upsert(
-              completedSession.currentClaudeSessionId,
-              completedSession.projectPath,
-              completedSession.worktreeId,
-              "qraftbox",
-            );
-          } catch {
-            // Non-critical
-          }
-        }
-
-        // Clean up agent
-        await agent.close();
-
-        const finalSession = store.get(sessionId);
-        emitEvent(
-          sessionId,
-          createProgressEvent(
-            finalSession?.state === "completed" ? "completed" : "error",
-            sessionId,
-          ),
-        );
-      } else {
-        // Fallback to stubbed behavior if toolRegistry is undefined
-        emitEvent(sessionId, createProgressEvent("thinking", sessionId));
-        store.updateActivity(sessionId, "Thinking...");
-
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
+      // 3. Consume event stream
+      for await (const event of execution.events()) {
+        // Check for external cancellation
         const currentSession = store.get(sessionId);
         if (
           currentSession === undefined ||
           currentSession.state === "cancelled"
         ) {
-          return;
+          break;
         }
 
-        const stubbedContent =
-          "[AI Integration Stubbed] Tool registry not provided. The full prompt was:\n\n" +
-          handle.fullPrompt.slice(0, 500) +
-          (handle.fullPrompt.length > 500 ? "..." : "");
-        handle.lastAssistantMessage = stubbedContent;
-        store.updateActivity(sessionId, undefined);
+        processAgentEvent(sessionId, handle, event);
 
-        emitEvent(
-          sessionId,
-          createProgressEvent("message", sessionId, {
-            role: "assistant",
-            content: stubbedContent,
-          }),
-        );
-
-        const completedAt = new Date().toISOString();
-        store.updateState(sessionId, "completed", { completedAt });
-
-        emitEvent(sessionId, createProgressEvent("completed", sessionId));
-      }
-    } catch (e) {
-      const currentSession = store.get(sessionId);
-      if (currentSession?.state === "cancelled") {
-        const completedAt =
-          currentSession.completedAt ?? new Date().toISOString();
-        store.updateState(sessionId, "cancelled", { completedAt });
-        return;
+        // If completed event, break out
+        if (event.type === "completed") {
+          break;
+        }
       }
 
-      const completedAt = new Date().toISOString();
-      store.updateState(sessionId, "failed", { completedAt });
-      store.updateActivity(sessionId, undefined);
-
-      const errorMessage = e instanceof Error ? e.message : "Session failed";
-      store.updateError(sessionId, errorMessage);
-      emitEvent(
-        sessionId,
-        createProgressEvent("error", sessionId, {
-          message: errorMessage,
-        }),
-      );
+      // 4. Finalize state
+      finalizeSession(sessionId);
+    } catch (error) {
+      handleExecutionError(sessionId, error);
     } finally {
       // Clean up runtime handle for terminal states
       const finalSession = store.get(sessionId);
@@ -732,8 +600,8 @@ export function createSessionManager(
       broadcastQueueUpdate();
 
       // Don't await - run in background
-      executeSession(nextSessionId).catch(() => {
-        // Errors handled in executeSession
+      runExecution(nextSessionId).catch(() => {
+        // Errors handled in runExecution
       });
     }
   }
@@ -784,8 +652,8 @@ export function createSessionManager(
         runtimeHandles.set(sessionId, handle);
 
         // Start immediately
-        executeSession(sessionId).catch(() => {
-          // Errors handled in executeSession
+        runExecution(sessionId).catch(() => {
+          // Errors handled in runExecution
         });
 
         return {
@@ -860,13 +728,13 @@ export function createSessionManager(
       store.updateActivity(sessionId, undefined);
       emitEvent(sessionId, createProgressEvent("cancelled", sessionId));
 
-      // Cancel ToolAgentSession if available
+      // Cancel AgentExecution if available
       const handle = runtimeHandles.get(sessionId);
-      if (handle?.toolAgentSession !== undefined) {
+      if (handle?.execution !== undefined) {
         let cancelTimedOut = false;
         try {
           await Promise.race([
-            handle.toolAgentSession.cancel(),
+            handle.execution.cancel(),
             delay(SESSION_CANCEL_TIMEOUT_MS).then(() => {
               cancelTimedOut = true;
             }),
@@ -878,7 +746,7 @@ export function createSessionManager(
         // Force-abort if graceful cancel did not complete in time
         if (cancelTimedOut) {
           try {
-            await handle.toolAgentSession.abort();
+            await handle.execution.abort();
           } catch {
             // Keep cancellation idempotent and continue local cleanup
           }

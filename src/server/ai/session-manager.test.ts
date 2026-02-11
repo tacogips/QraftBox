@@ -14,6 +14,8 @@ import type {
   QraftAiSessionId,
   WorktreeId,
 } from "../../types/ai.js";
+import type { AgentRunner, AgentEvent } from "./agent-runner.js";
+import { DEFAULT_AI_CONFIG } from "../../types/ai.js";
 
 /**
  * Create a test AI prompt request
@@ -813,6 +815,379 @@ describe("createSessionManager", () => {
 
       const expectedWorktreeId = generateWorktreeId(projectPath);
       expect(result.worktreeId).toBe(expectedWorktreeId);
+    });
+  });
+
+  describe("AgentRunner integration", () => {
+    /**
+     * Create a mock AgentRunner that yields predetermined events
+     */
+    function createMockAgentRunner(events: AgentEvent[]): AgentRunner {
+      return {
+        execute(_params) {
+          let cancelled = false;
+          const eventsCopy = [...events];
+
+          return {
+            events(): AsyncIterable<AgentEvent> {
+              return {
+                [Symbol.asyncIterator]() {
+                  let index = 0;
+                  return {
+                    async next() {
+                      if (cancelled || index >= eventsCopy.length) {
+                        return {
+                          value: undefined as unknown as AgentEvent,
+                          done: true,
+                        };
+                      }
+                      const value = eventsCopy[index];
+                      index++;
+                      // Small delay to allow event loop to process
+                      await new Promise((resolve) => setTimeout(resolve, 10));
+                      return { value: value!, done: false };
+                    },
+                  };
+                },
+              };
+            },
+            async cancel() {
+              cancelled = true;
+            },
+            async abort() {
+              cancelled = true;
+            },
+          };
+        },
+      };
+    }
+
+    test("processes claude_session_detected event and updates session", async () => {
+      const mockRunner = createMockAgentRunner([
+        {
+          type: "claude_session_detected",
+          claudeSessionId: "claude-abc-123" as ClaudeSessionId,
+        },
+        { type: "completed", success: true, lastAssistantMessage: "Done" },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined, // no toolRegistry
+        undefined, // no broadcast
+        undefined, // no mappingStore
+        undefined, // no sessionStore
+        mockRunner,
+      );
+
+      const result = await manager.submit(createTestRequest());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const session = manager.getSession(result.sessionId);
+      expect(session?.state).toBe("completed");
+      expect(session?.claudeSessionId).toBe("claude-abc-123");
+    });
+
+    test("processes message events and emits to subscribers", async () => {
+      const mockRunner = createMockAgentRunner([
+        {
+          type: "message",
+          role: "assistant" as const,
+          content: "Hello from mock",
+        },
+        {
+          type: "completed",
+          success: true,
+          lastAssistantMessage: "Hello from mock",
+        },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const events: AIProgressEvent[] = [];
+      const result = await manager.submit(createTestRequest());
+      manager.subscribe(result.sessionId, (event) => events.push(event));
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const messageEvents = events.filter((e) => e.type === "message");
+      expect(messageEvents.length).toBeGreaterThanOrEqual(1);
+
+      const msgEvent = messageEvents[0];
+      if (
+        msgEvent !== undefined &&
+        "content" in msgEvent.data &&
+        typeof msgEvent.data.content === "string"
+      ) {
+        expect(msgEvent.data.content).toBe("Hello from mock");
+      }
+    });
+
+    test("processes tool_call and tool_result events", async () => {
+      const mockRunner = createMockAgentRunner([
+        {
+          type: "tool_call",
+          toolName: "read_file",
+          input: { path: "/tmp/test.ts" },
+        },
+        {
+          type: "tool_result",
+          toolName: "read_file",
+          output: "file content",
+          isError: false,
+        },
+        { type: "completed", success: true },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const events: AIProgressEvent[] = [];
+      const result = await manager.submit(createTestRequest());
+      manager.subscribe(result.sessionId, (event) => events.push(event));
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const toolUseEvents = events.filter((e) => e.type === "tool_use");
+      const toolResultEvents = events.filter((e) => e.type === "tool_result");
+      expect(toolUseEvents.length).toBeGreaterThanOrEqual(1);
+      expect(toolResultEvents.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("handles failed execution with error event", async () => {
+      const mockRunner = createMockAgentRunner([
+        { type: "error", message: "Something went wrong" },
+        { type: "completed", success: false, error: "Something went wrong" },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const result = await manager.submit(createTestRequest());
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const session = manager.getSession(result.sessionId);
+      expect(session?.state).toBe("failed");
+    });
+
+    test("processes activity events and updates currentActivity", async () => {
+      const mockRunner = createMockAgentRunner([
+        { type: "activity", activity: "Reading files..." },
+        { type: "activity", activity: undefined },
+        { type: "completed", success: true },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const result = await manager.submit(createTestRequest());
+
+      // Check activity during execution (before completion)
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const activeSess = manager.getSession(result.sessionId);
+      // Activity may have been set or cleared depending on timing
+      expect(activeSess).not.toBeNull();
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const session = manager.getSession(result.sessionId);
+      expect(session?.state).toBe("completed");
+    });
+
+    test("passes resumeSessionId from session to runner.execute", async () => {
+      let capturedParams:
+        | {
+            prompt: string;
+            projectPath: string;
+            resumeSessionId?: ClaudeSessionId | undefined;
+          }
+        | undefined;
+
+      const mockRunner: AgentRunner = {
+        execute(params) {
+          capturedParams = { ...params };
+          // Return a simple completed execution
+          return {
+            events(): AsyncIterable<AgentEvent> {
+              const evts: AgentEvent[] = [{ type: "completed", success: true }];
+              return {
+                [Symbol.asyncIterator]() {
+                  let i = 0;
+                  return {
+                    async next() {
+                      if (i >= evts.length)
+                        return {
+                          value: undefined as unknown as AgentEvent,
+                          done: true,
+                        };
+                      const value = evts[i]!;
+                      i++;
+                      await new Promise((r) => setTimeout(r, 10));
+                      return { value, done: false };
+                    },
+                  };
+                },
+              };
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const request = createTestRequest({
+        options: {
+          projectPath: "/tmp/test",
+          sessionMode: "continue",
+          immediate: true,
+          resumeSessionId: "resume-session-xyz" as ClaudeSessionId,
+        },
+      });
+
+      await manager.submit(request);
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      expect(capturedParams).toBeDefined();
+      expect(capturedParams?.resumeSessionId).toBe("resume-session-xyz");
+      expect(capturedParams?.projectPath).toBe("/tmp/test");
+    });
+
+    test("broadcasts queue updates for prompt queue entries via mock runner", async () => {
+      const broadcasts: { event: string; data: unknown }[] = [];
+      const mockRunner = createMockAgentRunner([
+        { type: "message", role: "assistant" as const, content: "response" },
+        {
+          type: "completed",
+          success: true,
+          lastAssistantMessage: "response",
+        },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        (event, data) => {
+          broadcasts.push({ event, data });
+        },
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "Test broadcast with mock",
+        project_path: "/tmp/test",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const queueUpdates = broadcasts.filter(
+        (b) => b.event === "ai:queue_update",
+      );
+      expect(queueUpdates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("cancel() stops execution via AgentExecution.cancel()", async () => {
+      let cancelCalled = false;
+
+      // Create a slow runner that takes a long time so we can cancel it
+      const slowRunner: AgentRunner = {
+        execute(_params) {
+          let cancelled = false;
+          return {
+            events(): AsyncIterable<AgentEvent> {
+              return {
+                [Symbol.asyncIterator]() {
+                  let step = 0;
+                  return {
+                    async next() {
+                      if (cancelled || step > 10) {
+                        return {
+                          value: undefined as unknown as AgentEvent,
+                          done: true,
+                        };
+                      }
+                      step++;
+                      // Wait a long time between events
+                      await new Promise((r) => setTimeout(r, 100));
+                      return {
+                        value: {
+                          type: "activity",
+                          activity: `Step ${step}`,
+                        } as AgentEvent,
+                        done: false,
+                      };
+                    },
+                  };
+                },
+              };
+            },
+            async cancel() {
+              cancelCalled = true;
+              cancelled = true;
+            },
+            async abort() {
+              cancelled = true;
+            },
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        slowRunner,
+      );
+
+      const result = await manager.submit(createTestRequest());
+
+      // Wait for execution to start
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      // Cancel
+      await manager.cancel(result.sessionId);
+
+      expect(cancelCalled).toBe(true);
+
+      const session = manager.getSession(result.sessionId);
+      expect(session?.state).toBe("cancelled");
     });
   });
 });
