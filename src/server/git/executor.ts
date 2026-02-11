@@ -104,6 +104,13 @@ export async function execGit(
     };
   } catch (e) {
     clearTimeout(timeoutId);
+    // Ensure the process is killed and reaped to prevent zombie processes
+    try {
+      proc.kill();
+    } catch {
+      // Process may have already exited
+    }
+    await proc.exited.catch(() => {});
     const errorMessage = e instanceof Error ? e.message : String(e);
     throw new GitExecutorError(
       `Git command execution failed: ${errorMessage}`,
@@ -147,7 +154,7 @@ export function execGitStream(
     proc = Bun.spawn(["git", ...args], {
       cwd: options.cwd,
       stdout: "pipe",
-      stderr: "pipe",
+      stderr: "ignore",
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -158,6 +165,9 @@ export function execGitStream(
       -1,
     );
   }
+
+  // Ensure the process is always reaped even if the caller doesn't await exited
+  void proc.exited.catch(() => {});
 
   return proc.stdout;
 }

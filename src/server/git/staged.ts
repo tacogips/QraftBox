@@ -243,8 +243,8 @@ export async function hasStagedChanges(cwd: string): Promise<boolean> {
   try {
     proc = Bun.spawn(["git", "diff", "--cached", "--quiet"], {
       cwd,
-      stdout: "pipe",
-      stderr: "pipe",
+      stdout: "ignore",
+      stderr: "ignore",
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -257,18 +257,15 @@ export async function hasStagedChanges(cwd: string): Promise<boolean> {
 
   const exitCode = await proc.exited;
 
-  // Exit code 0 means no changes, 1 means there are changes
-  // Any other exit code is an error
   if (exitCode === 0) {
     return false;
   } else if (exitCode === 1) {
     return true;
   } else {
-    const stderr = await new Response(proc.stderr).text();
     throw new GitError(
       `Git command failed with exit code ${exitCode}`,
       "git diff --cached --quiet",
-      stderr,
+      `exit code: ${exitCode}`,
     );
   }
 }
