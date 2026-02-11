@@ -38,7 +38,12 @@
     running: readonly AISession[];
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
-    pendingPrompts: readonly { id: string; message: string; status: string }[];
+    pendingPrompts: readonly {
+      id: string;
+      message: string;
+      status: string;
+      qraft_ai_session_id?: string | undefined;
+    }[];
     resumeSessionId?: string | null;
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
@@ -85,6 +90,7 @@
   let summaryLoading = $state(false);
   let tasksExpanded = $state(false);
   let filesExpanded = $state(false);
+  let latestCliFetchToken = 0;
 
   /**
    * Session to resolve from Claude session browser.
@@ -101,7 +107,7 @@
     const currentGroup = running.find(
       (session) => session.clientSessionId === currentClientSessionId,
     );
-    return currentGroup ?? (running.length > 0 ? running[0] : null);
+    return currentGroup ?? null;
   });
 
   /**
@@ -111,10 +117,7 @@
     const currentGroup = recentlyCompleted.find(
       (session) => session.clientSessionId === currentClientSessionId,
     );
-    return (
-      currentGroup ??
-      (recentlyCompleted.length > 0 ? recentlyCompleted[0] : null)
-    );
+    return currentGroup ?? null;
   });
 
   /**
@@ -126,6 +129,26 @@
       return false;
     }
     return runningSession.clientSessionId === targetCliSessionId;
+  });
+
+  /**
+   * Queued prompt entries that belong to the current conversation.
+   * Prompt queue API returns newest-first, so the next prompt to run is last.
+   */
+  const queuedPromptsInCurrentConversation = $derived.by(() => {
+    if (targetCliSessionId.length === 0) return [];
+    return pendingPrompts.filter(
+      (prompt) => prompt.qraft_ai_session_id === targetCliSessionId,
+    );
+  });
+
+  const nextQueuedPromptInCurrentConversation = $derived.by(() => {
+    if (queuedPromptsInCurrentConversation.length === 0) {
+      return undefined;
+    }
+    return queuedPromptsInCurrentConversation[
+      queuedPromptsInCurrentConversation.length - 1
+    ]?.message;
   });
 
   /**
@@ -275,20 +298,33 @@
    */
   async function fetchCliSessionById(qraftAiSessionId: string): Promise<void> {
     if (contextId === null) return;
+    const fetchToken = ++latestCliFetchToken;
     cliSessionLoading = true;
     try {
       const resp = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions/${qraftAiSessionId}`,
       );
-      if (!resp.ok) return;
+      if (fetchToken !== latestCliFetchToken) {
+        return;
+      }
+      if (!resp.ok) {
+        recentCliSession = null;
+        sessionSummary = null;
+        return;
+      }
       const session = (await resp.json()) as ExtendedSessionEntry;
       recentCliSession = session;
       // Reset summary when switching sessions
       sessionSummary = null;
     } catch {
-      // Silently ignore
+      if (fetchToken === latestCliFetchToken) {
+        recentCliSession = null;
+        sessionSummary = null;
+      }
     } finally {
-      cliSessionLoading = false;
+      if (fetchToken === latestCliFetchToken) {
+        cliSessionLoading = false;
+      }
     }
   }
 
@@ -319,8 +355,11 @@
   $effect(() => {
     if (contextId === null) return;
     if (targetCliSessionId.length > 0) {
+      recentCliSession = null;
+      sessionSummary = null;
       void fetchCliSessionById(targetCliSessionId);
     } else {
+      latestCliFetchToken += 1;
       recentCliSession = null;
       sessionSummary = null;
       cliSessionLoading = false;
@@ -848,10 +887,11 @@
               {contextId}
               autoRefreshMs={isRunningCurrentConversation ? 1500 : 0}
               followLatest={isRunningCurrentConversation}
-              optimisticUserMessage={isRunningCurrentConversation &&
-              runningSession !== null &&
-              runningSession !== undefined
-                ? runningSession.prompt
+              optimisticUserMessage={isRunningCurrentConversation
+                ? (nextQueuedPromptInCurrentConversation ??
+                  (runningSession !== null && runningSession !== undefined
+                    ? runningSession.prompt
+                    : undefined))
                 : undefined}
               optimisticAssistantMessage={isRunningCurrentConversation &&
               runningSession !== null &&

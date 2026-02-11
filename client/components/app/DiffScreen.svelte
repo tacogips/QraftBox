@@ -2,6 +2,7 @@
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
   import type { QueueStatus, AISession } from "../../../src/types/ai";
+  import type { PromptQueueItem } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
@@ -99,7 +100,7 @@
     runningSessions: AISession[];
     queuedSessions: AISession[];
     recentlyCompletedSessions: AISession[];
-    pendingPrompts: Array<{ status: string }>;
+    pendingPrompts: PromptQueueItem[];
     resumeDisplaySessionId: string | null;
     currentQraftAiSessionId: string;
     showIgnored: boolean;
@@ -443,6 +444,7 @@
       resumeSessionId={resumeDisplaySessionId}
       onCancelSession={onCancelActiveSession}
       onResumeSession={onResumeCliSession}
+      {onNewSession}
     />
 
     <AIPromptPanel
