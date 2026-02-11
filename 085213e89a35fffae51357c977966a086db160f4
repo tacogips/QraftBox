@@ -90,6 +90,16 @@
       "email": "me@tacogips.me"
     },
     "createdAt": 1770791811664,
-    "replies": []
+    "replies": [
+      {
+        "id": "1d1bf00e-0084-4d2e-8aad-bc7b305edc20",
+        "body": "Test reply",
+        "author": {
+          "name": "tacogips",
+          "email": "me@tacogips.me"
+        },
+        "createdAt": 1770791811673
+      }
+    ]
   }
 ]
