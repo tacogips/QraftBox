@@ -100,6 +100,10 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   handleSearchSession: () => void;
   hasActiveSessionWork: () => boolean;
 } {
+  let stickyCompletedSession:
+    | { session: AISession; expiresAt: number }
+    | null = null;
+
   async function fetchPromptQueue(): Promise<void> {
     try {
       const prompts = await fetchPromptQueueApi();
@@ -135,14 +139,38 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         } else if (session.state === "queued") {
           queued.push(session);
         } else if (
-          (session.state === "completed" || session.state === "failed") &&
-          session.completedAt !== undefined
+          session.state === "completed" ||
+          session.state === "failed" ||
+          session.state === "cancelled"
         ) {
-          const completedTime = new Date(session.completedAt).getTime();
-          if (now - completedTime < recentWindowMs) {
+          const terminalAt =
+            session.completedAt ?? session.startedAt ?? session.createdAt;
+          const terminalTime = new Date(terminalAt).getTime();
+          // Keep terminal sessions visible briefly even when timestamps are missing
+          // or malformed, to avoid a jarring panel disappear right after completion.
+          if (Number.isNaN(terminalTime) || now - terminalTime < recentWindowMs) {
             recentCompleted.push(session);
           }
         }
+      }
+
+      if (recentCompleted.length > 0) {
+        stickyCompletedSession = {
+          session: recentCompleted[0],
+          expiresAt: now + recentWindowMs,
+        };
+      } else if (
+        stickyCompletedSession !== null &&
+        stickyCompletedSession.expiresAt > now &&
+        running.length === 0 &&
+        queued.length === 0
+      ) {
+        recentCompleted.push(stickyCompletedSession.session);
+      } else if (
+        stickyCompletedSession !== null &&
+        stickyCompletedSession.expiresAt <= now
+      ) {
+        stickyCompletedSession = null;
       }
 
       deps.setRunningSessions(running);
@@ -162,13 +190,16 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     if (deps.getContextId() === null) return;
 
     try {
-      await submitAIPrompt({
+      const payload = {
         runImmediately: immediate,
         message,
         context,
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: deps.getQraftAiSessionId(),
-      });
+      };
+      console.log(`!!!!! prompt ${JSON.stringify(payload)}`);
+
+      await submitAIPrompt(payload);
 
       void fetchPromptQueue();
       void fetchActiveSessions();
@@ -228,7 +259,9 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
       deps.getQueuedSessions().length > 0 ||
       deps
         .getServerPromptQueue()
-        .some((item) => item.status === "queued" || item.status === "running") ||
+        .some(
+          (item) => item.status === "queued" || item.status === "running",
+        ) ||
       deps.getRecentlyCompletedSessions().length > 0
     );
   }

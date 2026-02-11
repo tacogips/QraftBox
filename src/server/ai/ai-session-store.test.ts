@@ -567,6 +567,19 @@ describe("AiSessionStore", () => {
       const sessionInfo = toSessionInfo(testRow);
       expect(sessionInfo.prompt).toBe("This was the user prompt");
     });
+
+    test("uses lastAssistantMessage field in AISessionInfo", () => {
+      const testRow: AiSessionRow = {
+        id: "qs_test_last_assistant" as QraftAiSessionId,
+        state: "completed",
+        projectPath: "/tmp/test",
+        createdAt: "2025-01-01T00:00:00.000Z",
+        lastAssistantMessage: "Assistant final response",
+      };
+
+      const sessionInfo = toSessionInfo(testRow);
+      expect(sessionInfo.lastAssistantMessage).toBe("Assistant final response");
+    });
   });
 
   describe("prompt queue fields", () => {
@@ -639,6 +652,38 @@ describe("AiSessionStore", () => {
 
       const retrieved = sessionStore.get(testRow.id);
       expect(retrieved?.error).toBeUndefined();
+    });
+  });
+
+  describe("updateLastAssistantMessage()", () => {
+    test("sets last assistant message", () => {
+      const testRow = createTestRow({
+        id: "qs_test_set_last_assistant" as QraftAiSessionId,
+        state: "completed",
+      });
+
+      sessionStore.insert(testRow);
+      sessionStore.updateLastAssistantMessage(
+        testRow.id,
+        "Final assistant output",
+      );
+
+      const retrieved = sessionStore.get(testRow.id);
+      expect(retrieved?.lastAssistantMessage).toBe("Final assistant output");
+    });
+
+    test("clears last assistant message with undefined", () => {
+      const testRow = createTestRow({
+        id: "qs_test_clear_last_assistant" as QraftAiSessionId,
+        state: "completed",
+        lastAssistantMessage: "Before clear",
+      });
+
+      sessionStore.insert(testRow);
+      sessionStore.updateLastAssistantMessage(testRow.id, undefined);
+
+      const retrieved = sessionStore.get(testRow.id);
+      expect(retrieved?.lastAssistantMessage).toBeUndefined();
     });
   });
 

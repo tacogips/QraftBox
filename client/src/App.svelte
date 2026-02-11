@@ -365,7 +365,6 @@
     handleResumeToChanges,
     handleResumeCliSession,
     handleNewSession,
-    handleSearchSession,
     hasActiveSessionWork,
   } = aiFeatureController;
 
@@ -592,7 +591,6 @@
         onToggleAiPanel={() => {
           aiPanelCollapsed = !aiPanelCollapsed;
         }}
-        onSearchSession={handleSearchSession}
       />
     {:else if currentScreen === "commits"}
       <!-- Commits Screen -->

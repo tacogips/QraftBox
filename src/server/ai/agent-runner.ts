@@ -16,6 +16,85 @@ import {
 } from "claude-code-agent/src/sdk/index.js";
 
 const logger = createLogger("AgentRunner");
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function readStringField(
+  obj: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = obj[key];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function isLikelyClaudeSessionId(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
+
+/**
+ * Extract Claude CLI session ID from various stream payload shapes.
+ *
+ * Claude stream/control payloads can expose session ID as:
+ * - sessionId
+ * - session_id
+ * - message.sessionId / message.session_id
+ * - result.sessionId / result.session_id
+ */
+export function extractClaudeSessionIdFromMessage(
+  msg: unknown,
+): ClaudeSessionId | undefined {
+  const root = asRecord(msg);
+  if (root === undefined) {
+    return undefined;
+  }
+
+  const directCamel = readStringField(root, "sessionId");
+  if (directCamel !== undefined && isLikelyClaudeSessionId(directCamel)) {
+    return directCamel as ClaudeSessionId;
+  }
+
+  const directSnake = readStringField(root, "session_id");
+  if (directSnake !== undefined && isLikelyClaudeSessionId(directSnake)) {
+    return directSnake as ClaudeSessionId;
+  }
+
+  const nestedMessage = asRecord(root["message"]);
+  if (nestedMessage !== undefined) {
+    const messageCamel = readStringField(nestedMessage, "sessionId");
+    if (messageCamel !== undefined && isLikelyClaudeSessionId(messageCamel)) {
+      return messageCamel as ClaudeSessionId;
+    }
+    const messageSnake = readStringField(nestedMessage, "session_id");
+    if (messageSnake !== undefined && isLikelyClaudeSessionId(messageSnake)) {
+      return messageSnake as ClaudeSessionId;
+    }
+  }
+
+  const nestedResult = asRecord(root["result"]);
+  if (nestedResult !== undefined) {
+    const resultCamel = readStringField(nestedResult, "sessionId");
+    if (resultCamel !== undefined && isLikelyClaudeSessionId(resultCamel)) {
+      return resultCamel as ClaudeSessionId;
+    }
+    const resultSnake = readStringField(nestedResult, "session_id");
+    if (resultSnake !== undefined && isLikelyClaudeSessionId(resultSnake)) {
+      return resultSnake as ClaudeSessionId;
+    }
+  }
+
+  return undefined;
+}
 
 /**
  * Events yielded by an AgentRunner execution.
@@ -195,24 +274,16 @@ class ClaudeAgentRunner implements AgentRunner {
         // Set up event listeners
         toolAgentSession.on("message", (msg: unknown) => {
           // Detect Claude session ID once from stream (only for new sessions)
-          if (
-            !claudeSessionDetected &&
-            typeof msg === "object" &&
-            msg !== null
-          ) {
-            const msgObj = msg as Record<string, unknown>;
-            if (
-              typeof msgObj["sessionId"] === "string" &&
-              msgObj["sessionId"].length > 0
-            ) {
-              const claudeSessionId = msgObj["sessionId"] as ClaudeSessionId;
+          if (!claudeSessionDetected) {
+            const detectedSessionId = extractClaudeSessionIdFromMessage(msg);
+            if (detectedSessionId !== undefined) {
               channel.push({
                 type: "claude_session_detected",
-                claudeSessionId,
+                claudeSessionId: detectedSessionId,
               });
               claudeSessionDetected = true;
               logger.info("Detected Claude session ID from stream", {
-                claudeSessionId,
+                claudeSessionId: detectedSessionId,
               });
             }
           }

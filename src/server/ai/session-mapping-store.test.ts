@@ -52,6 +52,25 @@ describe("SessionMappingStore", () => {
       const found = store.findClaudeSessionId(qraftId2);
       expect(found).toBe(claudeSessionId);
     });
+
+    test("uses explicit qraft_ai_session_id when provided", () => {
+      const claudeSessionId = "explicit-qraft-session-123" as ClaudeSessionId;
+      const projectPath = "/test/project";
+      const worktreeId = "main" as WorktreeId;
+      const clientQraftId = "qs_client_provided_123" as QraftAiSessionId;
+
+      const qraftId = store.upsert(
+        claudeSessionId,
+        projectPath,
+        worktreeId,
+        "qraftbox",
+        clientQraftId,
+      );
+
+      expect(qraftId).toBe(clientQraftId);
+      expect(store.findClaudeSessionId(clientQraftId)).toBe(claudeSessionId);
+      expect(store.findByClaudeSessionId(claudeSessionId)).toBe(clientQraftId);
+    });
   });
 
   describe("findClaudeSessionId", () => {

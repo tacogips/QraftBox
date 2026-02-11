@@ -37,6 +37,7 @@ export interface AiSessionRow {
   readonly promptId?: PromptId | undefined;
   readonly worktreeId?: WorktreeId | undefined;
   readonly message?: string | undefined; // truncated prompt for display
+  readonly lastAssistantMessage?: string | undefined;
   readonly error?: string | undefined;
   readonly clientSessionId?: QraftAiSessionId | undefined; // client-generated group ID
 }
@@ -68,6 +69,11 @@ export interface AiSessionStore {
   updateActivity(id: QraftAiSessionId, activity: string | undefined): void;
   /** Update error message */
   updateError(id: QraftAiSessionId, error: string | undefined): void;
+  /** Update last assistant message */
+  updateLastAssistantMessage(
+    id: QraftAiSessionId,
+    message: string | undefined,
+  ): void;
   /** Find session by prompt ID */
   findByPromptId(promptId: PromptId): AiSessionRow | undefined;
   /** List prompt queue entries (sessions with prompt_id), optionally filtered by worktreeId */
@@ -100,7 +106,7 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     startedAt: row.startedAt,
     completedAt: row.completedAt,
     context: { references: [] },
-    lastAssistantMessage: undefined,
+    lastAssistantMessage: row.lastAssistantMessage,
     currentActivity: row.currentActivity,
     claudeSessionId: row.currentClaudeSessionId,
   };
@@ -129,6 +135,9 @@ class AiSessionStoreImpl implements AiSessionStore {
   private readonly stmtUpdateClaudeSessionId: ReturnType<Database["prepare"]>;
   private readonly stmtUpdateActivity: ReturnType<Database["prepare"]>;
   private readonly stmtUpdateError: ReturnType<Database["prepare"]>;
+  private readonly stmtUpdateLastAssistantMessage: ReturnType<
+    Database["prepare"]
+  >;
   private readonly stmtFindByPromptId: ReturnType<Database["prepare"]>;
   private readonly stmtListPromptQueue: ReturnType<Database["prepare"]>;
   private readonly stmtListPromptQueueByWorktree: ReturnType<
@@ -151,8 +160,8 @@ class AiSessionStoreImpl implements AiSessionStore {
         id, state, project_path,
         created_at, started_at, completed_at,
         current_activity, current_claude_session_id,
-        prompt_id, worktree_id, message, error, client_session_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        prompt_id, worktree_id, message, last_assistant_message, error, client_session_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtGet = db.prepare(`
@@ -187,6 +196,9 @@ class AiSessionStoreImpl implements AiSessionStore {
 
     this.stmtUpdateError = db.prepare(`
       UPDATE ai_sessions SET error = ? WHERE id = ?
+    `);
+    this.stmtUpdateLastAssistantMessage = db.prepare(`
+      UPDATE ai_sessions SET last_assistant_message = ? WHERE id = ?
     `);
 
     this.stmtFindByPromptId = db.prepare(`
@@ -252,6 +264,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       row.promptId ?? null,
       row.worktreeId ?? null,
       row.message ?? null,
+      row.lastAssistantMessage ?? null,
       row.error ?? null,
       row.clientSessionId ?? null,
     );
@@ -272,6 +285,7 @@ class AiSessionStoreImpl implements AiSessionStore {
           prompt_id: string | null;
           worktree_id: string | null;
           message: string | null;
+          last_assistant_message: string | null;
           error: string | null;
           client_session_id: string | null;
         }
@@ -298,6 +312,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       prompt_id: string | null;
       worktree_id: string | null;
       message: string | null;
+      last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
     }>;
@@ -318,6 +333,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       prompt_id: string | null;
       worktree_id: string | null;
       message: string | null;
+      last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
     }>;
@@ -403,6 +419,13 @@ class AiSessionStoreImpl implements AiSessionStore {
     this.stmtUpdateError.run(error ?? null, id);
   }
 
+  updateLastAssistantMessage(
+    id: QraftAiSessionId,
+    message: string | undefined,
+  ): void {
+    this.stmtUpdateLastAssistantMessage.run(message ?? null, id);
+  }
+
   findByPromptId(promptId: PromptId): AiSessionRow | undefined {
     const row = this.stmtFindByPromptId.get(promptId) as
       | {
@@ -417,6 +440,7 @@ class AiSessionStoreImpl implements AiSessionStore {
           prompt_id: string | null;
           worktree_id: string | null;
           message: string | null;
+          last_assistant_message: string | null;
           error: string | null;
           client_session_id: string | null;
         }
@@ -440,6 +464,7 @@ class AiSessionStoreImpl implements AiSessionStore {
         prompt_id: string | null;
         worktree_id: string | null;
         message: string | null;
+        last_assistant_message: string | null;
         error: string | null;
         client_session_id: string | null;
       }>;
@@ -457,6 +482,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       prompt_id: string | null;
       worktree_id: string | null;
       message: string | null;
+      last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
     }>;
@@ -498,6 +524,7 @@ class AiSessionStoreImpl implements AiSessionStore {
     prompt_id: string | null;
     worktree_id: string | null;
     message: string | null;
+    last_assistant_message: string | null;
     error: string | null;
     client_session_id: string | null;
   }): AiSessionRow {
@@ -513,6 +540,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       promptId: (row.prompt_id ?? undefined) as PromptId | undefined,
       worktreeId: (row.worktree_id ?? undefined) as WorktreeId | undefined,
       message: row.message ?? undefined,
+      lastAssistantMessage: row.last_assistant_message ?? undefined,
       error: row.error ?? undefined,
       clientSessionId: (row.client_session_id ?? undefined) as
         | QraftAiSessionId
@@ -555,6 +583,7 @@ export function createAiSessionStore(
       prompt_id TEXT,
       worktree_id TEXT,
       message TEXT,
+      last_assistant_message TEXT,
       error TEXT,
       client_session_id TEXT
     )
@@ -585,6 +614,7 @@ export function createAiSessionStore(
     "prompt_id TEXT",
     "worktree_id TEXT",
     "message TEXT",
+    "last_assistant_message TEXT",
     "error TEXT",
     "client_session_id TEXT",
   ]) {
@@ -625,6 +655,7 @@ export function createInMemoryAiSessionStore(): AiSessionStore {
       prompt_id TEXT,
       worktree_id TEXT,
       message TEXT,
+      last_assistant_message TEXT,
       error TEXT,
       client_session_id TEXT
     )

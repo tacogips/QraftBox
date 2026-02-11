@@ -6,9 +6,8 @@
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
-  import AIPromptPanel from "../../src/components/AIPromptPanel.svelte";
+  import AIPromptPanel from "../AIPromptPanel.svelte";
   import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
-  import SessionToolbar from "../SessionToolbar.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
 
   type FileContent = {
@@ -64,7 +63,6 @@
     onResumeCliSession,
     onCancelActiveSession,
     onToggleAiPanel,
-    onSearchSession,
   }: {
     activeTabIsGitRepo: boolean;
     loading: boolean;
@@ -117,7 +115,6 @@
     onResumeCliSession: (resumeQraftId: string) => void;
     onCancelActiveSession: (sessionId: string) => Promise<void>;
     onToggleAiPanel: () => void;
-    onSearchSession: () => void;
   } = $props();
 
   function handleInlineCommentSubmit(
@@ -428,13 +425,6 @@
       </div>
     </div>
 
-    <SessionToolbar
-      {contextId}
-      {projectPath}
-      {onNewSession}
-      onResumeSession={onResumeCliSession}
-    />
-
     <CurrentSessionPanel
       {contextId}
       running={runningSessions}
@@ -447,6 +437,8 @@
     />
 
     <AIPromptPanel
+      {contextId}
+      {projectPath}
       collapsed={aiPanelCollapsed}
       {queueStatus}
       changedFiles={changedFilePaths}
@@ -460,7 +452,7 @@
         })}
       onToggle={onToggleAiPanel}
       {onNewSession}
-      {onSearchSession}
+      onResumeSession={onResumeCliSession}
     />
   </div>
 </div>

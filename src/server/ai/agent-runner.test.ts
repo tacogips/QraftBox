@@ -8,6 +8,7 @@
 import { describe, test, expect } from "vitest";
 import {
   createAgentRunner,
+  extractClaudeSessionIdFromMessage,
   type AgentEvent,
   type AgentRunParams,
 } from "./agent-runner.js";
@@ -53,6 +54,43 @@ describe("createAgentRunner()", () => {
     );
     expect(runner).toBeDefined();
     expect(typeof runner.execute).toBe("function");
+  });
+});
+
+describe("extractClaudeSessionIdFromMessage()", () => {
+  const sessionId = "0dc4ee1f-2e78-462f-a400-16d14ab6a418" as ClaudeSessionId;
+
+  test("extracts from top-level camelCase sessionId", () => {
+    const result = extractClaudeSessionIdFromMessage({ sessionId });
+    expect(result).toBe(sessionId);
+  });
+
+  test("extracts from top-level snake_case session_id", () => {
+    const result = extractClaudeSessionIdFromMessage({ session_id: sessionId });
+    expect(result).toBe(sessionId);
+  });
+
+  test("extracts from nested message.session_id", () => {
+    const result = extractClaudeSessionIdFromMessage({
+      type: "assistant",
+      message: { role: "assistant", session_id: sessionId },
+    });
+    expect(result).toBe(sessionId);
+  });
+
+  test("extracts from nested result.sessionId", () => {
+    const result = extractClaudeSessionIdFromMessage({
+      type: "result",
+      result: { sessionId },
+    });
+    expect(result).toBe(sessionId);
+  });
+
+  test("returns undefined for non-UUID values", () => {
+    const result = extractClaudeSessionIdFromMessage({
+      sessionId: "sdk-session-1",
+    });
+    expect(result).toBeUndefined();
   });
 });
 

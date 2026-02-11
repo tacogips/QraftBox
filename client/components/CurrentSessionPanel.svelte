@@ -105,15 +105,22 @@
    * All queued items = queued sessions + pending prompts
    */
   const allQueuedItems = $derived.by(() => {
-    const items: { id: string; text: string; source: "session" | "prompt" }[] =
-      [];
-    for (const s of queued) {
-      items.push({ id: s.id, text: s.prompt, source: "session" });
+    // `pendingPrompts` and `queued` are often two views of the same queued
+    // prompt-backed sessions. Prefer prompt queue entries when available to
+    // avoid double-counting the same queue item in the UI.
+    if (pendingPrompts.length > 0) {
+      return pendingPrompts.map((p) => ({
+        id: p.id,
+        text: p.message,
+        source: "prompt" as const,
+      }));
     }
-    for (const p of pendingPrompts) {
-      items.push({ id: p.id, text: p.message, source: "prompt" });
-    }
-    return items;
+
+    return queued.map((s) => ({
+      id: s.id,
+      text: s.prompt,
+      source: "session" as const,
+    }));
   });
 
   /**

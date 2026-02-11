@@ -53,6 +53,7 @@ export interface SessionMappingStore {
     projectPath: string,
     worktreeId: WorktreeId,
     source?: SessionSource | undefined,
+    qraftAiSessionId?: QraftAiSessionId | undefined,
   ): QraftAiSessionId;
 
   /**
@@ -157,8 +158,10 @@ class SessionMappingStoreImpl implements SessionMappingStore {
     projectPath: string,
     worktreeId: WorktreeId,
     source?: SessionSource | undefined,
+    qraftAiSessionId?: QraftAiSessionId | undefined,
   ): QraftAiSessionId {
-    const qraftId = deriveQraftAiSessionIdFromClaude(claudeSessionId);
+    const qraftId =
+      qraftAiSessionId ?? deriveQraftAiSessionIdFromClaude(claudeSessionId);
     const sourceValue: SessionSource = source ?? "auto";
     this.stmtUpsert.run(
       claudeSessionId,

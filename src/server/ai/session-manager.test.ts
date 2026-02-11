@@ -6,6 +6,7 @@
 
 import { describe, test, expect } from "vitest";
 import { createSessionManager, generateWorktreeId } from "./session-manager.js";
+import { createInMemorySessionMappingStore } from "./session-mapping-store.js";
 import type {
   AIPromptRequest,
   AIConfig,
@@ -317,9 +318,10 @@ describe("createSessionManager", () => {
       expect(session).toBeNull();
     });
 
-    test("returns empty defaults for content fields after session completes and handle is cleaned", async () => {
+    test("preserves last assistant message after session completes and handle is cleaned", async () => {
       // Submit, wait for completion (stubbed completes quickly), then verify
-      // After completion, runtime handle is cleaned up, so content fields should be empty defaults
+      // After completion, runtime handle is cleaned up, so prompt/context are defaults.
+      // lastAssistantMessage should survive via persistent session store.
       const manager = createSessionManager();
       const result = await manager.submit(
         createTestRequest({ prompt: "Will be cleaned" }),
@@ -334,7 +336,8 @@ describe("createSessionManager", () => {
       // After handle cleanup, content fields get empty defaults from toSessionInfo
       expect(session?.prompt).toBe("");
       expect(session?.context).toEqual({ references: [] });
-      expect(session?.lastAssistantMessage).toBeUndefined();
+      expect(typeof session?.lastAssistantMessage).toBe("string");
+      expect(session?.lastAssistantMessage?.length ?? 0).toBeGreaterThan(0);
     });
   });
 
@@ -862,6 +865,130 @@ describe("createSessionManager", () => {
         },
       };
     }
+
+    test("registers client qraft_ai_session_id mapping on first prompt detection", async () => {
+      const mappingStore = createInMemorySessionMappingStore();
+      const clientQraftId = "qs_client_first_prompt_1" as QraftAiSessionId;
+      const detectedClaudeId = "claude-first-prompt-001" as ClaudeSessionId;
+      const mockRunner = createMockAgentRunner([
+        {
+          type: "claude_session_detected",
+          claudeSessionId: detectedClaudeId,
+        },
+        { type: "completed", success: true },
+      ]);
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        mappingStore,
+        undefined,
+        mockRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "First prompt",
+        project_path: "/tmp/test",
+        qraft_ai_session_id: clientQraftId,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(mappingStore.findClaudeSessionId(clientQraftId)).toBe(
+        detectedClaudeId,
+      );
+      expect(mappingStore.findByClaudeSessionId(detectedClaudeId)).toBe(
+        clientQraftId,
+      );
+
+      mappingStore.close();
+    });
+
+    test("does not dispatch same clientSessionId concurrently", async () => {
+      const config: AIConfig = {
+        ...DEFAULT_AI_CONFIG,
+        maxConcurrent: 2,
+      };
+      let executeCount = 0;
+
+      const serializedRunner: AgentRunner = {
+        execute() {
+          executeCount++;
+          return {
+            events(): AsyncIterable<AgentEvent> {
+              return {
+                [Symbol.asyncIterator]() {
+                  let step = 0;
+                  return {
+                    async next() {
+                      if (step === 0) {
+                        step++;
+                        return {
+                          value: {
+                            type: "activity",
+                            activity: "working",
+                          } as AgentEvent,
+                          done: false,
+                        };
+                      }
+                      if (step === 1) {
+                        step++;
+                        await new Promise((resolve) =>
+                          setTimeout(resolve, 200),
+                        );
+                        return {
+                          value: {
+                            type: "completed",
+                            success: true,
+                          } as AgentEvent,
+                          done: false,
+                        };
+                      }
+                      return {
+                        value: undefined as unknown as AgentEvent,
+                        done: true,
+                      };
+                    },
+                  };
+                },
+              };
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        serializedRunner,
+      );
+      const clientQraftId = "qs_dedupe_client_1" as QraftAiSessionId;
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "first",
+        project_path: "/tmp/test",
+        qraft_ai_session_id: clientQraftId,
+      });
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "second",
+        project_path: "/tmp/test",
+        qraft_ai_session_id: clientQraftId,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      expect(executeCount).toBe(1);
+
+      await new Promise((resolve) => setTimeout(resolve, 320));
+      expect(executeCount).toBe(2);
+    });
 
     test("processes claude_session_detected event and updates session", async () => {
       const mockRunner = createMockAgentRunner([

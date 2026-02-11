@@ -45,6 +45,7 @@ export type AISessionInfo = {
   startedAt?: string | undefined;
   completedAt?: string | undefined;
   context: unknown;
+  lastAssistantMessage?: string | undefined;
   currentActivity?: string | undefined;
 };
 

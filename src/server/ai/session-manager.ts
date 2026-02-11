@@ -198,6 +198,7 @@ export function createSessionManager(
   const logger = createLogger("SessionManager");
   const store = sessionStore ?? createInMemoryAiSessionStore();
   const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
+  const pendingClientSessions = new Set<QraftAiSessionId>();
   const runner = agentRunner ?? createAgentRunner(config, toolRegistry);
 
   function delay(ms: number): Promise<void> {
@@ -330,12 +331,25 @@ export function createSessionManager(
   ): void {
     if (mappingStore === undefined) return;
     try {
+      const explicitQraftAiSessionId =
+        session.clientSessionId !== undefined &&
+        session.clientSessionId.length > 0
+          ? session.clientSessionId
+          : undefined;
       mappingStore.upsert(
         claudeSessionId,
         session.projectPath,
         session.worktreeId ?? generateWorktreeId(session.projectPath),
         "qraftbox",
+        explicitQraftAiSessionId,
       );
+      if (explicitQraftAiSessionId !== undefined) {
+        logger.info("Registered session mapping from clientSessionId", {
+          sessionId: session.id,
+          clientSessionId: session.clientSessionId,
+          claudeSessionId,
+        });
+      }
     } catch {
       // Best-effort registration for source detection
     }
@@ -364,6 +378,7 @@ export function createSessionManager(
 
       case "message": {
         handle.lastAssistantMessage = event.content;
+        store.updateLastAssistantMessage(sessionId, event.content);
         store.updateActivity(sessionId, undefined);
         emitEvent(
           sessionId,
@@ -431,6 +446,10 @@ export function createSessionManager(
         store.updateActivity(sessionId, undefined);
         if (event.lastAssistantMessage !== undefined) {
           handle.lastAssistantMessage = event.lastAssistantMessage;
+          store.updateLastAssistantMessage(
+            sessionId,
+            event.lastAssistantMessage,
+          );
         }
 
         // Persist final mapping
@@ -511,31 +530,32 @@ export function createSessionManager(
   async function runExecution(sessionId: QraftAiSessionId): Promise<void> {
     const session = store.get(sessionId);
     if (session === undefined) return;
-
-    const handle = runtimeHandles.get(sessionId);
-    if (handle === undefined) return;
-
-    // 1. Transition to running
-    const startedAt = new Date().toISOString();
-    store.updateState(sessionId, "running", { startedAt });
-    store.updateActivity(sessionId, "Starting session...");
-    emitEvent(sessionId, createProgressEvent("session_started", sessionId));
-
-    // 2. Start execution
-    const execution = runner.execute({
-      prompt: handle.fullPrompt,
-      projectPath: session.projectPath,
-      resumeSessionId: session.currentClaudeSessionId,
-    });
-    handle.execution = execution;
-
-    // If resuming, register known Claude session ID
-    if (session.currentClaudeSessionId !== undefined) {
-      handle.registeredClaudeSessionIds.add(session.currentClaudeSessionId);
-      registerMapping(session.currentClaudeSessionId, session);
-    }
+    const pendingClientSessionId = session.clientSessionId;
 
     try {
+      const handle = runtimeHandles.get(sessionId);
+      if (handle === undefined) return;
+
+      // 1. Transition to running
+      const startedAt = new Date().toISOString();
+      store.updateState(sessionId, "running", { startedAt });
+      store.updateActivity(sessionId, "Starting session...");
+      emitEvent(sessionId, createProgressEvent("session_started", sessionId));
+
+      // 2. Start execution
+      const execution = runner.execute({
+        prompt: handle.fullPrompt,
+        projectPath: session.projectPath,
+        resumeSessionId: session.currentClaudeSessionId,
+      });
+      handle.execution = execution;
+
+      // If resuming, register known Claude session ID
+      if (session.currentClaudeSessionId !== undefined) {
+        handle.registeredClaudeSessionIds.add(session.currentClaudeSessionId);
+        registerMapping(session.currentClaudeSessionId, session);
+      }
+
       // 3. Consume event stream
       for await (const event of execution.events()) {
         // Check for external cancellation
@@ -560,6 +580,9 @@ export function createSessionManager(
     } catch (error) {
       handleExecutionError(sessionId, error);
     } finally {
+      if (pendingClientSessionId !== undefined) {
+        pendingClientSessions.delete(pendingClientSessionId);
+      }
       // Clean up runtime handle for terminal states
       const finalSession = store.get(sessionId);
       if (
@@ -580,9 +603,21 @@ export function createSessionManager(
    */
   function processQueue(): void {
     while (store.countByState("running") < config.maxConcurrent) {
-      const nextSessionId = store.nextQueued();
-      if (nextSessionId === undefined) break;
+      const queuedSessions = [...store.listByState("queued")].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
+      const nextSession = queuedSessions.find((candidate) => {
+        if (
+          candidate.clientSessionId !== undefined &&
+          pendingClientSessions.has(candidate.clientSessionId)
+        ) {
+          return false;
+        }
+        return true;
+      });
+      if (nextSession === undefined) break;
 
+      const nextSessionId = nextSession.id;
       const session = store.get(nextSessionId);
       if (session === undefined || session.state !== "queued") continue;
 
@@ -598,6 +633,9 @@ export function createSessionManager(
       }
 
       broadcastQueueUpdate();
+      if (session.clientSessionId !== undefined) {
+        pendingClientSessions.add(session.clientSessionId);
+      }
 
       // Don't await - run in background
       runExecution(nextSessionId).catch(() => {
