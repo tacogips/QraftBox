@@ -39,12 +39,18 @@
     }
   });
 
+  type FileStatus =
+    | "added"
+    | "modified"
+    | "deleted"
+    | "untracked"
+    | "ignored"
+    | undefined;
+
   /**
    * Get status badge text based on file status
    */
-  function getStatusBadge(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBadge(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -54,6 +60,10 @@
         return "[M]";
       case "deleted":
         return "[-]";
+      case "untracked":
+        return "[?]";
+      case "ignored":
+        return "[I]";
       default:
         return "";
     }
@@ -62,9 +72,7 @@
   /**
    * Get status badge color class based on file status
    */
-  function getStatusBadgeColor(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBadgeColor(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -74,6 +82,10 @@
         return "text-attention-fg";
       case "deleted":
         return "text-danger-fg";
+      case "untracked":
+        return "text-success-fg";
+      case "ignored":
+        return "text-text-quaternary";
       default:
         return "";
     }
@@ -82,9 +94,7 @@
   /**
    * Get background class for the entire file-node row based on diff status
    */
-  function getStatusBackgroundClass(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBackgroundClass(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -94,6 +104,10 @@
         return "status-modified";
       case "deleted":
         return "status-deleted";
+      case "untracked":
+        return "status-untracked";
+      case "ignored":
+        return "status-ignored";
       default:
         return "";
     }
@@ -185,15 +199,15 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(
-      .status-deleted
-    ):hover {
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):not(
+      .status-untracked
+    ):not(.status-ignored):hover {
     background-color: var(--color-bg-tertiary);
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(
-      .status-deleted
-    ):active {
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):not(
+      .status-untracked
+    ):not(.status-ignored):active {
     background-color: var(--color-bg-tertiary);
   }
 
@@ -223,5 +237,24 @@
   .file-node.status-deleted:hover,
   .file-node.status-deleted:active {
     background-color: var(--color-diff-del-word);
+  }
+
+  .file-node.status-untracked {
+    background-color: var(--color-diff-add-bg);
+  }
+
+  .file-node.status-untracked:hover,
+  .file-node.status-untracked:active {
+    background-color: var(--color-diff-add-word);
+  }
+
+  .file-node.status-ignored {
+    opacity: 0.5;
+  }
+
+  .file-node.status-ignored:hover,
+  .file-node.status-ignored:active {
+    background-color: var(--color-bg-tertiary);
+    opacity: 0.7;
   }
 </style>

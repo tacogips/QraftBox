@@ -68,7 +68,7 @@ function sortTree(node: FileNode): void {
 
 export function annotateTreeWithStatus(
   node: FileNode,
-  statusMap: Map<string, "added" | "modified" | "deleted">,
+  statusMap: Map<string, "added" | "modified" | "deleted" | "untracked">,
 ): FileNode {
   if (node.isDirectory && node.children) {
     const annotatedChildren = node.children.map((child) =>
@@ -102,7 +102,9 @@ export function convertServerTree(node: ServerFileNode): FileNode {
   const status =
     node.status === "added" ||
     node.status === "modified" ||
-    node.status === "deleted"
+    node.status === "deleted" ||
+    node.status === "untracked" ||
+    node.status === "ignored"
       ? node.status
       : undefined;
   return {

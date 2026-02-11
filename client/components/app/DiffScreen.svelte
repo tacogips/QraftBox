@@ -50,9 +50,12 @@
     recentlyCompletedSessions,
     pendingPrompts,
     resumeDisplaySessionId,
+    currentQraftAiSessionId,
+    showIgnored,
     onToggleSidebar,
     onFileSelect,
     onFileTreeModeChange,
+    onShowIgnoredChange,
     onDirectoryExpand,
     onLoadFullTree,
     onNarrowSidebar,
@@ -98,9 +101,12 @@
     recentlyCompletedSessions: AISession[];
     pendingPrompts: Array<{ status: string }>;
     resumeDisplaySessionId: string | null;
+    currentQraftAiSessionId: string;
+    showIgnored: boolean;
     onToggleSidebar: () => void;
     onFileSelect: (path: string) => void;
     onFileTreeModeChange: (mode: "diff" | "all") => void;
+    onShowIgnoredChange: (value: boolean) => void;
     onDirectoryExpand: (dirPath: string) => Promise<void>;
     onLoadFullTree: () => Promise<FileNode | undefined>;
     onNarrowSidebar: () => void;
@@ -159,7 +165,9 @@
             {onFileSelect}
             changedCount={diffFiles.length}
             {contextId}
+            {showIgnored}
             onModeChange={onFileTreeModeChange}
+            {onShowIgnoredChange}
             {onDirectoryExpand}
             {onLoadFullTree}
             onNarrow={onNarrowSidebar}
@@ -427,6 +435,7 @@
 
     <CurrentSessionPanel
       {contextId}
+      currentClientSessionId={currentQraftAiSessionId}
       running={runningSessions}
       queued={queuedSessions}
       recentlyCompleted={recentlyCompletedSessions}

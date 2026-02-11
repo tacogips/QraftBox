@@ -174,6 +174,11 @@
   let allFilesTreeStale = false;
 
   /**
+   * Whether to show git-ignored files in the file tree (default: hidden)
+   */
+  let showIgnored = $state(false);
+
+  /**
    * Map of file paths to their diff status
    */
   const diffStatusMap = $derived(
@@ -195,6 +200,7 @@
     getDiffStatusMap: () => diffStatusMap,
     setFileContent: (value) => (fileContent = value),
     setFileContentLoading: (value) => (fileContentLoading = value),
+    getShowIgnored: () => showIgnored,
   });
 
   const {
@@ -571,11 +577,21 @@
         {recentlyCompletedSessions}
         pendingPrompts={serverPromptQueue.filter((p) => p.status === "queued")}
         {resumeDisplaySessionId}
+        currentQraftAiSessionId={qraftAiSessionId}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
         onFileTreeModeChange={(mode) => {
           fileTreeMode = mode;
           if (mode === "all" && contextId !== null) {
+            void fetchAllFiles(contextId);
+          }
+        }}
+        {showIgnored}
+        onShowIgnoredChange={(value) => {
+          showIgnored = value;
+          allFilesTree = null;
+          allFilesTreeStale = true;
+          if (contextId !== null && fileTreeMode === "all") {
             void fetchAllFiles(contextId);
           }
         }}

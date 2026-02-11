@@ -43,6 +43,16 @@
     contextId?: string | null;
 
     /**
+     * Whether git-ignored files are currently shown
+     */
+    showIgnored?: boolean;
+
+    /**
+     * Callback when show-ignored toggle changes
+     */
+    onShowIgnoredChange?: (value: boolean) => void;
+
+    /**
      * Callback to narrow the sidebar width
      */
     onNarrow?: () => void;
@@ -82,6 +92,8 @@
     onModeChange,
     changedCount = undefined,
     contextId = null,
+    showIgnored = false,
+    onShowIgnoredChange = undefined,
     onNarrow = undefined,
     onWiden = undefined,
     canNarrow = true,
@@ -358,8 +370,11 @@
         children: filteredChildren,
       };
     } else {
-      // Apply mode filter
-      if (mode === "diff" && node.status === undefined) {
+      // Apply mode filter: in diff mode, show only files with change status
+      if (
+        mode === "diff" &&
+        (node.status === undefined || node.status === "ignored")
+      ) {
         return null;
       }
       // Apply status filter
@@ -798,14 +813,14 @@
 
   <!-- Bottom Status Panel -->
   <div
-    class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1"
+    class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1 min-w-0 overflow-hidden"
   >
     {#if uncommittedCount > 0}
-      <span class="text-[11px] text-attention-fg font-medium">
+      <span class="text-[11px] text-attention-fg font-medium truncate min-w-0">
         {uncommittedCount} uncommitted
       </span>
     {/if}
-    <div class="ml-auto flex items-center gap-0.5">
+    <div class="ml-auto flex items-center gap-0.5 shrink-0">
       <!-- Narrow sidebar -->
       {#if onNarrow}
         <button
@@ -854,6 +869,46 @@
               d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z"
             />
           </svg>
+        </button>
+      {/if}
+      <!-- Toggle show ignored files -->
+      {#if onShowIgnoredChange}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {showIgnored
+            ? 'text-text-primary'
+            : 'text-text-tertiary hover:text-text-primary'}"
+          onclick={() => onShowIgnoredChange?.(!showIgnored)}
+          title={showIgnored ? "Hide ignored files" : "Show ignored files"}
+          aria-label={showIgnored ? "Hide ignored files" : "Show ignored files"}
+          aria-pressed={showIgnored}
+        >
+          <!-- Eye icon (open when showing, slashed when hiding) -->
+          {#if showIgnored}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 010 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.831.88 9.577.43 8.899a1.62 1.62 0 010-1.798c.45-.678 1.367-1.932 2.637-3.023C4.33 2.992 6.019 2 8 2zM1.679 7.932a.12.12 0 000 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 000-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.824.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717zM8 10a2 2 0 11-.001-3.999A2 2 0 018 10z"
+              />
+            </svg>
+          {:else}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M.143 2.31a.75.75 0 011.047-.167l14 10a.75.75 0 11-.88 1.214l-2.248-1.606C11.346 12.076 10.259 12.5 9 12.5c-1.981 0-3.671-.992-4.933-2.078C2.797 9.331 1.88 8.077 1.43 7.399a1.62 1.62 0 010-1.798c.353-.533 1.063-1.46 2.025-2.347L.31 1.357A.75.75 0 01.143 2.31zm4.653 3.324c-.676.58-1.236 1.206-1.617 1.684a.12.12 0 000 .136c.412.621 1.242 1.75 2.366 2.717C6.676 11.258 8.027 12 9.5 12c.74 0 1.463-.214 2.145-.554L4.796 5.634zM16.57 7.399c-.45.678-1.367 1.932-2.637 3.023l-1.142-.816c1.03-.89 1.784-1.917 2.166-2.488a.12.12 0 000-.136c-.412-.621-1.242-1.75-2.366-2.717C11.46 3.242 10.11 2.5 8.636 2.5c-.96 0-1.886.28-2.748.747L4.667 2.37C5.734 1.712 6.887 1 8.636 1c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 010 1.798z"
+              />
+            </svg>
+          {/if}
         </button>
       {/if}
       <span class="w-px h-3 bg-border-default mx-0.5"></span>
@@ -907,6 +962,7 @@
     <!-- Directory Node -->
     <div
       class="directory-node"
+      class:opacity-50={node.status === "ignored"}
       role="treeitem"
       aria-expanded={isExpanded(node.path)}
     >
@@ -955,8 +1011,16 @@
           {node.name}
         </span>
 
-        <!-- Changed Indicator -->
-        {#if hasChangedChildren(node)}
+        <!-- Ignored Indicator -->
+        {#if node.status === "ignored"}
+          <span
+            class="text-[10px] font-medium text-text-quaternary shrink-0"
+            aria-label="Ignored by git"
+          >
+            [I]
+          </span>
+        {:else if hasChangedChildren(node)}
+          <!-- Changed Indicator -->
           <span
             class="changed-indicator text-xs text-accent-fg shrink-0"
             aria-label="Contains changed files"

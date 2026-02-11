@@ -109,6 +109,7 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     lastAssistantMessage: row.lastAssistantMessage,
     currentActivity: row.currentActivity,
     claudeSessionId: row.currentClaudeSessionId,
+    clientSessionId: row.clientSessionId,
   };
 }
 

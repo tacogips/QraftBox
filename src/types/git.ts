@@ -14,7 +14,8 @@ export type FileStatusCode =
   | "deleted"
   | "renamed"
   | "copied"
-  | "untracked";
+  | "untracked"
+  | "ignored";
 
 /**
  * File status information for a single file
@@ -100,7 +101,8 @@ export function isFileStatusCode(value: string): value is FileStatusCode {
     value === "deleted" ||
     value === "renamed" ||
     value === "copied" ||
-    value === "untracked"
+    value === "untracked" ||
+    value === "ignored"
   );
 }
 
@@ -280,10 +282,12 @@ export function groupByStatus(
  * - +: Added file
  * - -: Deleted file
  * - R: Renamed file
+ * - ?: Untracked file
+ * - I: Ignored file
  * - IMG: Image file (binary)
  * - BIN: Binary file (non-image)
  */
-export type FileBadge = "M" | "+" | "-" | "R" | "IMG" | "BIN";
+export type FileBadge = "M" | "+" | "-" | "R" | "?" | "I" | "IMG" | "BIN";
 
 /**
  * Image file extensions that can be previewed
@@ -334,6 +338,12 @@ export function getFileBadge(node: FileNode): FileBadge | undefined {
   }
   if (node.status === "modified") {
     return "M";
+  }
+  if (node.status === "untracked") {
+    return "?";
+  }
+  if (node.status === "ignored") {
+    return "I";
   }
 
   return undefined;

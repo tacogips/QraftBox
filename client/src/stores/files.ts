@@ -30,10 +30,10 @@ export interface FileNode {
   readonly children?: readonly FileNode[];
 
   /**
-   * File status (only for files with changes)
-   * undefined for unchanged files or directories
+   * File status (only for files with changes or special states)
+   * undefined for unchanged tracked files or directories
    */
-  readonly status?: "added" | "modified" | "deleted";
+  readonly status?: "added" | "modified" | "deleted" | "untracked" | "ignored";
 
   /**
    * Whether this file is binary (true if binary, undefined if text)

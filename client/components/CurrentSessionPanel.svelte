@@ -34,6 +34,7 @@
 
   interface Props {
     contextId: string | null;
+    currentClientSessionId: string;
     running: readonly AISession[];
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
@@ -48,6 +49,7 @@
 
   const {
     contextId,
+    currentClientSessionId,
     running,
     queued,
     recentlyCompleted,
@@ -85,21 +87,46 @@
   let filesExpanded = $state(false);
 
   /**
-   * Currently running QraftBox session
+   * Session to resolve from Claude session browser.
+   * Explicit resume target has priority over current client session.
    */
-  const runningSession = $derived(running.length > 0 ? running[0] : null);
+  const targetCliSessionId = $derived(
+    resumeSessionId ?? currentClientSessionId,
+  );
 
   /**
-   * Most recently completed QraftBox session
+   * Currently running QraftBox session (prefer current client session group).
    */
-  const completedSession = $derived(
-    recentlyCompleted.length > 0 ? recentlyCompleted[0] : null,
-  );
+  const runningSession = $derived.by(() => {
+    const currentGroup = running.find(
+      (session) => session.clientSessionId === currentClientSessionId,
+    );
+    return currentGroup ?? (running.length > 0 ? running[0] : null);
+  });
+
+  /**
+   * Most recently completed QraftBox session (prefer current client session group).
+   */
+  const completedSession = $derived.by(() => {
+    const currentGroup = recentlyCompleted.find(
+      (session) => session.clientSessionId === currentClientSessionId,
+    );
+    return (
+      currentGroup ??
+      (recentlyCompleted.length > 0 ? recentlyCompleted[0] : null)
+    );
+  });
 
   /**
    * Whether something is actively running
    */
-  const isRunning = $derived(running.length > 0);
+  const isRunning = $derived(runningSession !== null);
+  const isRunningCurrentConversation = $derived.by(() => {
+    if (runningSession === null || targetCliSessionId.length === 0) {
+      return false;
+    }
+    return runningSession.clientSessionId === targetCliSessionId;
+  });
 
   /**
    * All queued items = queued sessions + pending prompts
@@ -141,13 +168,15 @@
 
   /**
    * What kind of session to display in the main card.
-   * Priority: running > completed (recent QraftBox) > loading > cli
+   * Priority: loading > cli > running > completed
    */
   const displayMode = $derived.by(() => {
+    if (cliSessionLoading) return "loading" as const;
+    // Keep showing the resumed CLI conversation while prompts in that
+    // conversation are running, to avoid UI mode flapping.
+    if (recentCliSession !== null) return "cli" as const;
     if (isRunning) return "running" as const;
     if (completedSession !== null) return "completed" as const;
-    if (cliSessionLoading) return "loading" as const;
-    if (recentCliSession !== null) return "cli" as const;
     return "none" as const;
   });
 
@@ -155,16 +184,16 @@
    * Display title
    */
   const displayTitle = $derived.by(() => {
+    if (recentCliSession !== null) {
+      return stripSystemTags(
+        recentCliSession.firstPrompt || recentCliSession.summary,
+      );
+    }
     if (runningSession !== null && runningSession !== undefined) {
       return stripSystemTags(runningSession.prompt);
     }
     if (completedSession !== null) {
       return stripSystemTags(completedSession.prompt);
-    }
-    if (recentCliSession !== null) {
-      return stripSystemTags(
-        recentCliSession.firstPrompt || recentCliSession.summary,
-      );
     }
     return "";
   });
@@ -289,8 +318,8 @@
 
   $effect(() => {
     if (contextId === null) return;
-    if (resumeSessionId !== null) {
-      void fetchCliSessionById(resumeSessionId);
+    if (targetCliSessionId.length > 0) {
+      void fetchCliSessionById(targetCliSessionId);
     } else {
       recentCliSession = null;
       sessionSummary = null;
@@ -459,6 +488,32 @@
           >
             Loading
           </span>
+        {:else if isRunningCurrentConversation}
+          <svg
+            class="animate-spin h-3.5 w-3.5 text-accent-fg shrink-0"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            />
+          </svg>
+          <span
+            class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent-muted text-accent-fg"
+          >
+            Running
+          </span>
         {:else}
           <span
             class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-bg-tertiary text-text-secondary"
@@ -492,12 +547,27 @@
               : ""}
           </span>
         {:else if recentCliSession !== null}
-          <span class="text-[10px] text-text-tertiary shrink-0">
-            {recentCliSession.messageCount} msgs
-          </span>
-          <span class="text-[10px] text-text-tertiary shrink-0">
-            {getRelativeTime(recentCliSession.modified)}
-          </span>
+          {#if isRunningCurrentConversation && runningSession !== null && runningSession !== undefined}
+            {#if runningSession.currentActivity}
+              <span
+                class="text-[10px] text-text-tertiary shrink-0 animate-pulse"
+              >
+                {runningSession.currentActivity}
+              </span>
+            {/if}
+            <span
+              class="text-xs font-mono text-text-tertiary tabular-nums shrink-0"
+            >
+              {elapsedFormatted}
+            </span>
+          {:else}
+            <span class="text-[10px] text-text-tertiary shrink-0">
+              {recentCliSession.messageCount} msgs
+            </span>
+            <span class="text-[10px] text-text-tertiary shrink-0">
+              {getRelativeTime(recentCliSession.modified)}
+            </span>
+          {/if}
         {/if}
       </div>
 
@@ -776,7 +846,18 @@
             <SessionTranscriptInline
               sessionId={recentCliSession.qraftAiSessionId}
               {contextId}
-              maxMessages={3}
+              autoRefreshMs={isRunningCurrentConversation ? 1500 : 0}
+              followLatest={isRunningCurrentConversation}
+              optimisticUserMessage={isRunningCurrentConversation &&
+              runningSession !== null &&
+              runningSession !== undefined
+                ? runningSession.prompt
+                : undefined}
+              optimisticAssistantMessage={isRunningCurrentConversation &&
+              runningSession !== null &&
+              runningSession !== undefined
+                ? runningSession.lastAssistantMessage
+                : undefined}
             />
           {/if}
         </div>

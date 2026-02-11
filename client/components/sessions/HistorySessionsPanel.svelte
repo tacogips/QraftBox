@@ -168,17 +168,53 @@
    */
   const mergedSessions = $derived.by(() => {
     const items: UnifiedSessionItem[] = [];
+    const query = localSearchQuery.toLowerCase();
+    const cliQraftIds = new Set(
+      cliSessions.map((session) => session.qraftAiSessionId),
+    );
+
+    // Keep only the newest completed QraftBox entry per conversation group.
+    // Key priority:
+    // 1) clientSessionId (true chained conversation)
+    // 2) session id fallback for standalone execution
+    const latestQraftByGroup = new Map<string, AISession>();
+
+    for (const session of completedSessions) {
+      const groupKey = session.clientSessionId ?? session.id;
+      const existing = latestQraftByGroup.get(groupKey);
+      if (existing === undefined) {
+        latestQraftByGroup.set(groupKey, session);
+        continue;
+      }
+      const existingTime = new Date(
+        existing.completedAt ?? existing.createdAt,
+      ).getTime();
+      const candidateTime = new Date(
+        session.completedAt ?? session.createdAt,
+      ).getTime();
+      if (candidateTime > existingTime) {
+        latestQraftByGroup.set(groupKey, session);
+      }
+    }
 
     // Add QraftBox completed sessions, optionally filtered by local search
-    for (const s of completedSessions) {
-      if (localSearchQuery.length > 0) {
-        const query = localSearchQuery.toLowerCase();
-        const matchesPrompt = stripSystemTags(s.prompt)
+    for (const session of latestQraftByGroup.values()) {
+      // If Claude CLI already has the same qraft_ai_session_id,
+      // hide the duplicate QraftBox row in history.
+      if (
+        session.clientSessionId !== undefined &&
+        cliQraftIds.has(session.clientSessionId)
+      ) {
+        continue;
+      }
+
+      if (query.length > 0) {
+        const matchesPrompt = stripSystemTags(session.prompt)
           .toLowerCase()
           .includes(query);
         if (!matchesPrompt) continue;
       }
-      items.push({ kind: "qraftbox", session: s });
+      items.push({ kind: "qraftbox", session });
     }
 
     // Add Claude CLI sessions (already filtered server-side by the store)
@@ -232,7 +268,7 @@
   /**
    * Total session count for display
    */
-  const totalCount = $derived(completedSessions.length + cliTotal);
+  const totalCount = $derived(mergedSessions.length);
 
   /**
    * Handle search input

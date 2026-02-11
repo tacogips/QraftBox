@@ -11,7 +11,7 @@ import {
   fetchFileContentApi,
 } from "./app-api";
 
-type DiffStatusMap = Map<string, "added" | "modified" | "deleted">;
+type DiffStatusMap = Map<string, "added" | "modified" | "deleted" | "untracked">;
 
 type SetState<T> = (value: T) => void;
 type GetState<T> = () => T;
@@ -35,6 +35,7 @@ interface FileViewDeps {
   getDiffStatusMap: GetState<DiffStatusMap>;
   setFileContent: SetState<FileContent | null>;
   setFileContentLoading: SetState<boolean>;
+  getShowIgnored: GetState<boolean>;
 }
 
 export function loadSidebarWidth(params: {
@@ -85,7 +86,8 @@ export function createFileViewController(deps: FileViewDeps): {
     deps.setAllFilesTreeStale(false);
 
     try {
-      const tree = await fetchAllFilesTreeApi(ctxId, true);
+      const showIgnored = deps.getShowIgnored();
+      const tree = await fetchAllFilesTreeApi(ctxId, true, { showIgnored });
       deps.setAllFilesTree(convertServerTree(tree));
     } catch (error) {
       console.error("Failed to fetch all files:", error);
@@ -96,7 +98,8 @@ export function createFileViewController(deps: FileViewDeps): {
 
   async function refreshAllFiles(ctxId: string): Promise<void> {
     try {
-      const tree = await fetchAllFilesTreeApi(ctxId, false);
+      const showIgnored = deps.getShowIgnored();
+      const tree = await fetchAllFilesTreeApi(ctxId, false, { showIgnored });
       deps.setAllFilesTree(convertServerTree(tree));
       deps.setAllFilesTreeStale(false);
     } catch (error) {
@@ -109,7 +112,10 @@ export function createFileViewController(deps: FileViewDeps): {
     if (contextId === null) return;
 
     try {
-      const children = await fetchDirectoryChildrenApi(contextId, dirPath);
+      const showIgnored = deps.getShowIgnored();
+      const children = await fetchDirectoryChildrenApi(contextId, dirPath, {
+        showIgnored,
+      });
       const currentTree = deps.getAllFilesTree();
       if (currentTree !== null) {
         const convertedChildren = children.map(convertServerTree);
@@ -127,7 +133,10 @@ export function createFileViewController(deps: FileViewDeps): {
     if (contextId === null) return undefined;
 
     try {
-      const tree = await fetchAllFilesTreeApi(contextId, false);
+      const showIgnored = deps.getShowIgnored();
+      const tree = await fetchAllFilesTreeApi(contextId, false, {
+        showIgnored,
+      });
       const fullTree = convertServerTree(tree);
       deps.setAllFilesTree(fullTree);
       return annotateTreeWithStatus(fullTree, deps.getDiffStatusMap());

@@ -11,6 +11,7 @@ import type { FileNode } from "../../types/git.js";
 import {
   getFileTree,
   getAllFiles,
+  getUntrackedFiles,
   getDirectoryChildren,
 } from "../git/files.js";
 import { getFileContent, getChangedFiles } from "../git/diff.js";
@@ -147,9 +148,13 @@ export function createFileRoutes(context: ServerContext): Hono {
       let tree: FileNode;
       let totalFiles: number;
 
+      const showIgnored = c.req.query("showIgnored") === "true";
+
       if (shallow && !diffOnly) {
         // Lazy loading: return only top-level entries
-        const children = await getDirectoryChildren(context.projectPath, "");
+        const children = await getDirectoryChildren(context.projectPath, "", {
+          showIgnored,
+        });
         tree = {
           name: "",
           path: "",
@@ -158,9 +163,12 @@ export function createFileRoutes(context: ServerContext): Hono {
           status: undefined,
           isBinary: undefined,
         };
-        // Count total files for display
-        const allFiles = await getAllFiles(context.projectPath);
-        totalFiles = allFiles.length;
+        // Count total files for display (tracked + untracked)
+        const [allFiles, untrackedFiles] = await Promise.all([
+          getAllFiles(context.projectPath),
+          getUntrackedFiles(context.projectPath),
+        ]);
+        totalFiles = allFiles.length + untrackedFiles.length;
       } else {
         tree = await getFileTree(context.projectPath, diffOnly);
         totalFiles = countFiles(tree);
@@ -205,9 +213,14 @@ export function createFileRoutes(context: ServerContext): Hono {
    */
   app.get("/children", async (c) => {
     const dirPath = c.req.query("path") ?? "";
+    const showIgnored = c.req.query("showIgnored") === "true";
 
     try {
-      const children = await getDirectoryChildren(context.projectPath, dirPath);
+      const children = await getDirectoryChildren(
+        context.projectPath,
+        dirPath,
+        { showIgnored },
+      );
       return c.json({ children });
     } catch (e) {
       const errorMessage =

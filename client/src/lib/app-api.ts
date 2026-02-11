@@ -47,6 +47,7 @@ export type AISessionInfo = {
   context: unknown;
   lastAssistantMessage?: string | undefined;
   currentActivity?: string | undefined;
+  clientSessionId?: QraftAiSessionId | undefined;
 };
 
 function ensureOk(response: Response, message: string): Response {
@@ -169,9 +170,16 @@ export async function fetchDiffFiles(ctxId: string): Promise<DiffFile[]> {
 export async function fetchAllFilesTreeApi(
   ctxId: string,
   shallow: boolean,
+  options?: { showIgnored?: boolean } | undefined,
 ): Promise<ServerFileNode> {
-  const query = shallow ? "?mode=all&shallow=true" : "?mode=all";
-  const response = await fetch(`/api/ctx/${ctxId}/files${query}`);
+  const params = new URLSearchParams({ mode: "all" });
+  if (shallow) {
+    params.set("shallow", "true");
+  }
+  if (options?.showIgnored === true) {
+    params.set("showIgnored", "true");
+  }
+  const response = await fetch(`/api/ctx/${ctxId}/files?${params.toString()}`);
   ensureOk(response, "Files API error");
   const data = (await response.json()) as { tree: ServerFileNode };
   return data.tree;
@@ -180,9 +188,14 @@ export async function fetchAllFilesTreeApi(
 export async function fetchDirectoryChildrenApi(
   ctxId: string,
   dirPath: string,
+  options?: { showIgnored?: boolean } | undefined,
 ): Promise<ServerFileNode[]> {
+  const params = new URLSearchParams({ path: dirPath });
+  if (options?.showIgnored === true) {
+    params.set("showIgnored", "true");
+  }
   const response = await fetch(
-    `/api/ctx/${ctxId}/files/children?path=${encodeURIComponent(dirPath)}`,
+    `/api/ctx/${ctxId}/files/children?${params.toString()}`,
   );
   ensureOk(response, "Children API error");
   const data = (await response.json()) as { children: ServerFileNode[] };

@@ -30,6 +30,7 @@ describe("Git Types", () => {
       expect(isFileStatusCode("renamed")).toBe(true);
       expect(isFileStatusCode("copied")).toBe(true);
       expect(isFileStatusCode("untracked")).toBe(true);
+      expect(isFileStatusCode("ignored")).toBe(true);
     });
 
     test("returns false for invalid status codes", () => {
@@ -537,10 +538,16 @@ describe("Git Types", () => {
       expect(getFileBadge(node)).toBeUndefined();
     });
 
-    test("returns undefined for untracked status", () => {
+    test("returns ? for untracked status", () => {
       const node = createFileNode("new.ts", "src/new.ts", "file");
       const untracked = { ...node, status: "untracked" as const };
-      expect(getFileBadge(untracked)).toBeUndefined();
+      expect(getFileBadge(untracked)).toBe("?");
+    });
+
+    test("returns I for ignored status", () => {
+      const node = createFileNode("dist.js", "dist/dist.js", "file");
+      const ignored = { ...node, status: "ignored" as const };
+      expect(getFileBadge(ignored)).toBe("I");
     });
 
     test("returns undefined for copied status", () => {

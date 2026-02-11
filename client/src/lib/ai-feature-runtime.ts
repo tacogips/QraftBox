@@ -225,7 +225,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
 
   function handleResumeToChanges(resumeQraftId: string): void {
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
-    deps.setResumeDisplaySessionId(null);
+    deps.setResumeDisplaySessionId(resumeQraftId);
     deps.navigateToScreen("diff");
     void fetchActiveSessions();
     void fetchPromptQueue();
@@ -234,7 +234,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   function handleResumeCliSession(resumeQraftId: string): void {
     if (deps.getContextId() === null) return;
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
-    deps.setResumeDisplaySessionId(null);
+    deps.setResumeDisplaySessionId(resumeQraftId);
     void fetchActiveSessions();
     void fetchPromptQueue();
   }

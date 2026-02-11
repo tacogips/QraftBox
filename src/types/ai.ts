@@ -241,6 +241,10 @@ export interface AISessionInfo {
    * Claude CLI session ID currently bound to this execution
    */
   readonly claudeSessionId?: ClaudeSessionId | undefined;
+  /**
+   * Client-generated session group ID used to chain prompts.
+   */
+  readonly clientSessionId?: QraftAiSessionId | undefined;
 }
 
 /**

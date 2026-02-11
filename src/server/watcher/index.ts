@@ -1,12 +1,21 @@
 /**
  * File Watcher
  *
- * Monitors a git repository for file changes using fs.watch in recursive mode.
+ * Monitors a git repository for file changes using manual per-directory watching.
+ * Skips symlinks and ignored directories to avoid ENOSPC errors.
  * Filters changes through gitignore and debounces events before emitting.
  */
 
 import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
+import {
+  existsSync,
+  statSync,
+  lstatSync,
+  realpathSync,
+  readdirSync,
+} from "node:fs";
+import { join } from "node:path";
 import type {
   FileChangeEvent,
   FileChangeType,
@@ -21,8 +30,25 @@ import type { GitignoreFilter } from "./gitignore.js";
 import { createGitignoreFilter } from "./gitignore.js";
 import type { EventCollector } from "./debounce.js";
 import { createEventCollector } from "./debounce.js";
-import { existsSync, statSync } from "node:fs";
 import { createLogger } from "../logger.js";
+
+/**
+ * Directories to skip during directory walking and watching.
+ * These directories are never watched to avoid ENOSPC errors from excessive inotify watches.
+ */
+const SKIP_WATCH_PREFIXES = [
+  "node_modules/",
+  ".git/",
+  "dist/",
+  ".direnv/",
+  ".next/",
+  ".nuxt/",
+  ".svelte-kit/",
+  ".cache/",
+  "build/",
+  ".vscode/",
+  ".idea/",
+] as const;
 
 /**
  * File watcher interface for monitoring file system changes
@@ -82,13 +108,145 @@ export function createFileWatcher(
 ): FileWatcher {
   const logger = createLogger("FileWatcher");
   const fullConfig = mergeWatcherConfig(config ?? {});
-  let fsWatcher: FSWatcher | undefined = undefined;
+  let directoryWatchers = new Map<string, FSWatcher>();
   let gitignoreFilter: GitignoreFilter | undefined = undefined;
   let eventCollector: EventCollector<FileChangeEvent> | undefined = undefined;
   let isActive = false;
   let lastUpdate: number | null = null;
+  let projectRealPath: string | undefined = undefined;
   let fileChangeHandlers: Array<(events: readonly FileChangeEvent[]) => void> =
     [];
+
+  /**
+   * Check if a relative path should be skipped during directory walking
+   */
+  function shouldSkipDirectory(relativePath: string): boolean {
+    const normalizedPath =
+      relativePath === "" ? "" : `${relativePath.replace(/\\/g, "/")}/`;
+
+    for (const prefix of SKIP_WATCH_PREFIXES) {
+      if (
+        normalizedPath === prefix ||
+        normalizedPath.startsWith(prefix) ||
+        prefix.startsWith(normalizedPath)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Check if a symlink points outside the project root
+   */
+  function isSymlinkOutsideProject(
+    absolutePath: string,
+    projectRealPathValue: string,
+  ): boolean {
+    try {
+      const stats = lstatSync(absolutePath);
+      if (!stats.isSymbolicLink()) {
+        return false;
+      }
+      const realTarget = realpathSync(absolutePath);
+      return (
+        !realTarget.startsWith(`${projectRealPathValue}/`) &&
+        realTarget !== projectRealPathValue
+      );
+    } catch {
+      // If we can't check, skip it to be safe
+      return true;
+    }
+  }
+
+  /**
+   * Walk directories and collect paths to watch.
+   * Skips ignored directories and symlinks pointing outside the project.
+   *
+   * @param rootPath - Absolute path to start walking from
+   * @param projectRealPathValue - Real path of project root (for symlink checking)
+   * @param recursive - Whether to recurse into subdirectories
+   * @returns Array of relative directory paths (including "" for root)
+   */
+  function walkDirectories(
+    rootPath: string,
+    projectRealPathValue: string,
+    recursive: boolean,
+  ): string[] {
+    const result: string[] = [""];
+
+    if (!recursive) {
+      return result;
+    }
+
+    const queue: string[] = [""];
+
+    while (queue.length > 0) {
+      const currentRelativePath = queue.shift();
+      if (currentRelativePath === undefined) {
+        continue;
+      }
+
+      const currentAbsolutePath =
+        currentRelativePath === ""
+          ? rootPath
+          : join(rootPath, currentRelativePath);
+
+      let entries: ReturnType<typeof readdirSync>;
+      try {
+        entries = readdirSync(currentAbsolutePath, { withFileTypes: true });
+      } catch (error) {
+        logger.error("Failed to read directory during walk", error, {
+          path: currentAbsolutePath,
+        });
+        continue;
+      }
+
+      for (const entry of entries) {
+        const entryRelativePath =
+          currentRelativePath === ""
+            ? entry.name
+            : `${currentRelativePath}/${entry.name}`;
+        const entryAbsolutePath = join(currentAbsolutePath, entry.name);
+
+        // Skip non-directories
+        if (!entry.isDirectory() && !entry.isSymbolicLink()) {
+          continue;
+        }
+
+        // Skip if matches SKIP_WATCH_PREFIXES
+        if (shouldSkipDirectory(entryRelativePath)) {
+          logger.debug("Skipping ignored directory", {
+            path: entryRelativePath,
+          });
+          continue;
+        }
+
+        // Skip symlinks pointing outside project
+        if (isSymlinkOutsideProject(entryAbsolutePath, projectRealPathValue)) {
+          logger.debug("Skipping external symlink", {
+            path: entryRelativePath,
+          });
+          continue;
+        }
+
+        // Check if it's actually a directory after resolving symlinks
+        try {
+          const stats = statSync(entryAbsolutePath);
+          if (stats.isDirectory()) {
+            result.push(entryRelativePath);
+            queue.push(entryRelativePath);
+          }
+        } catch (error) {
+          logger.error("Failed to stat directory entry", error, {
+            path: entryAbsolutePath,
+          });
+        }
+      }
+    }
+
+    return result;
+  }
 
   /**
    * Map fs.watch event types to FileChangeType
@@ -111,9 +269,41 @@ export function createFileWatcher(
   }
 
   /**
+   * Register a watcher for a specific directory
+   */
+  function registerDirectoryWatcher(
+    watchDir: string,
+    absolutePath: string,
+  ): void {
+    try {
+      const watcher = watch(
+        absolutePath,
+        {
+          recursive: false,
+          persistent: true,
+        },
+        (eventType, filename) => {
+          void handleFsWatchEvent(watchDir, eventType, filename);
+        },
+      );
+      directoryWatchers.set(watchDir, watcher);
+    } catch (error) {
+      logger.error("Failed to register watcher for directory", error, {
+        watchDir,
+        absolutePath,
+      });
+    }
+  }
+
+  /**
    * Handle file change events from fs.watch
+   *
+   * @param watchDir - Relative directory path being watched
+   * @param eventType - Type of fs.watch event
+   * @param filename - Base name of changed file (not full path)
    */
   async function handleFsWatchEvent(
+    watchDir: string,
     eventType: "rename" | "change",
     filename: string | null,
   ): Promise<void> {
@@ -121,8 +311,8 @@ export function createFileWatcher(
       return;
     }
 
-    // Construct full path relative to project root
-    const relativePath = filename;
+    // Construct relative path from watchDir and filename
+    const relativePath = watchDir === "" ? filename : `${watchDir}/${filename}`;
 
     // Check if file should be ignored
     try {
@@ -140,8 +330,55 @@ export function createFileWatcher(
     }
 
     // Determine the change type
-    const fullPath = `${projectPath}/${relativePath}`;
+    const fullPath = join(projectPath, relativePath);
     const changeType = mapEventType(eventType, fullPath);
+
+    // Handle new directory creation
+    if (eventType === "rename" && changeType === "create") {
+      try {
+        const stats = statSync(fullPath);
+        if (
+          stats.isDirectory() &&
+          !shouldSkipDirectory(relativePath) &&
+          fullConfig.recursive &&
+          projectRealPath !== undefined &&
+          !isSymlinkOutsideProject(fullPath, projectRealPath)
+        ) {
+          // Register watcher for newly created directory
+          logger.debug("Registering watcher for new directory", {
+            relativePath,
+          });
+          registerDirectoryWatcher(relativePath, fullPath);
+        }
+      } catch {
+        // If we can't stat, it might have been deleted already
+      }
+    }
+
+    // Handle directory deletion
+    if (eventType === "rename" && changeType === "delete") {
+      // Check if this was a directory being watched
+      const existingWatcher = directoryWatchers.get(relativePath);
+      if (existingWatcher !== undefined) {
+        logger.debug("Removing watcher for deleted directory", {
+          relativePath,
+        });
+        existingWatcher.close();
+        directoryWatchers.delete(relativePath);
+      }
+
+      // Also clean up any child watchers (nested directories)
+      const prefixToRemove = `${relativePath}/`;
+      for (const [watchedPath, watcher] of directoryWatchers.entries()) {
+        if (watchedPath.startsWith(prefixToRemove)) {
+          logger.debug("Removing watcher for deleted subdirectory", {
+            path: watchedPath,
+          });
+          watcher.close();
+          directoryWatchers.delete(watchedPath);
+        }
+      }
+    }
 
     // Create and add event to collector
     const event = createFileChangeEvent(changeType, relativePath);
@@ -192,6 +429,15 @@ export function createFileWatcher(
       );
     }
 
+    // Get real path for symlink checking
+    try {
+      projectRealPath = realpathSync(projectPath);
+    } catch (error) {
+      throw new Error(
+        `Failed to resolve project path: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
     // Initialize gitignore filter
     gitignoreFilter = createGitignoreFilter(projectPath);
 
@@ -202,36 +448,51 @@ export function createFileWatcher(
       (event) => event.path, // Deduplicate by path
     );
 
-    // Start fs.watch
+    // Walk directories to find paths to watch
     try {
-      fsWatcher = watch(
+      const directoriesToWatch = walkDirectories(
         projectPath,
-        {
-          recursive: fullConfig.recursive,
-          persistent: true,
-        },
-        (eventType, filename) => {
-          // Handle event asynchronously
-          void handleFsWatchEvent(eventType, filename);
-        },
+        projectRealPath,
+        fullConfig.recursive,
       );
 
-      isActive = true;
-      lastUpdate = Date.now();
-      logger.debug("File watcher started", {
+      logger.debug("Starting file watcher", {
         projectPath,
         recursive: fullConfig.recursive,
         debounceMs: fullConfig.debounceMs,
+        directoryCount: directoriesToWatch.length,
+      });
+
+      // Register non-recursive watchers for each directory
+      for (const watchDir of directoriesToWatch) {
+        const absolutePath =
+          watchDir === "" ? projectPath : join(projectPath, watchDir);
+        registerDirectoryWatcher(watchDir, absolutePath);
+      }
+
+      isActive = true;
+      lastUpdate = Date.now();
+
+      logger.debug("File watcher started", {
+        projectPath,
+        watchedDirectories: directoryWatchers.size,
       });
     } catch (error) {
       // Cleanup on failure
+      for (const watcher of directoryWatchers.values()) {
+        watcher.close();
+      }
+      directoryWatchers.clear();
+
       if (eventCollector) {
         eventCollector.dispose();
         eventCollector = undefined;
       }
       gitignoreFilter = undefined;
+      projectRealPath = undefined;
+
       throw new Error(
-        `Failed to start fs.watch: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to start file watcher: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -244,11 +505,11 @@ export function createFileWatcher(
       return;
     }
 
-    // Stop fs.watch
-    if (fsWatcher) {
-      fsWatcher.close();
-      fsWatcher = undefined;
+    // Stop all directory watchers
+    for (const watcher of directoryWatchers.values()) {
+      watcher.close();
     }
+    directoryWatchers.clear();
 
     // Flush any pending events
     if (eventCollector) {
@@ -258,6 +519,7 @@ export function createFileWatcher(
     }
 
     gitignoreFilter = undefined;
+    projectRealPath = undefined;
     isActive = false;
     logger.debug("File watcher stopped", { projectPath });
   }
@@ -268,7 +530,7 @@ export function createFileWatcher(
   function getStatus(): WatcherStatus {
     return {
       enabled: isActive,
-      watchedPaths: isActive ? 1 : 0,
+      watchedPaths: directoryWatchers.size,
       lastUpdate,
     };
   }

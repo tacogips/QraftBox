@@ -1,4 +1,12 @@
 <script lang="ts">
+  type FileStatus =
+    | "added"
+    | "modified"
+    | "deleted"
+    | "untracked"
+    | "ignored"
+    | undefined;
+
   /**
    * StatusBadge component properties
    */
@@ -6,7 +14,7 @@
     /**
      * File status (undefined means no badge)
      */
-    status: "added" | "modified" | "deleted" | undefined;
+    status: FileStatus;
   }
 
   const { status }: Props = $props();
@@ -14,9 +22,7 @@
   /**
    * Get badge text for status
    */
-  function getBadgeText(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getBadgeText(status: FileStatus): string {
     if (status === undefined) {
       return "";
     }
@@ -28,6 +34,10 @@
         return "M";
       case "deleted":
         return "-";
+      case "untracked":
+        return "?";
+      case "ignored":
+        return "I";
       default: {
         const _exhaustive: never = status;
         throw new Error(`Unhandled status: ${_exhaustive}`);
@@ -38,9 +48,7 @@
   /**
    * Get badge background color class for status
    */
-  function getBadgeBackgroundClass(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getBadgeBackgroundClass(status: FileStatus): string {
     if (status === undefined) {
       return "";
     }
@@ -52,6 +60,10 @@
         return "bg-attention-muted";
       case "deleted":
         return "bg-danger-subtle";
+      case "untracked":
+        return "bg-success-subtle";
+      case "ignored":
+        return "bg-bg-tertiary";
       default: {
         const _exhaustive: never = status;
         throw new Error(`Unhandled status: ${_exhaustive}`);
@@ -62,9 +74,7 @@
   /**
    * Get badge text color class for status
    */
-  function getBadgeTextClass(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getBadgeTextClass(status: FileStatus): string {
     if (status === undefined) {
       return "";
     }
@@ -76,6 +86,10 @@
         return "text-attention-fg";
       case "deleted":
         return "text-danger-fg";
+      case "untracked":
+        return "text-success-fg";
+      case "ignored":
+        return "text-text-quaternary";
       default: {
         const _exhaustive: never = status;
         throw new Error(`Unhandled status: ${_exhaustive}`);

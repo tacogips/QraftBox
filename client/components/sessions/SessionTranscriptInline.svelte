@@ -15,11 +15,27 @@
     contextId: string;
     /** When set, only show the last N messages (compact mode) */
     maxMessages?: number | undefined;
+    /** Auto-refresh interval for live transcript updates (0 = disabled) */
+    autoRefreshMs?: number | undefined;
+    /** Keep the viewport anchored to the latest message while refreshing */
+    followLatest?: boolean | undefined;
+    /** Optimistic user message shown before transcript persistence */
+    optimisticUserMessage?: string | undefined;
+    /** Optimistic assistant message shown before transcript persistence */
+    optimisticAssistantMessage?: string | undefined;
   }
 
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
 
-  const { sessionId, contextId, maxMessages = undefined }: Props = $props();
+  const {
+    sessionId,
+    contextId,
+    maxMessages = undefined,
+    autoRefreshMs = 0,
+    followLatest = false,
+    optimisticUserMessage = undefined,
+    optimisticAssistantMessage = undefined,
+  }: Props = $props();
 
   /**
    * Transcript event structure (matches server response)
@@ -104,11 +120,55 @@
 
   const isCompact = $derived(maxMessages !== undefined);
 
+  function normalizeMessageText(rawText: string): string {
+    return stripSystemTags(rawText).replace(/\s+/g, " ").trim();
+  }
+
+  const normalizedOptimisticUser = $derived(
+    normalizeMessageText(optimisticUserMessage ?? ""),
+  );
+
+  const normalizedOptimisticAssistant = $derived(
+    normalizeMessageText(optimisticAssistantMessage ?? ""),
+  );
+
+  const normalizedChatTextSet = $derived.by(() => {
+    const textSet = new Set<string>();
+    for (const transcriptEvent of chatEvents) {
+      const normalizedText = normalizeMessageText(
+        extractTextContent(transcriptEvent),
+      );
+      if (normalizedText.length > 0) {
+        textSet.add(normalizedText);
+      }
+    }
+    return textSet;
+  });
+
+  const showOptimisticUser = $derived(
+    normalizedOptimisticUser.length > 0 &&
+      !normalizedChatTextSet.has(normalizedOptimisticUser),
+  );
+
+  const showOptimisticAssistant = $derived(
+    normalizedOptimisticAssistant.length > 0 &&
+      !normalizedChatTextSet.has(normalizedOptimisticAssistant),
+  );
+
+  const optimisticTailCount = $derived(
+    (showOptimisticUser ? 1 : 0) + (showOptimisticAssistant ? 1 : 0),
+  );
+
   /**
    * Fetch transcript events from API
    */
-  async function fetchTranscript(): Promise<void> {
-    loadingState = { status: "loading" };
+  async function fetchTranscript(options?: {
+    silent?: boolean;
+  }): Promise<void> {
+    const isSilentRefresh = options?.silent === true;
+    if (!isSilentRefresh) {
+      loadingState = { status: "loading" };
+    }
 
     try {
       const response = await fetch(
@@ -117,6 +177,9 @@
 
       if (!response.ok) {
         const errorData = (await response.json()) as { error: string };
+        if (isSilentRefresh && loadingState.status === "success") {
+          return;
+        }
         loadingState = {
           status: "error",
           error: errorData.error ?? "Failed to fetch transcript",
@@ -131,6 +194,9 @@
         total: data.total,
       };
     } catch (error: unknown) {
+      if (isSilentRefresh && loadingState.status === "success") {
+        return;
+      }
       loadingState = {
         status: "error",
         error:
@@ -143,7 +209,19 @@
    * Initial fetch on mount
    */
   $effect(() => {
-    fetchTranscript();
+    void fetchTranscript();
+  });
+
+  /**
+   * Optional polling for live transcript updates.
+   * Uses silent refresh so existing content stays visible while fetching.
+   */
+  $effect(() => {
+    if (autoRefreshMs <= 0) return;
+    const pollTimerId = setInterval(() => {
+      void fetchTranscript({ silent: true });
+    }, autoRefreshMs);
+    return () => clearInterval(pollTimerId);
   });
 
   /**
@@ -164,10 +242,13 @@
       loadingState.status === "success" &&
       chatScrollContainer !== null
     ) {
+      const _liveTail = optimisticTailCount;
       const container = chatScrollContainer;
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
+      if (followLatest) {
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
+      }
     }
   });
 
@@ -649,6 +730,48 @@
             </div>
           </div>
         {/each}
+
+        {#if showOptimisticUser}
+          <div
+            class="border-l-4 border-accent-emphasis bg-bg-secondary rounded-r"
+          >
+            <div class="px-3 py-1.5 flex items-center justify-between">
+              <span
+                class="text-xs font-semibold px-2 py-0.5 rounded bg-accent-muted text-accent-fg"
+              >
+                user (pending)
+              </span>
+            </div>
+            <div class="px-3 py-2">
+              <div
+                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+              >
+                {stripSystemTags(optimisticUserMessage ?? "")}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        {#if showOptimisticAssistant}
+          <div
+            class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
+          >
+            <div class="px-3 py-1.5 flex items-center justify-between">
+              <span
+                class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+              >
+                assistant (live)
+              </span>
+            </div>
+            <div class="px-3 py-2">
+              <div
+                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+              >
+                {stripSystemTags(optimisticAssistantMessage ?? "")}
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
     {:else if viewMode === "carousel"}
       <!-- Carousel mode: narrower cards with neighbors visible on sides -->
