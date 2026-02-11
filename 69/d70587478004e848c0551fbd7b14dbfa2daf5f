@@ -37,5 +37,18 @@
     },
     "createdAt": 1770809412024,
     "replies": []
+  },
+  {
+    "id": "32391b0e-a9e4-429c-9035-c133811dc6ec",
+    "commitHash": "69d70587478004e848c0551fbd7b14dbfa2daf5f",
+    "filePath": "file1.txt",
+    "lineNumber": 2,
+    "body": "New comment",
+    "author": {
+      "name": "tacogips",
+      "email": "me@tacogips.me"
+    },
+    "createdAt": 1770809412038,
+    "replies": []
   }
 ]
