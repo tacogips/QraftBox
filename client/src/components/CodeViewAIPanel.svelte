@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * AIPromptPanel Component
+   * CodeViewAIPanel Component
    *
-   * Bottom panel for AI prompts in the Diff screen.
+   * Bottom panel for AI prompts in the Code View (diff) screen.
    *
    * Features:
    * - Collapsed state: Single-line input (default)
@@ -353,7 +353,7 @@ Ctrl+Enter to submit immediately"
 
 <style>
   /**
-   * AIPromptPanel Styling
+   * CodeViewAIPanel Styling
    *
    * - Smooth height transitions
    * - Single-line and multi-line input modes

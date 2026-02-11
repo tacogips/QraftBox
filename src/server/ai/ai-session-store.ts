@@ -195,13 +195,13 @@ class AiSessionStoreImpl implements AiSessionStore {
 
     this.stmtListPromptQueue = db.prepare(`
       SELECT * FROM ai_sessions
-      WHERE prompt_id IS NOT NULL
+      WHERE prompt_id IS NOT NULL AND state IN ('queued', 'running')
       ORDER BY created_at DESC
     `);
 
     this.stmtListPromptQueueByWorktree = db.prepare(`
       SELECT * FROM ai_sessions
-      WHERE prompt_id IS NOT NULL AND worktree_id = ?
+      WHERE prompt_id IS NOT NULL AND worktree_id = ? AND state IN ('queued', 'running')
       ORDER BY created_at DESC
     `);
 

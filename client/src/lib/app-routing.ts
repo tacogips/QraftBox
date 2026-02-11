@@ -1,0 +1,54 @@
+export type ScreenType =
+  | "diff"
+  | "commits"
+  | "sessions"
+  | "project"
+  | "tools"
+  | "system-info";
+
+export const VALID_SCREENS: ReadonlySet<string> = new Set([
+  "diff",
+  "commits",
+  "sessions",
+  "project",
+  "tools",
+  "system-info",
+]);
+
+export function parseHash(hashValue: string): {
+  slug: string | null;
+  screen: ScreenType;
+} {
+  const hash = hashValue.replace(/^#\/?/, "");
+  const parts = hash.split("/").filter(Boolean);
+
+  if (parts.length >= 2) {
+    const slug = parts[0] ?? null;
+    const page = parts[1] ?? "diff";
+    return {
+      slug,
+      screen: VALID_SCREENS.has(page) ? (page as ScreenType) : "diff",
+    };
+  }
+
+  if (parts.length === 1) {
+    const single = parts[0] ?? "";
+    if (VALID_SCREENS.has(single)) {
+      return { slug: null, screen: single as ScreenType };
+    }
+    return { slug: single, screen: "diff" };
+  }
+
+  return { slug: null, screen: "diff" };
+}
+
+export function screenFromHash(hashValue: string): ScreenType {
+  return parseHash(hashValue).screen;
+}
+
+export function buildScreenHash(
+  slug: string | null,
+  screen: ScreenType,
+): string {
+  return slug !== null ? `#/${slug}/${screen}` : `#/${screen}`;
+}

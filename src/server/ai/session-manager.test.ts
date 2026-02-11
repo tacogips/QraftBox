@@ -563,9 +563,10 @@ describe("createSessionManager", () => {
 
       manager.cancelPrompt(promptId);
 
+      // Cancelled prompts should no longer appear in the active queue
       const queue = manager.getPromptQueue();
       const prompt = queue.find((p) => p.id === promptId);
-      expect(prompt?.status).toBe("cancelled");
+      expect(prompt).toBeUndefined();
     });
   });
 
