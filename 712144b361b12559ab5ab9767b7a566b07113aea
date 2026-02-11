@@ -126,6 +126,16 @@
       "email": "me@tacogips.me"
     },
     "createdAt": 1770791892477,
-    "replies": []
+    "replies": [
+      {
+        "id": "31b3e0e4-2931-4b95-9ca7-634cc7417f1b",
+        "body": "Workflow reply",
+        "author": {
+          "name": "tacogips",
+          "email": "me@tacogips.me"
+        },
+        "createdAt": 1770791892485
+      }
+    ]
   }
 ]
