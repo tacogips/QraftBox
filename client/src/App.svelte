@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
-  import type {
-    QueueStatus,
-    FileReference,
-    AISession,
+  import {
+    deriveQraftAiSessionIdFromClaude,
+    generateQraftAiSessionId,
+    type QraftAiSessionId,
+    type QueueStatus,
+    type FileReference,
+    type AISession,
   } from "../../src/types/ai";
-  import type { LocalPrompt } from "../../src/types/local-prompt";
+  // LocalPrompt type no longer needed - server manages prompt queue
   import DiffView from "../components/DiffView.svelte";
   import FileViewer from "../components/FileViewer.svelte";
   import FileTree from "../components/FileTree.svelte";
@@ -91,8 +94,8 @@
   let contextId = $state<string | null>(null);
   let diffFiles = $state<DiffFile[]>([]);
   let selectedPath = $state<string | null>(null);
-  let viewMode = $state<ViewMode>("side-by-side");
-  let fileTreeMode = $state<"diff" | "all">("diff");
+  let viewMode = $state<ViewMode>("full-file");
+  let fileTreeMode = $state<"diff" | "all">("all");
   let sidebarCollapsed = $state(false);
 
   const SIDEBAR_MIN_WIDTH = 160;
@@ -160,9 +163,33 @@
   let currentCliSessionId = $state<string | null>(null);
   let isNewSessionMode = $state(true);
 
-  // Local prompt queue for tracking submitted prompts
-  let pendingPrompts = $state<LocalPrompt[]>([]);
-  let isDispatchingNext = false;
+  /**
+   * Client-generated session group ID (qraft_ai_session_id).
+   * All prompts submitted in the same "session" share this ID so the server
+   * can chain them together even before the Claude session ID is resolved.
+   *
+   * When currentCliSessionId is known, derived deterministically via
+   * deriveQraftAiSessionIdFromClaude() so Claude CLI sessions and QraftBox sessions
+   * share the same grouping key.
+   * When starting a fresh session (no Claude session ID), generated via
+   * generateQraftAiSessionId() until the Claude session ID is resolved.
+   */
+  let qraftAiSessionId = $state<QraftAiSessionId>(generateQraftAiSessionId());
+
+  // Server-managed prompt queue (received via WebSocket)
+  interface PromptQueueItem {
+    id: string;
+    message: string;
+    status: "queued" | "running" | "completed" | "failed" | "cancelled";
+    requested_claude_session_id: string | null;
+    claude_session_id?: string | undefined;
+    current_activity?: string | undefined;
+    error?: string | undefined;
+    created_at: string;
+    worktree_id: string;
+    qraft_ai_session_id?: QraftAiSessionId | undefined;
+  }
+  let serverPromptQueue = $state<PromptQueueItem[]>([]);
 
   /**
    * Recent projects filtered to exclude currently open tabs
@@ -411,6 +438,13 @@
   );
 
   /**
+   * Effective view mode: force full-file when selected file has no diff
+   */
+  const effectiveViewMode = $derived<ViewMode>(
+    selectedHasDiff ? viewMode : "full-file",
+  );
+
+  /**
    * File content for non-diff files
    */
   let fileContent = $state<{
@@ -530,8 +564,11 @@
       // Only fetch diff for git repositories
       if (tab.isGitRepo) {
         await fetchDiff(tabId);
+        if (fileTreeMode === "all") {
+          void fetchAllFiles(tabId);
+        }
       }
-      void fetchQueueStatus();
+      void fetchPromptQueue();
       void fetchActiveSessions();
 
       // Navigate to diff if on project screen, otherwise update hash with new slug
@@ -615,7 +652,10 @@
             allFilesTreeStale = false;
             fileContent = null;
             await fetchDiff(newTab.id);
-            void fetchQueueStatus();
+            if (fileTreeMode === "all") {
+              void fetchAllFiles(newTab.id);
+            }
+            void fetchPromptQueue();
             void fetchActiveSessions();
             // Update hash to reflect new active project
             if (newTab.projectSlug.length > 0) {
@@ -865,8 +905,11 @@
       // Only fetch diff for git repositories
       if (activeTabIsGitRepo) {
         await fetchDiff(contextId);
+        if (fileTreeMode === "all") {
+          void fetchAllFiles(contextId);
+        }
       }
-      void fetchQueueStatus();
+      void fetchPromptQueue();
       void fetchActiveSessions();
       void fetchRecentProjects();
 
@@ -958,168 +1001,59 @@
   const changedFilePaths = $derived(diffFiles.map((f) => f.path));
 
   /**
-   * Submit AI prompt from the global panel
+   * Submit AI prompt from the global panel.
    *
-   * Flow:
-   * 1. Add optimistic entry immediately for instant UI feedback
-   * 2. POST to /api/prompts to persist the prompt
-   * 3. If nothing is running, dispatch immediately
-   * 4. Otherwise, prompt stays in pending queue (auto-dispatched later)
+   * Simplified flow:
+   * 1. POST { session_id, run_immediately, message } to /api/ai/submit
+   * 2. Server manages queue, session continuity, and execution
+   * 3. Queue status updates arrive via WebSocket
    */
   async function handleAIPanelSubmit(
     prompt: string,
-    _immediate: boolean,
+    immediate: boolean,
     refs: readonly FileReference[],
   ): Promise<void> {
     if (contextId === null) return;
-    const wasNewSessionMode = isNewSessionMode;
-    // Capture the current session for resume before any state changes.
-    let resumeSessionId = currentCliSessionId;
-    // Exit "new session" mode but keep selectedCliSessionId so the
-    // CurrentSessionPanel continues tracking the same session.
+
+    // On first submit in a new-session flow, generate a fresh qraft_ai_session_id.
+    // If resuming a known Claude session, derive deterministically so
+    // QraftBox and Claude CLI sessions share the same group key.
+    if (isNewSessionMode) {
+      qraftAiSessionId = generateQraftAiSessionId();
+    } else if (currentCliSessionId !== null) {
+      qraftAiSessionId = deriveQraftAiSessionIdFromClaude(currentCliSessionId);
+    }
+    const sessionIdToSend = isNewSessionMode ? null : currentCliSessionId;
     isNewSessionMode = false;
 
-    // 1. Optimistic UI: add to pending immediately
-    const optimisticId = `optimistic_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    const optimisticPrompt: LocalPrompt = {
-      id: optimisticId,
-      prompt,
-      description: "",
-      context: {
-        primaryFile: undefined,
-        references: [...refs],
-        diffSummary: undefined,
-      },
-      projectPath,
-      status: "pending",
-      sessionId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      error: null,
-    };
-    pendingPrompts = [...pendingPrompts, optimisticPrompt];
-
-    const body = {
-      prompt,
-      context: {
-        primaryFile: undefined,
-        references: refs,
-        diffSummary: undefined,
-      },
-      projectPath: projectPath,
-    };
-
     try {
-      // 2. Create prompt in store
-      const resp = await fetch("/api/prompts", {
+      const resp = await fetch("/api/ai/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          session_id: sessionIdToSend,
+          run_immediately: immediate,
+          message: prompt,
+          context: {
+            primaryFile: undefined,
+            references: refs,
+            diffSummary: undefined,
+          },
+          project_path: projectPath,
+          qraft_ai_session_id: qraftAiSessionId,
+        }),
       });
 
       if (!resp.ok) {
-        console.error("AI prompt error:", resp.status);
-        // Remove optimistic entry on failure
-        pendingPrompts = pendingPrompts.filter((p) => p.id !== optimisticId);
+        console.error("AI prompt submit error:", resp.status);
         return;
       }
 
-      const data = (await resp.json()) as { prompt: LocalPrompt };
-
-      // 3. Replace optimistic entry with real prompt
-      pendingPrompts = pendingPrompts.map((p) =>
-        p.id === optimisticId ? data.prompt : p,
-      );
-
-      // If we're not explicitly in "new session" mode and no session is selected yet,
-      // resolve latest session ID first to avoid accidentally splitting the thread.
-      if (resumeSessionId === null && !wasNewSessionMode) {
-        resumeSessionId = await resolveLatestCliSessionId();
-        if (resumeSessionId !== null) {
-          selectedCliSessionId = resumeSessionId;
-          currentCliSessionId = resumeSessionId;
-        }
-      }
-
-      // 4. If a current CLI session is selected, always continue that session.
-      if (resumeSessionId !== null) {
-        const dispatchResp = await fetch(
-          `/api/prompts/${data.prompt.id}/dispatch`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              immediate: true,
-              resumeSessionId,
-            }),
-          },
-        );
-
-        if (dispatchResp.ok) {
-          // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter(
-            (p) => p.id !== data.prompt.id,
-          );
-        }
-      } else if (runningSessions.length === 0 && queuedSessions.length === 0) {
-        // 5. If nothing is running/queued, dispatch immediately.
-        const dispatchResp = await fetch(
-          `/api/prompts/${data.prompt.id}/dispatch`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ immediate: true }),
-          },
-        );
-
-        if (dispatchResp.ok) {
-          // Remove from pending (it's now a session)
-          pendingPrompts = pendingPrompts.filter(
-            (p) => p.id !== data.prompt.id,
-          );
-        }
-      }
-      // If something is running and no CLI session is selected, prompt stays in pending queue.
-      // autoDispatchNext handles it.
-
-      void fetchQueueStatus();
+      // Poll prompt queue immediately so UI reflects the new entry
+      void fetchPromptQueue();
       void fetchActiveSessions();
     } catch (e) {
       console.error("AI prompt submit error:", e);
-      // Remove optimistic entry on error
-      pendingPrompts = pendingPrompts.filter((p) => p.id !== optimisticId);
-    }
-  }
-
-  /**
-   * Resolve most recent CLI session ID for the current project.
-   */
-  async function resolveLatestCliSessionId(): Promise<string | null> {
-    if (contextId === null) return null;
-    try {
-      const params = new URLSearchParams({
-        offset: "0",
-        limit: "1",
-        sortBy: "modified",
-        sortOrder: "desc",
-      });
-      if (projectPath.length > 0) {
-        params.set("workingDirectoryPrefix", projectPath);
-      }
-      const resp = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
-      );
-      if (!resp.ok) return null;
-      const data = (await resp.json()) as {
-        sessions: Array<{ sessionId?: string }>;
-        total: number;
-      };
-      const sessionId = data.sessions[0]?.sessionId;
-      return typeof sessionId === "string" && sessionId.length > 0
-        ? sessionId
-        : null;
-    } catch {
-      return null;
     }
   }
 
@@ -1129,60 +1063,83 @@
   async function handleInlineCommentSubmit(
     startLine: number,
     endLine: number,
-    side: "old" | "new",
+    _side: "old" | "new",
     filePath: string,
     prompt: string,
     immediate: boolean,
   ): Promise<void> {
     if (contextId === null) return;
-    const body = {
-      prompt,
-      context: {
-        primaryFile: {
-          path: filePath,
-          startLine,
-          endLine,
-          content: "",
-        },
-        references: [],
-        diffSummary: undefined,
-      },
-      projectPath: projectPath,
-    };
     try {
-      const resp = await fetch("/api/prompts", {
+      const resp = await fetch("/api/ai/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          session_id: currentCliSessionId,
+          run_immediately: immediate,
+          message: prompt,
+          context: {
+            primaryFile: {
+              path: filePath,
+              startLine,
+              endLine,
+              content: "",
+            },
+            references: [],
+            diffSummary: undefined,
+          },
+          project_path: projectPath,
+          qraft_ai_session_id: qraftAiSessionId,
+        }),
       });
       if (!resp.ok) {
-        console.error("AI prompt error:", resp.status);
-      } else if (immediate) {
-        const data = (await resp.json()) as { prompt: { id: string } };
-        await fetch(`/api/prompts/${data.prompt.id}/dispatch`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ immediate: true }),
-        });
+        console.error("AI inline prompt error:", resp.status);
       }
-      void fetchQueueStatus();
+      void fetchPromptQueue();
       void fetchActiveSessions();
     } catch (e) {
-      console.error("AI prompt submit error:", e);
+      console.error("AI inline prompt submit error:", e);
     }
   }
 
   /**
-   * Fetch AI queue status
+   * Fetch server-side prompt queue via polling.
+   * Supplements WebSocket updates to handle missed broadcasts
+   * (e.g., rapid consecutive submissions).
    */
-  async function fetchQueueStatus(): Promise<void> {
+  async function fetchPromptQueue(): Promise<void> {
     try {
-      const resp = await fetch("/api/ai/queue/status");
-      if (resp.ok) {
-        queueStatus = (await resp.json()) as QueueStatus;
+      const resp = await fetch("/api/ai/prompt-queue");
+      if (!resp.ok) return;
+      const data = (await resp.json()) as { prompts: PromptQueueItem[] };
+      serverPromptQueue = data.prompts;
+
+      // Derive queue status from prompt queue
+      const runningPrompts = data.prompts.filter((p) => p.status === "running");
+      const queuedPrompts = data.prompts.filter((p) => p.status === "queued");
+      queueStatus = {
+        runningCount: runningPrompts.length,
+        queuedCount: queuedPrompts.length,
+        runningSessionIds: [],
+        totalCount: runningPrompts.length + queuedPrompts.length,
+      };
+
+      // Auto-resolve currentCliSessionId from prompt queue results.
+      // Once resolved, switch qraftAiSessionId to the derived form so
+      // subsequent prompts (and external CLI sessions) share the same group.
+      if (!isNewSessionMode && currentCliSessionId === null) {
+        const resolvedId =
+          data.prompts.find(
+            (p) =>
+              typeof p.claude_session_id === "string" &&
+              p.claude_session_id.length > 0,
+          )?.claude_session_id ?? null;
+        if (resolvedId !== null) {
+          currentCliSessionId = resolvedId;
+          qraftAiSessionId = deriveQraftAiSessionIdFromClaude(resolvedId);
+        }
       }
     } catch {
-      // Silently ignore - queue status is non-critical
+      // Silently ignore
     }
   }
 
@@ -1203,6 +1160,7 @@
           completedAt?: string | undefined;
           context: unknown;
           currentActivity?: string | undefined;
+          claudeSessionId?: string | undefined;
         }[];
       };
 
@@ -1219,6 +1177,7 @@
           context: info.context as AISession["context"],
           turns: [],
           currentActivity: info.currentActivity,
+          claudeSessionId: info.claudeSessionId,
         };
         if (session.state === "running") {
           running.push(session);
@@ -1240,16 +1199,7 @@
       recentlyCompletedSessions = recentCompleted;
 
       // Also refresh queue status to avoid stale display
-      void fetchQueueStatus();
-
-      // Auto-dispatch next pending prompt if nothing is running
-      if (
-        running.length === 0 &&
-        queued.length === 0 &&
-        pendingPrompts.length > 0
-      ) {
-        void autoDispatchNext();
-      }
+      void fetchPromptQueue();
     } catch {
       // Silently ignore
     }
@@ -1472,80 +1422,10 @@
    */
   async function reconcileSessionState(sessionId: string): Promise<void> {
     await fetchActiveSessions();
-    await fetchQueueStatus();
+    await fetchPromptQueue();
     const stillRunning = runningSessions.some((s) => s.id === sessionId);
     if (!stillRunning) {
       closeSessionStream(sessionId);
-    }
-  }
-
-  /**
-   * Fetch pending prompts from the local prompt store
-   */
-  async function fetchPendingPrompts(): Promise<void> {
-    try {
-      const resp = await fetch("/api/prompts?status=pending");
-      if (!resp.ok) return;
-      const data = (await resp.json()) as {
-        prompts: LocalPrompt[];
-        total: number;
-      };
-      // Merge with optimistic prompts: keep optimistic ones that aren't in server data yet
-      const serverIds = new Set(data.prompts.map((p) => p.id));
-      const optimisticOnly = pendingPrompts.filter(
-        (p) => !serverIds.has(p.id) && p.id.startsWith("optimistic_"),
-      );
-      pendingPrompts = [...optimisticOnly, ...data.prompts];
-    } catch {
-      // Silently ignore
-    }
-  }
-
-  /**
-   * Auto-dispatch the next pending prompt
-   */
-  async function autoDispatchNext(): Promise<void> {
-    if (isDispatchingNext || pendingPrompts.length === 0) return;
-    isDispatchingNext = true;
-    try {
-      const next = pendingPrompts[0];
-      if (next === undefined) return;
-
-      // Skip optimistic prompts (they'll become real after API creates them)
-      if (next.id.startsWith("optimistic_")) return;
-
-      let resumeSessionId = currentCliSessionId;
-      if (resumeSessionId === null && !isNewSessionMode) {
-        resumeSessionId = await resolveLatestCliSessionId();
-        if (resumeSessionId !== null) {
-          selectedCliSessionId = resumeSessionId;
-          currentCliSessionId = resumeSessionId;
-        } else {
-          // Wait until current session is discoverable instead of creating
-          // a new one unintentionally.
-          return;
-        }
-      }
-
-      const resp = await fetch(`/api/prompts/${next.id}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          immediate: true,
-          ...(resumeSessionId !== null ? { resumeSessionId } : {}),
-        }),
-      });
-
-      if (resp.ok) {
-        // Remove from pending list
-        pendingPrompts = pendingPrompts.filter((p) => p.id !== next.id);
-        void fetchActiveSessions();
-        void fetchQueueStatus();
-      }
-    } catch (e) {
-      console.error("Auto-dispatch failed:", e);
-    } finally {
-      isDispatchingNext = false;
     }
   }
 
@@ -1558,13 +1438,15 @@
     const hasActive =
       runningSessions.length > 0 ||
       queuedSessions.length > 0 ||
-      pendingPrompts.length > 0 ||
+      serverPromptQueue.some(
+        (p) => p.status === "queued" || p.status === "running",
+      ) ||
       recentlyCompletedSessions.length > 0;
 
     if (hasActive && sessionPollTimer === null) {
       sessionPollTimer = setInterval(() => {
+        void fetchPromptQueue();
         void fetchActiveSessions();
-        void fetchPendingPrompts();
       }, 2000);
     } else if (!hasActive && sessionPollTimer !== null) {
       clearInterval(sessionPollTimer);
@@ -1577,7 +1459,7 @@
     const _deps = [
       runningSessions.length,
       queuedSessions.length,
-      pendingPrompts.length,
+      serverPromptQueue.length,
       recentlyCompletedSessions.length,
     ];
     manageSessionPolling();
@@ -1600,7 +1482,7 @@
       if (resp.ok) {
         runningSessions = runningSessions.filter((s) => s.id !== sessionId);
         queuedSessions = queuedSessions.filter((s) => s.id !== sessionId);
-        void fetchQueueStatus();
+        void fetchPromptQueue();
       }
     } catch (e) {
       console.error("Failed to cancel session:", e);
@@ -1616,7 +1498,7 @@
     isNewSessionMode = false;
     navigateToScreen("diff");
     void fetchActiveSessions();
-    void fetchQueueStatus();
+    void fetchPromptQueue();
   }
 
   /**
@@ -1638,7 +1520,7 @@
       );
       if (resp.ok) {
         void fetchActiveSessions();
-        void fetchQueueStatus();
+        void fetchPromptQueue();
       }
     } catch (e) {
       console.error("Failed to resume CLI session:", e);
@@ -1664,7 +1546,7 @@
   function handleSearchSession(): void {
     navigateToScreen("sessions");
     void fetchActiveSessions();
-    void fetchQueueStatus();
+    void fetchPromptQueue();
   }
 
   /**
@@ -1781,6 +1663,45 @@
             }
             refetchTimer = null;
           }, 500);
+        } else if (msg.event === "ai:queue_update") {
+          // Server-side prompt queue status update
+          const update = msg.data as {
+            prompts: PromptQueueItem[];
+          };
+          serverPromptQueue = update.prompts;
+
+          // Update queue status from prompt queue data
+          const runningPrompts = update.prompts.filter(
+            (p) => p.status === "running",
+          );
+          const queuedPrompts = update.prompts.filter(
+            (p) => p.status === "queued",
+          );
+          queueStatus = {
+            runningCount: runningPrompts.length,
+            queuedCount: queuedPrompts.length,
+            runningSessionIds: [],
+            totalCount: runningPrompts.length + queuedPrompts.length,
+          };
+
+          // Auto-resolve currentCliSessionId from prompt queue results.
+          // Switch qraftAiSessionId to derived form for consistency.
+          if (!isNewSessionMode && currentCliSessionId === null) {
+            const resolvedId =
+              update.prompts.find(
+                (p) =>
+                  typeof p.claude_session_id === "string" &&
+                  p.claude_session_id.length > 0,
+              )?.claude_session_id ?? null;
+            if (resolvedId !== null) {
+              currentCliSessionId = resolvedId;
+              selectedCliSessionId = resolvedId;
+              qraftAiSessionId = deriveQraftAiSessionIdFromClaude(resolvedId);
+            }
+          }
+
+          // Refresh active sessions to sync UI
+          void fetchActiveSessions();
         }
       } catch {
         // Ignore parse errors
@@ -1845,7 +1766,7 @@
   // Fetch file content when selecting a non-diff file OR when full-file mode is active
   $effect(() => {
     if (selectedPath !== null && contextId !== null) {
-      if (viewMode === "full-file") {
+      if (effectiveViewMode === "full-file") {
         void fetchFileContent(contextId, selectedPath);
       } else if (!selectedHasDiff && fileTreeMode === "all") {
         void fetchFileContent(contextId, selectedPath);
@@ -2074,7 +1995,9 @@
         </div>
         <div class="max-h-60 overflow-y-auto">
           {#each availableRecentProjects as recent (recent.path)}
-            <div class="flex items-center hover:bg-bg-tertiary transition-colors">
+            <div
+              class="flex items-center hover:bg-bg-tertiary transition-colors"
+            >
               <button
                 type="button"
                 class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
@@ -2103,10 +2026,20 @@
                 type="button"
                 class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
                 title="Remove from history"
-                onclick={(e) => { e.stopPropagation(); void removeRecentProject(recent.path); }}
+                onclick={(e) => {
+                  e.stopPropagation();
+                  void removeRecentProject(recent.path);
+                }}
               >
-                <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                >
+                  <path
+                    d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+                  />
                 </svg>
               </button>
             </div>
@@ -2182,7 +2115,7 @@
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
         onclick={() => navigateToScreen("diff")}
       >
-        Changes
+        Files
       </button>
       <button
         type="button"
@@ -2287,12 +2220,24 @@
       <div class="flex flex-col flex-1 min-w-0">
         <main class="flex-1 overflow-auto bg-bg-primary">
           {#if !activeTabIsGitRepo}
-            <div class="flex flex-col items-center justify-center h-full text-text-tertiary gap-2">
-              <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
-                <path fill-rule="evenodd" d="M4.72.22a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 01-1.06-1.06l1-1zm3.78 0a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 11-1.06-1.06l1-1zM1.5 3.25a.75.75 0 01.75-.75h11.5a.75.75 0 01.75.75v2a.75.75 0 01-.75.75H2.25a.75.75 0 01-.75-.75v-2zm.75 7.25a.75.75 0 00-.75.75v2c0 .414.336.75.75.75h11.5a.75.75 0 00.75-.75v-2a.75.75 0 00-.75-.75H2.25z"/>
+            <div
+              class="flex flex-col items-center justify-center h-full text-text-tertiary gap-2"
+            >
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M4.72.22a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 01-1.06-1.06l1-1zm3.78 0a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 11-1.06-1.06l1-1zM1.5 3.25a.75.75 0 01.75-.75h11.5a.75.75 0 01.75.75v2a.75.75 0 01-.75.75H2.25a.75.75 0 01-.75-.75v-2zm.75 7.25a.75.75 0 00-.75.75v2c0 .414.336.75.75.75h11.5a.75.75 0 00.75-.75v-2a.75.75 0 00-.75-.75H2.25z"
+                />
               </svg>
               <span class="text-sm">Not a git repository</span>
-              <span class="text-xs">Changes view is not available for non-git directories</span>
+              <span class="text-xs"
+                >Changes view is not available for non-git directories</span
+              >
             </div>
           {:else if loading}
             <div class="p-8 text-center text-text-secondary">
@@ -2300,7 +2245,7 @@
             </div>
           {:else if error !== null}
             <div class="p-8 text-center text-danger-fg">{error}</div>
-          {:else if selectedFile !== null && viewMode === "current-state"}
+          {:else if selectedFile !== null && effectiveViewMode === "current-state"}
             <!-- Current State View -->
             <div class="px-2 pb-2">
               <CurrentStateView
@@ -2310,22 +2255,22 @@
                 onNavigateNext={navigateNext}
               />
             </div>
-          {:else if selectedFile !== null && (viewMode === "side-by-side" || viewMode === "inline")}
+          {:else if selectedFile !== null && (effectiveViewMode === "side-by-side" || effectiveViewMode === "inline")}
             <!-- Diff View (side-by-side or inline) -->
             <div class="px-2 pb-2">
               <DiffView
                 file={selectedFile}
-                mode={viewMode === "side-by-side" ? "side-by-side" : "inline"}
+                mode={effectiveViewMode === "side-by-side" ? "side-by-side" : "inline"}
                 onCommentSubmit={handleInlineCommentSubmit}
                 onNavigatePrev={navigatePrev}
                 onNavigateNext={navigateNext}
               />
             </div>
-          {:else if viewMode === "full-file" && fileContentLoading}
+          {:else if effectiveViewMode === "full-file" && fileContentLoading}
             <div class="p-8 text-center text-text-secondary">
               Loading file...
             </div>
-          {:else if viewMode === "full-file" && fileContent !== null}
+          {:else if effectiveViewMode === "full-file" && fileContent !== null}
             <!-- Full File Viewer (for diff files viewed as full content) -->
             <FileViewer
               path={fileContent.path}
@@ -2364,14 +2309,59 @@
           <div
             class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
           >
-            <!-- Side by Side icon: two vertical columns -->
+            <!-- Full File icon: document with lines -->
             <button
               type="button"
               class="p-1 transition-colors
-                     {viewMode === 'side-by-side'
+                     {effectiveViewMode === 'full-file'
                 ? 'bg-bg-emphasis text-text-on-emphasis'
                 : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => setViewMode("side-by-side")}
+              onclick={() => setViewMode("full-file")}
+              title="Full File"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path
+                  d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+                <line
+                  x1="5.5"
+                  y1="6"
+                  x2="11"
+                  y2="6"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="5.5"
+                  y1="8.5"
+                  x2="11"
+                  y2="8.5"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+                <line
+                  x1="5.5"
+                  y1="11"
+                  x2="9"
+                  y2="11"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                />
+              </svg>
+            </button>
+            <!-- Side by Side icon: two vertical columns -->
+            <button
+              type="button"
+              class="p-1 border-l border-border-default transition-colors
+                     {!selectedHasDiff
+                ? 'text-text-disabled cursor-not-allowed opacity-40'
+                : effectiveViewMode === 'side-by-side'
+                  ? 'bg-bg-emphasis text-text-on-emphasis'
+                  : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => { if (selectedHasDiff) setViewMode("side-by-side"); }}
+              disabled={!selectedHasDiff}
               title="Side by Side"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -2399,10 +2389,13 @@
             <button
               type="button"
               class="p-1 border-l border-border-default transition-colors
-                     {viewMode === 'inline'
-                ? 'bg-bg-emphasis text-text-on-emphasis'
-                : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => setViewMode("inline")}
+                     {!selectedHasDiff
+                ? 'text-text-disabled cursor-not-allowed opacity-40'
+                : effectiveViewMode === 'inline'
+                  ? 'bg-bg-emphasis text-text-on-emphasis'
+                  : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => { if (selectedHasDiff) setViewMode("inline"); }}
+              disabled={!selectedHasDiff}
               title="Inline"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -2445,10 +2438,13 @@
             <button
               type="button"
               class="p-1 border-l border-border-default transition-colors
-                     {viewMode === 'current-state'
-                ? 'bg-bg-emphasis text-text-on-emphasis'
-                : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => setViewMode("current-state")}
+                     {!selectedHasDiff
+                ? 'text-text-disabled cursor-not-allowed opacity-40'
+                : effectiveViewMode === 'current-state'
+                  ? 'bg-bg-emphasis text-text-on-emphasis'
+                  : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => { if (selectedHasDiff) setViewMode("current-state"); }}
+              disabled={!selectedHasDiff}
               title="Current"
             >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -2456,48 +2452,6 @@
                   d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
                   stroke="currentColor"
                   stroke-width="1.5"
-                />
-              </svg>
-            </button>
-            <!-- Full File icon: document with lines -->
-            <button
-              type="button"
-              class="p-1 border-l border-border-default transition-colors
-                     {viewMode === 'full-file'
-                ? 'bg-bg-emphasis text-text-on-emphasis'
-                : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => setViewMode("full-file")}
-              title="Full File"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path
-                  d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-                <line
-                  x1="5.5"
-                  y1="6"
-                  x2="11"
-                  y2="6"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                />
-                <line
-                  x1="5.5"
-                  y1="8.5"
-                  x2="11"
-                  y2="8.5"
-                  stroke="currentColor"
-                  stroke-width="1.2"
-                />
-                <line
-                  x1="5.5"
-                  y1="11"
-                  x2="9"
-                  y2="11"
-                  stroke="currentColor"
-                  stroke-width="1.2"
                 />
               </svg>
             </button>
@@ -2521,7 +2475,9 @@
           running={runningSessions}
           queued={queuedSessions}
           recentlyCompleted={recentlyCompletedSessions}
-          {pendingPrompts}
+          pendingPrompts={serverPromptQueue.filter(
+            (p) => p.status === "queued" || p.status === "running",
+          )}
           {selectedCliSessionId}
           newSessionMode={isNewSessionMode}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
@@ -2614,13 +2570,31 @@
                     viewBox="0 0 24 24"
                     aria-hidden="true"
                   >
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    />
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
                   </svg>
                   Opening file picker...
                 {:else}
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+                    />
                   </svg>
                   Choose Directory...
                 {/if}
@@ -2652,7 +2626,8 @@
                 />
                 <button
                   type="submit"
-                  disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+                  disabled={newProjectPath.trim().length === 0 ||
+                    newProjectLoading}
                   class="px-4 py-2 rounded-lg text-sm font-medium
                          bg-bg-tertiary hover:bg-border-default text-text-primary
                          border border-border-default
@@ -2690,7 +2665,9 @@
                   class="border border-border-default rounded-lg bg-bg-secondary overflow-hidden"
                 >
                   {#each availableRecentProjects as recent (recent.path)}
-                    <div class="flex items-center border-b border-border-default last:border-b-0 hover:bg-bg-tertiary transition-colors">
+                    <div
+                      class="flex items-center border-b border-border-default last:border-b-0 hover:bg-bg-tertiary transition-colors"
+                    >
                       <button
                         type="button"
                         class="flex-1 text-left px-4 py-2.5 text-sm flex items-center gap-3 min-w-0"
@@ -2725,8 +2702,15 @@
                         title="Remove from recent projects"
                         onclick={() => void removeRecentProject(recent.path)}
                       >
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                          <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 16 16"
+                          fill="currentColor"
+                        >
+                          <path
+                            d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+                          />
                         </svg>
                       </button>
                     </div>

@@ -147,7 +147,12 @@ export interface AIStoreActions {
   /**
    * Activate inline prompt for selected lines
    */
-  activateInlinePrompt(path: string, start: number, end: number, content?: string): void;
+  activateInlinePrompt(
+    path: string,
+    start: number,
+    end: number,
+    content?: string,
+  ): void;
 
   /**
    * Deactivate inline prompt
@@ -268,7 +273,12 @@ export function createAIStore(): AIStore {
       updateState({ currentPrompt: prompt, error: null });
     },
 
-    selectLines(path: string, start: number, end: number, content?: string): void {
+    selectLines(
+      path: string,
+      start: number,
+      end: number,
+      content?: string,
+    ): void {
       const selectedLines: SelectedLines = { path, start, end };
       if (content !== undefined) {
         updateState({
@@ -382,7 +392,6 @@ export function createAIStore(): AIStore {
         //   throw new Error("Failed to fetch queue status");
         // }
         // const status = await response.json() as QueueStatus;
-
         // Stubbed for now - keep current status
         // updateState({ queueStatus: status });
       } catch (e) {
@@ -403,7 +412,12 @@ export function createAIStore(): AIStore {
       updateState({ isPanelOpen: !state.isPanelOpen });
     },
 
-    activateInlinePrompt(path: string, start: number, end: number, content?: string): void {
+    activateInlinePrompt(
+      path: string,
+      start: number,
+      end: number,
+      content?: string,
+    ): void {
       const selectedLines: SelectedLines = { path, start, end };
       if (content !== undefined) {
         updateState({

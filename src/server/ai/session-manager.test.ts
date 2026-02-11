@@ -5,7 +5,7 @@
  */
 
 import { describe, test, expect } from "vitest";
-import { createSessionManager } from "./session-manager.js";
+import { createSessionManager, generateWorktreeId } from "./session-manager.js";
 import type {
   AIPromptRequest,
   AIConfig,
@@ -143,6 +143,24 @@ describe("createSessionManager", () => {
           }),
         ),
       ).rejects.toThrow("Queue is full");
+    });
+
+    test("preserves resumeSessionId as claudeSessionId for continued sessions", async () => {
+      const manager = createSessionManager();
+      const request = createTestRequest({
+        options: {
+          projectPath: "/tmp/test",
+          sessionMode: "continue",
+          immediate: true,
+          resumeSessionId: "claude-session-123",
+        },
+      });
+
+      const result = await manager.submit(request);
+      expect(result.claudeSessionId).toBe("claude-session-123");
+
+      const session = manager.getSession(result.sessionId);
+      expect(session?.claudeSessionId).toBe("claude-session-123");
     });
   });
 
@@ -425,6 +443,112 @@ describe("createSessionManager", () => {
     });
   });
 
+  describe("submitPrompt()", () => {
+    test("queues a prompt and returns promptId", () => {
+      const manager = createSessionManager();
+
+      const result = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Test prompt via queue",
+        project_path: "/tmp/test",
+      });
+
+      expect(result.promptId).toBeTruthy();
+      expect(result.promptId).toMatch(/^prompt_/);
+
+      const queue = manager.getPromptQueue();
+      expect(queue.length).toBeGreaterThanOrEqual(1);
+      expect(queue.some((p) => p.id === result.promptId)).toBe(true);
+    });
+
+    test("broadcasts queue update via callback", () => {
+      const broadcasts: { event: string; data: unknown }[] = [];
+      const manager = createSessionManager(
+        undefined,
+        undefined,
+        (event, data) => {
+          broadcasts.push({ event, data });
+        },
+      );
+
+      manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Broadcast test",
+        project_path: "/tmp/test",
+      });
+
+      const queueUpdates = broadcasts.filter(
+        (b) => b.event === "ai:queue_update",
+      );
+      expect(queueUpdates.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("passes session_id as resumeSessionId for continued sessions", async () => {
+      const manager = createSessionManager();
+
+      manager.submitPrompt({
+        session_id: "existing-claude-session",
+        run_immediately: true,
+        message: "Continue session",
+        project_path: "/tmp/test",
+      });
+
+      const queue = manager.getPromptQueue();
+      const prompt = queue[queue.length - 1];
+      expect(prompt?.requested_claude_session_id).toBe(
+        "existing-claude-session",
+      );
+    });
+
+    test("throws when AI disabled", () => {
+      const config: AIConfig = {
+        maxConcurrent: 1,
+        maxQueueSize: 10,
+        sessionTimeoutMs: 5 * 60 * 1000,
+        enabled: false,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      };
+      const manager = createSessionManager(config);
+
+      expect(() =>
+        manager.submitPrompt({
+          session_id: null,
+          run_immediately: true,
+          message: "Should fail",
+          project_path: "/tmp/test",
+        }),
+      ).toThrow("AI features are disabled");
+    });
+
+    test("cancels a queued prompt", () => {
+      const config: AIConfig = {
+        maxConcurrent: 0, // Prevent immediate dispatch
+        maxQueueSize: 10,
+        sessionTimeoutMs: 5 * 60 * 1000,
+        enabled: true,
+        assistantModel: "claude-opus-4-6",
+        assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      };
+      const manager = createSessionManager(config);
+
+      const { promptId } = manager.submitPrompt({
+        session_id: null,
+        run_immediately: false,
+        message: "To be cancelled",
+        project_path: "/tmp/test",
+      });
+
+      manager.cancelPrompt(promptId);
+
+      const queue = manager.getPromptQueue();
+      const prompt = queue.find((p) => p.id === promptId);
+      expect(prompt?.status).toBe("cancelled");
+    });
+  });
+
   describe("stubbed session behavior", () => {
     test("emits expected events without toolRegistry", async () => {
       const manager = createSessionManager();
@@ -499,6 +623,188 @@ describe("createSessionManager", () => {
       const session = manager.getSession(result.sessionId);
       expect(session?.state).toBe("completed");
       expect(session?.completedAt).toBeTruthy();
+    });
+  });
+
+  describe("generateWorktreeId()", () => {
+    test("returns a non-empty string", () => {
+      const worktreeId = generateWorktreeId("/home/user/project");
+      expect(worktreeId).toBeTruthy();
+      expect(typeof worktreeId).toBe("string");
+      expect(worktreeId.length).toBeGreaterThan(0);
+    });
+
+    test("is deterministic for same path", () => {
+      const path = "/home/user/my-project";
+      const id1 = generateWorktreeId(path);
+      const id2 = generateWorktreeId(path);
+      expect(id1).toBe(id2);
+    });
+
+    test("produces different IDs for different paths", () => {
+      const id1 = generateWorktreeId("/home/user/project-a");
+      const id2 = generateWorktreeId("/home/user/project-b");
+      expect(id1).not.toBe(id2);
+    });
+
+    test("produces URL-safe output", () => {
+      const worktreeId = generateWorktreeId("/home/user/my-project-123");
+      // Should only contain alphanumeric characters and underscores
+      expect(worktreeId).toMatch(/^[a-z0-9_]+$/);
+    });
+
+    test("sanitizes special characters in basename", () => {
+      const worktreeId = generateWorktreeId("/home/user/my@special#project!");
+      // Should only contain alphanumeric characters and underscores
+      expect(worktreeId).toMatch(/^[a-z0-9_]+$/);
+    });
+
+    test("handles paths with multiple segments correctly", () => {
+      const worktreeId = generateWorktreeId("/very/long/path/to/project");
+      // Should use basename only
+      expect(worktreeId).toContain("project");
+      expect(worktreeId).not.toContain("very");
+      expect(worktreeId).not.toContain("long");
+    });
+  });
+
+  describe("submitPrompt() with worktree_id", () => {
+    test("returns worktreeId in result", () => {
+      const manager = createSessionManager();
+
+      const result = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Test worktree_id",
+        project_path: "/tmp/test-project",
+      });
+
+      expect(result.worktreeId).toBeTruthy();
+      expect(typeof result.worktreeId).toBe("string");
+    });
+
+    test("uses explicit worktree_id when provided", () => {
+      const manager = createSessionManager();
+
+      const result = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Test explicit worktree_id",
+        project_path: "/tmp/test-project",
+        worktree_id: "custom_worktree_abc123",
+      });
+
+      expect(result.worktreeId).toBe("custom_worktree_abc123");
+
+      const queue = manager.getPromptQueue();
+      const prompt = queue.find((p) => p.id === result.promptId);
+      expect(prompt?.worktree_id).toBe("custom_worktree_abc123");
+    });
+
+    test("generates worktree_id from project_path when not provided", () => {
+      const manager = createSessionManager();
+      const projectPath = "/tmp/test-project-auto";
+
+      const result = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Test auto-generated worktree_id",
+        project_path: projectPath,
+      });
+
+      const expectedWorktreeId = generateWorktreeId(projectPath);
+      expect(result.worktreeId).toBe(expectedWorktreeId);
+    });
+
+    test("getPromptQueue() without filter returns all prompts", () => {
+      const manager = createSessionManager();
+
+      manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt 1",
+        project_path: "/tmp/project-a",
+      });
+
+      manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt 2",
+        project_path: "/tmp/project-b",
+      });
+
+      const queue = manager.getPromptQueue();
+      expect(queue.length).toBeGreaterThanOrEqual(2);
+    });
+
+    test("getPromptQueue(worktreeId) returns only matching prompts", () => {
+      const manager = createSessionManager();
+
+      const result1 = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt for project A",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+
+      manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt for project B",
+        project_path: "/tmp/project-b",
+        worktree_id: "worktree_b",
+      });
+
+      const queueForA = manager.getPromptQueue("worktree_a");
+      expect(queueForA.length).toBe(1);
+      expect(queueForA[0]?.id).toBe(result1.promptId);
+      expect(queueForA[0]?.worktree_id).toBe("worktree_a");
+    });
+
+    test("per-worktree session continuity: different worktrees have different session IDs", () => {
+      const manager = createSessionManager();
+
+      const result1 = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt 1 in worktree A",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a_123",
+      });
+
+      const result2 = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Prompt 2 in worktree B",
+        project_path: "/tmp/project-b",
+        worktree_id: "worktree_b_456",
+      });
+
+      const queueA = manager.getPromptQueue("worktree_a_123");
+      const queueB = manager.getPromptQueue("worktree_b_456");
+
+      expect(queueA.length).toBe(1);
+      expect(queueB.length).toBe(1);
+      expect(queueA[0]?.worktree_id).toBe("worktree_a_123");
+      expect(queueB[0]?.worktree_id).toBe("worktree_b_456");
+      expect(result1.worktreeId).not.toBe(result2.worktreeId);
+    });
+
+    test("empty worktree_id string is treated as missing and generates from path", () => {
+      const manager = createSessionManager();
+      const projectPath = "/tmp/test-empty-worktree";
+
+      const result = manager.submitPrompt({
+        session_id: null,
+        run_immediately: true,
+        message: "Test empty worktree_id",
+        project_path: projectPath,
+        worktree_id: "",
+      });
+
+      const expectedWorktreeId = generateWorktreeId(projectPath);
+      expect(result.worktreeId).toBe(expectedWorktreeId);
     });
   });
 });

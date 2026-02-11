@@ -22,6 +22,12 @@ describe("AI Routes", () => {
       listSessions: vi.fn(() => []),
       subscribe: vi.fn(() => () => {}),
       cleanup: vi.fn(),
+      submitPrompt: vi.fn(() => ({
+        promptId: "prompt-123",
+        worktreeId: "test_abc123",
+      })),
+      getPromptQueue: vi.fn(() => []),
+      cancelPrompt: vi.fn(),
     };
 
     app = createAIRoutes({
@@ -75,6 +81,172 @@ describe("AI Routes", () => {
       const body = (await res.json()) as { error: string; code: number };
       expect(body.code).toBe(500);
       expect(body.error).toContain("cancel failed");
+    });
+  });
+
+  describe("POST /submit", () => {
+    test("returns 201 with promptId and worktreeId on valid submission", async () => {
+      const res = await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Test prompt message",
+          session_id: "session-123",
+          run_immediately: true,
+          project_path: "/test/project",
+          worktree_id: "test_worktree",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        promptId: string;
+        worktreeId: string;
+      };
+      expect(body).toEqual({
+        promptId: "prompt-123",
+        worktreeId: "test_abc123",
+      });
+    });
+
+    test("returns 400 when message is empty", async () => {
+      const res = await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "",
+          session_id: null,
+          run_immediately: false,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; code: number };
+      expect(body.code).toBe(400);
+      expect(body.error).toContain("message is required and must be non-empty");
+    });
+
+    test("returns 400 when message is missing", async () => {
+      const res = await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: null,
+          run_immediately: false,
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; code: number };
+      expect(body.code).toBe(400);
+      expect(body.error).toContain("message is required and must be non-empty");
+    });
+
+    test("passes worktree_id from request body to sessionManager.submitPrompt", async () => {
+      const submitPromptMock = sessionManager.submitPrompt as Mock;
+
+      await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Test message",
+          session_id: "test-session",
+          run_immediately: true,
+          worktree_id: "custom_worktree_id",
+        }),
+      });
+
+      expect(submitPromptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          worktree_id: "custom_worktree_id",
+        }),
+      );
+    });
+
+    test("passes session_id and project_path correctly", async () => {
+      const submitPromptMock = sessionManager.submitPrompt as Mock;
+
+      await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Test message",
+          session_id: "my-session",
+          run_immediately: false,
+          project_path: "/custom/path",
+        }),
+      });
+
+      expect(submitPromptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          session_id: "my-session",
+          project_path: "/custom/path",
+          message: "Test message",
+          run_immediately: false,
+        }),
+      );
+    });
+  });
+
+  describe("GET /prompt-queue", () => {
+    test("returns empty prompts array by default", async () => {
+      const res = await app.request("/prompt-queue", { method: "GET" });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { prompts: unknown[] };
+      expect(body).toEqual({ prompts: [] });
+    });
+
+    test("passes worktree_id query parameter to getPromptQueue", async () => {
+      const getPromptQueueMock = sessionManager.getPromptQueue as Mock;
+
+      await app.request("/prompt-queue?worktree_id=test_worktree_xyz", {
+        method: "GET",
+      });
+
+      expect(getPromptQueueMock).toHaveBeenCalledWith("test_worktree_xyz");
+    });
+
+    test("works without worktree_id query parameter (passes undefined)", async () => {
+      const getPromptQueueMock = sessionManager.getPromptQueue as Mock;
+
+      await app.request("/prompt-queue", { method: "GET" });
+
+      expect(getPromptQueueMock).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe("POST /prompt-queue/:id/cancel", () => {
+    test("returns success when cancel succeeds", async () => {
+      const res = await app.request("/prompt-queue/prompt-456/cancel", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        success: boolean;
+        promptId: string;
+      };
+      expect(body).toEqual({
+        success: true,
+        promptId: "prompt-456",
+      });
+    });
+
+    test("returns 404 when prompt not found", async () => {
+      const cancelPromptMock = sessionManager.cancelPrompt as Mock;
+      cancelPromptMock.mockImplementationOnce(() => {
+        throw new Error("Prompt not found: missing-prompt");
+      });
+
+      const res = await app.request("/prompt-queue/missing-prompt/cancel", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+      const body = (await res.json()) as { error: string; code: number };
+      expect(body.code).toBe(404);
+      expect(body.error).toContain("Prompt not found: missing-prompt");
     });
   });
 });

@@ -68,7 +68,10 @@ function createMockContextManager(hasContext: boolean = true): ContextManager {
       repositoryRoot: "/path/to/repo",
       isWorktree: false,
     })),
-    getServerContext: mock(() => ({ projectPath: mockTab.path, isGitRepo: true })),
+    getServerContext: mock(() => ({
+      projectPath: mockTab.path,
+      isGitRepo: true,
+    })),
     getProjectRegistry: mock(() => ({
       getOrCreateSlug: async () => "test-abc123",
       resolveSlug: async () => undefined,

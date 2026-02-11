@@ -55,8 +55,7 @@ function createChunk(
  */
 function createDiffFile(chunks: readonly DiffChunk[]): DiffFile {
   const additions = chunks.reduce(
-    (sum, chunk) =>
-      sum + chunk.changes.filter((c) => c.type === "add").length,
+    (sum, chunk) => sum + chunk.changes.filter((c) => c.type === "add").length,
     0,
   );
   const deletions = chunks.reduce(
@@ -213,7 +212,10 @@ describe("transformToCurrentState", () => {
     // Line 2: unchanged, with deleted block A before it
     expect(result[1]?.lineNumber).toBe(2);
     expect(result[1]?.content).toBe("line 2");
-    expect(result[1]?.deletedBefore?.lines).toEqual(["deleted A1", "deleted A2"]);
+    expect(result[1]?.deletedBefore?.lines).toEqual([
+      "deleted A1",
+      "deleted A2",
+    ]);
     expect(result[1]?.deletedBefore?.id).toBe("deleted-2-3");
 
     // Line 3: added, with deleted block B before it
@@ -364,7 +366,9 @@ describe("transformToCurrentState", () => {
   });
 
   test("handles file with single addition", () => {
-    const chunk = createChunk([createChange("add", "single line", undefined, 1)]);
+    const chunk = createChunk([
+      createChange("add", "single line", undefined, 1),
+    ]);
     const file = createDiffFile([chunk]);
     const result = transformToCurrentState(file);
 

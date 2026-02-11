@@ -146,7 +146,10 @@ describe("GET /files", () => {
   });
 
   test("handles git errors gracefully", async () => {
-    const invalidContext: ServerContext = { projectPath: "/nonexistent/path", isGitRepo: true };
+    const invalidContext: ServerContext = {
+      projectPath: "/nonexistent/path",
+      isGitRepo: true,
+    };
     const invalidApp = createFileRoutes(invalidContext);
     const response = await invalidApp.request("/");
 

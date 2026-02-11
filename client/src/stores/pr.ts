@@ -9,7 +9,7 @@ import type {
   PRRequest,
   PRResult,
   BranchPRStatus,
-} from '../../../src/types/pr.js';
+} from "../../../src/types/pr.js";
 
 /**
  * PR store state
@@ -117,7 +117,7 @@ function createInitialState(): PRStoreState {
   return {
     currentPRStatus: null,
     selectedPromptId: null,
-    baseBranch: 'main',
+    baseBranch: "main",
     customVariables: {},
     isLoading: false,
     error: null,
@@ -179,12 +179,12 @@ export function createPRStore(): PRStore {
             error: response.statusText,
           }));
           const errorMessage =
-            typeof errorData === 'object' &&
+            typeof errorData === "object" &&
             errorData !== null &&
-            'error' in errorData &&
-            typeof errorData.error === 'string'
+            "error" in errorData &&
+            typeof errorData.error === "string"
               ? errorData.error
-              : 'Failed to fetch PR status';
+              : "Failed to fetch PR status";
           throw new Error(errorMessage);
         }
 
@@ -197,7 +197,7 @@ export function createPRStore(): PRStore {
         });
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to fetch PR status';
+          e instanceof Error ? e.message : "Failed to fetch PR status";
         updateState({
           error: errorMessage,
           isLoading: false,
@@ -207,20 +207,19 @@ export function createPRStore(): PRStore {
 
     async createPR(contextId: string, request: PRRequest): Promise<void> {
       if (state.selectedPromptId === null) {
-        updateState({ error: 'No prompt template selected' });
+        updateState({ error: "No prompt template selected" });
         return;
       }
 
       if (state.currentPRStatus === null) {
-        updateState({ error: 'PR status not loaded' });
+        updateState({ error: "PR status not loaded" });
         return;
       }
 
       if (!state.currentPRStatus.canCreatePR) {
         updateState({
           error:
-            state.currentPRStatus.reason ??
-            'Cannot create PR for this branch',
+            state.currentPRStatus.reason ?? "Cannot create PR for this branch",
         });
         return;
       }
@@ -229,8 +228,8 @@ export function createPRStore(): PRStore {
 
       try {
         const response = await fetch(`/api/ctx/${contextId}/pr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
         });
 
@@ -239,12 +238,12 @@ export function createPRStore(): PRStore {
             error: response.statusText,
           }));
           const errorMessage =
-            typeof errorData === 'object' &&
+            typeof errorData === "object" &&
             errorData !== null &&
-            'error' in errorData &&
-            typeof errorData.error === 'string'
+            "error" in errorData &&
+            typeof errorData.error === "string"
               ? errorData.error
-              : 'Failed to create PR';
+              : "Failed to create PR";
           throw new Error(errorMessage);
         }
 
@@ -261,7 +260,7 @@ export function createPRStore(): PRStore {
         }
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to create PR';
+          e instanceof Error ? e.message : "Failed to create PR";
         updateState({
           error: errorMessage,
           isLoading: false,
@@ -275,12 +274,12 @@ export function createPRStore(): PRStore {
       request: PRRequest,
     ): Promise<void> {
       if (state.selectedPromptId === null) {
-        updateState({ error: 'No prompt template selected' });
+        updateState({ error: "No prompt template selected" });
         return;
       }
 
       if (state.currentPRStatus === null || !state.currentPRStatus.hasPR) {
-        updateState({ error: 'No existing PR to update' });
+        updateState({ error: "No existing PR to update" });
         return;
       }
 
@@ -288,8 +287,8 @@ export function createPRStore(): PRStore {
 
       try {
         const response = await fetch(`/api/ctx/${contextId}/pr/${prNumber}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
         });
 
@@ -298,12 +297,12 @@ export function createPRStore(): PRStore {
             error: response.statusText,
           }));
           const errorMessage =
-            typeof errorData === 'object' &&
+            typeof errorData === "object" &&
             errorData !== null &&
-            'error' in errorData &&
-            typeof errorData.error === 'string'
+            "error" in errorData &&
+            typeof errorData.error === "string"
               ? errorData.error
-              : 'Failed to update PR';
+              : "Failed to update PR";
           throw new Error(errorMessage);
         }
 
@@ -320,7 +319,7 @@ export function createPRStore(): PRStore {
         }
       } catch (e) {
         const errorMessage =
-          e instanceof Error ? e.message : 'Failed to update PR';
+          e instanceof Error ? e.message : "Failed to update PR";
         updateState({
           error: errorMessage,
           isLoading: false,

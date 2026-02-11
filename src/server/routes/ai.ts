@@ -6,7 +6,11 @@
 
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
-import type { AIPromptRequest, AIProgressEvent } from "../../types/ai";
+import type {
+  AIPromptRequest,
+  AIProgressEvent,
+  AIPromptMessage,
+} from "../../types/ai";
 import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
 import type { PromptStore } from "../../types/local-prompt";
@@ -134,12 +138,12 @@ export function createAIRoutes(context: AIServerContext): Hono {
         // Submit to session manager
         const result = await context.sessionManager.submit(request);
 
-        // Update prompt with session ID and subscribe for completion sync
+        // Update prompt with dispatch session ID and subscribe for completion sync
         if (context.promptStore !== undefined && localPromptId !== undefined) {
           try {
             await context.promptStore.update(localPromptId, {
               status: "dispatched",
-              sessionId: result.sessionId,
+              dispatchSessionId: result.sessionId,
             });
           } catch {
             // Non-critical
@@ -179,6 +183,113 @@ export function createAIRoutes(context: AIServerContext): Hono {
         code: 500,
       };
       return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /api/ai/submit
+   *
+   * Simplified prompt submission endpoint.
+   * Accepts { session_id, run_immediately, message, context?, project_path? }
+   * Server manages queue, session continuity, and execution.
+   * Queue status is broadcast via WebSocket.
+   */
+  app.post("/submit", async (c) => {
+    try {
+      const body = await c.req.json<AIPromptMessage>();
+
+      if (
+        typeof body.message !== "string" ||
+        body.message.trim().length === 0
+      ) {
+        const errorResponse: ErrorResponse = {
+          error: "message is required and must be non-empty",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      if (body.message.length > 100000) {
+        const errorResponse: ErrorResponse = {
+          error: "message exceeds maximum length of 100000 characters",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Ensure project_path defaults to server config
+      const msg: AIPromptMessage = {
+        session_id:
+          typeof body.session_id === "string" && body.session_id.length > 0
+            ? body.session_id
+            : null,
+        run_immediately: body.run_immediately === true,
+        message: body.message,
+        context: body.context,
+        project_path:
+          typeof body.project_path === "string" && body.project_path.length > 0
+            ? body.project_path
+            : context.projectPath,
+        worktree_id:
+          typeof body.worktree_id === "string" && body.worktree_id.length > 0
+            ? body.worktree_id
+            : undefined,
+        qraft_ai_session_id:
+          typeof body.qraft_ai_session_id === "string" &&
+          body.qraft_ai_session_id.length > 0
+            ? body.qraft_ai_session_id
+            : undefined,
+      };
+
+      const result = context.sessionManager.submitPrompt(msg);
+
+      return c.json(result, 201);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to submit prompt";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /api/ai/prompt-queue
+   *
+   * Get current prompt queue state.
+   * Supports optional ?worktree_id=xxx query parameter for filtering.
+   */
+  app.get("/prompt-queue", (c) => {
+    const worktreeId = c.req.query("worktree_id");
+    const prompts = context.sessionManager.getPromptQueue(
+      typeof worktreeId === "string" && worktreeId.length > 0
+        ? worktreeId
+        : undefined,
+    );
+    return c.json({ prompts });
+  });
+
+  /**
+   * POST /api/ai/prompt-queue/:id/cancel
+   *
+   * Cancel a queued prompt.
+   */
+  app.post("/prompt-queue/:id/cancel", (c) => {
+    const promptId = c.req.param("id");
+    try {
+      context.sessionManager.cancelPrompt(promptId);
+      return c.json({ success: true, promptId });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to cancel prompt";
+      const isNotFound = e instanceof Error && e.message.includes("not found");
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: isNotFound ? 404 : 500,
+      };
+      return c.json(errorResponse, isNotFound ? 404 : 500);
     }
   });
 

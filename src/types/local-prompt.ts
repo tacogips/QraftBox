@@ -13,7 +13,7 @@ import type { AIPromptContext } from "./ai";
 export type LocalPromptStatus =
   | "pending" // Saved locally, not dispatched
   | "dispatching" // Being sent to Claude Code agent
-  | "dispatched" // Sent to agent, has sessionId
+  | "dispatched" // Sent to agent, has dispatchSessionId
   | "completed" // Session completed
   | "failed" // Session failed or dispatch error
   | "cancelled"; // Cancelled by user
@@ -34,8 +34,8 @@ export interface LocalPrompt {
   readonly projectPath: string;
   /** Current status */
   readonly status: LocalPromptStatus;
-  /** Claude Code session ID (set after dispatch) */
-  readonly sessionId: string | null;
+  /** QraftBox internal session ID assigned when the prompt is dispatched */
+  readonly dispatchSessionId: string | null;
   /** ISO timestamp of creation */
   readonly createdAt: string;
   /** ISO timestamp of last update */
@@ -87,7 +87,7 @@ export interface LocalPromptListOptions {
 export interface LocalPromptUpdate {
   readonly description?: string;
   readonly status?: LocalPromptStatus;
-  readonly sessionId?: string | null;
+  readonly dispatchSessionId?: string | null;
   readonly error?: string | null;
   readonly prompt?: string;
 }

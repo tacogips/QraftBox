@@ -122,6 +122,10 @@ export interface AISessionSubmitResult {
    * Whether the session started immediately
    */
   readonly immediate: boolean;
+  /**
+   * Claude CLI session ID if already known at submit time
+   */
+  readonly claudeSessionId?: string | undefined;
 }
 
 /**
@@ -233,6 +237,10 @@ export interface AISessionInfo {
   readonly context: AIPromptContext;
   readonly lastAssistantMessage?: string | undefined;
   readonly currentActivity?: string | undefined;
+  /**
+   * Claude CLI session ID currently bound to this execution
+   */
+  readonly claudeSessionId?: string | undefined;
 }
 
 /**
@@ -318,6 +326,136 @@ export interface AIConfig {
    * Additional CLI arguments for the AI assistant (e.g., ['--dangerously-skip-permissions'])
    */
   readonly assistantAdditionalArgs: readonly string[];
+}
+
+/**
+ * AI prompt message format (simplified submission)
+ *
+ * This is the new unified format for submitting AI prompts.
+ * The client only needs to pass the current session_id and the message.
+ * The server manages the queue, session continuity, and execution.
+ */
+export interface AIPromptMessage {
+  /** Claude CLI session ID to continue (null = new session or inherit from queue) */
+  readonly session_id: string | null;
+  /** Whether to execute immediately (true) or queue (false) */
+  readonly run_immediately: boolean;
+  /** The prompt text */
+  readonly message: string;
+  /** Optional file context */
+  readonly context?: AIPromptContext | undefined;
+  /** Project path / working directory (defaults to server config) */
+  readonly project_path?: string | undefined;
+  /** Worktree identifier for queue partitioning (auto-generated from project_path if omitted) */
+  readonly worktree_id?: string | undefined;
+  /**
+   * Client-generated session group ID.
+   * Prompts sharing the same qraft_ai_session_id are treated as part of the same
+   * conversation: the server inherits the resolved Claude session ID from the
+   * most recently completed prompt in the same group.
+   * Generate a new ID on the frontend when starting a "new session" flow,
+   * and reuse it for subsequent prompts in that session.
+   */
+  readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+}
+
+/**
+ * Queued prompt info for WebSocket broadcast
+ */
+export interface QueuedPromptInfo {
+  readonly id: string;
+  /** Truncated message for display */
+  readonly message: string;
+  readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  /** Claude CLI session ID explicitly requested by the client */
+  readonly requested_claude_session_id: string | null;
+  /** Claude CLI session ID (resolved after execution) */
+  readonly claude_session_id?: string | undefined;
+  /** Current activity description (e.g., "Using tool...") */
+  readonly current_activity?: string | undefined;
+  /** Error message if failed */
+  readonly error?: string | undefined;
+  readonly created_at: string;
+  /** Worktree identifier for queue partitioning */
+  readonly worktree_id: string;
+  /** Client-generated session group ID for prompt continuity */
+  readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+}
+
+/**
+ * AI queue update event payload for WebSocket broadcast
+ */
+export interface AIQueueUpdate {
+  readonly prompts: readonly QueuedPromptInfo[];
+}
+
+/**
+ * QraftAiSessionId - Branded type for session group identifiers.
+ *
+ * This is a one-way hash-based identifier used to group related prompts
+ * into a single logical session. Two derivation paths exist:
+ *
+ * 1. **Claude-originated**: When a session is initiated via Claude CLI,
+ *    the seed is `{claudeSessionId} + "claude"`. This allows grouping
+ *    prompts that share the same underlying Claude CLI session.
+ *
+ * 2. **Qraft-originated**: When a session is initiated from QraftBox UI,
+ *    the seed is `{datetime_microseconds} + "Qraft"`. This produces a
+ *    unique ID for each new session started from the frontend.
+ *
+ * The hash is one-way (FNV-1a): you cannot recover the original seed.
+ * To find the associated Claude session ID, look up stored prompt records.
+ */
+export type QraftAiSessionId = string & {
+  readonly __brand: "QraftAiSessionId";
+};
+
+/**
+ * Derive a QraftAiSessionId from a Claude CLI session ID.
+ *
+ * Derivation path: Claude-originated.
+ * Seed: {claudeSessionId} + "claude"
+ * Hash: FNV-1a 32-bit, output as "qs_{base36}"
+ *
+ * @param claudeSessionId - Claude CLI session UUID
+ * @returns Deterministic QraftAiSessionId
+ */
+export function deriveQraftAiSessionIdFromClaude(
+  claudeSessionId: string,
+): QraftAiSessionId {
+  const seed = claudeSessionId + "claude";
+  let hash = 0x811c9dc5; // FNV-1a offset basis (32-bit)
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV-1a prime
+  }
+  return `qs_${(hash >>> 0).toString(36)}` as QraftAiSessionId;
+}
+
+/**
+ * Generate a QraftAiSessionId for a QraftBox-originated session.
+ *
+ * Derivation path: Qraft-originated.
+ * Seed: {datetime_microseconds} + "Qraft"
+ * Hash: FNV-1a 32-bit, output as "qs_{base36}"
+ *
+ * Uses performance.now() for microsecond precision when available,
+ * falls back to Date.now() * 1000.
+ *
+ * @returns Unique QraftAiSessionId
+ */
+export function generateQraftAiSessionId(): QraftAiSessionId {
+  const microSeconds =
+    typeof performance !== "undefined"
+      ? Math.floor(performance.now() * 1000 + performance.timeOrigin * 1000)
+      : Date.now() * 1000;
+  const seed = String(microSeconds) + "Qraft";
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `qs_${(hash >>> 0).toString(36)}` as QraftAiSessionId;
 }
 
 /**

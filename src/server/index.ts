@@ -32,6 +32,8 @@ export interface ServerOptions {
   readonly initialTabs?:
     | readonly import("../types/workspace").WorkspaceTab[]
     | undefined;
+  /** Optional broadcast callback for WebSocket-based AI queue updates */
+  readonly broadcast?: ((event: string, data: unknown) => void) | undefined;
 }
 
 /**
@@ -130,6 +132,7 @@ export function createServer(options: ServerOptions): Hono {
       assistantAdditionalArgs: [...options.config.assistantAdditionalArgs],
     },
     toolRegistry,
+    options.broadcast,
   );
   const promptStore = createPromptStore();
 

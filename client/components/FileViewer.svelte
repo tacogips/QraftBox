@@ -96,6 +96,17 @@
 </script>
 
 <div class="file-viewer w-full h-full overflow-auto font-mono text-xs leading-5">
+  <!-- Sticky file name header -->
+  <div
+    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
+  >
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-medium text-text-primary truncate max-w-[300px]">
+        {path}
+      </span>
+    </div>
+  </div>
+
   {#if lines.length === 0}
     <div
       class="flex items-center justify-center py-12 text-text-secondary text-sm"

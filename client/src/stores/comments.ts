@@ -104,7 +104,7 @@ export interface CommentsStoreActions {
     commit: string,
     parentId: string,
     content: string,
-    author: Author
+    author: Author,
   ): Promise<CommentReply>;
 
   /**
@@ -113,7 +113,7 @@ export interface CommentsStoreActions {
   updateComment(
     commit: string,
     commentId: string,
-    content: string
+    content: string,
   ): Promise<void>;
 
   /**
@@ -195,7 +195,7 @@ export function createCommentsStore(): CommentsStore {
    */
   function updateCommentsMap(
     commit: string,
-    updater: (comments: readonly Comment[]) => readonly Comment[]
+    updater: (comments: readonly Comment[]) => readonly Comment[],
   ): void {
     const currentComments = state.comments.get(commit) ?? [];
     const updatedComments = updater(currentComments);
@@ -286,7 +286,7 @@ export function createCommentsStore(): CommentsStore {
       commit: string,
       parentId: string,
       content: string,
-      author: Author
+      author: Author,
     ): Promise<CommentReply> {
       updateState({ loading: true, error: null });
 
@@ -314,8 +314,8 @@ export function createCommentsStore(): CommentsStore {
           comments.map((comment) =>
             comment.id === parentId
               ? { ...comment, replies: [...comment.replies, newReply] }
-              : comment
-          )
+              : comment,
+          ),
         );
         updateState({ loading: false });
 
@@ -331,7 +331,7 @@ export function createCommentsStore(): CommentsStore {
     async updateComment(
       commit: string,
       commentId: string,
-      content: string
+      content: string,
     ): Promise<void> {
       updateState({ loading: true, error: null });
 
@@ -349,8 +349,8 @@ export function createCommentsStore(): CommentsStore {
         // Stubbed: update comment locally
         updateCommentsMap(commit, (comments) =>
           comments.map((comment) =>
-            comment.id === commentId ? { ...comment, content } : comment
-          )
+            comment.id === commentId ? { ...comment, content } : comment,
+          ),
         );
         updateState({ loading: false });
       } catch (e) {
@@ -375,7 +375,7 @@ export function createCommentsStore(): CommentsStore {
 
         // Stubbed: delete comment locally
         updateCommentsMap(commit, (comments) =>
-          comments.filter((comment) => comment.id !== commentId)
+          comments.filter((comment) => comment.id !== commentId),
         );
         updateState({ loading: false });
       } catch (e) {

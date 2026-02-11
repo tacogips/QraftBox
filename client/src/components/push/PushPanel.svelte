@@ -267,7 +267,8 @@
                 class="toggle-checkbox w-5 h-5 text-success-fg border-border-default rounded focus:ring-2 focus:ring-success-emphasis"
               />
               <div class="flex-1">
-                <span class="text-sm font-medium text-text-primary">Force Push</span
+                <span class="text-sm font-medium text-text-primary"
+                  >Force Push</span
                 >
                 <p class="text-xs text-text-secondary">
                   Overwrite remote branch (use with caution)
@@ -304,8 +305,12 @@
                 class="toggle-checkbox w-5 h-5 text-success-fg border-border-default rounded focus:ring-2 focus:ring-success-emphasis"
               />
               <div class="flex-1">
-                <span class="text-sm font-medium text-text-primary">Push Tags</span>
-                <p class="text-xs text-text-secondary">Push all tags to remote</p>
+                <span class="text-sm font-medium text-text-primary"
+                  >Push Tags</span
+                >
+                <p class="text-xs text-text-secondary">
+                  Push all tags to remote
+                </p>
               </div>
             </label>
           </div>

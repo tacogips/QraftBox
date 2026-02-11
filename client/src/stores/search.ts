@@ -299,8 +299,7 @@ export function createSearchStore(): SearchStore {
           loading: false,
         });
       } catch (e) {
-        const errorMessage =
-          e instanceof Error ? e.message : "Search failed";
+        const errorMessage = e instanceof Error ? e.message : "Search failed";
         updateState({
           error: errorMessage,
           results: [],

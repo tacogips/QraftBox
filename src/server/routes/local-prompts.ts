@@ -15,6 +15,7 @@ import type {
   LocalPromptStatus,
 } from "../../types/local-prompt";
 import type { SessionManager } from "../ai/session-manager";
+import { createLogger } from "../logger.js";
 
 /**
  * Configuration for local prompt routes
@@ -49,6 +50,7 @@ interface ErrorResponse {
  */
 export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
   const app = new Hono();
+  const logger = createLogger("LocalPromptRoutes");
 
   /**
    * POST / - Create a new local prompt
@@ -204,7 +206,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    * POST /:id/dispatch - Dispatch prompt to Claude Code agent
    *
    * Changes status to "dispatching", submits to session manager,
-   * then updates with sessionId on success or error on failure.
+   * then updates with dispatchSessionId on success or error on failure.
    */
   app.post("/:id/dispatch", async (c) => {
     try {
@@ -243,6 +245,11 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
           body.resumeSessionId.length > 0
             ? body.resumeSessionId
             : undefined;
+        logger.info("Dispatching prompt", {
+          promptId: id,
+          immediate: body.immediate ?? false,
+          resumeSessionId: resumeId ?? null,
+        });
         const result = await config.sessionManager.submit({
           prompt: prompt.prompt,
           context: prompt.context,
@@ -254,10 +261,17 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
           },
         });
 
-        // Update with session ID
+        // Update with QraftBox dispatch session ID
         const updated = await config.promptStore.update(id, {
           status: "dispatched",
+          dispatchSessionId: result.sessionId,
+        });
+        logger.info("Prompt dispatched", {
+          promptId: id,
           sessionId: result.sessionId,
+          claudeSessionId: result.claudeSessionId ?? null,
+          queuePosition: result.queuePosition ?? null,
+          immediate: result.immediate,
         });
 
         // Subscribe to session events for prompt status sync

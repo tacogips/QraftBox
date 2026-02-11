@@ -343,7 +343,8 @@ type ContextVariables = {
  * Returns 400 with a clear message, preventing 500 errors from failed git commands.
  */
 const NOT_GIT_REPO_RESPONSE = {
-  error: "Not a git repository. Git operations are not available for this directory.",
+  error:
+    "Not a git repository. Git operations are not available for this directory.",
   code: 400,
 } as const;
 

@@ -36,7 +36,10 @@
 </script>
 
 <div class="base-branch-selector">
-  <label for="base-branch" class="block text-sm font-medium text-text-primary mb-2">
+  <label
+    for="base-branch"
+    class="block text-sm font-medium text-text-primary mb-2"
+  >
     Base Branch
   </label>
 

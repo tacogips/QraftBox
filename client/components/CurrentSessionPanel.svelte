@@ -13,7 +13,6 @@
    */
 
   import type { AISession } from "../../src/types/ai";
-  import type { LocalPrompt } from "../../src/types/local-prompt";
   import type { ExtendedSessionEntry } from "../../src/types/claude-session";
   import { stripSystemTags } from "../../src/utils/strip-system-tags";
   import SessionTranscriptInline from "./sessions/SessionTranscriptInline.svelte";
@@ -39,7 +38,7 @@
     running: readonly AISession[];
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
-    pendingPrompts: readonly LocalPrompt[];
+    pendingPrompts: readonly { id: string; message: string; status: string }[];
     selectedCliSessionId: string | null;
     newSessionMode: boolean;
     onCancelSession: (id: string) => void;
@@ -118,7 +117,7 @@
       items.push({ id: s.id, text: s.prompt, source: "session" });
     }
     for (const p of pendingPrompts) {
-      items.push({ id: p.id, text: p.prompt, source: "prompt" });
+      items.push({ id: p.id, text: p.message, source: "prompt" });
     }
     return items;
   });

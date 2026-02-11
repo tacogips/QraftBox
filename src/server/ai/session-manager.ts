@@ -13,11 +13,23 @@ import type {
   AISessionInfo,
   SessionState,
   AIConfig,
+  AIPromptMessage,
+  QueuedPromptInfo,
+  AIQueueUpdate,
+  AIPromptContext,
+  QraftAiSessionId,
 } from "../../types/ai";
-import { DEFAULT_AI_CONFIG } from "../../types/ai";
+import {
+  DEFAULT_AI_CONFIG,
+  deriveQraftAiSessionIdFromClaude,
+} from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import { SessionRegistry } from "../claude/session-registry.js";
+import { createLogger } from "../logger.js";
+import { basename, join } from "node:path";
+import { homedir } from "node:os";
+import { readdirSync, statSync } from "node:fs";
 import {
   ClaudeCodeToolAgent,
   type ToolAgentSession,
@@ -42,9 +54,54 @@ interface InternalSession {
   toolAgentSession?: ToolAgentSession;
   claudeAgent?: ClaudeCodeToolAgent;
   registeredClaudeSessionIds: Set<string>;
+  currentClaudeSessionId?: string;
 }
 
+/**
+ * Internal queued prompt representation for server-side queue management
+ */
+interface QueuedPrompt {
+  readonly id: string;
+  /** Claude CLI session ID explicitly requested by the client (null = new session) */
+  requestedClaudeSessionId: string | null;
+  readonly message: string;
+  readonly context: AIPromptContext;
+  readonly projectPath: string;
+  readonly runImmediately: boolean;
+  readonly worktreeId: string;
+  /** Client-generated group ID for session continuity across queued prompts */
+  readonly qraftAiSessionId: QraftAiSessionId | undefined;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  resultClaudeSessionId: string | undefined;
+  currentActivity: string | undefined;
+  error: string | undefined;
+  readonly createdAt: Date;
+  /** QraftBox internal session ID (set when dispatched) */
+  internalSessionId: string | undefined;
+}
+
+/**
+ * Broadcast callback type for sending events to WebSocket clients
+ */
+export type BroadcastFn = (event: string, data: unknown) => void;
+
 const SESSION_CANCEL_TIMEOUT_MS = 3000;
+
+/**
+ * Generate a deterministic, URL-safe worktree identifier from a project path.
+ * Format: {basename_sanitized}_{6_char_hash}
+ *
+ * @param projectPath - Absolute filesystem path to the project/worktree directory
+ * @returns URL-safe worktree identifier
+ */
+export function generateWorktreeId(projectPath: string): string {
+  const base = basename(projectPath)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  const hash = Bun.hash(projectPath).toString(16).slice(0, 6);
+  return `${base}_${hash}`;
+}
 
 /**
  * Session manager interface
@@ -87,6 +144,24 @@ export interface SessionManager {
    * Clean up completed/failed sessions
    */
   cleanup(): void;
+
+  /**
+   * Submit a prompt to the server-side queue.
+   * The server manages session continuity and execution order.
+   * Returns the prompt ID and the resolved worktree ID.
+   */
+  submitPrompt(msg: AIPromptMessage): { promptId: string; worktreeId: string };
+
+  /**
+   * Get the current prompt queue state for display.
+   * @param worktreeId - Optional filter to return only prompts for a specific worktree
+   */
+  getPromptQueue(worktreeId?: string): readonly QueuedPromptInfo[];
+
+  /**
+   * Cancel a queued prompt by its ID.
+   */
+  cancelPrompt(promptId: string): void;
 }
 
 /**
@@ -136,6 +211,62 @@ function extractClaudeSessionId(msg: unknown): string | null {
   return null;
 }
 
+/** UUID v4 pattern (lowercase hex with dashes) */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * Discover the Claude CLI session ID from the transcript directory.
+ *
+ * Claude CLI stores session transcripts at:
+ *   ~/.claude/projects/{encoded-path}/{session-uuid}.jsonl
+ *
+ * where {encoded-path} is the absolute project path with '/' replaced by '-'.
+ *
+ * @param projectPath - Absolute path to the project directory
+ * @param createdAfter - Only consider files modified after this timestamp (ms)
+ * @returns Claude CLI session UUID, or null if not found
+ */
+function discoverClaudeSessionId(
+  projectPath: string,
+  createdAfter: number,
+): string | null {
+  try {
+    const encoded = projectPath.replace(/\//g, "-");
+    const transcriptDir = join(homedir(), ".claude", "projects", encoded);
+
+    let entries: string[];
+    try {
+      entries = readdirSync(transcriptDir);
+    } catch {
+      return null; // Directory doesn't exist
+    }
+
+    // Find UUID-named .jsonl files modified after the session started
+    let best: { name: string; mtime: number } | undefined;
+    for (const entry of entries) {
+      if (!entry.endsWith(".jsonl")) continue;
+      const name = entry.slice(0, -6); // strip .jsonl
+      if (!UUID_RE.test(name)) continue;
+
+      try {
+        const st = statSync(join(transcriptDir, entry));
+        const mtime = st.mtimeMs;
+        if (mtime < createdAfter) continue;
+        if (best === undefined || mtime > best.mtime) {
+          best = { name, mtime };
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return best?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Convert internal session to public session info
  */
@@ -150,6 +281,7 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
     context: session.request.context,
     lastAssistantMessage: session.lastAssistantMessage,
     currentActivity: session.currentActivity,
+    claudeSessionId: session.currentClaudeSessionId,
   };
 }
 
@@ -162,11 +294,18 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
 export function createSessionManager(
   config: AIConfig = DEFAULT_AI_CONFIG,
   toolRegistry?: QraftBoxToolRegistry | undefined,
+  broadcast?: BroadcastFn | undefined,
 ): SessionManager {
+  const logger = createLogger("SessionManager");
   const sessions = new Map<string, InternalSession>();
   const sessionRegistry = new SessionRegistry();
   const queue: string[] = [];
   let runningCount = 0;
+
+  /** Server-side prompt queue */
+  const promptQueue: QueuedPrompt[] = [];
+  /** Max prompts to keep in queue for display (including completed) */
+  const MAX_PROMPT_HISTORY = 50;
 
   function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -236,6 +375,11 @@ export function createSessionManager(
 
         session.toolAgentSession = toolAgentSession;
         if (resumeSessionId !== undefined && resumeSessionId.length > 0) {
+          session.currentClaudeSessionId = resumeSessionId;
+          logger.info("Resuming Claude session", {
+            qraftAiSessionId: sessionId,
+            claudeSessionId: resumeSessionId,
+          });
           try {
             await sessionRegistry.register(
               resumeSessionId,
@@ -258,6 +402,11 @@ export function createSessionManager(
             !session.registeredClaudeSessionIds.has(claudeSessionId)
           ) {
             session.registeredClaudeSessionIds.add(claudeSessionId);
+            session.currentClaudeSessionId = claudeSessionId;
+            logger.info("Detected Claude session ID from stream", {
+              qraftAiSessionId: sessionId,
+              claudeSessionId,
+            });
             void sessionRegistry
               .register(claudeSessionId, session.request.options.projectPath)
               .catch(() => {
@@ -419,6 +568,26 @@ export function createSessionManager(
         const sessionResult = await toolAgentSession.waitForCompletion();
         const finalAgentState = toolAgentSession.getState().state;
 
+        // Fallback: if stream messages never contained a session ID,
+        // discover it from the transcript file that the CLI created.
+        if (session.currentClaudeSessionId === undefined) {
+          const discovered = discoverClaudeSessionId(
+            session.request.options.projectPath,
+            session.startedAt?.getTime() ?? session.createdAt.getTime(),
+          );
+          if (discovered !== null) {
+            session.currentClaudeSessionId = discovered;
+            session.registeredClaudeSessionIds.add(discovered);
+            logger.info("Discovered Claude session ID from transcript file", {
+              qraftAiSessionId: sessionId,
+              claudeSessionId: discovered,
+            });
+            void sessionRegistry
+              .register(discovered, session.request.options.projectPath)
+              .catch(() => {});
+          }
+        }
+
         // Keep explicit cancellation as cancelled (don't downgrade to failed)
         const latestSession = sessions.get(sessionId);
         if (
@@ -514,6 +683,11 @@ export function createSessionManager(
     } finally {
       runningCount--;
       processQueue();
+      // Also drain the prompt queue – the "completed" event listener in
+      // dispatchNextPrompt's subscriber fires *before* runningCount is
+      // decremented, so its re-entrance check (runningCount >= maxConcurrent)
+      // returns early.  We must retry here, after the decrement.
+      dispatchNextPrompt();
     }
   }
 
@@ -535,7 +709,228 @@ export function createSessionManager(
     }
   }
 
-  return {
+  /**
+   * Generate a unique prompt ID
+   */
+  function generatePromptId(): string {
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).slice(2, 6);
+    return `prompt_${timestamp}_${random}`;
+  }
+
+  /**
+   * Convert internal QueuedPrompt to QueuedPromptInfo for broadcast
+   */
+  function toPromptInfo(p: QueuedPrompt): QueuedPromptInfo {
+    return {
+      id: p.id,
+      message:
+        p.message.length > 200 ? p.message.slice(0, 200) + "..." : p.message,
+      status: p.status,
+      requested_claude_session_id: p.requestedClaudeSessionId,
+      claude_session_id: p.resultClaudeSessionId,
+      current_activity: p.currentActivity,
+      error: p.error,
+      created_at: p.createdAt.toISOString(),
+      worktree_id: p.worktreeId,
+      qraft_ai_session_id: p.qraftAiSessionId,
+    };
+  }
+
+  /**
+   * Broadcast current prompt queue state via WebSocket
+   */
+  function broadcastQueueUpdate(): void {
+    if (broadcast === undefined) return;
+    const update: AIQueueUpdate = {
+      prompts: promptQueue.map(toPromptInfo),
+    };
+    broadcast("ai:queue_update", update);
+  }
+
+  /**
+   * Trim old completed/failed prompts from queue to prevent unbounded growth
+   */
+  function trimPromptHistory(): void {
+    while (promptQueue.length > MAX_PROMPT_HISTORY) {
+      const oldest = promptQueue[0];
+      if (
+        oldest !== undefined &&
+        (oldest.status === "completed" ||
+          oldest.status === "failed" ||
+          oldest.status === "cancelled")
+      ) {
+        promptQueue.shift();
+      } else {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Resolve the resumeSessionId for the next prompt in queue.
+   *
+   * Priority:
+   * 1. If prompt has an explicit session_id (Claude CLI session ID), use it
+   * 2. If prompt has a qraft_ai_session_id, look for the most recently completed
+   *    prompt in the same group to inherit its resultClaudeSessionId
+   * 3. Otherwise, fall back to same-worktree lookup
+   * 4. If none found, start a new session (undefined)
+   */
+  function resolveResumeSessionId(prompt: QueuedPrompt): string | undefined {
+    // 1. Explicit Claude session ID takes priority
+    if (
+      prompt.requestedClaudeSessionId !== null &&
+      prompt.requestedClaudeSessionId.length > 0
+    ) {
+      return prompt.requestedClaudeSessionId;
+    }
+
+    // 2. Match by qraft_ai_session_id first (client-generated group key)
+    if (
+      prompt.qraftAiSessionId !== undefined &&
+      prompt.qraftAiSessionId.length > 0
+    ) {
+      for (let i = promptQueue.length - 1; i >= 0; i--) {
+        const prev = promptQueue[i];
+        if (prev === undefined) continue;
+        if (prev.id === prompt.id) continue;
+        if (prev.qraftAiSessionId !== prompt.qraftAiSessionId) continue;
+        if (
+          prev.resultClaudeSessionId !== undefined &&
+          prev.resultClaudeSessionId.length > 0
+        ) {
+          return prev.resultClaudeSessionId;
+        }
+      }
+    }
+
+    // 3. Fall back to same-worktree lookup
+    for (let i = promptQueue.length - 1; i >= 0; i--) {
+      const prev = promptQueue[i];
+      if (prev === undefined) continue;
+      if (prev.id === prompt.id) continue;
+      if (prev.worktreeId !== prompt.worktreeId) continue;
+      if (
+        prev.resultClaudeSessionId !== undefined &&
+        prev.resultClaudeSessionId.length > 0
+      ) {
+        return prev.resultClaudeSessionId;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Dispatch the next queued prompt for execution.
+   * Called when the prompt queue has items and capacity is available.
+   */
+  function dispatchNextPrompt(): void {
+    const next = promptQueue.find((p) => p.status === "queued");
+    if (next === undefined) return;
+    if (runningCount >= config.maxConcurrent) return;
+
+    next.status = "running";
+    next.currentActivity = "Starting...";
+    broadcastQueueUpdate();
+
+    const resumeSessionId = resolveResumeSessionId(next);
+    logger.info("Dispatching queued prompt", {
+      promptId: next.id,
+      resumeSessionId: resumeSessionId ?? null,
+      message: next.message.slice(0, 80),
+    });
+
+    // Use the existing submit() mechanism internally
+    const self = sessionManagerRef;
+    if (self === undefined) return;
+
+    void self
+      .submit({
+        prompt: next.message,
+        context: next.context,
+        options: {
+          projectPath: next.projectPath,
+          sessionMode: resumeSessionId !== undefined ? "continue" : "new",
+          immediate: true,
+          resumeSessionId,
+        },
+      })
+      .then((result) => {
+        next.internalSessionId = result.sessionId;
+        if (result.claudeSessionId !== undefined) {
+          next.resultClaudeSessionId = result.claudeSessionId;
+        }
+        broadcastQueueUpdate();
+
+        // Subscribe to session events to track prompt lifecycle
+        self.subscribe(result.sessionId, (event) => {
+          if (event.type === "completed") {
+            next.status = "completed";
+            next.currentActivity = undefined;
+            // Resolve claude session ID from the completed session
+            const completedSession = self.getSession(result.sessionId);
+            if (completedSession?.claudeSessionId !== undefined) {
+              next.resultClaudeSessionId = completedSession.claudeSessionId;
+            }
+            trimPromptHistory();
+            broadcastQueueUpdate();
+            // Dispatch next prompt in queue
+            dispatchNextPrompt();
+          } else if (event.type === "error") {
+            next.status = "failed";
+            next.currentActivity = undefined;
+            const errorData = event.data as { message?: string };
+            next.error =
+              typeof errorData.message === "string"
+                ? errorData.message
+                : "Session failed";
+            broadcastQueueUpdate();
+            // Still try to dispatch next
+            dispatchNextPrompt();
+          } else if (event.type === "cancelled") {
+            next.status = "cancelled";
+            next.currentActivity = undefined;
+            broadcastQueueUpdate();
+            dispatchNextPrompt();
+          } else if (event.type === "tool_use") {
+            const toolData = event.data as { toolName?: string };
+            next.currentActivity =
+              typeof toolData.toolName === "string"
+                ? `Using ${toolData.toolName}...`
+                : "Using tool...";
+            broadcastQueueUpdate();
+          } else if (event.type === "message") {
+            next.currentActivity = undefined;
+            // Also pick up claude session ID from message events
+            const session = self.getSession(result.sessionId);
+            if (session?.claudeSessionId !== undefined) {
+              next.resultClaudeSessionId = session.claudeSessionId;
+            }
+            broadcastQueueUpdate();
+          } else if (
+            event.type === "thinking" ||
+            event.type === "session_started"
+          ) {
+            next.currentActivity = "Thinking...";
+            broadcastQueueUpdate();
+          }
+        });
+      })
+      .catch((err: unknown) => {
+        next.status = "failed";
+        next.currentActivity = undefined;
+        next.error = err instanceof Error ? err.message : "Dispatch failed";
+        broadcastQueueUpdate();
+        dispatchNextPrompt();
+      });
+  }
+
+  // Forward reference for self-calling submit from prompt queue
+  let sessionManagerRef: SessionManager | undefined;
+
+  const manager: SessionManager = {
     async submit(request: AIPromptRequest): Promise<AISessionSubmitResult> {
       if (!config.enabled) {
         throw new Error("AI features are disabled");
@@ -554,6 +949,9 @@ export function createSessionManager(
         currentActivity: undefined,
         listeners: new Set(),
         registeredClaudeSessionIds: new Set(),
+        ...(request.options.resumeSessionId !== undefined
+          ? { currentClaudeSessionId: request.options.resumeSessionId }
+          : {}),
       };
 
       sessions.set(sessionId, session);
@@ -568,6 +966,7 @@ export function createSessionManager(
         return {
           sessionId,
           immediate: true,
+          claudeSessionId: session.currentClaudeSessionId,
         };
       } else {
         // Add to queue
@@ -588,6 +987,7 @@ export function createSessionManager(
           sessionId,
           queuePosition,
           immediate: false,
+          claudeSessionId: session.currentClaudeSessionId,
         };
       }
     },
@@ -712,5 +1112,104 @@ export function createSessionManager(
         }
       }
     },
+
+    submitPrompt(msg: AIPromptMessage): {
+      promptId: string;
+      worktreeId: string;
+    } {
+      if (!config.enabled) {
+        throw new Error("AI features are disabled");
+      }
+
+      const promptId = generatePromptId();
+      const projectPath = msg.project_path ?? "";
+      const worktreeId =
+        typeof msg.worktree_id === "string" && msg.worktree_id.length > 0
+          ? msg.worktree_id
+          : generateWorktreeId(projectPath);
+
+      // Resolve qraft_ai_session_id:
+      // 1. Use explicit value if provided
+      // 2. Derive from session_id (Claude session ID) if available
+      // 3. Otherwise undefined (new session group)
+      let qraftAiSessionId: QraftAiSessionId | undefined;
+      if (
+        typeof msg.qraft_ai_session_id === "string" &&
+        msg.qraft_ai_session_id.length > 0
+      ) {
+        qraftAiSessionId = msg.qraft_ai_session_id as QraftAiSessionId;
+      } else if (msg.session_id !== null && msg.session_id.length > 0) {
+        qraftAiSessionId = deriveQraftAiSessionIdFromClaude(msg.session_id);
+      }
+
+      const prompt: QueuedPrompt = {
+        id: promptId,
+        requestedClaudeSessionId: msg.session_id,
+        message: msg.message,
+        context: msg.context ?? { references: [] },
+        projectPath,
+        runImmediately: msg.run_immediately,
+        worktreeId,
+        qraftAiSessionId,
+        status: "queued",
+        resultClaudeSessionId: undefined,
+        currentActivity: undefined,
+        error: undefined,
+        createdAt: new Date(),
+        internalSessionId: undefined,
+      };
+
+      promptQueue.push(prompt);
+      logger.info("Prompt queued", {
+        promptId,
+        requestedClaudeSessionId: msg.session_id,
+        qraftAiSessionId,
+        queueLength: promptQueue.filter((p) => p.status === "queued").length,
+      });
+
+      broadcastQueueUpdate();
+
+      // Try to dispatch immediately if capacity available
+      dispatchNextPrompt();
+
+      return { promptId, worktreeId };
+    },
+
+    getPromptQueue(worktreeId?: string): readonly QueuedPromptInfo[] {
+      const source =
+        typeof worktreeId === "string" && worktreeId.length > 0
+          ? promptQueue.filter((p) => p.worktreeId === worktreeId)
+          : promptQueue;
+      return source.map(toPromptInfo);
+    },
+
+    cancelPrompt(promptId: string): void {
+      const prompt = promptQueue.find((p) => p.id === promptId);
+      if (prompt === undefined) {
+        throw new Error(`Prompt not found: ${promptId}`);
+      }
+
+      if (prompt.status === "queued") {
+        prompt.status = "cancelled";
+        prompt.currentActivity = undefined;
+        broadcastQueueUpdate();
+      } else if (
+        prompt.status === "running" &&
+        prompt.internalSessionId !== undefined
+      ) {
+        // Cancel the running session
+        void manager.cancel(prompt.internalSessionId).catch(() => {
+          // Best effort
+        });
+        prompt.status = "cancelled";
+        prompt.currentActivity = undefined;
+        broadcastQueueUpdate();
+      }
+    },
   };
+
+  // Set forward reference so dispatchNextPrompt can call submit()
+  sessionManagerRef = manager;
+
+  return manager;
 }

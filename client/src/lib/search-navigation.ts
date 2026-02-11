@@ -51,9 +51,13 @@ export interface MatchPosition {
  */
 export function navigateToResult(
   result: SearchResult,
-  options: NavigationOptions = {}
+  options: NavigationOptions = {},
 ): void {
-  const { scrollIntoView = true, behavior = "smooth", block = "center" } = options;
+  const {
+    scrollIntoView = true,
+    behavior = "smooth",
+    block = "center",
+  } = options;
 
   // Find the line element by line number
   const lineSelector = `[data-line-number="${result.lineNumber}"]`;
@@ -99,7 +103,7 @@ export function navigateToResult(
 export function highlightSearchMatches(
   content: string,
   pattern: string,
-  caseSensitive = false
+  caseSensitive = false,
 ): readonly MatchPosition[] {
   if (pattern.length === 0) {
     return [];
@@ -115,7 +119,10 @@ export function highlightSearchMatches(
     // Limit matches to prevent excessive highlighting
     const maxMatches = 100;
 
-    while ((match = regex.exec(content)) !== null && matches.length < maxMatches) {
+    while (
+      (match = regex.exec(content)) !== null &&
+      matches.length < maxMatches
+    ) {
       // Prevent infinite loop for zero-width matches
       if (match[0].length === 0) {
         regex.lastIndex++;
@@ -144,7 +151,7 @@ export function highlightSearchMatches(
  */
 export function scrollResultIntoView(
   lineNumber: number,
-  options: NavigationOptions = {}
+  options: NavigationOptions = {},
 ): boolean {
   const { behavior = "smooth", block = "center" } = options;
 
@@ -174,7 +181,8 @@ export function isLineVisible(lineNumber: number): boolean {
   }
 
   const rect = lineElement.getBoundingClientRect();
-  const viewHeight = window.innerHeight || document.documentElement.clientHeight;
+  const viewHeight =
+    window.innerHeight || document.documentElement.clientHeight;
 
   return rect.top >= 0 && rect.bottom <= viewHeight;
 }
@@ -186,7 +194,7 @@ export function isLineVisible(lineNumber: number): boolean {
  * @returns Array of visible line numbers
  */
 export function getVisibleLineNumbers(
-  containerSelector = ".diff-content"
+  containerSelector = ".diff-content",
 ): readonly number[] {
   const container = document.querySelector(containerSelector);
   if (container === null) {
@@ -201,13 +209,10 @@ export function getVisibleLineNumbers(
     const rect = element.getBoundingClientRect();
 
     // Check if element is within the container's visible area
-    if (
-      rect.top < containerRect.bottom &&
-      rect.bottom > containerRect.top
-    ) {
+    if (rect.top < containerRect.bottom && rect.bottom > containerRect.top) {
       const lineNumber = parseInt(
         element.getAttribute("data-line-number") ?? "0",
-        10
+        10,
       );
       if (lineNumber > 0) {
         visibleLines.push(lineNumber);
@@ -227,7 +232,7 @@ export function getVisibleLineNumbers(
  */
 export function findClosestResultIndex(
   results: readonly SearchResult[],
-  visibleLines: readonly number[]
+  visibleLines: readonly number[],
 ): number {
   if (results.length === 0) {
     return -1;

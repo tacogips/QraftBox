@@ -68,7 +68,7 @@ export function createPromptStore(storageDir?: string): PromptStore {
         context: request.context,
         projectPath: request.projectPath,
         status: "pending",
-        sessionId: null,
+        dispatchSessionId: null,
         createdAt: now,
         updatedAt: now,
         error: null,
@@ -202,7 +202,7 @@ export function createPromptStore(storageDir?: string): PromptStore {
             const updated: LocalPrompt = {
               ...prompt,
               status: "pending",
-              sessionId: null,
+              dispatchSessionId: null,
               error: "Interrupted by server restart",
               updatedAt: new Date().toISOString(),
             };

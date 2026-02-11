@@ -171,8 +171,7 @@ export function createClaudeSessionsStore(): ClaudeSessionsStore {
   const listeners: Set<() => void> = new Set();
 
   async function extractErrorMessage(response: Response): Promise<string> {
-    const hasJson =
-      typeof (response as { json?: unknown }).json === "function";
+    const hasJson = typeof (response as { json?: unknown }).json === "function";
     if (!hasJson) {
       return response.statusText;
     }

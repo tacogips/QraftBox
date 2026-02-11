@@ -301,6 +301,9 @@ export async function main(): Promise<void> {
       contextManager,
       recentStore,
       initialTabs,
+      broadcast: (event: string, data: unknown) => {
+        wsManager.broadcast(event, data);
+      },
     });
     const server = startServer(app, config, wsManager);
 

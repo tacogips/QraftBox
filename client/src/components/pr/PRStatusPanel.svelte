@@ -53,7 +53,9 @@
   }
 </script>
 
-<div class="pr-status-panel p-4 bg-bg-secondary border border-border-default rounded-lg">
+<div
+  class="pr-status-panel p-4 bg-bg-secondary border border-border-default rounded-lg"
+>
   <div class="flex items-center justify-between gap-4">
     <!-- PR Info -->
     <div class="flex-1">

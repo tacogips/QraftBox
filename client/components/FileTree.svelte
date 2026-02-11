@@ -395,10 +395,21 @@
   /**
    * Auto-expand ancestor directories when selectedPath changes
    * so that the selected file is always visible in the tree.
+   * Only runs when selectedPath actually changes (not on expandedPaths changes).
+   * Skips the first change so the tree starts fully collapsed on load.
    */
+  let prevSelectedPath: string | null = null;
+  let initialSelectionSkipped = false;
   $effect(() => {
-    if (selectedPath === null) return;
-    const segments = selectedPath.split("/");
+    const current = selectedPath;
+    if (current === prevSelectedPath) return;
+    prevSelectedPath = current;
+    if (current === null) return;
+    if (!initialSelectionSkipped) {
+      initialSelectionSkipped = true;
+      return;
+    }
+    const segments = current.split("/");
     if (segments.length <= 1) return;
     const newExpanded = new Set(expandedPaths);
     let changed = false;
