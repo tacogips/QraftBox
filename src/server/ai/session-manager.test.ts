@@ -314,6 +314,26 @@ describe("createSessionManager", () => {
       const session = manager.getSession("unknown-session" as QraftAiSessionId);
       expect(session).toBeNull();
     });
+
+    test("returns empty defaults for content fields after session completes and handle is cleaned", async () => {
+      // Submit, wait for completion (stubbed completes quickly), then verify
+      // After completion, runtime handle is cleaned up, so content fields should be empty defaults
+      const manager = createSessionManager();
+      const result = await manager.submit(
+        createTestRequest({ prompt: "Will be cleaned" }),
+      );
+
+      // Wait for session to complete and runtime handle cleanup
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const session = manager.getSession(result.sessionId);
+      expect(session).not.toBeNull();
+      expect(session?.state).toBe("completed");
+      // After handle cleanup, content fields get empty defaults from toSessionInfo
+      expect(session?.prompt).toBe("");
+      expect(session?.context).toEqual({ references: [] });
+      expect(session?.lastAssistantMessage).toBeUndefined();
+    });
   });
 
   describe("listSessions()", () => {
@@ -339,6 +359,19 @@ describe("createSessionManager", () => {
 
       const sessions = manager.listSessions();
       expect(sessions).toHaveLength(0);
+    });
+
+    test("returns content fields from runtime handle for active sessions", async () => {
+      const manager = createSessionManager();
+      const request = createTestRequest({ prompt: "Active session prompt" });
+      const result = await manager.submit(request);
+
+      // Session should still have runtime handle content before completion
+      const sessions = manager.listSessions();
+      const session = sessions.find((s) => s.id === result.sessionId);
+      expect(session).toBeDefined();
+      expect(session?.prompt).toBe("Active session prompt");
+      expect(session?.context).toEqual(request.context);
     });
   });
 

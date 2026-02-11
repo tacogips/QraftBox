@@ -44,6 +44,57 @@ Apply these standards when:
 | Optional chaining without null check | Explicit narrowing |
 | Deep folder nesting (>3 levels) | Flat, feature-based structure |
 | Implicit `undefined` in optional props | Explicit `T \| undefined` |
+| Ambiguous variable names (`store`, `id`, `data`) | Self-descriptive names (`sessionStore`, `sessionId`, `userData`) |
+| Single-character lambda params (`x => x.name`) | Descriptive params (`session => session.name`) |
+
+## Naming Conventions: Self-Descriptive Variable Names
+
+**RULE**: All variable, parameter, and property names MUST be self-descriptive. Avoid short, ambiguous names that require surrounding context to understand. Code should read like prose -- a reader should understand what a variable holds without looking at its declaration or surrounding code.
+
+### Prohibited Patterns
+
+```typescript
+// BAD - ambiguous, requires context to understand
+store.get(id);
+const res = await fetch(url);
+const val = map.get(key);
+items.filter(x => x.active);
+data.forEach(d => process(d));
+const cb = () => { /* ... */ };
+
+// GOOD - self-descriptive, intention is immediately clear
+sessionStore.get(sessionId);
+const apiResponse = await fetch(endpointUrl);
+const configValue = configMap.get(configKey);
+sessions.filter(session => session.active);
+diffEntries.forEach(diffEntry => processDiffEntry(diffEntry));
+const onSessionExpired = () => { /* ... */ };
+```
+
+### Single-Character Variables Are Prohibited
+
+Even in lambda expressions, arrow functions, and short callbacks, single-character variable names (`x`, `e`, `d`, `v`, `i`, `k`) are prohibited. Use descriptive names that convey what the value represents.
+
+```typescript
+// BAD - single-character params hide meaning
+users.map(u => u.name);
+entries.filter(e => e.isValid);
+Object.entries(obj).forEach(([k, v]) => console.log(k, v));
+for (let i = 0; i < items.length; i++) { /* ... */ }
+
+// GOOD - descriptive params
+users.map(user => user.name);
+entries.filter(entry => entry.isValid);
+Object.entries(configMap).forEach(([configKey, configValue]) => console.log(configKey, configValue));
+for (let itemIndex = 0; itemIndex < items.length; itemIndex++) { /* ... */ }
+```
+
+### General Guidelines
+
+1. **Variable names should describe WHAT, not HOW**: `sessionStore` (what it stores) over `store` (generic)
+2. **Parameters should describe the domain concept**: `sessionId` over `id`, `filePath` over `path`
+3. **Collections should hint at their contents**: `sessions` over `items`, `diffEntries` over `data`
+4. **Callbacks should describe their trigger**: `onSessionExpired` over `cb`, `handleFileChange` over `fn`
 
 ## Detailed Guidelines
 

@@ -325,6 +325,72 @@ type OnlyStrings = Extract<StringOrNumber, string>; // string
 type NoStrings = Exclude<StringOrNumber, string>; // number | boolean
 ```
 
+## Self-Descriptive Naming
+
+Variable names are part of type safety -- ambiguous names lead to misuse and bugs just as `any` does. All names MUST be self-descriptive so that a reader immediately understands what the variable holds.
+
+### Variable and Parameter Names
+
+```typescript
+// BAD - ambiguous, could mean anything
+const store = new Map();
+store.get(id);
+const res = await fetch(url);
+
+// GOOD - self-descriptive
+const sessionStore = new Map<QraftAiSessionId, AiSession>();
+sessionStore.get(sessionId);
+const diffResponse = await fetch(diffEndpointUrl);
+```
+
+### Lambda and Arrow Function Parameters
+
+Single-character variable names are prohibited even in lambdas, callbacks, and short arrow functions. The name should describe the domain object being iterated.
+
+```typescript
+// BAD - single-character hides meaning
+sessions.map(s => s.id);
+files.filter(f => f.endsWith('.ts'));
+entries.reduce((a, b) => a + b.size, 0);
+Object.entries(map).forEach(([k, v]) => { /* ... */ });
+
+// GOOD - descriptive names
+sessions.map(session => session.id);
+files.filter(filePath => filePath.endsWith('.ts'));
+entries.reduce((totalSize, entry) => totalSize + entry.size, 0);
+Object.entries(configMap).forEach(([configKey, configValue]) => { /* ... */ });
+```
+
+### Collections and Containers
+
+Collection variable names should hint at their contents, not their data structure.
+
+```typescript
+// BAD - describes structure, not content
+const list = getAll();
+const map = new Map();
+const items = fetchData();
+
+// GOOD - describes content
+const activeSessions = getAllSessions();
+const worktreePathMap = new Map<WorktreeId, string>();
+const pendingDiffEntries = fetchDiffEntries();
+```
+
+### Callbacks and Handlers
+
+Callback names should describe their trigger or purpose.
+
+```typescript
+// BAD - opaque
+const cb = () => cleanup();
+const fn = (event) => { /* ... */ };
+
+// GOOD - describes trigger
+const onSessionExpired = () => cleanupExpiredSession();
+const handleFileChange = (changeEvent: FileChangeEvent) => { /* ... */ };
+```
+
 ## Anti-Patterns to Avoid
 
 ```typescript

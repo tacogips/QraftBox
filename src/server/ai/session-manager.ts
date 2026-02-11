@@ -11,7 +11,6 @@ import type {
   QueueStatus,
   AIProgressEvent,
   AISessionInfo,
-  SessionState,
   AIConfig,
   AIPromptMessage,
   QueuedPromptInfo,
@@ -26,6 +25,11 @@ import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { SessionMappingStore } from "./session-mapping-store.js";
+import type { AiSessionStore, AiSessionRow } from "./ai-session-store.js";
+import {
+  createInMemoryAiSessionStore,
+  toSessionInfo,
+} from "./ai-session-store.js";
 import { createLogger } from "../logger.js";
 import { basename } from "node:path";
 import {
@@ -34,43 +38,17 @@ import {
 } from "claude-code-agent/src/sdk/index.js";
 
 /**
- * Internal session representation
+ * Runtime session handle - only stores non-serializable runtime state
  */
-interface InternalSession {
-  id: QraftAiSessionId;
-  state: SessionState;
+interface RuntimeSessionHandle {
+  listeners: Set<(event: AIProgressEvent) => void>;
+  toolAgentSession?: ToolAgentSession | undefined;
+  registeredClaudeSessionIds: Set<ClaudeSessionId>;
+  /** Runtime-only content fields (not persisted to SQLite) */
   prompt: string;
   fullPrompt: string;
-  request: AIPromptRequest;
-  createdAt: Date;
-  startedAt?: Date;
-  completedAt?: Date;
-  lastAssistantMessage?: string;
-  currentActivity: string | undefined;
-  listeners: Set<(event: AIProgressEvent) => void>;
-  toolAgentSession?: ToolAgentSession;
-  registeredClaudeSessionIds: Set<ClaudeSessionId>;
-  currentClaudeSessionId?: ClaudeSessionId;
-}
-
-/**
- * Internal queued prompt representation for server-side queue management
- */
-interface QueuedPrompt {
-  readonly id: PromptId;
-  readonly message: string;
-  readonly context: AIPromptContext;
-  readonly projectPath: string;
-  readonly worktreeId: WorktreeId;
-  /** Client-generated group ID for session continuity across queued prompts */
-  readonly qraftAiSessionId: QraftAiSessionId | undefined;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  resultClaudeSessionId: ClaudeSessionId | undefined;
-  currentActivity: string | undefined;
-  error: string | undefined;
-  readonly createdAt: Date;
-  /** QraftBox internal session ID (set when dispatched) */
-  internalSessionId: QraftAiSessionId | undefined;
+  context: AIPromptContext;
+  lastAssistantMessage?: string | undefined;
 }
 
 /**
@@ -197,30 +175,13 @@ function createProgressEvent(
 }
 
 /**
- * Convert internal session to public session info
- */
-function toSessionInfo(session: InternalSession): AISessionInfo {
-  return {
-    id: session.id,
-    state: session.state,
-    prompt: session.prompt,
-    createdAt: session.createdAt.toISOString(),
-    startedAt: session.startedAt?.toISOString(),
-    completedAt: session.completedAt?.toISOString(),
-    context: session.request.context,
-    lastAssistantMessage: session.lastAssistantMessage,
-    currentActivity: session.currentActivity,
-    claudeSessionId: session.currentClaudeSessionId,
-  };
-}
-
-/**
  * Create a session manager
  *
  * @param config - AI configuration
  * @param toolRegistry - Tool registry for MCP tools
  * @param broadcast - Broadcast function for WebSocket events
  * @param mappingStore - Session mapping store for persisting qraft_ai_session_id <-> claude_session_id mappings
+ * @param sessionStore - AI session store for persisting session metadata
  * @returns Session manager instance
  */
 export function createSessionManager(
@@ -228,19 +189,106 @@ export function createSessionManager(
   toolRegistry?: QraftBoxToolRegistry | undefined,
   broadcast?: BroadcastFn | undefined,
   mappingStore?: SessionMappingStore | undefined,
+  sessionStore?: AiSessionStore | undefined,
 ): SessionManager {
   const logger = createLogger("SessionManager");
-  const sessions = new Map<QraftAiSessionId, InternalSession>();
-  const queue: QraftAiSessionId[] = [];
-  let runningCount = 0;
-
-  /** Server-side prompt queue */
-  const promptQueue: QueuedPrompt[] = [];
-  /** Max prompts to keep in queue for display (including completed) */
-  const MAX_PROMPT_HISTORY = 50;
+  const store = sessionStore ?? createInMemoryAiSessionStore();
+  const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
 
   function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Convert AiSessionRow to QueuedPromptInfo for broadcast
+   */
+  function toPromptInfoFromRow(row: AiSessionRow): QueuedPromptInfo {
+    return {
+      id: row.promptId ?? ("" as PromptId),
+      message: row.message ?? "",
+      status: row.state,
+      claude_session_id: row.currentClaudeSessionId,
+      current_activity: row.currentActivity,
+      error: row.error,
+      created_at: row.createdAt,
+      worktree_id: row.worktreeId ?? ("" as WorktreeId),
+      qraft_ai_session_id: row.clientSessionId,
+    };
+  }
+
+  /**
+   * Resolve the resumeSessionId for a session about to be executed.
+   *
+   * Priority:
+   * 0. Persistent SQLite lookup by clientSessionId via mappingStore
+   * 1. AiSessionStore lookup by clientSessionId (most recent session with claude ID)
+   * 2. AiSessionStore lookup by worktreeId (fallback)
+   * 3. If none found, start a new session (undefined)
+   */
+  function resolveResumeSessionId(
+    session: AiSessionRow,
+  ): ClaudeSessionId | undefined {
+    // 0. Persistent SQLite mapping store lookup
+    if (
+      mappingStore !== undefined &&
+      session.clientSessionId !== undefined &&
+      session.clientSessionId.length > 0
+    ) {
+      const stored = mappingStore.findClaudeSessionId(session.clientSessionId);
+      if (stored !== undefined) {
+        logger.info("Resolved resume session via SQLite mapping", {
+          sessionId: session.id,
+          clientSessionId: session.clientSessionId,
+          resumeSessionId: stored,
+        });
+        return stored;
+      }
+    }
+
+    // 1. AiSessionStore lookup by clientSessionId
+    if (
+      session.clientSessionId !== undefined &&
+      session.clientSessionId.length > 0
+    ) {
+      const resumeId = store.findResumeByClientSessionId(
+        session.clientSessionId,
+      );
+      if (resumeId !== undefined) {
+        logger.info("Resolved resume session via clientSessionId in store", {
+          sessionId: session.id,
+          clientSessionId: session.clientSessionId,
+          resumeSessionId: resumeId,
+        });
+        return resumeId;
+      }
+    }
+
+    // 2. AiSessionStore lookup by worktreeId
+    if (session.worktreeId !== undefined && session.worktreeId.length > 0) {
+      const resumeId = store.findResumeByWorktreeId(session.worktreeId);
+      if (resumeId !== undefined) {
+        logger.info("Resolved resume session via worktreeId fallback", {
+          sessionId: session.id,
+          worktreeId: session.worktreeId,
+          resumeSessionId: resumeId,
+        });
+        return resumeId;
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Broadcast current prompt queue state via WebSocket
+   */
+  function broadcastQueueUpdate(): void {
+    if (broadcast === undefined) return;
+    const rows = store.listPromptQueue();
+    const update: AIQueueUpdate = {
+      prompts: rows.map(toPromptInfoFromRow),
+    };
+    broadcast("ai:queue_update", update);
   }
 
   /**
@@ -250,9 +298,9 @@ export function createSessionManager(
     sessionId: QraftAiSessionId,
     event: AIProgressEvent,
   ): void {
-    const session = sessions.get(sessionId);
-    if (session !== undefined) {
-      for (const listener of session.listeners) {
+    const handle = runtimeHandles.get(sessionId);
+    if (handle !== undefined) {
+      for (const listener of handle.listeners) {
         try {
           listener(event);
         } catch {
@@ -260,19 +308,28 @@ export function createSessionManager(
         }
       }
     }
+
+    // Broadcast queue update for prompt queue entries
+    const session = store.get(sessionId);
+    if (session?.promptId !== undefined) {
+      broadcastQueueUpdate();
+    }
   }
 
   /**
    * Execute a session with real claude-code-agent integration
    */
   async function executeSession(sessionId: QraftAiSessionId): Promise<void> {
-    const session = sessions.get(sessionId);
+    const session = store.get(sessionId);
     if (session === undefined) return;
 
-    session.state = "running";
-    session.currentActivity = "Starting session...";
-    session.startedAt = new Date();
-    runningCount++;
+    const handle = runtimeHandles.get(sessionId);
+    if (handle === undefined) return;
+
+    // Update state to running
+    const startedAt = new Date().toISOString();
+    store.updateState(sessionId, "running", { startedAt });
+    store.updateActivity(sessionId, "Starting session...");
 
     // Emit session started event
     emitEvent(sessionId, createProgressEvent("session_started", sessionId));
@@ -285,7 +342,7 @@ export function createSessionManager(
         const mcpServerConfig = toolRegistry.toMcpServerConfig();
 
         const agent = new ClaudeCodeToolAgent({
-          cwd: session.request.options.projectPath,
+          cwd: session.projectPath,
           mcpServers: {
             "qraftbox-tools": mcpServerConfig as any,
           },
@@ -294,33 +351,32 @@ export function createSessionManager(
           additionalArgs: [...config.assistantAdditionalArgs],
         });
 
-        // Start or resume session
-        const resumeSessionId = session.request.options.resumeSessionId;
+        // Start or resume session using cached Claude session ID
+        const resumeClaudeId = session.currentClaudeSessionId;
         const toolAgentSession =
-          resumeSessionId !== undefined
+          resumeClaudeId !== undefined
             ? await agent.startSession({
-                prompt: session.fullPrompt,
-                resumeSessionId,
+                prompt: handle.fullPrompt,
+                resumeSessionId: resumeClaudeId,
               })
             : await agent.startSession({
-                prompt: session.fullPrompt,
+                prompt: handle.fullPrompt,
               });
 
-        session.toolAgentSession = toolAgentSession;
-        if (resumeSessionId !== undefined && resumeSessionId.length > 0) {
-          session.currentClaudeSessionId = resumeSessionId;
+        handle.toolAgentSession = toolAgentSession;
+        if (resumeClaudeId !== undefined) {
           logger.info("Resuming Claude session", {
             qraftAiSessionId: sessionId,
-            claudeSessionId: resumeSessionId,
+            claudeSessionId: resumeClaudeId,
           });
+          handle.registeredClaudeSessionIds.add(resumeClaudeId);
           try {
             mappingStore?.upsert(
-              resumeSessionId,
-              session.request.options.projectPath,
-              generateWorktreeId(session.request.options.projectPath),
+              resumeClaudeId,
+              session.projectPath,
+              session.worktreeId ?? generateWorktreeId(session.projectPath),
               "qraftbox",
             );
-            session.registeredClaudeSessionIds.add(resumeSessionId);
           } catch {
             // Best-effort registration for source detection.
           }
@@ -332,8 +388,10 @@ export function createSessionManager(
         let streamedAssistantContent = "";
         toolAgentSession.on("message", (msg: unknown) => {
           // Detect Claude session ID once from stream (only for new sessions)
+          const currentSession = store.get(sessionId);
           if (
-            session.currentClaudeSessionId === undefined &&
+            currentSession !== undefined &&
+            currentSession.currentClaudeSessionId === undefined &&
             typeof msg === "object" &&
             msg !== null
           ) {
@@ -343,8 +401,8 @@ export function createSessionManager(
               obj["sessionId"].length > 0
             ) {
               const claudeSessionId = obj["sessionId"] as ClaudeSessionId;
-              session.currentClaudeSessionId = claudeSessionId;
-              session.registeredClaudeSessionIds.add(claudeSessionId);
+              store.updateClaudeSessionId(sessionId, claudeSessionId);
+              handle.registeredClaudeSessionIds.add(claudeSessionId);
               logger.info("Detected Claude session ID from stream", {
                 qraftAiSessionId: sessionId,
                 claudeSessionId,
@@ -352,8 +410,9 @@ export function createSessionManager(
               try {
                 mappingStore?.upsert(
                   claudeSessionId,
-                  session.request.options.projectPath,
-                  generateWorktreeId(session.request.options.projectPath),
+                  currentSession.projectPath,
+                  currentSession.worktreeId ??
+                    generateWorktreeId(currentSession.projectPath),
                   "qraftbox",
                 );
               } catch {
@@ -384,8 +443,8 @@ export function createSessionManager(
             ) {
               streamedAssistantContent += rawMsg.event.delta.text;
               if (streamedAssistantContent.length > 0) {
-                session.lastAssistantMessage = streamedAssistantContent;
-                session.currentActivity = undefined;
+                handle.lastAssistantMessage = streamedAssistantContent;
+                store.updateActivity(sessionId, undefined);
                 emitEvent(
                   sessionId,
                   createProgressEvent("message", sessionId, {
@@ -425,8 +484,8 @@ export function createSessionManager(
 
             if (content !== undefined && content.length > 0) {
               streamedAssistantContent = content;
-              session.lastAssistantMessage = content;
-              session.currentActivity = undefined;
+              handle.lastAssistantMessage = content;
+              store.updateActivity(sessionId, undefined);
               emitEvent(
                 sessionId,
                 createProgressEvent("message", sessionId, {
@@ -458,7 +517,7 @@ export function createSessionManager(
                 input,
               }),
             );
-            session.currentActivity = `Using ${toolName}...`;
+            store.updateActivity(sessionId, `Using ${toolName}...`);
           }
         });
 
@@ -484,7 +543,7 @@ export function createSessionManager(
                 isError,
               }),
             );
-            session.currentActivity = `Processing ${toolName} result...`;
+            store.updateActivity(sessionId, `Processing ${toolName} result...`);
           }
         });
 
@@ -501,7 +560,7 @@ export function createSessionManager(
         // Iterate messages until completion
         for await (const _msg of toolAgentSession.messages()) {
           // Check if cancelled
-          const currentSession = sessions.get(sessionId);
+          const currentSession = store.get(sessionId);
           if (
             currentSession === undefined ||
             currentSession.state === "cancelled"
@@ -515,24 +574,28 @@ export function createSessionManager(
         const finalAgentState = toolAgentSession.getState().state;
 
         // Keep explicit cancellation as cancelled (don't downgrade to failed)
-        const latestSession = sessions.get(sessionId);
+        const latestSession = store.get(sessionId);
         if (
           latestSession?.state === "cancelled" ||
           finalAgentState === "cancelled"
         ) {
-          session.state = "cancelled";
-          session.completedAt = new Date();
+          const completedAt = new Date().toISOString();
+          store.updateState(sessionId, "cancelled", { completedAt });
+          store.updateActivity(sessionId, undefined);
           return;
         }
 
         // Mark as completed or failed
+        const completedAt = new Date().toISOString();
         if (sessionResult.success) {
-          session.state = "completed";
-          session.currentActivity = undefined;
+          store.updateState(sessionId, "completed", { completedAt });
+          store.updateActivity(sessionId, undefined);
         } else {
-          session.state = "failed";
-          session.currentActivity = undefined;
+          store.updateState(sessionId, "failed", { completedAt });
+          store.updateActivity(sessionId, undefined);
+          // Store error message in session
           if (sessionResult.error !== undefined) {
+            store.updateError(sessionId, sessionResult.error.message);
             emitEvent(
               sessionId,
               createProgressEvent("error", sessionId, {
@@ -541,26 +604,45 @@ export function createSessionManager(
             );
           }
         }
-        session.completedAt = new Date();
+
+        // Persist final mapping to SQLite for cross-restart continuity
+        const completedSession = store.get(sessionId);
+        if (
+          mappingStore !== undefined &&
+          completedSession?.currentClaudeSessionId !== undefined &&
+          completedSession.worktreeId !== undefined
+        ) {
+          try {
+            mappingStore.upsert(
+              completedSession.currentClaudeSessionId,
+              completedSession.projectPath,
+              completedSession.worktreeId,
+              "qraftbox",
+            );
+          } catch {
+            // Non-critical
+          }
+        }
 
         // Clean up agent
         await agent.close();
 
+        const finalSession = store.get(sessionId);
         emitEvent(
           sessionId,
           createProgressEvent(
-            session.state === "completed" ? "completed" : "error",
+            finalSession?.state === "completed" ? "completed" : "error",
             sessionId,
           ),
         );
       } else {
         // Fallback to stubbed behavior if toolRegistry is undefined
         emitEvent(sessionId, createProgressEvent("thinking", sessionId));
-        session.currentActivity = "Thinking...";
+        store.updateActivity(sessionId, "Thinking...");
 
         await new Promise((resolve) => setTimeout(resolve, 100));
 
-        const currentSession = sessions.get(sessionId);
+        const currentSession = store.get(sessionId);
         if (
           currentSession === undefined ||
           currentSession.state === "cancelled"
@@ -570,10 +652,10 @@ export function createSessionManager(
 
         const stubbedContent =
           "[AI Integration Stubbed] Tool registry not provided. The full prompt was:\n\n" +
-          session.fullPrompt.slice(0, 500) +
-          (session.fullPrompt.length > 500 ? "..." : "");
-        session.lastAssistantMessage = stubbedContent;
-        session.currentActivity = undefined;
+          handle.fullPrompt.slice(0, 500) +
+          (handle.fullPrompt.length > 500 ? "..." : "");
+        handle.lastAssistantMessage = stubbedContent;
+        store.updateActivity(sessionId, undefined);
 
         emitEvent(
           sessionId,
@@ -583,23 +665,26 @@ export function createSessionManager(
           }),
         );
 
-        session.state = "completed";
-        session.completedAt = new Date();
-        session.currentActivity = undefined;
+        const completedAt = new Date().toISOString();
+        store.updateState(sessionId, "completed", { completedAt });
 
         emitEvent(sessionId, createProgressEvent("completed", sessionId));
       }
     } catch (e) {
-      if (session.state === "cancelled") {
-        session.completedAt = session.completedAt ?? new Date();
+      const currentSession = store.get(sessionId);
+      if (currentSession?.state === "cancelled") {
+        const completedAt =
+          currentSession.completedAt ?? new Date().toISOString();
+        store.updateState(sessionId, "cancelled", { completedAt });
         return;
       }
 
-      session.state = "failed";
-      session.completedAt = new Date();
-      session.currentActivity = undefined;
+      const completedAt = new Date().toISOString();
+      store.updateState(sessionId, "failed", { completedAt });
+      store.updateActivity(sessionId, undefined);
 
       const errorMessage = e instanceof Error ? e.message : "Session failed";
+      store.updateError(sessionId, errorMessage);
       emitEvent(
         sessionId,
         createProgressEvent("error", sessionId, {
@@ -607,13 +692,18 @@ export function createSessionManager(
         }),
       );
     } finally {
-      runningCount--;
+      // Clean up runtime handle for terminal states
+      const finalSession = store.get(sessionId);
+      if (
+        finalSession !== undefined &&
+        (finalSession.state === "completed" ||
+          finalSession.state === "failed" ||
+          finalSession.state === "cancelled")
+      ) {
+        runtimeHandles.delete(sessionId);
+      }
+      broadcastQueueUpdate();
       processQueue();
-      // Also drain the prompt queue – the "completed" event listener in
-      // dispatchNextPrompt's subscriber fires *before* runningCount is
-      // decremented, so its re-entrance check (runningCount >= maxConcurrent)
-      // returns early.  We must retry here, after the decrement.
-      dispatchNextPrompt();
     }
   }
 
@@ -621,17 +711,30 @@ export function createSessionManager(
    * Process the queue - start next session if capacity available
    */
   function processQueue(): void {
-    while (runningCount < config.maxConcurrent && queue.length > 0) {
-      const nextSessionId = queue.shift();
-      if (nextSessionId !== undefined) {
-        const session = sessions.get(nextSessionId);
-        if (session !== undefined && session.state === "queued") {
-          // Don't await - run in background
-          executeSession(nextSessionId).catch(() => {
-            // Errors handled in executeSession
-          });
+    while (store.countByState("running") < config.maxConcurrent) {
+      const nextSessionId = store.nextQueued();
+      if (nextSessionId === undefined) break;
+
+      const session = store.get(nextSessionId);
+      if (session === undefined || session.state !== "queued") continue;
+
+      // For prompt queue sessions, resolve resume session ID
+      if (
+        session.promptId !== undefined &&
+        session.currentClaudeSessionId === undefined
+      ) {
+        const resumeId = resolveResumeSessionId(session);
+        if (resumeId !== undefined) {
+          store.updateClaudeSessionId(nextSessionId, resumeId);
         }
       }
+
+      broadcastQueueUpdate();
+
+      // Don't await - run in background
+      executeSession(nextSessionId).catch(() => {
+        // Errors handled in executeSession
+      });
     }
   }
 
@@ -644,270 +747,6 @@ export function createSessionManager(
     return `prompt_${timestamp}_${random}` as PromptId;
   }
 
-  /**
-   * Convert internal QueuedPrompt to QueuedPromptInfo for broadcast
-   */
-  function toPromptInfo(p: QueuedPrompt): QueuedPromptInfo {
-    return {
-      id: p.id,
-      message:
-        p.message.length > 200 ? p.message.slice(0, 200) + "..." : p.message,
-      status: p.status,
-      claude_session_id: p.resultClaudeSessionId,
-      current_activity: p.currentActivity,
-      error: p.error,
-      created_at: p.createdAt.toISOString(),
-      worktree_id: p.worktreeId,
-      qraft_ai_session_id: p.qraftAiSessionId,
-    };
-  }
-
-  /**
-   * Broadcast current prompt queue state via WebSocket
-   */
-  function broadcastQueueUpdate(): void {
-    if (broadcast === undefined) return;
-    const update: AIQueueUpdate = {
-      prompts: promptQueue.map(toPromptInfo),
-    };
-    broadcast("ai:queue_update", update);
-  }
-
-  /**
-   * Trim old completed/failed prompts from queue to prevent unbounded growth
-   */
-  function trimPromptHistory(): void {
-    while (promptQueue.length > MAX_PROMPT_HISTORY) {
-      const oldest = promptQueue[0];
-      if (
-        oldest !== undefined &&
-        (oldest.status === "completed" ||
-          oldest.status === "failed" ||
-          oldest.status === "cancelled")
-      ) {
-        promptQueue.shift();
-      } else {
-        break;
-      }
-    }
-  }
-
-  /**
-   * Resolve the resumeSessionId for the next prompt in queue.
-   *
-   * Priority:
-   * 0. Persistent SQLite lookup by qraft_ai_session_id (if mappingStore available)
-   * 1. If prompt has a qraft_ai_session_id, look for the most recently completed
-   *    prompt in the same group to inherit its resultClaudeSessionId
-   * 2. Otherwise, fall back to same-worktree lookup
-   * 3. If none found, start a new session (undefined)
-   */
-  function resolveResumeSessionId(
-    prompt: QueuedPrompt,
-  ): ClaudeSessionId | undefined {
-    // 0. Persistent SQLite lookup by qraft_ai_session_id
-    if (
-      mappingStore !== undefined &&
-      prompt.qraftAiSessionId !== undefined &&
-      prompt.qraftAiSessionId.length > 0
-    ) {
-      const stored = mappingStore.findClaudeSessionId(prompt.qraftAiSessionId);
-      if (stored !== undefined) {
-        logger.info("Resolved resume session via SQLite mapping", {
-          promptId: prompt.id,
-          qraftAiSessionId: prompt.qraftAiSessionId,
-          resumeSessionId: stored,
-        });
-        return stored;
-      }
-    }
-
-    // 1. Match by qraft_ai_session_id (client-generated group key)
-    if (
-      prompt.qraftAiSessionId !== undefined &&
-      prompt.qraftAiSessionId.length > 0
-    ) {
-      for (let i = promptQueue.length - 1; i >= 0; i--) {
-        const prev = promptQueue[i];
-        if (prev === undefined) continue;
-        if (prev.id === prompt.id) continue;
-        if (prev.qraftAiSessionId !== prompt.qraftAiSessionId) continue;
-        if (
-          prev.resultClaudeSessionId !== undefined &&
-          prev.resultClaudeSessionId.length > 0
-        ) {
-          logger.info("Resolved resume session via qraftAiSessionId group", {
-            promptId: prompt.id,
-            matchedPromptId: prev.id,
-            resumeSessionId: prev.resultClaudeSessionId,
-          });
-          return prev.resultClaudeSessionId;
-        }
-      }
-    }
-
-    // 2. Fall back to same-worktree lookup
-    for (let i = promptQueue.length - 1; i >= 0; i--) {
-      const prev = promptQueue[i];
-      if (prev === undefined) continue;
-      if (prev.id === prompt.id) continue;
-      if (prev.worktreeId !== prompt.worktreeId) continue;
-      if (
-        prev.resultClaudeSessionId !== undefined &&
-        prev.resultClaudeSessionId.length > 0
-      ) {
-        logger.info("Resolved resume session via worktreeId fallback", {
-          promptId: prompt.id,
-          matchedPromptId: prev.id,
-          resumeSessionId: prev.resultClaudeSessionId,
-        });
-        return prev.resultClaudeSessionId;
-      }
-    }
-
-    return undefined;
-  }
-
-  /**
-   * Dispatch the next queued prompt for execution.
-   * Called when the prompt queue has items and capacity is available.
-   */
-  function dispatchNextPrompt(): void {
-    const next = promptQueue.find((p) => p.status === "queued");
-    if (next === undefined) return;
-    if (runningCount >= config.maxConcurrent) return;
-
-    next.status = "running";
-    next.currentActivity = "Starting...";
-    broadcastQueueUpdate();
-
-    const resumeSessionId = resolveResumeSessionId(next);
-    logger.info("!!!!Dispatching prompt", {
-      promptId: next.id,
-      resumeSessionId: resumeSessionId ?? "NEW_SESSION",
-    });
-
-    // Use the existing submit() mechanism internally
-    const self = sessionManagerRef;
-    if (self === undefined) return;
-
-    void self
-      .submit({
-        prompt: next.message,
-        context: next.context,
-        options: {
-          projectPath: next.projectPath,
-          sessionMode: resumeSessionId !== undefined ? "continue" : "new",
-          immediate: true,
-          resumeSessionId,
-        },
-      })
-      .then((result) => {
-        next.internalSessionId = result.sessionId;
-        if (result.claudeSessionId !== undefined) {
-          next.resultClaudeSessionId = result.claudeSessionId;
-        }
-        broadcastQueueUpdate();
-
-        // Subscribe to session events to track prompt lifecycle
-        self.subscribe(result.sessionId, (event) => {
-          if (event.type === "completed") {
-            next.status = "completed";
-            next.currentActivity = undefined;
-            const completedSession = self.getSession(result.sessionId);
-            if (completedSession?.claudeSessionId !== undefined) {
-              next.resultClaudeSessionId = completedSession.claudeSessionId;
-            }
-            // Persist mapping to SQLite for cross-restart continuity
-            if (
-              mappingStore !== undefined &&
-              next.resultClaudeSessionId !== undefined &&
-              next.resultClaudeSessionId.length > 0
-            ) {
-              try {
-                mappingStore.upsert(
-                  next.resultClaudeSessionId,
-                  next.projectPath,
-                  next.worktreeId,
-                  "qraftbox",
-                );
-              } catch {
-                // Non-critical: SQLite write failure should not affect queue operation
-              }
-            }
-            trimPromptHistory();
-            broadcastQueueUpdate();
-            // Dispatch next prompt in queue
-            dispatchNextPrompt();
-          } else if (event.type === "error") {
-            next.status = "failed";
-            next.currentActivity = undefined;
-            const errorData = event.data as { message?: string };
-            next.error =
-              typeof errorData.message === "string"
-                ? errorData.message
-                : "Session failed";
-            broadcastQueueUpdate();
-            // Still try to dispatch next
-            dispatchNextPrompt();
-          } else if (event.type === "cancelled") {
-            next.status = "cancelled";
-            next.currentActivity = undefined;
-            broadcastQueueUpdate();
-            dispatchNextPrompt();
-          } else if (event.type === "tool_use") {
-            const toolData = event.data as { toolName?: string };
-            next.currentActivity =
-              typeof toolData.toolName === "string"
-                ? `Using ${toolData.toolName}...`
-                : "Using tool...";
-            broadcastQueueUpdate();
-          } else if (event.type === "message") {
-            next.currentActivity = undefined;
-            // Also pick up claude session ID from message events
-            const session = self.getSession(result.sessionId);
-            if (session?.claudeSessionId !== undefined) {
-              next.resultClaudeSessionId = session.claudeSessionId;
-            }
-            // Persist mapping to SQLite
-            if (
-              mappingStore !== undefined &&
-              next.resultClaudeSessionId !== undefined &&
-              next.resultClaudeSessionId.length > 0
-            ) {
-              try {
-                mappingStore.upsert(
-                  next.resultClaudeSessionId,
-                  next.projectPath,
-                  next.worktreeId,
-                  "qraftbox",
-                );
-              } catch {
-                // Non-critical
-              }
-            }
-            broadcastQueueUpdate();
-          } else if (
-            event.type === "thinking" ||
-            event.type === "session_started"
-          ) {
-            next.currentActivity = "Thinking...";
-            broadcastQueueUpdate();
-          }
-        });
-      })
-      .catch((err: unknown) => {
-        next.status = "failed";
-        next.currentActivity = undefined;
-        next.error = err instanceof Error ? err.message : "Dispatch failed";
-        broadcastQueueUpdate();
-        dispatchNextPrompt();
-      });
-  }
-
-  // Forward reference for self-calling submit from prompt queue
-  let sessionManagerRef: SessionManager | undefined;
-
   const manager: SessionManager = {
     async submit(request: AIPromptRequest): Promise<AISessionSubmitResult> {
       if (!config.enabled) {
@@ -917,25 +756,33 @@ export function createSessionManager(
       const sessionId = generateSessionId();
       const fullPrompt = buildPromptWithContext(request);
 
-      const session: InternalSession = {
-        id: sessionId,
-        state: "queued",
-        prompt: request.prompt,
-        fullPrompt,
-        request,
-        createdAt: new Date(),
-        currentActivity: undefined,
-        listeners: new Set(),
-        registeredClaudeSessionIds: new Set(),
-        ...(request.options.resumeSessionId !== undefined
-          ? { currentClaudeSessionId: request.options.resumeSessionId }
-          : {}),
-      };
-
-      sessions.set(sessionId, session);
-
       // Immediate execution or queue
-      if (request.options.immediate && runningCount < config.maxConcurrent) {
+      if (
+        request.options.immediate &&
+        store.countByState("running") < config.maxConcurrent
+      ) {
+        // Create session in store
+        const sessionRow: AiSessionRow = {
+          id: sessionId,
+          state: "queued" as const,
+          projectPath: request.options.projectPath,
+          createdAt: new Date().toISOString(),
+          currentActivity: undefined,
+          currentClaudeSessionId: request.options.resumeSessionId,
+        };
+
+        store.insert(sessionRow);
+
+        // Create runtime handle
+        const handle: RuntimeSessionHandle = {
+          listeners: new Set(),
+          registeredClaudeSessionIds: new Set(),
+          prompt: request.prompt,
+          fullPrompt,
+          context: request.context,
+        };
+        runtimeHandles.set(sessionId, handle);
+
         // Start immediately
         executeSession(sessionId).catch(() => {
           // Errors handled in executeSession
@@ -944,34 +791,57 @@ export function createSessionManager(
         return {
           sessionId,
           immediate: true,
-          claudeSessionId: session.currentClaudeSessionId,
+          claudeSessionId: sessionRow.currentClaudeSessionId,
         };
       } else {
-        // Add to queue
-        if (queue.length >= config.maxQueueSize) {
-          sessions.delete(sessionId);
+        // Check queue size BEFORE inserting
+        if (store.countByState("queued") >= config.maxQueueSize) {
           throw new Error(
             `Queue is full (max ${config.maxQueueSize} sessions)`,
           );
         }
 
-        queue.push(sessionId);
-        const queuePosition = queue.indexOf(sessionId) + 1;
+        // Create session in store
+        const sessionRow: AiSessionRow = {
+          id: sessionId,
+          state: "queued" as const,
+          projectPath: request.options.projectPath,
+          createdAt: new Date().toISOString(),
+          currentActivity: undefined,
+          currentClaudeSessionId: request.options.resumeSessionId,
+        };
+
+        store.insert(sessionRow);
+
+        // Create runtime handle
+        const handle: RuntimeSessionHandle = {
+          listeners: new Set(),
+          registeredClaudeSessionIds: new Set(),
+          prompt: request.prompt,
+          fullPrompt,
+          context: request.context,
+        };
+        runtimeHandles.set(sessionId, handle);
+
+        // Calculate queue position (1-based)
+        const queuedSessions = store.listByState("queued");
+        const queuePosition =
+          queuedSessions.findIndex((s) => s.id === sessionId) + 1;
 
         // Try to process queue in case there's capacity
         processQueue();
 
         return {
           sessionId,
-          queuePosition,
+          queuePosition: queuePosition > 0 ? queuePosition : undefined,
           immediate: false,
-          claudeSessionId: session.currentClaudeSessionId,
+          claudeSessionId: sessionRow.currentClaudeSessionId,
         };
       }
     },
 
     async cancel(sessionId: QraftAiSessionId): Promise<void> {
-      const session = sessions.get(sessionId);
+      const session = store.get(sessionId);
       if (session === undefined) {
         throw new Error(`Session not found: ${sessionId}`);
       }
@@ -984,24 +854,19 @@ export function createSessionManager(
         return; // Already done
       }
 
-      // Remove from queue if queued
-      const queueIndex = queue.indexOf(sessionId);
-      if (queueIndex !== -1) {
-        queue.splice(queueIndex, 1);
-      }
-
       // Mark cancelled first so UI and executor loop observe terminal state quickly.
-      session.state = "cancelled";
-      session.completedAt = new Date();
-      session.currentActivity = undefined;
+      const completedAt = new Date().toISOString();
+      store.updateState(sessionId, "cancelled", { completedAt });
+      store.updateActivity(sessionId, undefined);
       emitEvent(sessionId, createProgressEvent("cancelled", sessionId));
 
       // Cancel ToolAgentSession if available
-      if (session.toolAgentSession !== undefined) {
+      const handle = runtimeHandles.get(sessionId);
+      if (handle?.toolAgentSession !== undefined) {
         let cancelTimedOut = false;
         try {
           await Promise.race([
-            session.toolAgentSession.cancel(),
+            handle.toolAgentSession.cancel(),
             delay(SESSION_CANCEL_TIMEOUT_MS).then(() => {
               cancelTimedOut = true;
             }),
@@ -1013,76 +878,96 @@ export function createSessionManager(
         // Force-abort if graceful cancel did not complete in time
         if (cancelTimedOut) {
           try {
-            await session.toolAgentSession.abort();
+            await handle.toolAgentSession.abort();
           } catch {
             // Keep cancellation idempotent and continue local cleanup
           }
         }
       }
+
+      // Clean up runtime handle
+      runtimeHandles.delete(sessionId);
     },
 
     getQueueStatus(): QueueStatus {
-      const runningSessionIds: QraftAiSessionId[] = [];
-      for (const session of sessions.values()) {
-        if (session.state === "running") {
-          runningSessionIds.push(session.id);
-        }
-      }
+      const running = store.listByState("running");
+      const queuedCount = store.countByState("queued");
 
       return {
-        runningCount,
-        queuedCount: queue.length,
-        runningSessionIds,
-        totalCount: runningCount + queue.length,
+        runningCount: running.length,
+        queuedCount,
+        runningSessionIds: running.map((s) => s.id),
+        totalCount: running.length + queuedCount,
       };
     },
 
     getSession(sessionId: QraftAiSessionId): AISessionInfo | null {
-      const session = sessions.get(sessionId);
+      const session = store.get(sessionId);
       if (session === undefined) {
         return null;
       }
-      return toSessionInfo(session);
+      const handle = runtimeHandles.get(sessionId);
+      const info = toSessionInfo(session);
+      // Merge runtime content if handle exists
+      if (handle !== undefined) {
+        return {
+          ...info,
+          prompt: handle.prompt,
+          context: handle.context,
+          lastAssistantMessage: handle.lastAssistantMessage,
+        };
+      }
+      return info;
     },
 
     listSessions(): readonly AISessionInfo[] {
-      return Array.from(sessions.values()).map(toSessionInfo);
+      return store.list().map((row) => {
+        const info = toSessionInfo(row);
+        const handle = runtimeHandles.get(row.id);
+        if (handle !== undefined) {
+          return {
+            ...info,
+            prompt: handle.prompt,
+            context: handle.context,
+            lastAssistantMessage: handle.lastAssistantMessage,
+          };
+        }
+        return info;
+      });
     },
 
     subscribe(
       sessionId: QraftAiSessionId,
       listener: (event: AIProgressEvent) => void,
     ): () => void {
-      const session = sessions.get(sessionId);
-      if (session === undefined) {
-        // Return no-op unsubscribe
-        return () => {};
+      // Get runtime handle for this session
+      const handle = runtimeHandles.get(sessionId);
+      if (handle !== undefined) {
+        handle.listeners.add(listener);
       }
-
-      session.listeners.add(listener);
 
       // Return unsubscribe function
       return () => {
-        session.listeners.delete(listener);
+        const h = runtimeHandles.get(sessionId);
+        if (h !== undefined) {
+          h.listeners.delete(listener);
+        }
       };
     },
 
     cleanup(): void {
-      const now = Date.now();
-      const maxAge = config.sessionTimeoutMs;
+      const deletedCount = store.cleanup(config.sessionTimeoutMs);
 
-      for (const [id, session] of sessions.entries()) {
-        // Remove completed/failed/cancelled sessions older than maxAge
-        if (
-          session.state === "completed" ||
-          session.state === "failed" ||
-          session.state === "cancelled"
-        ) {
-          const age = now - session.createdAt.getTime();
-          if (age > maxAge) {
-            sessions.delete(id);
-          }
+      // Also clean up any stale runtime handles
+      for (const [id, _handle] of runtimeHandles.entries()) {
+        const session = store.get(id);
+        if (session === undefined) {
+          runtimeHandles.delete(id);
         }
+      }
+
+      if (deletedCount > 0) {
+        logger.info("Cleanup completed", { deletedCount });
       }
     },
 
@@ -1095,76 +980,94 @@ export function createSessionManager(
       }
 
       const promptId = generatePromptId();
+      const sessionId = generateSessionId();
       const projectPath = msg.project_path ?? "";
       const worktreeId =
         typeof msg.worktree_id === "string" && msg.worktree_id.length > 0
           ? (msg.worktree_id as WorktreeId)
           : generateWorktreeId(projectPath);
 
-      const qraftAiSessionId: QraftAiSessionId | undefined =
+      const clientSessionId: QraftAiSessionId | undefined =
         typeof msg.qraft_ai_session_id === "string" &&
         msg.qraft_ai_session_id.length > 0
           ? (msg.qraft_ai_session_id as QraftAiSessionId)
           : undefined;
 
-      const prompt: QueuedPrompt = {
-        id: promptId,
-        message: msg.message,
-        context: msg.context ?? { references: [] },
+      const messageForDisplay =
+        msg.message.length > 200
+          ? msg.message.slice(0, 200) + "..."
+          : msg.message;
+
+      const promptContext: AIPromptContext = msg.context ?? { references: [] };
+
+      // Create session row in store with prompt queue fields
+      const sessionRow: AiSessionRow = {
+        id: sessionId,
+        state: "queued" as const,
         projectPath,
+        createdAt: new Date().toISOString(),
+        promptId,
         worktreeId,
-        qraftAiSessionId,
-        status: "queued",
-        resultClaudeSessionId: undefined,
-        currentActivity: undefined,
-        error: undefined,
-        createdAt: new Date(),
-        internalSessionId: undefined,
+        message: messageForDisplay,
+        clientSessionId,
       };
 
-      promptQueue.push(prompt);
+      store.insert(sessionRow);
+
+      // Create runtime handle for content that stays in memory
+      const handle: RuntimeSessionHandle = {
+        listeners: new Set(),
+        registeredClaudeSessionIds: new Set(),
+        prompt: msg.message,
+        fullPrompt: buildPromptWithContext({
+          prompt: msg.message,
+          context: promptContext,
+          options: {
+            projectPath,
+            sessionMode: "new",
+            immediate: true,
+          },
+        }),
+        context: promptContext,
+      };
+      runtimeHandles.set(sessionId, handle);
+
       logger.info("Prompt queued", {
         promptId,
-        qraftAiSessionId,
-        queueLength: promptQueue.filter((p) => p.status === "queued").length,
+        sessionId,
+        clientSessionId,
+        worktreeId,
       });
 
       broadcastQueueUpdate();
 
       // Try to dispatch immediately if capacity available
-      dispatchNextPrompt();
+      processQueue();
 
       return { promptId, worktreeId };
     },
 
     getPromptQueue(worktreeId?: WorktreeId): readonly QueuedPromptInfo[] {
-      const source =
-        worktreeId !== undefined
-          ? promptQueue.filter((p) => p.worktreeId === worktreeId)
-          : promptQueue;
-      return source.map(toPromptInfo);
+      const rows = store.listPromptQueue(worktreeId);
+      return rows.map(toPromptInfoFromRow);
     },
 
     cancelPrompt(promptId: PromptId): void {
-      const prompt = promptQueue.find((p) => p.id === promptId);
-      if (prompt === undefined) {
+      const session = store.findByPromptId(promptId);
+      if (session === undefined) {
         throw new Error(`Prompt not found: ${promptId}`);
       }
 
-      if (prompt.status === "queued") {
-        prompt.status = "cancelled";
-        prompt.currentActivity = undefined;
+      if (session.state === "queued") {
+        const completedAt = new Date().toISOString();
+        store.updateState(session.id, "cancelled", { completedAt });
+        runtimeHandles.delete(session.id);
         broadcastQueueUpdate();
-      } else if (
-        prompt.status === "running" &&
-        prompt.internalSessionId !== undefined
-      ) {
+      } else if (session.state === "running") {
         // Cancel the running session
-        void manager.cancel(prompt.internalSessionId).catch(() => {
+        void manager.cancel(session.id).catch(() => {
           // Best effort
         });
-        prompt.status = "cancelled";
-        prompt.currentActivity = undefined;
         broadcastQueueUpdate();
       }
     },
@@ -1173,9 +1076,6 @@ export function createSessionManager(
       return mappingStore;
     },
   };
-
-  // Set forward reference so dispatchNextPrompt can call submit()
-  sessionManagerRef = manager;
 
   return manager;
 }

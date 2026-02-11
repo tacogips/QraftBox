@@ -94,7 +94,7 @@ export interface SessionMappingStore {
  * Default database path
  */
 export function defaultSessionMappingDbPath(): string {
-  return join(homedir(), ".qraftbox", "session-mappings.db");
+  return join(homedir(), ".local", "QraftBox", "session-mappings.db");
 }
 
 /**
@@ -360,7 +360,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
 /**
  * Create a session mapping store with the specified database path.
  *
- * @param dbPath - Path to the SQLite database file (defaults to ~/.qraftbox/session-mappings.db)
+ * @param dbPath - Path to the SQLite database file (defaults to ~/.local/QraftBox/session-mappings.db)
  * @param claudeProjectsDir - Path to Claude projects directory (defaults to ~/.claude/projects)
  * @returns SessionMappingStore instance
  */
