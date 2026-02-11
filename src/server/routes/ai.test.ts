@@ -28,6 +28,7 @@ describe("AI Routes", () => {
       })),
       getPromptQueue: vi.fn(() => []),
       cancelPrompt: vi.fn(),
+      registerResumeMapping: vi.fn(() => "qs_test123" as import("../../types/ai").QraftAiSessionId),
     };
 
     app = createAIRoutes({
@@ -163,7 +164,7 @@ describe("AI Routes", () => {
       );
     });
 
-    test("passes session_id and project_path correctly", async () => {
+    test("passes project_path and run_immediately correctly", async () => {
       const submitPromptMock = sessionManager.submitPrompt as Mock;
 
       await app.request("/submit", {
@@ -171,7 +172,6 @@ describe("AI Routes", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: "Test message",
-          session_id: "my-session",
           run_immediately: false,
           project_path: "/custom/path",
         }),
@@ -179,7 +179,6 @@ describe("AI Routes", () => {
 
       expect(submitPromptMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          session_id: "my-session",
           project_path: "/custom/path",
           message: "Test message",
           run_immediately: false,

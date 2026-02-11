@@ -26,7 +26,8 @@
     onDelete: (id: string) => void;
   }
 
-  const { prompts, onResume, onCancel, onCancelAll, onDelete }: Props = $props();
+  const { prompts, onResume, onCancel, onCancelAll, onDelete }: Props =
+    $props();
 
   const isEmpty = $derived(prompts.length === 0);
 
@@ -114,7 +115,9 @@
 
           <!-- Recovered badge -->
           {#if prompt.error !== null}
-            <span class="shrink-0 text-[10px] font-medium text-attention-fg">(recovered)</span>
+            <span class="shrink-0 text-[10px] font-medium text-attention-fg"
+              >(recovered)</span
+            >
           {/if}
 
           <!-- Prompt text (single line, truncated) -->
@@ -130,7 +133,10 @@
           <!-- Action buttons -->
           <button
             type="button"
-            onclick={(e: MouseEvent) => { e.stopPropagation(); onResume(prompt.id); }}
+            onclick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onResume(prompt.id);
+            }}
             class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
                    bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
                    border border-accent-emphasis/30 hover:border-accent-emphasis/60
@@ -141,7 +147,10 @@
           </button>
           <button
             type="button"
-            onclick={(e: MouseEvent) => { e.stopPropagation(); onCancel(prompt.id); }}
+            onclick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onCancel(prompt.id);
+            }}
             class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
                    bg-attention-muted/60 hover:bg-attention-muted text-attention-fg
                    border border-attention-emphasis/30 hover:border-attention-emphasis/60
@@ -152,16 +161,33 @@
           </button>
           <button
             type="button"
-            onclick={(e: MouseEvent) => { e.stopPropagation(); onDelete(prompt.id); }}
+            onclick={(e: MouseEvent) => {
+              e.stopPropagation();
+              onDelete(prompt.id);
+            }}
             class="shrink-0 px-1.5 py-0.5 text-[10px] rounded
                    text-text-tertiary hover:text-danger-fg hover:bg-danger-emphasis/20
                    transition-colors"
             title="Delete this prompt"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-              aria-hidden="true">
-              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="18" y1="6" x2="6" y2="18" /><line
+                x1="6"
+                y1="6"
+                x2="18"
+                y2="18"
+              />
             </svg>
           </button>
         </div>

@@ -21,7 +21,13 @@
     isGitRepo?: boolean;
   }
 
-  const { contextId, projectPath, hasChanges = true, onSuccess, isGitRepo = true }: Props = $props();
+  const {
+    contextId,
+    projectPath,
+    hasChanges = true,
+    onSuccess,
+    isGitRepo = true,
+  }: Props = $props();
 
   // Menu state
   let menuOpen = $state(false);
@@ -375,7 +381,9 @@
       }
       const result = (await resp.json()) as GitActionResult;
       if (!result.success) {
-        throw new Error(result.error ?? `${isUpdate ? "Update PR" : "Create PR"} failed`);
+        throw new Error(
+          result.error ?? `${isUpdate ? "Update PR" : "Create PR"} failed`,
+        );
       }
 
       // Try to extract PR URL from output, fallback to fetching status
@@ -693,7 +701,8 @@
           type="button"
           class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
           onclick={() => void handlePRDropdownAction()}
-          disabled={operating || (prNumber === null && selectedCreateBaseBranch === "")}
+          disabled={operating ||
+            (prNumber === null && selectedCreateBaseBranch === "")}
         >
           {operating && operationPhase === "creating-pr"
             ? "AI generating..."
@@ -721,7 +730,6 @@
         <span class="text-xs text-text-tertiary ml-1">(no PR)</span>
       {/if}
     </button>
-
   </div>
 {/if}
 

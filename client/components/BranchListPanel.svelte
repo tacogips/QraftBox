@@ -555,14 +555,21 @@
                 onFetchBranch?.();
               }}
               onkeydown={(e) => {
-                if (e.key === "Enter") { e.stopPropagation(); onFetchBranch?.(); }
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  onFetchBranch?.();
+                }
               }}
               title="Fetch from remote"
             >
               <!-- Download/fetch arrow icon -->
               <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                <path d="M8 2a.75.75 0 01.75.75v7.19l2.72-2.72a.75.75 0 111.06 1.06l-4 4a.75.75 0 01-1.06 0l-4-4a.75.75 0 111.06-1.06l2.72 2.72V2.75A.75.75 0 018 2z" />
-                <path d="M2.75 13.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75z" />
+                <path
+                  d="M8 2a.75.75 0 01.75.75v7.19l2.72-2.72a.75.75 0 111.06 1.06l-4 4a.75.75 0 01-1.06 0l-4-4a.75.75 0 111.06-1.06l2.72 2.72V2.75A.75.75 0 018 2z"
+                />
+                <path
+                  d="M2.75 13.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75z"
+                />
               </svg>
             </span>
           {/if}
@@ -581,13 +588,19 @@
                 onMergeBranch?.(branch);
               }}
               onkeydown={(e) => {
-                if (e.key === "Enter") { e.stopPropagation(); onMergeBranch?.(branch); }
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  onMergeBranch?.(branch);
+                }
               }}
               title="Merge into {currentBranch}"
             >
               <!-- Git merge icon -->
               <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
-                <path fill-rule="evenodd" d="M5 3.254V3.25v.005a.75.75 0 110-.005v.004zm.45 1.9a2.25 2.25 0 10-1.95.218v5.256a2.25 2.25 0 101.5 0V7.123A5.735 5.735 0 009.25 9h1.378a2.251 2.251 0 100-1.5H9.25a4.25 4.25 0 01-3.8-2.346zM12.75 9a.75.75 0 100-1.5.75.75 0 000 1.5zm-8.5 4.5a.75.75 0 100-1.5.75.75 0 000 1.5z" />
+                <path
+                  fill-rule="evenodd"
+                  d="M5 3.254V3.25v.005a.75.75 0 110-.005v.004zm.45 1.9a2.25 2.25 0 10-1.95.218v5.256a2.25 2.25 0 101.5 0V7.123A5.735 5.735 0 009.25 9h1.378a2.251 2.251 0 100-1.5H9.25a4.25 4.25 0 01-3.8-2.346zM12.75 9a.75.75 0 100-1.5.75.75 0 000 1.5zm-8.5 4.5a.75.75 0 100-1.5.75.75 0 000 1.5z"
+                />
               </svg>
             </span>
           {/if}

@@ -85,7 +85,6 @@
    * Whether working tree has uncommitted changes
    */
 
-
   /**
    * PR number and URL (only if PR exists and is open)
    */
@@ -185,10 +184,7 @@
 <div class="flex items-center gap-3 text-sm">
   <!-- Branch selector (clickable) -->
   {#if branchName.length > 0}
-    <BranchSelector
-      {contextId}
-      currentBranch={branchName}
-    />
+    <BranchSelector {contextId} currentBranch={branchName} />
   {/if}
 
   <!-- Worktree indicator (right of branch) -->

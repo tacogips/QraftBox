@@ -76,7 +76,9 @@
   aria-selected={selected}
 >
   <!-- Commit Hash and Date -->
-  <div class="commit-header flex items-center gap-2 text-xs text-text-secondary">
+  <div
+    class="commit-header flex items-center gap-2 text-xs text-text-secondary"
+  >
     <span class="commit-hash font-mono">{commit.shortHash}</span>
     <span class="commit-date">{formatDate(commit.date)}</span>
   </div>

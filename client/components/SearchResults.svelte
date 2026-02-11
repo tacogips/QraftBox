@@ -1,120 +1,120 @@
 <script lang="ts">
-/**
- * SearchResults Component
- *
- * Displays a list of search results with navigation support.
- *
- * Props:
- * - results: Array of search results to display
- * - currentIndex: Index of currently selected result
- * - loading: Whether search is in progress
- * - truncated: Whether results were truncated
- * - totalMatches: Total number of matches (may differ from results.length)
- * - onSelect: Callback when a result is selected
- * - onClose: Callback when panel is closed
- *
- * Design:
- * - Virtual scrolling for performance with many results
- * - Highlight current selection
- * - Click to navigate to result
- * - Touch-friendly with 44px minimum tap targets
- */
+  /**
+   * SearchResults Component
+   *
+   * Displays a list of search results with navigation support.
+   *
+   * Props:
+   * - results: Array of search results to display
+   * - currentIndex: Index of currently selected result
+   * - loading: Whether search is in progress
+   * - truncated: Whether results were truncated
+   * - totalMatches: Total number of matches (may differ from results.length)
+   * - onSelect: Callback when a result is selected
+   * - onClose: Callback when panel is closed
+   *
+   * Design:
+   * - Virtual scrolling for performance with many results
+   * - Highlight current selection
+   * - Click to navigate to result
+   * - Touch-friendly with 44px minimum tap targets
+   */
 
-import type { SearchResult } from "../../src/types/search";
-import SearchHighlight from "./SearchHighlight.svelte";
+  import type { SearchResult } from "../../src/types/search";
+  import SearchHighlight from "./SearchHighlight.svelte";
 
-interface Props {
-  results: readonly SearchResult[];
-  currentIndex: number;
-  loading?: boolean;
-  truncated?: boolean;
-  totalMatches?: number;
-  onSelect: (index: number) => void;
-  onClose: () => void;
-}
-
-// Svelte 5 props syntax
-const {
-  results,
-  currentIndex,
-  loading = false,
-  truncated = false,
-  totalMatches = 0,
-  onSelect,
-  onClose,
-}: Props = $props();
-
-/**
- * Get file name from path
- */
-function getFileName(filePath: string): string {
-  const parts = filePath.split("/");
-  return parts[parts.length - 1] ?? filePath;
-}
-
-/**
- * Get directory path from file path
- */
-function getDirectoryPath(filePath: string): string {
-  const parts = filePath.split("/");
-  if (parts.length <= 1) {
-    return "";
+  interface Props {
+    results: readonly SearchResult[];
+    currentIndex: number;
+    loading?: boolean;
+    truncated?: boolean;
+    totalMatches?: number;
+    onSelect: (index: number) => void;
+    onClose: () => void;
   }
-  return parts.slice(0, -1).join("/");
-}
 
-/**
- * Handle result click
- */
-function handleResultClick(index: number): void {
-  onSelect(index);
-}
+  // Svelte 5 props syntax
+  const {
+    results,
+    currentIndex,
+    loading = false,
+    truncated = false,
+    totalMatches = 0,
+    onSelect,
+    onClose,
+  }: Props = $props();
 
-/**
- * Handle keyboard navigation in results
- */
-function handleKeydown(event: KeyboardEvent, index: number): void {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
+  /**
+   * Get file name from path
+   */
+  function getFileName(filePath: string): string {
+    const parts = filePath.split("/");
+    return parts[parts.length - 1] ?? filePath;
+  }
+
+  /**
+   * Get directory path from file path
+   */
+  function getDirectoryPath(filePath: string): string {
+    const parts = filePath.split("/");
+    if (parts.length <= 1) {
+      return "";
+    }
+    return parts.slice(0, -1).join("/");
+  }
+
+  /**
+   * Handle result click
+   */
+  function handleResultClick(index: number): void {
     onSelect(index);
   }
-}
 
-/**
- * Scroll current result into view
- */
-function scrollCurrentIntoView(element: HTMLElement): void {
-  if (currentIndex >= 0 && results.length > 0) {
-    // Find the selected item and scroll it into view
-    const selectedItem = element.querySelector('[data-selected="true"]');
-    if (selectedItem !== null) {
-      selectedItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  /**
+   * Handle keyboard navigation in results
+   */
+  function handleKeydown(event: KeyboardEvent, index: number): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onSelect(index);
     }
   }
-}
 
-/**
- * Group results by file for better organization
- */
-const groupedResults = $derived.by(() => {
-  const groups: Map<string, { results: SearchResult[]; indices: number[] }> =
-    new Map();
-
-  results.forEach((result, index) => {
-    const existing = groups.get(result.filePath);
-    if (existing !== undefined) {
-      existing.results.push(result);
-      existing.indices.push(index);
-    } else {
-      groups.set(result.filePath, {
-        results: [result],
-        indices: [index],
-      });
+  /**
+   * Scroll current result into view
+   */
+  function scrollCurrentIntoView(element: HTMLElement): void {
+    if (currentIndex >= 0 && results.length > 0) {
+      // Find the selected item and scroll it into view
+      const selectedItem = element.querySelector('[data-selected="true"]');
+      if (selectedItem !== null) {
+        selectedItem.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     }
-  });
+  }
 
-  return groups;
-});
+  /**
+   * Group results by file for better organization
+   */
+  const groupedResults = $derived.by(() => {
+    const groups: Map<string, { results: SearchResult[]; indices: number[] }> =
+      new Map();
+
+    results.forEach((result, index) => {
+      const existing = groups.get(result.filePath);
+      if (existing !== undefined) {
+        existing.results.push(result);
+        existing.indices.push(index);
+      } else {
+        groups.set(result.filePath, {
+          results: [result],
+          indices: [index],
+        });
+      }
+    });
+
+    return groups;
+  });
 </script>
 
 <div
@@ -172,7 +172,11 @@ const groupedResults = $derived.by(() => {
   </div>
 
   <!-- Results List -->
-  <div class="flex-1 overflow-y-auto" role="listbox" aria-label="Search results">
+  <div
+    class="flex-1 overflow-y-auto"
+    role="listbox"
+    aria-label="Search results"
+  >
     {#if loading}
       <div class="flex items-center justify-center p-8 text-text-tertiary">
         <svg
@@ -199,7 +203,9 @@ const groupedResults = $derived.by(() => {
         Searching...
       </div>
     {:else if results.length === 0}
-      <div class="flex flex-col items-center justify-center p-8 text-text-tertiary">
+      <div
+        class="flex flex-col items-center justify-center p-8 text-text-tertiary"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="48"
@@ -238,7 +244,9 @@ const groupedResults = $derived.by(() => {
               class="text-text-tertiary flex-shrink-0"
               aria-hidden="true"
             >
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+              />
               <polyline points="14 2 14 8 20 8" />
             </svg>
             <div class="flex flex-col min-w-0">
@@ -333,22 +341,22 @@ const groupedResults = $derived.by(() => {
 </div>
 
 <style>
-/* Custom scrollbar for results */
-.search-results :global(::-webkit-scrollbar) {
-  width: 8px;
-}
+  /* Custom scrollbar for results */
+  .search-results :global(::-webkit-scrollbar) {
+    width: 8px;
+  }
 
-.search-results :global(::-webkit-scrollbar-track) {
-  background: transparent;
-}
+  .search-results :global(::-webkit-scrollbar-track) {
+    background: transparent;
+  }
 
-.search-results :global(::-webkit-scrollbar-thumb) {
-  background-color: var(--color-border-default, #374151);
-  border-radius: 4px;
-}
+  .search-results :global(::-webkit-scrollbar-thumb) {
+    background-color: var(--color-border-default, #374151);
+    border-radius: 4px;
+  }
 
-/* Smooth animation for current selection */
-[data-selected="true"] {
-  transition: background-color 0.15s ease;
-}
+  /* Smooth animation for current selection */
+  [data-selected="true"] {
+    transition: background-color 0.15s ease;
+  }
 </style>

@@ -220,9 +220,7 @@
       >
         Current Project
       </h2>
-      <div
-        class="p-4 rounded-lg border border-border-default bg-bg-secondary"
-      >
+      <div class="p-4 rounded-lg border border-border-default bg-bg-secondary">
         <div class="flex items-center gap-3">
           <!-- Folder icon -->
           <div class="shrink-0">
@@ -325,7 +323,8 @@
                 <button
                   type="button"
                   onclick={() => {
-                    if (browserParentPath !== null) void browseTo(browserParentPath);
+                    if (browserParentPath !== null)
+                      void browseTo(browserParentPath);
                   }}
                   class="px-2 py-1 rounded text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
                   title="Parent directory"
@@ -397,56 +396,54 @@
                   />
                 </svg>
               </div>
+            {:else if visibleEntries.length === 0}
+              <div class="text-center py-8 text-text-tertiary text-sm">
+                No subdirectories
+              </div>
             {:else}
-              {#if visibleEntries.length === 0}
-                <div class="text-center py-8 text-text-tertiary text-sm">
-                  No subdirectories
-                </div>
-              {:else}
-                {#each visibleEntries as entry (entry.path)}
-                  <button
-                    type="button"
-                    onclick={() => void browseTo(entry.path)}
-                    class="w-full text-left px-4 py-2 flex items-center gap-3
+              {#each visibleEntries as entry (entry.path)}
+                <button
+                  type="button"
+                  onclick={() => void browseTo(entry.path)}
+                  class="w-full text-left px-4 py-2 flex items-center gap-3
                            hover:bg-bg-tertiary transition-colors border-b border-border-default last:border-b-0"
+                >
+                  <!-- Folder icon -->
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    class={entry.isGitRepo
+                      ? "text-accent-fg"
+                      : "text-text-tertiary"}
                   >
-                    <!-- Folder icon -->
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 16 16"
-                      fill="currentColor"
-                      class={entry.isGitRepo
-                        ? "text-accent-fg"
-                        : "text-text-tertiary"}
-                    >
-                      <path
-                        d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
-                      />
-                    </svg>
+                    <path
+                      d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+                    />
+                  </svg>
+                  <span
+                    class="text-sm text-text-primary truncate"
+                    class:font-medium={entry.isGitRepo}
+                  >
+                    {entry.name}
+                  </span>
+                  {#if entry.isGitRepo}
                     <span
-                      class="text-sm text-text-primary truncate"
-                      class:font-medium={entry.isGitRepo}
+                      class="px-1.5 py-0.5 text-xs rounded bg-accent-subtle text-accent-fg shrink-0"
                     >
-                      {entry.name}
+                      git
                     </span>
-                    {#if entry.isGitRepo}
-                      <span
-                        class="px-1.5 py-0.5 text-xs rounded bg-accent-subtle text-accent-fg shrink-0"
-                      >
-                        git
-                      </span>
-                    {/if}
-                    {#if entry.isSymlink}
-                      <span
-                        class="px-1.5 py-0.5 text-xs rounded bg-bg-tertiary text-text-tertiary shrink-0"
-                      >
-                        link
-                      </span>
-                    {/if}
-                  </button>
-                {/each}
-              {/if}
+                  {/if}
+                  {#if entry.isSymlink}
+                    <span
+                      class="px-1.5 py-0.5 text-xs rounded bg-bg-tertiary text-text-tertiary shrink-0"
+                    >
+                      link
+                    </span>
+                  {/if}
+                </button>
+              {/each}
             {/if}
           </div>
 
@@ -455,7 +452,9 @@
             class="p-3 border-t border-border-default bg-bg-tertiary flex items-center gap-3"
           >
             <!-- Show hidden toggle -->
-            <label class="flex items-center gap-1.5 text-xs text-text-secondary">
+            <label
+              class="flex items-center gap-1.5 text-xs text-text-secondary"
+            >
               <input
                 type="checkbox"
                 bind:checked={showHidden}

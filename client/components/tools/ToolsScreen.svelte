@@ -1,148 +1,153 @@
 <script lang="ts">
-/**
- * ToolsScreen Component
- *
- * Screen for browsing and managing registered tools (builtin and plugin).
- *
- * Features:
- * - Lists all registered tools with type badges
- * - Expandable tool details with schema info
- * - Reload plugins button for hot-reloading from disk
- * - Loading, error, and empty states
- */
+  /**
+   * ToolsScreen Component
+   *
+   * Screen for browsing and managing registered tools (builtin and plugin).
+   *
+   * Features:
+   * - Lists all registered tools with type badges
+   * - Expandable tool details with schema info
+   * - Reload plugins button for hot-reloading from disk
+   * - Loading, error, and empty states
+   */
 
-interface RegisteredToolInfo {
-  readonly name: string;
-  readonly description: string;
-  readonly source: "builtin" | "plugin";
-  readonly pluginName?: string | undefined;
-  readonly inputSchema: {
-    readonly type: string;
-    readonly properties?: Record<string, { readonly type: string; readonly description?: string | undefined }> | undefined;
-    readonly required?: readonly string[] | undefined;
-    readonly description?: string | undefined;
-  };
-}
-
-interface ToolsListResponse {
-  readonly tools: readonly RegisteredToolInfo[];
-  readonly counts: {
-    readonly total: number;
-    readonly builtin: number;
-    readonly plugin: number;
-  };
-}
-
-interface ToolsReloadResponse {
-  readonly success: boolean;
-  readonly toolCount: number;
-  readonly errors: readonly {
-    readonly source: string;
-    readonly toolName?: string | undefined;
-    readonly message: string;
-  }[];
-}
-
-// No props
-
-/**
- * Component state
- */
-let tools = $state<RegisteredToolInfo[]>([]);
-let counts = $state<{ total: number; builtin: number; plugin: number }>({
-  total: 0,
-  builtin: 0,
-  plugin: 0,
-});
-let loading = $state(true);
-let error = $state<string | null>(null);
-let expandedTool = $state<string | null>(null);
-let reloading = $state(false);
-let reloadMessage = $state<string | null>(null);
-let reloadError = $state<string | null>(null);
-
-/**
- * Sort tools: builtin first, then plugin, alphabetically within each group
- */
-const sortedTools = $derived(
-  [...tools].sort((a, b) => {
-    if (a.source !== b.source) {
-      return a.source === "builtin" ? -1 : 1;
-    }
-    return a.name.localeCompare(b.name);
-  }),
-);
-
-/**
- * Fetch tools from the server
- */
-async function fetchTools(): Promise<void> {
-  try {
-    loading = true;
-    error = null;
-    const resp = await fetch("/api/tools");
-    if (!resp.ok) {
-      throw new Error(`Failed to fetch tools: ${resp.status}`);
-    }
-    const data = (await resp.json()) as ToolsListResponse;
-    tools = [...data.tools];
-    counts = { ...data.counts };
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load tools";
-    console.error("Failed to fetch tools:", e);
-  } finally {
-    loading = false;
+  interface RegisteredToolInfo {
+    readonly name: string;
+    readonly description: string;
+    readonly source: "builtin" | "plugin";
+    readonly pluginName?: string | undefined;
+    readonly inputSchema: {
+      readonly type: string;
+      readonly properties?:
+        | Record<
+            string,
+            { readonly type: string; readonly description?: string | undefined }
+          >
+        | undefined;
+      readonly required?: readonly string[] | undefined;
+      readonly description?: string | undefined;
+    };
   }
-}
 
-/**
- * Reload plugin tools from disk
- */
-async function handleReload(): Promise<void> {
-  try {
-    reloading = true;
-    reloadError = null;
-    reloadMessage = null;
-    const resp = await fetch("/api/tools/reload", { method: "POST" });
-    if (!resp.ok) {
-      throw new Error(`Reload failed: ${resp.status}`);
-    }
-    const data = (await resp.json()) as ToolsReloadResponse;
-    if (data.success) {
-      reloadMessage = `Plugins reloaded (${data.toolCount} tools)`;
-    } else {
-      const errorMessages = data.errors.map((e) => e.message).join("; ");
-      reloadError = `Reload completed with errors: ${errorMessages}`;
-    }
-    // Refresh the tool list after reload
-    await fetchTools();
-    // Clear success message after a delay
-    if (reloadMessage !== null) {
-      setTimeout(() => {
-        reloadMessage = null;
-      }, 3000);
-    }
-  } catch (e) {
-    reloadError = e instanceof Error ? e.message : "Failed to reload plugins";
-    console.error("Failed to reload plugins:", e);
-  } finally {
-    reloading = false;
+  interface ToolsListResponse {
+    readonly tools: readonly RegisteredToolInfo[];
+    readonly counts: {
+      readonly total: number;
+      readonly builtin: number;
+      readonly plugin: number;
+    };
   }
-}
 
-/**
- * Toggle tool detail expansion
- */
-function toggleExpand(toolName: string): void {
-  expandedTool = expandedTool === toolName ? null : toolName;
-}
+  interface ToolsReloadResponse {
+    readonly success: boolean;
+    readonly toolCount: number;
+    readonly errors: readonly {
+      readonly source: string;
+      readonly toolName?: string | undefined;
+      readonly message: string;
+    }[];
+  }
 
-/**
- * Load tools on mount
- */
-$effect(() => {
-  void fetchTools();
-});
+  // No props
+
+  /**
+   * Component state
+   */
+  let tools = $state<RegisteredToolInfo[]>([]);
+  let counts = $state<{ total: number; builtin: number; plugin: number }>({
+    total: 0,
+    builtin: 0,
+    plugin: 0,
+  });
+  let loading = $state(true);
+  let error = $state<string | null>(null);
+  let expandedTool = $state<string | null>(null);
+  let reloading = $state(false);
+  let reloadMessage = $state<string | null>(null);
+  let reloadError = $state<string | null>(null);
+
+  /**
+   * Sort tools: builtin first, then plugin, alphabetically within each group
+   */
+  const sortedTools = $derived(
+    [...tools].sort((a, b) => {
+      if (a.source !== b.source) {
+        return a.source === "builtin" ? -1 : 1;
+      }
+      return a.name.localeCompare(b.name);
+    }),
+  );
+
+  /**
+   * Fetch tools from the server
+   */
+  async function fetchTools(): Promise<void> {
+    try {
+      loading = true;
+      error = null;
+      const resp = await fetch("/api/tools");
+      if (!resp.ok) {
+        throw new Error(`Failed to fetch tools: ${resp.status}`);
+      }
+      const data = (await resp.json()) as ToolsListResponse;
+      tools = [...data.tools];
+      counts = { ...data.counts };
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Failed to load tools";
+      console.error("Failed to fetch tools:", e);
+    } finally {
+      loading = false;
+    }
+  }
+
+  /**
+   * Reload plugin tools from disk
+   */
+  async function handleReload(): Promise<void> {
+    try {
+      reloading = true;
+      reloadError = null;
+      reloadMessage = null;
+      const resp = await fetch("/api/tools/reload", { method: "POST" });
+      if (!resp.ok) {
+        throw new Error(`Reload failed: ${resp.status}`);
+      }
+      const data = (await resp.json()) as ToolsReloadResponse;
+      if (data.success) {
+        reloadMessage = `Plugins reloaded (${data.toolCount} tools)`;
+      } else {
+        const errorMessages = data.errors.map((e) => e.message).join("; ");
+        reloadError = `Reload completed with errors: ${errorMessages}`;
+      }
+      // Refresh the tool list after reload
+      await fetchTools();
+      // Clear success message after a delay
+      if (reloadMessage !== null) {
+        setTimeout(() => {
+          reloadMessage = null;
+        }, 3000);
+      }
+    } catch (e) {
+      reloadError = e instanceof Error ? e.message : "Failed to reload plugins";
+      console.error("Failed to reload plugins:", e);
+    } finally {
+      reloading = false;
+    }
+  }
+
+  /**
+   * Toggle tool detail expansion
+   */
+  function toggleExpand(toolName: string): void {
+    expandedTool = expandedTool === toolName ? null : toolName;
+  }
+
+  /**
+   * Load tools on mount
+   */
+  $effect(() => {
+    void fetchTools();
+  });
 </script>
 
 <div
@@ -152,7 +157,9 @@ $effect(() => {
 >
   <!-- Summary bar with reload button -->
   {#if !loading && error === null}
-    <div class="flex items-center justify-between px-4 py-2 border-b border-border-default bg-bg-secondary">
+    <div
+      class="flex items-center justify-between px-4 py-2 border-b border-border-default bg-bg-secondary"
+    >
       <div class="text-sm text-text-secondary">
         <span class="font-medium text-text-primary">{counts.total}</span>
         tool{counts.total !== 1 ? "s" : ""}
@@ -240,7 +247,9 @@ $effect(() => {
         <span class="flex-1">{reloadError}</span>
         <button
           type="button"
-          onclick={() => { reloadError = null; }}
+          onclick={() => {
+            reloadError = null;
+          }}
           class="p-1 rounded hover:bg-danger-subtle transition-colors shrink-0"
           aria-label="Dismiss error"
         >
@@ -345,7 +354,9 @@ $effect(() => {
           class="text-text-tertiary mb-4"
           aria-hidden="true"
         >
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+          <path
+            d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
+          />
         </svg>
         <p class="text-text-secondary mb-1">No tools registered</p>
         <p class="text-sm text-text-tertiary">
@@ -389,7 +400,9 @@ $effect(() => {
               </svg>
 
               <!-- Tool name -->
-              <span class="font-mono text-sm text-text-primary">{tool.name}</span>
+              <span class="font-mono text-sm text-text-primary"
+                >{tool.name}</span
+              >
 
               <!-- Type badge -->
               {#if tool.source === "builtin"}
@@ -418,27 +431,37 @@ $effect(() => {
 
             <!-- Expanded details -->
             {#if expandedTool === tool.name}
-              <div class="px-4 pb-4 pt-0 border-t border-border-default mx-4 mt-0">
+              <div
+                class="px-4 pb-4 pt-0 border-t border-border-default mx-4 mt-0"
+              >
                 <div class="pt-3 space-y-3">
                   <!-- Full description -->
                   {#if tool.description}
                     <div>
-                      <h3 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                      <h3
+                        class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1"
+                      >
                         Description
                       </h3>
-                      <p class="text-sm text-text-secondary">{tool.description}</p>
+                      <p class="text-sm text-text-secondary">
+                        {tool.description}
+                      </p>
                     </div>
                   {/if}
 
                   <!-- Source info -->
                   <div>
-                    <h3 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                    <h3
+                      class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1"
+                    >
                       Source
                     </h3>
                     <p class="text-sm text-text-secondary">
                       {tool.source}
                       {#if tool.pluginName !== undefined}
-                        <span class="text-text-tertiary">({tool.pluginName})</span>
+                        <span class="text-text-tertiary"
+                          >({tool.pluginName})</span
+                        >
                       {/if}
                     </p>
                   </div>
@@ -446,19 +469,29 @@ $effect(() => {
                   <!-- Input schema -->
                   {#if tool.inputSchema?.properties !== undefined}
                     <div>
-                      <h3 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1">
+                      <h3
+                        class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-1"
+                      >
                         Parameters
                       </h3>
                       <div class="space-y-1">
                         {#each Object.entries(tool.inputSchema.properties) as [paramName, paramSchema]}
                           <div class="flex items-start gap-2 text-sm">
-                            <span class="font-mono text-text-primary shrink-0">{paramName}</span>
-                            <span class="text-text-tertiary">({paramSchema.type})</span>
+                            <span class="font-mono text-text-primary shrink-0"
+                              >{paramName}</span
+                            >
+                            <span class="text-text-tertiary"
+                              >({paramSchema.type})</span
+                            >
                             {#if tool.inputSchema.required?.includes(paramName)}
-                              <span class="text-xs text-danger-fg">required</span>
+                              <span class="text-xs text-danger-fg"
+                                >required</span
+                              >
                             {/if}
                             {#if paramSchema.description !== undefined}
-                              <span class="text-text-secondary">- {paramSchema.description}</span>
+                              <span class="text-text-secondary"
+                                >- {paramSchema.description}</span
+                              >
                             {/if}
                           </div>
                         {/each}

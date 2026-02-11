@@ -1,122 +1,122 @@
 <script lang="ts">
-import type { SyncStatus } from "../src/stores/comments";
+  import type { SyncStatus } from "../src/stores/comments";
 
-/**
- * SyncStatusBar Component
- *
- * Displays git-xnotes sync status and provides push/pull controls.
- *
- * Props:
- * - status: Current SyncStatus from the comments store
- * - loading: Whether a sync operation is in progress
- * - onPush: Callback to push local notes to remote
- * - onPull: Callback to pull remote notes to local
- *
- * Design:
- * - Compact status bar that can be placed in header or footer
- * - Clear visual indication of sync state
- * - Touch-friendly push/pull buttons
- */
+  /**
+   * SyncStatusBar Component
+   *
+   * Displays git-xnotes sync status and provides push/pull controls.
+   *
+   * Props:
+   * - status: Current SyncStatus from the comments store
+   * - loading: Whether a sync operation is in progress
+   * - onPush: Callback to push local notes to remote
+   * - onPull: Callback to pull remote notes to local
+   *
+   * Design:
+   * - Compact status bar that can be placed in header or footer
+   * - Clear visual indication of sync state
+   * - Touch-friendly push/pull buttons
+   */
 
-interface Props {
-  status: SyncStatus;
-  loading?: boolean;
-  onPush: () => void;
-  onPull: () => void;
-}
-
-// Svelte 5 props syntax
-const { status, loading = false, onPush, onPull }: Props = $props();
-
-/**
- * Get status description text
- */
-const statusText = $derived.by(() => {
-  switch (status.mode) {
-    case "local":
-      return "Local only";
-    case "remote":
-      return "Remote only";
-    case "synced":
-      return "Synced";
-    default:
-      return "Unknown";
+  interface Props {
+    status: SyncStatus;
+    loading?: boolean;
+    onPush: () => void;
+    onPull: () => void;
   }
-});
 
-/**
- * Get status icon color
- */
-const statusColorClass = $derived.by(() => {
-  switch (status.mode) {
-    case "local":
-      return "text-attention-fg";
-    case "remote":
-      return "text-accent-fg";
-    case "synced":
-      return "text-success-fg";
-    default:
-      return "text-text-secondary";
+  // Svelte 5 props syntax
+  const { status, loading = false, onPush, onPull }: Props = $props();
+
+  /**
+   * Get status description text
+   */
+  const statusText = $derived.by(() => {
+    switch (status.mode) {
+      case "local":
+        return "Local only";
+      case "remote":
+        return "Remote only";
+      case "synced":
+        return "Synced";
+      default:
+        return "Unknown";
+    }
+  });
+
+  /**
+   * Get status icon color
+   */
+  const statusColorClass = $derived.by(() => {
+    switch (status.mode) {
+      case "local":
+        return "text-attention-fg";
+      case "remote":
+        return "text-accent-fg";
+      case "synced":
+        return "text-success-fg";
+      default:
+        return "text-text-secondary";
+    }
+  });
+
+  /**
+   * Check if there are unpushed local changes
+   */
+  const hasUnpushed = $derived(
+    status.mode === "local" ||
+      (status.mode === "synced" && status.localCount > status.remoteCount),
+  );
+
+  /**
+   * Check if there are unpulled remote changes
+   */
+  const hasUnpulled = $derived(
+    status.mode === "remote" ||
+      (status.mode === "synced" && status.remoteCount > status.localCount),
+  );
+
+  /**
+   * Format last sync time
+   */
+  const lastSyncText = $derived.by(() => {
+    if (status.lastSync === undefined) {
+      return "Never synced";
+    }
+    const date = new Date(status.lastSync);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) {
+      return "Just now";
+    } else if (diffMins < 60) {
+      return `${diffMins}m ago`;
+    } else if (diffMins < 1440) {
+      const hours = Math.floor(diffMins / 60);
+      return `${hours}h ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  });
+
+  /**
+   * Handle push button click
+   */
+  function handlePush(): void {
+    if (!loading) {
+      onPush();
+    }
   }
-});
 
-/**
- * Check if there are unpushed local changes
- */
-const hasUnpushed = $derived(
-  status.mode === "local" ||
-    (status.mode === "synced" && status.localCount > status.remoteCount)
-);
-
-/**
- * Check if there are unpulled remote changes
- */
-const hasUnpulled = $derived(
-  status.mode === "remote" ||
-    (status.mode === "synced" && status.remoteCount > status.localCount)
-);
-
-/**
- * Format last sync time
- */
-const lastSyncText = $derived.by(() => {
-  if (status.lastSync === undefined) {
-    return "Never synced";
+  /**
+   * Handle pull button click
+   */
+  function handlePull(): void {
+    if (!loading) {
+      onPull();
+    }
   }
-  const date = new Date(status.lastSync);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) {
-    return "Just now";
-  } else if (diffMins < 60) {
-    return `${diffMins}m ago`;
-  } else if (diffMins < 1440) {
-    const hours = Math.floor(diffMins / 60);
-    return `${hours}h ago`;
-  } else {
-    return date.toLocaleDateString();
-  }
-});
-
-/**
- * Handle push button click
- */
-function handlePush(): void {
-  if (!loading) {
-    onPush();
-  }
-}
-
-/**
- * Handle pull button click
- */
-function handlePull(): void {
-  if (!loading) {
-    onPull();
-  }
-}
 </script>
 
 <div
@@ -242,16 +242,16 @@ function handlePull(): void {
 </div>
 
 <style>
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
-  to {
-    transform: rotate(360deg);
-  }
-}
 
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
 </style>

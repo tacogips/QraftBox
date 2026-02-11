@@ -302,7 +302,6 @@
           <option value="claude-cli">CLI</option>
         </select>
       </div>
-
     </div>
   {/if}
 </aside>

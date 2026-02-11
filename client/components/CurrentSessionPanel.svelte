@@ -39,11 +39,9 @@
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
     pendingPrompts: readonly { id: string; message: string; status: string }[];
-    selectedCliSessionId: string | null;
-    newSessionMode: boolean;
+    resumeSessionId?: string | null;
     onCancelSession: (id: string) => void;
     onResumeSession: (sessionId: string) => void;
-    onCurrentSessionChange: (sessionId: string | null) => void;
     onNewSession?: () => void;
     onSearchSession?: () => void;
     onChangePage?: () => void;
@@ -56,11 +54,9 @@
     queued,
     recentlyCompleted,
     pendingPrompts,
-    selectedCliSessionId,
-    newSessionMode,
+    resumeSessionId = null,
     onCancelSession,
     onResumeSession,
-    onCurrentSessionChange,
     onNewSession,
     onSearchSession,
     onChangePage,
@@ -316,22 +312,11 @@
 
   $effect(() => {
     if (contextId === null) return;
-    if (newSessionMode) {
-      // In new session mode, clear the displayed CLI session
-      recentCliSession = null;
-      onCurrentSessionChange(null);
-      return;
-    }
-    if (selectedCliSessionId !== null) {
-      void fetchCliSessionById(selectedCliSessionId);
+    if (resumeSessionId !== null) {
+      void fetchCliSessionById(resumeSessionId);
     } else {
       void fetchRecentCliSession();
     }
-  });
-
-  // Report current CLI session changes to parent
-  $effect(() => {
-    onCurrentSessionChange(recentCliSession?.sessionId ?? null);
   });
 </script>
 
@@ -542,8 +527,13 @@
         <div class="border-t border-border-default/50 bg-bg-primary">
           {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}
             <div class="px-4 py-2">
-              <div class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2">
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block">user</span>
+              <div
+                class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2"
+              >
+                <span
+                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
+                  >user</span
+                >
                 <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
                   {stripSystemTags(runningSession.prompt)}
                 </p>
@@ -606,8 +596,13 @@
             </div>
           {:else if displayMode === "completed" && completedSession !== null}
             <div class="px-4 py-2">
-              <div class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2">
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block">user</span>
+              <div
+                class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2"
+              >
+                <span
+                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
+                  >user</span
+                >
                 <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
                   {stripSystemTags(completedSession.prompt)}
                 </p>

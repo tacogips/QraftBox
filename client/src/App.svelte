@@ -2,7 +2,6 @@
   import type { DiffFile, ViewMode } from "./types/diff";
   import type { FileNode } from "./stores/files";
   import {
-    deriveQraftAiSessionIdFromClaude,
     generateQraftAiSessionId,
     type QraftAiSessionId,
     type QueueStatus,
@@ -158,21 +157,18 @@
   let sessionPollTimer: ReturnType<typeof setInterval> | null = null;
   let sessionStreams = new Map<string, EventSource>();
 
-  // Session selection/mode state used by SessionToolbar and CurrentSessionPanel
-  let selectedCliSessionId = $state<string | null>(null);
-  let currentCliSessionId = $state<string | null>(null);
-  let isNewSessionMode = $state(true);
+  /**
+   * Claude CLI session ID for display in CurrentSessionPanel (set by Resume).
+   * This is purely for UI display; session resolution is handled server-side
+   * via qraft_ai_session_id.
+   */
+  let resumeDisplaySessionId = $state<string | null>(null);
 
   /**
    * Client-generated session group ID (qraft_ai_session_id).
    * All prompts submitted in the same "session" share this ID so the server
    * can chain them together even before the Claude session ID is resolved.
-   *
-   * When currentCliSessionId is known, derived deterministically via
-   * deriveQraftAiSessionIdFromClaude() so Claude CLI sessions and QraftBox sessions
-   * share the same grouping key.
-   * When starting a fresh session (no Claude session ID), generated via
-   * generateQraftAiSessionId() until the Claude session ID is resolved.
+   * The server maps qraft_ai_session_id to Claude CLI sessions internally.
    */
   let qraftAiSessionId = $state<QraftAiSessionId>(generateQraftAiSessionId());
 
@@ -181,7 +177,6 @@
     id: string;
     message: string;
     status: "queued" | "running" | "completed" | "failed" | "cancelled";
-    requested_claude_session_id: string | null;
     claude_session_id?: string | undefined;
     current_activity?: string | undefined;
     error?: string | undefined;
@@ -457,9 +452,7 @@
       }
       return child;
     });
-    const changed = updatedChildren.some(
-      (c, i) => c !== node.children![i],
-    );
+    const changed = updatedChildren.some((c, i) => c !== node.children![i]);
     return changed ? { ...node, children: updatedChildren } : node;
   }
 
@@ -1093,23 +1086,11 @@
   ): Promise<void> {
     if (contextId === null) return;
 
-    // On first submit in a new-session flow, generate a fresh qraft_ai_session_id.
-    // If resuming a known Claude session, derive deterministically so
-    // QraftBox and Claude CLI sessions share the same group key.
-    if (isNewSessionMode) {
-      qraftAiSessionId = generateQraftAiSessionId();
-    } else if (currentCliSessionId !== null) {
-      qraftAiSessionId = deriveQraftAiSessionIdFromClaude(currentCliSessionId);
-    }
-    const sessionIdToSend = isNewSessionMode ? null : currentCliSessionId;
-    isNewSessionMode = false;
-
     try {
       const resp = await fetch("/api/ai/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionIdToSend,
           run_immediately: immediate,
           message: prompt,
           context: {
@@ -1127,7 +1108,6 @@
         return;
       }
 
-      // Poll prompt queue immediately so UI reflects the new entry
       void fetchPromptQueue();
       void fetchActiveSessions();
     } catch (e) {
@@ -1152,7 +1132,6 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: currentCliSessionId,
           run_immediately: immediate,
           message: prompt,
           context: {
@@ -1200,22 +1179,6 @@
         runningSessionIds: [],
         totalCount: runningPrompts.length + queuedPrompts.length,
       };
-
-      // Auto-resolve currentCliSessionId from prompt queue results.
-      // Once resolved, switch qraftAiSessionId to the derived form so
-      // subsequent prompts (and external CLI sessions) share the same group.
-      if (!isNewSessionMode && currentCliSessionId === null) {
-        const resolvedId =
-          data.prompts.find(
-            (p) =>
-              typeof p.claude_session_id === "string" &&
-              p.claude_session_id.length > 0,
-          )?.claude_session_id ?? null;
-        if (resolvedId !== null) {
-          currentCliSessionId = resolvedId;
-          qraftAiSessionId = deriveQraftAiSessionIdFromClaude(resolvedId);
-        }
-      }
     } catch {
       // Silently ignore
     }
@@ -1570,10 +1533,24 @@
   /**
    * Handle resume from Sessions screen: navigate to Changes and refresh sessions
    */
-  function handleResumeToChanges(sessionId: string): void {
-    selectedCliSessionId = sessionId;
-    currentCliSessionId = sessionId;
-    isNewSessionMode = false;
+  async function handleResumeToChanges(sessionId: string): Promise<void> {
+    // Register server-side resume mapping and update display
+    try {
+      const resp = await fetch("/api/ai/resume-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claude_session_id: sessionId }),
+      });
+      if (resp.ok) {
+        const data = (await resp.json()) as {
+          qraft_ai_session_id: QraftAiSessionId;
+        };
+        qraftAiSessionId = data.qraft_ai_session_id;
+      }
+    } catch (e) {
+      console.error("Failed to register resume mapping:", e);
+    }
+    resumeDisplaySessionId = sessionId;
     navigateToScreen("diff");
     void fetchActiveSessions();
     void fetchPromptQueue();
@@ -1584,35 +1561,32 @@
    */
   async function handleResumeCliSession(sessionId: string): Promise<void> {
     if (contextId === null) return;
-    selectedCliSessionId = sessionId;
-    currentCliSessionId = sessionId;
-    isNewSessionMode = false;
     try {
-      const resp = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/resume`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        },
-      );
+      const resp = await fetch("/api/ai/resume-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ claude_session_id: sessionId }),
+      });
       if (resp.ok) {
-        void fetchActiveSessions();
-        void fetchPromptQueue();
+        const data = (await resp.json()) as {
+          qraft_ai_session_id: QraftAiSessionId;
+        };
+        qraftAiSessionId = data.qraft_ai_session_id;
       }
     } catch (e) {
-      console.error("Failed to resume CLI session:", e);
+      console.error("Failed to register resume mapping:", e);
     }
+    resumeDisplaySessionId = sessionId;
+    void fetchActiveSessions();
+    void fetchPromptQueue();
   }
 
   /**
    * Start a new session by expanding the AI prompt panel and focusing it
    */
   function handleNewSession(): void {
-    // Clear any selected/resolved CLI session and switch panel into fresh mode.
-    selectedCliSessionId = null;
-    currentCliSessionId = null;
-    isNewSessionMode = true;
+    resumeDisplaySessionId = null;
+    qraftAiSessionId = generateQraftAiSessionId();
     if (aiPanelCollapsed) {
       aiPanelCollapsed = false;
     }
@@ -1761,22 +1735,6 @@
             runningSessionIds: [],
             totalCount: runningPrompts.length + queuedPrompts.length,
           };
-
-          // Auto-resolve currentCliSessionId from prompt queue results.
-          // Switch qraftAiSessionId to derived form for consistency.
-          if (!isNewSessionMode && currentCliSessionId === null) {
-            const resolvedId =
-              update.prompts.find(
-                (p) =>
-                  typeof p.claude_session_id === "string" &&
-                  p.claude_session_id.length > 0,
-              )?.claude_session_id ?? null;
-            if (resolvedId !== null) {
-              currentCliSessionId = resolvedId;
-              selectedCliSessionId = resolvedId;
-              qraftAiSessionId = deriveQraftAiSessionIdFromClaude(resolvedId);
-            }
-          }
 
           // Refresh active sessions to sync UI
           void fetchActiveSessions();
@@ -2340,7 +2298,9 @@
             <div class="px-2 pb-2">
               <DiffView
                 file={selectedFile}
-                mode={effectiveViewMode === "side-by-side" ? "side-by-side" : "inline"}
+                mode={effectiveViewMode === "side-by-side"
+                  ? "side-by-side"
+                  : "inline"}
                 onCommentSubmit={handleInlineCommentSubmit}
                 onNavigatePrev={navigatePrev}
                 onNavigateNext={navigateNext}
@@ -2440,7 +2400,9 @@
                 : effectiveViewMode === 'side-by-side'
                   ? 'bg-bg-emphasis text-text-on-emphasis'
                   : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => { if (selectedHasDiff) setViewMode("side-by-side"); }}
+              onclick={() => {
+                if (selectedHasDiff) setViewMode("side-by-side");
+              }}
               disabled={!selectedHasDiff}
               title="Side by Side"
             >
@@ -2474,7 +2436,9 @@
                 : effectiveViewMode === 'inline'
                   ? 'bg-bg-emphasis text-text-on-emphasis'
                   : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => { if (selectedHasDiff) setViewMode("inline"); }}
+              onclick={() => {
+                if (selectedHasDiff) setViewMode("inline");
+              }}
               disabled={!selectedHasDiff}
               title="Inline"
             >
@@ -2523,7 +2487,9 @@
                 : effectiveViewMode === 'current-state'
                   ? 'bg-bg-emphasis text-text-on-emphasis'
                   : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => { if (selectedHasDiff) setViewMode("current-state"); }}
+              onclick={() => {
+                if (selectedHasDiff) setViewMode("current-state");
+              }}
               disabled={!selectedHasDiff}
               title="Current"
             >
@@ -2542,7 +2508,6 @@
         <SessionToolbar
           {contextId}
           {projectPath}
-          excludeSessionId={currentCliSessionId}
           onNewSession={handleNewSession}
           onResumeSession={(sessionId) =>
             void handleResumeCliSession(sessionId)}
@@ -2558,14 +2523,10 @@
           pendingPrompts={serverPromptQueue.filter(
             (p) => p.status === "queued" || p.status === "running",
           )}
-          {selectedCliSessionId}
-          newSessionMode={isNewSessionMode}
+          resumeSessionId={resumeDisplaySessionId}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
           onResumeSession={(sessionId) =>
             void handleResumeCliSession(sessionId)}
-          onCurrentSessionChange={(sessionId) => {
-            currentCliSessionId = sessionId;
-          }}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->

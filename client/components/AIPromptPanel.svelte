@@ -712,7 +712,9 @@
       <!-- Input area -->
       <div class="flex-1 flex gap-4 min-h-0">
         <!-- Left icon column: session icons + collapse -->
-        <div class="shrink-0 flex flex-col items-center gap-1 self-start mt-0.5">
+        <div
+          class="shrink-0 flex flex-col items-center gap-1 self-start mt-0.5"
+        >
           {#if onNewSession !== undefined}
             <button
               type="button"
@@ -926,7 +928,8 @@
                                transition-colors duration-150
                                {i === drafts.length - 1 ? 'rounded-b-lg' : ''}"
                       >
-                        <span class="block truncate">{draftPreview(draft)}</span>
+                        <span class="block truncate">{draftPreview(draft)}</span
+                        >
                       </button>
                     {/each}
                   </div>

@@ -22,8 +22,8 @@
     "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit",
     "lint": "bun run typecheck",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.svelte\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"client/**/*.svelte\"",
     "clean": "rm -rf dist"
   },
   "homepage": "https://github.com/user/repo",

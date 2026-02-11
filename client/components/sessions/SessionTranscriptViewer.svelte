@@ -69,10 +69,7 @@
   /**
    * Copy event content to clipboard
    */
-  async function copyToClipboard(
-    text: string,
-    eventId: string,
-  ): Promise<void> {
+  async function copyToClipboard(text: string, eventId: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       copiedEventId = eventId;
@@ -240,9 +237,7 @@
 
     // User/assistant: content is at raw.message.content
     if (event.type === "user" || event.type === "assistant") {
-      const message = raw["message"] as
-        | Record<string, unknown>
-        | undefined;
+      const message = raw["message"] as Record<string, unknown> | undefined;
       if (message !== undefined) {
         const msgContent = message["content"];
         if (typeof msgContent === "string") {
@@ -499,8 +494,17 @@
                         class="text-text-tertiary"
                         aria-hidden="true"
                       >
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                        />
                       </svg>
                     {/if}
                   </button>

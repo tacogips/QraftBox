@@ -78,16 +78,14 @@
   let expandedSections = $state<Record<string, boolean>>({});
 
   // Derived
-  const hasUncommitted = $derived(
-    statusData !== null && !statusData.clean,
-  );
+  const hasUncommitted = $derived(statusData !== null && !statusData.clean);
 
   const uncommittedCount = $derived(
     statusData !== null
       ? statusData.staged.length +
-        statusData.modified.length +
-        statusData.untracked.length +
-        statusData.conflicts.length
+          statusData.modified.length +
+          statusData.untracked.length +
+          statusData.conflicts.length
       : 0,
   );
 
@@ -100,9 +98,7 @@
   }
 
   async function fetchPushStatus(): Promise<void> {
-    const resp = await fetch(
-      `/api/ctx/${contextId}/push/${contextId}/status`,
-    );
+    const resp = await fetch(`/api/ctx/${contextId}/push/${contextId}/status`);
     if (!resp.ok) throw new Error(`Push status API error: ${resp.status}`);
     const data = (await resp.json()) as { status: PushStatusData };
     pushStatusData = data.status;
@@ -448,7 +444,8 @@
                       #{prStatusData.pr.number}: {prStatusData.pr.title}
                     </h4>
                     <div class="text-xs text-text-secondary mt-1">
-                      {prStatusData.pr.headBranch} -> {prStatusData.pr.baseBranch}
+                      {prStatusData.pr.headBranch} -> {prStatusData.pr
+                        .baseBranch}
                     </div>
                   </div>
                   <span
@@ -576,7 +573,8 @@
             <div
               class="p-4 bg-bg-secondary border border-border-default rounded-lg text-sm text-text-secondary"
             >
-              PR information unavailable. GitHub integration may not be configured.
+              PR information unavailable. GitHub integration may not be
+              configured.
             </div>
           {/if}
         </section>

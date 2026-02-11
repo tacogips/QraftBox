@@ -1,214 +1,221 @@
 <script lang="ts">
-/**
- * AIPromptInline Component
- *
- * Inline prompt input that appears after line selection in the diff viewer.
- * Supports @ file references with autocomplete.
- *
- * Props:
- * - lineStart: Start line of selection
- * - lineEnd: End line of selection
- * - filePath: Path of the file
- * - selectedContent: Content of selected lines
- * - changedFiles: List of changed files for autocomplete
- * - allFiles: List of all files for autocomplete
- * - onSubmit: Callback when prompt is submitted
- * - onCancel: Callback when prompt is cancelled
- *
- * Design:
- * - Appears inline after line selection
- * - @ file reference autocomplete
- * - Split button: Submit (queue) + dropdown "Submit & Run Now"
- * - Touch-friendly (bottom sheet on tablet)
- */
+  /**
+   * AIPromptInline Component
+   *
+   * Inline prompt input that appears after line selection in the diff viewer.
+   * Supports @ file references with autocomplete.
+   *
+   * Props:
+   * - lineStart: Start line of selection
+   * - lineEnd: End line of selection
+   * - filePath: Path of the file
+   * - selectedContent: Content of selected lines
+   * - changedFiles: List of changed files for autocomplete
+   * - allFiles: List of all files for autocomplete
+   * - onSubmit: Callback when prompt is submitted
+   * - onCancel: Callback when prompt is cancelled
+   *
+   * Design:
+   * - Appears inline after line selection
+   * - @ file reference autocomplete
+   * - Split button: Submit (queue) + dropdown "Submit & Run Now"
+   * - Touch-friendly (bottom sheet on tablet)
+   */
 
-import type { FileReference } from "../../src/types/ai";
-import FileAutocomplete from "./FileAutocomplete.svelte";
+  import type { FileReference } from "../../src/types/ai";
+  import FileAutocomplete from "./FileAutocomplete.svelte";
 
-interface Props {
-  lineStart: number;
-  lineEnd: number;
-  filePath: string;
-  selectedContent?: string | undefined;
-  changedFiles: readonly string[];
-  allFiles: readonly string[];
-  onSubmit: (prompt: string, immediate: boolean, refs: readonly FileReference[]) => void;
-  onCancel: () => void;
-}
+  interface Props {
+    lineStart: number;
+    lineEnd: number;
+    filePath: string;
+    selectedContent?: string | undefined;
+    changedFiles: readonly string[];
+    allFiles: readonly string[];
+    onSubmit: (
+      prompt: string,
+      immediate: boolean,
+      refs: readonly FileReference[],
+    ) => void;
+    onCancel: () => void;
+  }
 
-// Svelte 5 props syntax
-const {
-  lineStart,
-  lineEnd,
-  filePath,
-  selectedContent = undefined,
-  changedFiles,
-  allFiles,
-  onSubmit,
-  onCancel,
-}: Props = $props();
+  // Svelte 5 props syntax
+  const {
+    lineStart,
+    lineEnd,
+    filePath,
+    selectedContent = undefined,
+    changedFiles,
+    allFiles,
+    onSubmit,
+    onCancel,
+  }: Props = $props();
 
-/**
- * Current prompt text
- */
-let prompt = $state("");
+  /**
+   * Current prompt text
+   */
+  let prompt = $state("");
 
-/**
- * Dropdown state for split button
- */
-let showDropdown = $state(false);
+  /**
+   * Dropdown state for split button
+   */
+  let showDropdown = $state(false);
 
-/**
- * File references added via @
- */
-let fileRefs = $state<FileReference[]>([]);
+  /**
+   * File references added via @
+   */
+  let fileRefs = $state<FileReference[]>([]);
 
-/**
- * Autocomplete state
- */
-let showAutocomplete = $state(false);
-let autocompleteQuery = $state("");
+  /**
+   * Autocomplete state
+   */
+  let showAutocomplete = $state(false);
+  let autocompleteQuery = $state("");
 
-/**
- * Get line range text
- */
-const lineRangeText = $derived(
-  lineStart === lineEnd
-    ? `Line ${lineStart}`
-    : `Lines ${lineStart}-${lineEnd}`
-);
+  /**
+   * Get line range text
+   */
+  const lineRangeText = $derived(
+    lineStart === lineEnd
+      ? `Line ${lineStart}`
+      : `Lines ${lineStart}-${lineEnd}`,
+  );
 
-/**
- * Handle input changes and detect @ mentions
- */
-function handleInput(event: Event): void {
-  const target = event.target as HTMLTextAreaElement;
-  prompt = target.value;
+  /**
+   * Handle input changes and detect @ mentions
+   */
+  function handleInput(event: Event): void {
+    const target = event.target as HTMLTextAreaElement;
+    prompt = target.value;
 
-  // Check for @ trigger
-  const cursorPos = target.selectionStart;
-  const textBeforeCursor = prompt.slice(0, cursorPos);
-  const atMatch = textBeforeCursor.match(/@([\w./-]*)$/);
+    // Check for @ trigger
+    const cursorPos = target.selectionStart;
+    const textBeforeCursor = prompt.slice(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([\w./-]*)$/);
 
-  if (atMatch !== null) {
-    showAutocomplete = true;
-    autocompleteQuery = atMatch[1] ?? "";
-  } else {
+    if (atMatch !== null) {
+      showAutocomplete = true;
+      autocompleteQuery = atMatch[1] ?? "";
+    } else {
+      showAutocomplete = false;
+      autocompleteQuery = "";
+    }
+  }
+
+  /**
+   * Handle file selection from autocomplete
+   */
+  function handleFileSelect(
+    path: string,
+    lineRange?: { start: number; end: number } | undefined,
+  ): void {
+    // Add file reference
+    const ref: FileReference = { path };
+    if (lineRange !== undefined) {
+      fileRefs = [
+        ...fileRefs,
+        { ...ref, startLine: lineRange.start, endLine: lineRange.end },
+      ];
+    } else {
+      fileRefs = [...fileRefs, ref];
+    }
+
+    // Replace @query with @path in prompt
+    const cursorPos = prompt.length;
+    const textBeforeCursor = prompt.slice(0, cursorPos);
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+    if (atIndex !== -1) {
+      const lineRangeStr =
+        lineRange !== undefined ? `:L${lineRange.start}-L${lineRange.end}` : "";
+      prompt = prompt.slice(0, atIndex) + `@${path}${lineRangeStr} `;
+    }
+
     showAutocomplete = false;
     autocompleteQuery = "";
   }
-}
 
-/**
- * Handle file selection from autocomplete
- */
-function handleFileSelect(
-  path: string,
-  lineRange?: { start: number; end: number } | undefined
-): void {
-  // Add file reference
-  const ref: FileReference = { path };
-  if (lineRange !== undefined) {
-    fileRefs = [...fileRefs, { ...ref, startLine: lineRange.start, endLine: lineRange.end }];
-  } else {
-    fileRefs = [...fileRefs, ref];
+  /**
+   * Remove a file reference
+   */
+  function removeFileRef(path: string): void {
+    fileRefs = fileRefs.filter((r) => r.path !== path);
   }
 
-  // Replace @query with @path in prompt
-  const cursorPos = prompt.length;
-  const textBeforeCursor = prompt.slice(0, cursorPos);
-  const atIndex = textBeforeCursor.lastIndexOf("@");
-  if (atIndex !== -1) {
-    const lineRangeStr =
-      lineRange !== undefined ? `:L${lineRange.start}-L${lineRange.end}` : "";
-    prompt = prompt.slice(0, atIndex) + `@${path}${lineRangeStr} `;
+  /**
+   * Handle close autocomplete
+   */
+  function handleCloseAutocomplete(): void {
+    showAutocomplete = false;
+    autocompleteQuery = "";
   }
 
-  showAutocomplete = false;
-  autocompleteQuery = "";
-}
-
-/**
- * Remove a file reference
- */
-function removeFileRef(path: string): void {
-  fileRefs = fileRefs.filter((r) => r.path !== path);
-}
-
-/**
- * Handle close autocomplete
- */
-function handleCloseAutocomplete(): void {
-  showAutocomplete = false;
-  autocompleteQuery = "";
-}
-
-/**
- * Handle keyboard shortcuts
- */
-function handleKeydown(event: KeyboardEvent): void {
-  // Ctrl/Cmd + Enter to submit
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-    event.preventDefault();
-    handleSubmit();
+  /**
+   * Handle keyboard shortcuts
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    // Ctrl/Cmd + Enter to submit
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      handleSubmit();
+    }
+    // Escape to cancel (or close dropdown first)
+    if (event.key === "Escape") {
+      if (showDropdown) {
+        event.preventDefault();
+        showDropdown = false;
+      } else if (!showAutocomplete) {
+        event.preventDefault();
+        onCancel();
+      }
+    }
   }
-  // Escape to cancel (or close dropdown first)
-  if (event.key === "Escape") {
+
+  /**
+   * Handle form submission (default: queue)
+   */
+  function handleSubmit(): void {
+    if (prompt.trim().length === 0) return;
+    onSubmit(prompt, false, fileRefs);
+    showDropdown = false;
+  }
+
+  /**
+   * Handle submit and run now (immediate)
+   */
+  function handleSubmitAndRun(): void {
+    if (prompt.trim().length === 0) return;
+    onSubmit(prompt, true, fileRefs);
+    showDropdown = false;
+  }
+
+  /**
+   * Toggle dropdown menu
+   */
+  function toggleDropdown(): void {
+    showDropdown = !showDropdown;
+  }
+
+  /**
+   * Handle clicks outside dropdown to close it
+   */
+  function handleWindowClick(event: MouseEvent): void {
     if (showDropdown) {
-      event.preventDefault();
-      showDropdown = false;
-    } else if (!showAutocomplete) {
-      event.preventDefault();
-      onCancel();
+      const target = event.target as HTMLElement;
+      if (!target.closest(".split-button-container")) {
+        showDropdown = false;
+      }
     }
   }
-}
 
-/**
- * Handle form submission (default: queue)
- */
-function handleSubmit(): void {
-  if (prompt.trim().length === 0) return;
-  onSubmit(prompt, false, fileRefs);
-  showDropdown = false;
-}
-
-/**
- * Handle submit and run now (immediate)
- */
-function handleSubmitAndRun(): void {
-  if (prompt.trim().length === 0) return;
-  onSubmit(prompt, true, fileRefs);
-  showDropdown = false;
-}
-
-/**
- * Toggle dropdown menu
- */
-function toggleDropdown(): void {
-  showDropdown = !showDropdown;
-}
-
-/**
- * Handle clicks outside dropdown to close it
- */
-function handleWindowClick(event: MouseEvent): void {
-  if (showDropdown) {
-    const target = event.target as HTMLElement;
-    if (!target.closest(".split-button-container")) {
-      showDropdown = false;
-    }
+  /**
+   * Focus textarea on mount
+   */
+  function handleTextareaMount(element: HTMLTextAreaElement): void {
+    setTimeout(() => {
+      element.focus();
+    }, 100);
   }
-}
-
-/**
- * Focus textarea on mount
- */
-function handleTextareaMount(element: HTMLTextAreaElement): void {
-  setTimeout(() => {
-    element.focus();
-  }, 100);
-}
 </script>
 
 <svelte:window on:click={handleWindowClick} />
@@ -236,8 +243,12 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
         class="text-accent-fg"
         aria-hidden="true"
       >
-        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54" />
-        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54" />
+        <path
+          d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"
+        />
+        <path
+          d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"
+        />
       </svg>
       <span class="text-sm font-medium text-text-primary">
         Ask AI about {lineRangeText}
@@ -277,8 +288,10 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
     </div>
     {#if selectedContent !== undefined}
       <pre
-        class="text-xs text-text-secondary font-mono max-h-20 overflow-y-auto"
-      >{selectedContent.slice(0, 500)}{selectedContent.length > 500 ? "..." : ""}</pre>
+        class="text-xs text-text-secondary font-mono max-h-20 overflow-y-auto">{selectedContent.slice(
+          0,
+          500,
+        )}{selectedContent.length > 500 ? "..." : ""}</pre>
     {/if}
   </div>
 
@@ -324,7 +337,9 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
           <span class="truncate max-w-[150px]">@{ref.path}</span>
           {#if ref.startLine !== undefined}
             <span class="text-accent-fg">
-              :L{ref.startLine}{ref.endLine !== ref.startLine ? `-L${ref.endLine}` : ""}
+              :L{ref.startLine}{ref.endLine !== ref.startLine
+                ? `-L${ref.endLine}`
+                : ""}
             </span>
           {/if}
           <button

@@ -1,69 +1,69 @@
 <script lang="ts">
-/**
- * ExpandControls Component
- *
- * Provides expand/collapse all controls for deleted blocks in the Current State View.
- *
- * Props:
- * - hasDeletedBlocks: Whether there are any deleted blocks in the view
- * - allExpanded: Whether all deleted blocks are currently expanded
- * - allCollapsed: Whether all deleted blocks are currently collapsed
- * - onExpandAll: Callback to expand all deleted blocks
- * - onCollapseAll: Callback to collapse all deleted blocks
- *
- * Design:
- * - Touch-friendly button sizing (44px minimum tap targets)
- * - Clear visual state indication
- * - Keyboard shortcuts: zR (expand all), zM (collapse all)
- */
+  /**
+   * ExpandControls Component
+   *
+   * Provides expand/collapse all controls for deleted blocks in the Current State View.
+   *
+   * Props:
+   * - hasDeletedBlocks: Whether there are any deleted blocks in the view
+   * - allExpanded: Whether all deleted blocks are currently expanded
+   * - allCollapsed: Whether all deleted blocks are currently collapsed
+   * - onExpandAll: Callback to expand all deleted blocks
+   * - onCollapseAll: Callback to collapse all deleted blocks
+   *
+   * Design:
+   * - Touch-friendly button sizing (44px minimum tap targets)
+   * - Clear visual state indication
+   * - Keyboard shortcuts: zR (expand all), zM (collapse all)
+   */
 
-interface Props {
-  hasDeletedBlocks: boolean;
-  allExpanded: boolean;
-  allCollapsed: boolean;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
-}
+  interface Props {
+    hasDeletedBlocks: boolean;
+    allExpanded: boolean;
+    allCollapsed: boolean;
+    onExpandAll: () => void;
+    onCollapseAll: () => void;
+  }
 
-// Svelte 5 props syntax
-const {
-  hasDeletedBlocks,
-  allExpanded,
-  allCollapsed,
-  onExpandAll,
-  onCollapseAll,
-}: Props = $props();
+  // Svelte 5 props syntax
+  const {
+    hasDeletedBlocks,
+    allExpanded,
+    allCollapsed,
+    onExpandAll,
+    onCollapseAll,
+  }: Props = $props();
 
-/**
- * Get the state description for screen readers
- */
-function getStateDescription(): string {
-  if (!hasDeletedBlocks) {
-    return "No deleted blocks";
+  /**
+   * Get the state description for screen readers
+   */
+  function getStateDescription(): string {
+    if (!hasDeletedBlocks) {
+      return "No deleted blocks";
+    }
+    if (allExpanded) {
+      return "All expanded";
+    }
+    if (allCollapsed) {
+      return "All collapsed";
+    }
+    return "Mixed state";
   }
-  if (allExpanded) {
-    return "All expanded";
-  }
-  if (allCollapsed) {
-    return "All collapsed";
-  }
-  return "Mixed state";
-}
 
-/**
- * Handle keyboard shortcuts
- */
-function handleKeydown(event: KeyboardEvent): void {
-  // zR = expand all (vim-style)
-  if (event.key === "R" && event.shiftKey === false) {
-    // Track last key for z prefix
-    return;
+  /**
+   * Handle keyboard shortcuts
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    // zR = expand all (vim-style)
+    if (event.key === "R" && event.shiftKey === false) {
+      // Track last key for z prefix
+      return;
+    }
+    // zM = collapse all (vim-style)
+    if (event.key === "M" && event.shiftKey === false) {
+      return;
+    }
   }
-  // zM = collapse all (vim-style)
-  if (event.key === "M" && event.shiftKey === false) {
-    return;
-  }
-}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -148,8 +148,6 @@ function handleKeydown(event: KeyboardEvent): void {
     </button>
   {:else}
     <!-- No deleted blocks state -->
-    <span class="text-xs text-text-tertiary italic">
-      No deleted content
-    </span>
+    <span class="text-xs text-text-tertiary italic"> No deleted content </span>
   {/if}
 </div>

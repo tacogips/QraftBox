@@ -32,7 +32,12 @@
     disabled?: boolean;
   }
 
-  const { contextId, projectPath, onWorktreeSwitch, disabled = false }: Props = $props();
+  const {
+    contextId,
+    projectPath,
+    onWorktreeSwitch,
+    disabled = false,
+  }: Props = $props();
 
   // Dropdown list state
   let listOpen = $state(false);
@@ -76,8 +81,7 @@
       };
       worktrees = data.worktrees;
     } catch (e) {
-      listError =
-        e instanceof Error ? e.message : "Failed to fetch worktrees";
+      listError = e instanceof Error ? e.message : "Failed to fetch worktrees";
     } finally {
       listLoading = false;
     }
@@ -211,8 +215,7 @@
       // Trigger app reload
       onWorktreeSwitch();
     } catch (e) {
-      listError =
-        e instanceof Error ? e.message : "Failed to switch directory";
+      listError = e instanceof Error ? e.message : "Failed to switch directory";
     }
   }
 
@@ -255,13 +258,23 @@
       : createOpen
         ? 'text-text-primary font-semibold'
         : 'text-text-secondary hover:text-text-primary'}"
-    onclick={() => { if (!disabled) void toggleCreate(); }}
+    onclick={() => {
+      if (!disabled) void toggleCreate();
+    }}
     title={disabled ? "Not a git repository" : "Create new worktree"}
     {disabled}
   >
     <!-- Git branch icon -->
-    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" class="shrink-0">
-      <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/>
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      class="shrink-0"
+    >
+      <path
+        d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"
+      />
     </svg>
     Worktree
   </button>
@@ -276,7 +289,9 @@
       : listOpen
         ? 'text-text-primary'
         : 'text-text-secondary hover:text-text-primary'}"
-    onclick={() => { if (!disabled) void toggleList(); }}
+    onclick={() => {
+      if (!disabled) void toggleList();
+    }}
     title={disabled ? "Not a git repository" : "Show worktrees"}
     {disabled}
   >
@@ -287,7 +302,9 @@
       fill="currentColor"
       class="transition-transform {listOpen ? 'rotate-180' : ''}"
     >
-      <path d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"/>
+      <path
+        d="m4.427 7.427 3.396 3.396a.25.25 0 0 0 .354 0l3.396-3.396A.25.25 0 0 0 11.396 7H4.604a.25.25 0 0 0-.177.427Z"
+      />
     </svg>
   </button>
 </div>
@@ -381,7 +398,9 @@
         </button>
         <button
           type="button"
-          onclick={() => { createOpen = false; }}
+          onclick={() => {
+            createOpen = false;
+          }}
           class="px-3 py-1.5 rounded text-sm
                  text-text-secondary hover:text-text-primary
                  hover:bg-bg-tertiary transition-colors"
@@ -452,28 +471,49 @@
             disabled={wt.path === projectPath}
           >
             <!-- Branch icon -->
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"
-                 class="shrink-0 {wt.path === projectPath ? 'text-accent-fg' : 'text-text-tertiary'}">
-              <path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"/>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              class="shrink-0 {wt.path === projectPath
+                ? 'text-accent-fg'
+                : 'text-text-tertiary'}"
+            >
+              <path
+                d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.493 2.493 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Zm-6 0a.75.75 0 1 0 1.5 0 .75.75 0 0 0-1.5 0Zm8.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5ZM4.25 12a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5Z"
+              />
             </svg>
 
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
-                <span class="text-sm text-text-primary truncate {wt.path === projectPath ? 'font-semibold' : ''}">
+                <span
+                  class="text-sm text-text-primary truncate {wt.path ===
+                  projectPath
+                    ? 'font-semibold'
+                    : ''}"
+                >
                   {wt.branch ?? "(detached)"}
                 </span>
                 {#if wt.isMain}
-                  <span class="px-1.5 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary shrink-0">
+                  <span
+                    class="px-1.5 py-0.5 text-xs rounded bg-bg-tertiary text-text-secondary shrink-0"
+                  >
                     root
                   </span>
                 {/if}
                 {#if wt.path === projectPath}
-                  <span class="px-1.5 py-0.5 text-xs rounded bg-accent-subtle text-accent-fg shrink-0">
+                  <span
+                    class="px-1.5 py-0.5 text-xs rounded bg-accent-subtle text-accent-fg shrink-0"
+                  >
                     current
                   </span>
                 {/if}
               </div>
-              <p class="text-xs text-text-tertiary font-mono truncate mt-0.5" title={wt.path}>
+              <p
+                class="text-xs text-text-tertiary font-mono truncate mt-0.5"
+                title={wt.path}
+              >
                 {truncPath(wt.path, 50)}
               </p>
             </div>

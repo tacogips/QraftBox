@@ -1,50 +1,50 @@
 <script lang="ts">
-/**
- * UnifiedSessionCard Component
- *
- * Wrapper component that adds a source badge and delegates rendering
- * to the appropriate underlying SessionCard component based on the
- * UnifiedSessionItem kind.
- *
- * Props:
- * - item: UnifiedSessionItem - the session item to render
- * - onResumeSession: Callback for resuming claude-cli sessions
- * - onSelectSession: Callback for selecting a session for detail view
- */
+  /**
+   * UnifiedSessionCard Component
+   *
+   * Wrapper component that adds a source badge and delegates rendering
+   * to the appropriate underlying SessionCard component based on the
+   * UnifiedSessionItem kind.
+   *
+   * Props:
+   * - item: UnifiedSessionItem - the session item to render
+   * - onResumeSession: Callback for resuming claude-cli sessions
+   * - onSelectSession: Callback for selecting a session for detail view
+   */
 
-import type { UnifiedSessionItem } from "../../src/types/unified-session";
-import ClaudeSessionCard from "../claude-sessions/SessionCard.svelte";
-import QraftBoxSessionCard from "../session/SessionCard.svelte";
+  import type { UnifiedSessionItem } from "../../src/types/unified-session";
+  import ClaudeSessionCard from "../claude-sessions/SessionCard.svelte";
+  import QraftBoxSessionCard from "../session/SessionCard.svelte";
 
-interface Props {
-  item: UnifiedSessionItem;
-  onResumeSession?: ((sessionId: string) => void) | undefined;
-  onSelectSession?: ((sessionId: string) => void) | undefined;
-}
-
-const {
-  item,
-  onResumeSession = undefined,
-  onSelectSession = undefined,
-}: Props = $props();
-
-function handleQraftBoxSelect(): void {
-  if (item.kind === "qraftbox" && onSelectSession !== undefined) {
-    onSelectSession(item.session.id);
+  interface Props {
+    item: UnifiedSessionItem;
+    onResumeSession?: ((sessionId: string) => void) | undefined;
+    onSelectSession?: ((sessionId: string) => void) | undefined;
   }
-}
 
-function handleClaudeResume(sessionId: string): void {
-  if (onResumeSession !== undefined) {
-    onResumeSession(sessionId);
-  }
-}
+  const {
+    item,
+    onResumeSession = undefined,
+    onSelectSession = undefined,
+  }: Props = $props();
 
-function handleClaudeView(sessionId: string): void {
-  if (onSelectSession !== undefined) {
-    onSelectSession(sessionId);
+  function handleQraftBoxSelect(): void {
+    if (item.kind === "qraftbox" && onSelectSession !== undefined) {
+      onSelectSession(item.session.id);
+    }
   }
-}
+
+  function handleClaudeResume(sessionId: string): void {
+    if (onResumeSession !== undefined) {
+      onResumeSession(sessionId);
+    }
+  }
+
+  function handleClaudeView(sessionId: string): void {
+    if (onSelectSession !== undefined) {
+      onSelectSession(sessionId);
+    }
+  }
 </script>
 
 <div class="unified-session-card">

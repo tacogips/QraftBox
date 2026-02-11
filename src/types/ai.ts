@@ -336,8 +336,6 @@ export interface AIConfig {
  * The server manages the queue, session continuity, and execution.
  */
 export interface AIPromptMessage {
-  /** Claude CLI session ID to continue (null = new session or inherit from queue) */
-  readonly session_id: string | null;
   /** Whether to execute immediately (true) or queue (false) */
   readonly run_immediately: boolean;
   /** The prompt text */
@@ -367,8 +365,6 @@ export interface QueuedPromptInfo {
   /** Truncated message for display */
   readonly message: string;
   readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
-  /** Claude CLI session ID explicitly requested by the client */
-  readonly requested_claude_session_id: string | null;
   /** Claude CLI session ID (resolved after execution) */
   readonly claude_session_id?: string | undefined;
   /** Current activity description (e.g., "Using tool...") */

@@ -29,8 +29,12 @@
     ) => void;
   }
 
-  let { path, content, language, onCommentSubmit = undefined }: Props =
-    $props();
+  let {
+    path,
+    content,
+    language,
+    onCommentSubmit = undefined,
+  }: Props = $props();
 
   let activeComment = $state<CommentRange | null>(null);
   let commentText = $state("");
@@ -95,13 +99,17 @@
   });
 </script>
 
-<div class="file-viewer w-full h-full overflow-auto font-mono text-xs leading-5">
+<div
+  class="file-viewer w-full h-full overflow-auto font-mono text-xs leading-5"
+>
   <!-- Sticky file name header -->
   <div
     class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
     <div class="flex items-center gap-2">
-      <span class="text-xs font-medium text-text-primary truncate max-w-[300px]">
+      <span
+        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
+      >
         {path}
       </span>
     </div>
@@ -133,12 +141,10 @@
                 e.stopPropagation();
                 handleCommentOpen(lineNumber, e.shiftKey);
               }}
-              aria-label="Add comment on line {lineNumber}"
-            >+</button>
+              aria-label="Add comment on line {lineNumber}">+</button
+            >
           {/if}
-          <span class="select-none"
-            >{lineNumber}</span
-          >
+          <span class="select-none">{lineNumber}</span>
         </div>
 
         <!-- Line content -->
@@ -153,7 +159,9 @@
 
       <!-- Inline comment box after endLine -->
       {#if activeComment !== null && activeComment.endLine === lineNumber}
-        <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
+        <div
+          class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
+        >
           <textarea
             class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
@@ -178,12 +186,13 @@
               type="button"
               class="px-3 py-1 text-sm bg-success-emphasis text-white rounded hover:brightness-110"
               onclick={() => handleCommentSubmit(commentText, true)}
-            >Submit</button>
+              >Submit</button
+            >
             <button
               type="button"
               class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-              onclick={() => handleCommentCancel()}
-            >Cancel</button>
+              onclick={() => handleCommentCancel()}>Cancel</button
+            >
           </div>
         </div>
       {/if}

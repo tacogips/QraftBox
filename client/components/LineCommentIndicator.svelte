@@ -1,52 +1,52 @@
 <script lang="ts">
-/**
- * LineCommentIndicator Component
- *
- * Small indicator badge shown next to line numbers when a line has comments.
- * Clicking opens the comments panel for that line.
- *
- * Props:
- * - commentCount: Number of comments on this line
- * - onClick: Callback when indicator is clicked
- *
- * Design:
- * - Small comment icon with count badge
- * - Touch-friendly 44px minimum tap target
- * - High contrast for visibility in diff views
- */
+  /**
+   * LineCommentIndicator Component
+   *
+   * Small indicator badge shown next to line numbers when a line has comments.
+   * Clicking opens the comments panel for that line.
+   *
+   * Props:
+   * - commentCount: Number of comments on this line
+   * - onClick: Callback when indicator is clicked
+   *
+   * Design:
+   * - Small comment icon with count badge
+   * - Touch-friendly 44px minimum tap target
+   * - High contrast for visibility in diff views
+   */
 
-interface Props {
-  commentCount: number;
-  onClick: () => void;
-}
+  interface Props {
+    commentCount: number;
+    onClick: () => void;
+  }
 
-// Svelte 5 props syntax
-const { commentCount, onClick }: Props = $props();
+  // Svelte 5 props syntax
+  const { commentCount, onClick }: Props = $props();
 
-/**
- * Get display text for comment count
- * Shows "9+" for counts above 9 to keep badge compact
- */
-const displayCount = $derived(commentCount > 9 ? "9+" : String(commentCount));
+  /**
+   * Get display text for comment count
+   * Shows "9+" for counts above 9 to keep badge compact
+   */
+  const displayCount = $derived(commentCount > 9 ? "9+" : String(commentCount));
 
-/**
- * Handle click on indicator
- */
-function handleClick(event: MouseEvent): void {
-  event.stopPropagation();
-  onClick();
-}
-
-/**
- * Handle keyboard activation
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
+  /**
+   * Handle click on indicator
+   */
+  function handleClick(event: MouseEvent): void {
     event.stopPropagation();
     onClick();
   }
-}
+
+  /**
+   * Handle keyboard activation
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClick();
+    }
+  }
 </script>
 
 <button
@@ -59,7 +59,9 @@ function handleKeydown(event: KeyboardEvent): void {
          focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-1 focus:ring-offset-bg-primary"
   onclick={handleClick}
   onkeydown={handleKeydown}
-  aria-label="{commentCount} comment{commentCount === 1 ? '' : 's'} on this line"
+  aria-label="{commentCount} comment{commentCount === 1
+    ? ''
+    : 's'} on this line"
   title="{commentCount} comment{commentCount === 1 ? '' : 's'}"
 >
   <!-- Comment Icon -->
@@ -90,8 +92,8 @@ function handleKeydown(event: KeyboardEvent): void {
 </button>
 
 <style>
-.line-comment-indicator {
-  /* Ensure proper sizing in flex containers */
-  flex-shrink: 0;
-}
+  .line-comment-indicator {
+    /* Ensure proper sizing in flex containers */
+    flex-shrink: 0;
+  }
 </style>

@@ -67,10 +67,7 @@
   /**
    * Copy event content to clipboard
    */
-  async function copyToClipboard(
-    text: string,
-    eventId: string,
-  ): Promise<void> {
+  async function copyToClipboard(text: string, eventId: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       copiedEventId = eventId;
@@ -414,85 +411,87 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="session-transcript-inline {isCompact ? 'px-4 py-1.5' : 'px-4 py-3'}">
+<div
+  class="session-transcript-inline {isCompact ? 'px-4 py-1.5' : 'px-4 py-3'}"
+>
   <!-- View mode toggle with navigation (hidden in compact mode) -->
   {#if !isCompact}
-  <div class="flex items-center justify-center gap-2 mb-3">
-    <div class="flex bg-bg-tertiary rounded-md p-0.5">
-      <button
-        type="button"
-        class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
-        'chat'
-          ? 'bg-bg-primary text-text-primary shadow-sm'
-          : 'text-text-secondary hover:text-text-primary'}"
-        onclick={() => (viewMode = "chat")}
-        aria-pressed={viewMode === "chat"}
-      >
-        Chat
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
-        'carousel'
-          ? 'bg-bg-primary text-text-primary shadow-sm'
-          : 'text-text-secondary hover:text-text-primary'}"
-        onclick={() => (viewMode = "carousel")}
-        aria-pressed={viewMode === "carousel"}
-      >
-        Carousel
-      </button>
-    </div>
-
-    <!-- Jump to first/last buttons -->
-    {#if chatEvents.length > 0}
-      <div class="flex items-center gap-0.5">
+    <div class="flex items-center justify-center gap-2 mb-3">
+      <div class="flex bg-bg-tertiary rounded-md p-0.5">
         <button
           type="button"
-          onclick={handleGoToFirst}
-          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
-          aria-label="Jump to first message"
-          title="Jump to first message"
+          class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
+          'chat'
+            ? 'bg-bg-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
+          onclick={() => (viewMode = "chat")}
+          aria-pressed={viewMode === "chat"}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="11 17 6 12 11 7" />
-            <polyline points="18 17 13 12 18 7" />
-          </svg>
+          Chat
         </button>
         <button
           type="button"
-          onclick={handleGoToLast}
-          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
-          aria-label="Jump to last message"
-          title="Jump to last message"
+          class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
+          'carousel'
+            ? 'bg-bg-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
+          onclick={() => (viewMode = "carousel")}
+          aria-pressed={viewMode === "carousel"}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="13 17 18 12 13 7" />
-            <polyline points="6 17 11 12 6 7" />
-          </svg>
+          Carousel
         </button>
       </div>
-    {/if}
-  </div>
+
+      <!-- Jump to first/last buttons -->
+      {#if chatEvents.length > 0}
+        <div class="flex items-center gap-0.5">
+          <button
+            type="button"
+            onclick={handleGoToFirst}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+            aria-label="Jump to first message"
+            title="Jump to first message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="11 17 6 12 11 7" />
+              <polyline points="18 17 13 12 18 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onclick={handleGoToLast}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+            aria-label="Jump to last message"
+            title="Jump to last message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="13 17 18 12 13 7" />
+              <polyline points="6 17 11 12 6 7" />
+            </svg>
+          </button>
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- Content area -->
@@ -546,7 +545,9 @@
       <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
       <div
         bind:this={chatScrollContainer}
-        class="{isCompact ? 'max-h-[120px]' : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
+        class="{isCompact
+          ? 'max-h-[120px]'
+          : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
       >
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
@@ -575,7 +576,10 @@
                 <!-- Copy to clipboard button -->
                 <button
                   type="button"
-                  onclick={(e: MouseEvent) => { e.stopPropagation(); copyToClipboard(textContent, eventId); }}
+                  onclick={(e: MouseEvent) => {
+                    e.stopPropagation();
+                    copyToClipboard(textContent, eventId);
+                  }}
                   class="p-0.5 hover:bg-bg-hover rounded transition-colors
                          focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
                   aria-label="Copy message to clipboard"
@@ -612,7 +616,9 @@
                       aria-hidden="true"
                     >
                       <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      <path
+                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                      />
                     </svg>
                   {/if}
                 </button>
@@ -745,8 +751,23 @@
                       <div
                         role="button"
                         tabindex="0"
-                        onclick={(e: MouseEvent) => { e.stopPropagation(); copyToClipboard(textContent, getEventId(event, index)); }}
-                        onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); copyToClipboard(textContent, getEventId(event, index)); } }}
+                        onclick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          copyToClipboard(
+                            textContent,
+                            getEventId(event, index),
+                          );
+                        }}
+                        onkeydown={(e: KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            copyToClipboard(
+                              textContent,
+                              getEventId(event, index),
+                            );
+                          }
+                        }}
                         class="p-0.5 hover:bg-bg-hover rounded transition-colors cursor-pointer
                                focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
                         aria-label="Copy message to clipboard"
@@ -782,8 +803,17 @@
                             class="text-text-tertiary"
                             aria-hidden="true"
                           >
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            <rect
+                              x="9"
+                              y="9"
+                              width="13"
+                              height="13"
+                              rx="2"
+                              ry="2"
+                            />
+                            <path
+                              d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            />
                           </svg>
                         {/if}
                       </div>

@@ -1,116 +1,116 @@
 <script lang="ts">
-import type { Comment, CommentReply, Author } from "../src/stores/comments";
+  import type { Comment, CommentReply, Author } from "../src/stores/comments";
 
-/**
- * CommentDisplay Component
- *
- * Displays a single comment with author info, timestamp, and action buttons.
- *
- * Props:
- * - comment: The Comment or CommentReply to display
- * - currentUser: Current user's email to determine if edit/delete is allowed
- * - isReply: Whether this is a reply (smaller, indented style)
- * - onReply: Callback when reply button is clicked
- * - onEdit: Callback when edit button is clicked
- * - onDelete: Callback when delete button is clicked
- *
- * Design:
- * - Compact display of comment content
- * - Touch-friendly action buttons (44px targets)
- * - Visual distinction between original comments and replies
- */
+  /**
+   * CommentDisplay Component
+   *
+   * Displays a single comment with author info, timestamp, and action buttons.
+   *
+   * Props:
+   * - comment: The Comment or CommentReply to display
+   * - currentUser: Current user's email to determine if edit/delete is allowed
+   * - isReply: Whether this is a reply (smaller, indented style)
+   * - onReply: Callback when reply button is clicked
+   * - onEdit: Callback when edit button is clicked
+   * - onDelete: Callback when delete button is clicked
+   *
+   * Design:
+   * - Compact display of comment content
+   * - Touch-friendly action buttons (44px targets)
+   * - Visual distinction between original comments and replies
+   */
 
-interface Props {
-  comment: Comment | CommentReply;
-  currentUser?: string;
-  isReply?: boolean;
-  onReply?: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-}
-
-// Svelte 5 props syntax
-const {
-  comment,
-  currentUser = undefined,
-  isReply = false,
-  onReply = undefined,
-  onEdit = undefined,
-  onDelete = undefined,
-}: Props = $props();
-
-// Check if this is a full Comment (has filePath) or a CommentReply
-const isFullComment = $derived("filePath" in comment);
-
-// Check if current user owns this comment
-const isOwner = $derived(
-  currentUser !== undefined && comment.author.email === currentUser
-);
-
-/**
- * Format the timestamp for display
- */
-const formattedTime = $derived.by(() => {
-  const date = new Date(comment.createdAt);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-
-  if (diffMins < 1) {
-    return "Just now";
-  } else if (diffMins < 60) {
-    return `${diffMins}m ago`;
-  } else if (diffMins < 1440) {
-    const hours = Math.floor(diffMins / 60);
-    return `${hours}h ago`;
-  } else if (diffMins < 10080) {
-    const days = Math.floor(diffMins / 1440);
-    return `${days}d ago`;
-  } else {
-    return date.toLocaleDateString();
+  interface Props {
+    comment: Comment | CommentReply;
+    currentUser?: string;
+    isReply?: boolean;
+    onReply?: () => void;
+    onEdit?: () => void;
+    onDelete?: () => void;
   }
-});
 
-/**
- * Get initials from author name for avatar
- */
-const authorInitials = $derived.by(() => {
-  const parts = comment.author.name.split(" ");
-  if (parts.length >= 2) {
-    return (
-      (parts[0]?.[0] ?? "").toUpperCase() +
-      (parts[1]?.[0] ?? "").toUpperCase()
-    );
+  // Svelte 5 props syntax
+  const {
+    comment,
+    currentUser = undefined,
+    isReply = false,
+    onReply = undefined,
+    onEdit = undefined,
+    onDelete = undefined,
+  }: Props = $props();
+
+  // Check if this is a full Comment (has filePath) or a CommentReply
+  const isFullComment = $derived("filePath" in comment);
+
+  // Check if current user owns this comment
+  const isOwner = $derived(
+    currentUser !== undefined && comment.author.email === currentUser,
+  );
+
+  /**
+   * Format the timestamp for display
+   */
+  const formattedTime = $derived.by(() => {
+    const date = new Date(comment.createdAt);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) {
+      return "Just now";
+    } else if (diffMins < 60) {
+      return `${diffMins}m ago`;
+    } else if (diffMins < 1440) {
+      const hours = Math.floor(diffMins / 60);
+      return `${hours}h ago`;
+    } else if (diffMins < 10080) {
+      const days = Math.floor(diffMins / 1440);
+      return `${days}d ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  });
+
+  /**
+   * Get initials from author name for avatar
+   */
+  const authorInitials = $derived.by(() => {
+    const parts = comment.author.name.split(" ");
+    if (parts.length >= 2) {
+      return (
+        (parts[0]?.[0] ?? "").toUpperCase() +
+        (parts[1]?.[0] ?? "").toUpperCase()
+      );
+    }
+    return (comment.author.name[0] ?? "?").toUpperCase();
+  });
+
+  /**
+   * Handle long press for context menu on touch devices
+   */
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined =
+    $state(undefined);
+  let showActions = $state(false);
+
+  function handlePointerDown(): void {
+    longPressTimer = setTimeout(() => {
+      showActions = true;
+    }, 500);
   }
-  return (comment.author.name[0] ?? "?").toUpperCase();
-});
 
-/**
- * Handle long press for context menu on touch devices
- */
-let longPressTimer: ReturnType<typeof setTimeout> | undefined =
-  $state(undefined);
-let showActions = $state(false);
-
-function handlePointerDown(): void {
-  longPressTimer = setTimeout(() => {
-    showActions = true;
-  }, 500);
-}
-
-function handlePointerUp(): void {
-  if (longPressTimer !== undefined) {
-    clearTimeout(longPressTimer);
-    longPressTimer = undefined;
+  function handlePointerUp(): void {
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
   }
-}
 
-function handlePointerLeave(): void {
-  if (longPressTimer !== undefined) {
-    clearTimeout(longPressTimer);
-    longPressTimer = undefined;
+  function handlePointerLeave(): void {
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
   }
-}
 </script>
 
 <div
@@ -164,7 +164,9 @@ function handlePointerLeave(): void {
     <!-- Actions -->
     <div
       class="flex items-center gap-1 mt-2 -ml-2
-             {showActions ? 'opacity-100' : 'opacity-0 hover:opacity-100 focus-within:opacity-100'}
+             {showActions
+        ? 'opacity-100'
+        : 'opacity-0 hover:opacity-100 focus-within:opacity-100'}
              transition-opacity duration-150"
     >
       <!-- Reply Button (only for non-replies) -->
@@ -216,11 +218,12 @@ function handlePointerLeave(): void {
 </div>
 
 <style>
-.comment-display {
-  border-bottom: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
-}
+  .comment-display {
+    border-bottom: 1px solid
+      var(--color-border-default, rgba(255, 255, 255, 0.1));
+  }
 
-.comment-display:last-child {
-  border-bottom: none;
-}
+  .comment-display:last-child {
+    border-bottom: none;
+  }
 </style>

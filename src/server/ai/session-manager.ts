@@ -27,9 +27,7 @@ import { buildPromptWithContext } from "./prompt-builder";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import { SessionRegistry } from "../claude/session-registry.js";
 import { createLogger } from "../logger.js";
-import { basename, join } from "node:path";
-import { homedir } from "node:os";
-import { readdirSync, statSync } from "node:fs";
+import { basename } from "node:path";
 import {
   ClaudeCodeToolAgent,
   type ToolAgentSession,
@@ -62,8 +60,6 @@ interface InternalSession {
  */
 interface QueuedPrompt {
   readonly id: string;
-  /** Claude CLI session ID explicitly requested by the client (null = new session) */
-  requestedClaudeSessionId: string | null;
   readonly message: string;
   readonly context: AIPromptContext;
   readonly projectPath: string;
@@ -162,6 +158,22 @@ export interface SessionManager {
    * Cancel a queued prompt by its ID.
    */
   cancelPrompt(promptId: string): void;
+
+  /**
+   * Register a resume mapping so that subsequent prompts with the returned
+   * qraft_ai_session_id will resume the given Claude CLI session.
+   *
+   * Creates a synthetic completed queue entry that links the derived
+   * qraftAiSessionId to the provided claudeSessionId.
+   *
+   * @param claudeSessionId - Claude CLI session UUID to resume
+   * @param projectPath - Project path for worktree resolution
+   * @returns The derived QraftAiSessionId to use for subsequent prompts
+   */
+  registerResumeMapping(
+    claudeSessionId: string,
+    projectPath: string,
+  ): QraftAiSessionId;
 }
 
 /**
@@ -211,60 +223,7 @@ function extractClaudeSessionId(msg: unknown): string | null {
   return null;
 }
 
-/** UUID v4 pattern (lowercase hex with dashes) */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
 /**
- * Discover the Claude CLI session ID from the transcript directory.
- *
- * Claude CLI stores session transcripts at:
- *   ~/.claude/projects/{encoded-path}/{session-uuid}.jsonl
- *
- * where {encoded-path} is the absolute project path with '/' replaced by '-'.
- *
- * @param projectPath - Absolute path to the project directory
- * @param createdAfter - Only consider files modified after this timestamp (ms)
- * @returns Claude CLI session UUID, or null if not found
- */
-function discoverClaudeSessionId(
-  projectPath: string,
-  createdAfter: number,
-): string | null {
-  try {
-    const encoded = projectPath.replace(/\//g, "-");
-    const transcriptDir = join(homedir(), ".claude", "projects", encoded);
-
-    let entries: string[];
-    try {
-      entries = readdirSync(transcriptDir);
-    } catch {
-      return null; // Directory doesn't exist
-    }
-
-    // Find UUID-named .jsonl files modified after the session started
-    let best: { name: string; mtime: number } | undefined;
-    for (const entry of entries) {
-      if (!entry.endsWith(".jsonl")) continue;
-      const name = entry.slice(0, -6); // strip .jsonl
-      if (!UUID_RE.test(name)) continue;
-
-      try {
-        const st = statSync(join(transcriptDir, entry));
-        const mtime = st.mtimeMs;
-        if (mtime < createdAfter) continue;
-        if (best === undefined || mtime > best.mtime) {
-          best = { name, mtime };
-        }
-      } catch {
-        continue;
-      }
-    }
-
-    return best?.name ?? null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -568,26 +527,6 @@ export function createSessionManager(
         const sessionResult = await toolAgentSession.waitForCompletion();
         const finalAgentState = toolAgentSession.getState().state;
 
-        // Fallback: if stream messages never contained a session ID,
-        // discover it from the transcript file that the CLI created.
-        if (session.currentClaudeSessionId === undefined) {
-          const discovered = discoverClaudeSessionId(
-            session.request.options.projectPath,
-            session.startedAt?.getTime() ?? session.createdAt.getTime(),
-          );
-          if (discovered !== null) {
-            session.currentClaudeSessionId = discovered;
-            session.registeredClaudeSessionIds.add(discovered);
-            logger.info("Discovered Claude session ID from transcript file", {
-              qraftAiSessionId: sessionId,
-              claudeSessionId: discovered,
-            });
-            void sessionRegistry
-              .register(discovered, session.request.options.projectPath)
-              .catch(() => {});
-          }
-        }
-
         // Keep explicit cancellation as cancelled (don't downgrade to failed)
         const latestSession = sessions.get(sessionId);
         if (
@@ -727,7 +666,6 @@ export function createSessionManager(
       message:
         p.message.length > 200 ? p.message.slice(0, 200) + "..." : p.message,
       status: p.status,
-      requested_claude_session_id: p.requestedClaudeSessionId,
       claude_session_id: p.resultClaudeSessionId,
       current_activity: p.currentActivity,
       error: p.error,
@@ -771,22 +709,13 @@ export function createSessionManager(
    * Resolve the resumeSessionId for the next prompt in queue.
    *
    * Priority:
-   * 1. If prompt has an explicit session_id (Claude CLI session ID), use it
-   * 2. If prompt has a qraft_ai_session_id, look for the most recently completed
+   * 1. If prompt has a qraft_ai_session_id, look for the most recently completed
    *    prompt in the same group to inherit its resultClaudeSessionId
-   * 3. Otherwise, fall back to same-worktree lookup
-   * 4. If none found, start a new session (undefined)
+   * 2. Otherwise, fall back to same-worktree lookup
+   * 3. If none found, start a new session (undefined)
    */
   function resolveResumeSessionId(prompt: QueuedPrompt): string | undefined {
-    // 1. Explicit Claude session ID takes priority
-    if (
-      prompt.requestedClaudeSessionId !== null &&
-      prompt.requestedClaudeSessionId.length > 0
-    ) {
-      return prompt.requestedClaudeSessionId;
-    }
-
-    // 2. Match by qraft_ai_session_id first (client-generated group key)
+    // 1. Match by qraft_ai_session_id (client-generated group key)
     if (
       prompt.qraftAiSessionId !== undefined &&
       prompt.qraftAiSessionId.length > 0
@@ -800,12 +729,17 @@ export function createSessionManager(
           prev.resultClaudeSessionId !== undefined &&
           prev.resultClaudeSessionId.length > 0
         ) {
+          logger.info("Resolved resume session via qraftAiSessionId group", {
+            promptId: prompt.id,
+            matchedPromptId: prev.id,
+            resumeSessionId: prev.resultClaudeSessionId,
+          });
           return prev.resultClaudeSessionId;
         }
       }
     }
 
-    // 3. Fall back to same-worktree lookup
+    // 2. Fall back to same-worktree lookup
     for (let i = promptQueue.length - 1; i >= 0; i--) {
       const prev = promptQueue[i];
       if (prev === undefined) continue;
@@ -815,6 +749,11 @@ export function createSessionManager(
         prev.resultClaudeSessionId !== undefined &&
         prev.resultClaudeSessionId.length > 0
       ) {
+        logger.info("Resolved resume session via worktreeId fallback", {
+          promptId: prompt.id,
+          matchedPromptId: prev.id,
+          resumeSessionId: prev.resultClaudeSessionId,
+        });
         return prev.resultClaudeSessionId;
       }
     }
@@ -836,10 +775,9 @@ export function createSessionManager(
     broadcastQueueUpdate();
 
     const resumeSessionId = resolveResumeSessionId(next);
-    logger.info("Dispatching queued prompt", {
+    logger.info("Dispatching prompt", {
       promptId: next.id,
-      resumeSessionId: resumeSessionId ?? null,
-      message: next.message.slice(0, 80),
+      resumeSessionId: resumeSessionId ?? "NEW_SESSION",
     });
 
     // Use the existing submit() mechanism internally
@@ -869,7 +807,6 @@ export function createSessionManager(
           if (event.type === "completed") {
             next.status = "completed";
             next.currentActivity = undefined;
-            // Resolve claude session ID from the completed session
             const completedSession = self.getSession(result.sessionId);
             if (completedSession?.claudeSessionId !== undefined) {
               next.resultClaudeSessionId = completedSession.claudeSessionId;
@@ -1128,23 +1065,14 @@ export function createSessionManager(
           ? msg.worktree_id
           : generateWorktreeId(projectPath);
 
-      // Resolve qraft_ai_session_id:
-      // 1. Use explicit value if provided
-      // 2. Derive from session_id (Claude session ID) if available
-      // 3. Otherwise undefined (new session group)
-      let qraftAiSessionId: QraftAiSessionId | undefined;
-      if (
+      const qraftAiSessionId: QraftAiSessionId | undefined =
         typeof msg.qraft_ai_session_id === "string" &&
         msg.qraft_ai_session_id.length > 0
-      ) {
-        qraftAiSessionId = msg.qraft_ai_session_id as QraftAiSessionId;
-      } else if (msg.session_id !== null && msg.session_id.length > 0) {
-        qraftAiSessionId = deriveQraftAiSessionIdFromClaude(msg.session_id);
-      }
+          ? (msg.qraft_ai_session_id as QraftAiSessionId)
+          : undefined;
 
       const prompt: QueuedPrompt = {
         id: promptId,
-        requestedClaudeSessionId: msg.session_id,
         message: msg.message,
         context: msg.context ?? { references: [] },
         projectPath,
@@ -1162,7 +1090,6 @@ export function createSessionManager(
       promptQueue.push(prompt);
       logger.info("Prompt queued", {
         promptId,
-        requestedClaudeSessionId: msg.session_id,
         qraftAiSessionId,
         queueLength: promptQueue.filter((p) => p.status === "queued").length,
       });
@@ -1205,6 +1132,42 @@ export function createSessionManager(
         prompt.currentActivity = undefined;
         broadcastQueueUpdate();
       }
+    },
+
+    registerResumeMapping(
+      claudeSessionId: string,
+      projectPath: string,
+    ): QraftAiSessionId {
+      const qraftAiSessionId =
+        deriveQraftAiSessionIdFromClaude(claudeSessionId);
+      const worktreeId = generateWorktreeId(projectPath);
+
+      // Insert a synthetic completed entry so resolveResumeSessionId
+      // can find the mapping via qraftAiSessionId group lookup.
+      const synthetic: QueuedPrompt = {
+        id: generatePromptId(),
+        message: `[resume mapping for ${claudeSessionId}]`,
+        context: { references: [] },
+        projectPath,
+        runImmediately: false,
+        worktreeId,
+        qraftAiSessionId,
+        status: "completed",
+        resultClaudeSessionId: claudeSessionId,
+        currentActivity: undefined,
+        error: undefined,
+        createdAt: new Date(),
+        internalSessionId: undefined,
+      };
+      promptQueue.push(synthetic);
+      trimPromptHistory();
+
+      logger.info("Registered resume mapping", {
+        qraftAiSessionId,
+        claudeSessionId,
+      });
+
+      return qraftAiSessionId;
     },
   };
 

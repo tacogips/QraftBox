@@ -60,12 +60,18 @@
       for (const change of chunk.changes) {
         if (change.type === "delete" || change.type === "context") {
           if (change.oldLine !== undefined) {
-            oldEntries.push({ lineNumber: change.oldLine, content: change.content });
+            oldEntries.push({
+              lineNumber: change.oldLine,
+              content: change.content,
+            });
           }
         }
         if (change.type === "add" || change.type === "context") {
           if (change.newLine !== undefined) {
-            newEntries.push({ lineNumber: change.newLine, content: change.content });
+            newEntries.push({
+              lineNumber: change.newLine,
+              content: change.content,
+            });
           }
         }
       }
@@ -117,7 +123,11 @@
    * Handle comment open from side-by-side gutter "+".
    * Shift+click extends existing range on the same side.
    */
-  function handleSideBySideCommentOpen(side: "old" | "new", line: number, shiftKey: boolean): void {
+  function handleSideBySideCommentOpen(
+    side: "old" | "new",
+    line: number,
+    shiftKey: boolean,
+  ): void {
     if (shiftKey && activeComment !== null && activeComment.side === side) {
       const start = Math.min(activeComment.startLine, line);
       const end = Math.max(activeComment.endLine, line);
@@ -131,7 +141,11 @@
    * Handle comment open from inline gutter "+".
    * Shift+click extends existing range on the same side.
    */
-  function handleInlineCommentOpen(line: number, type: "old" | "new", shiftKey: boolean): void {
+  function handleInlineCommentOpen(
+    line: number,
+    type: "old" | "new",
+    shiftKey: boolean,
+  ): void {
     if (shiftKey && activeComment !== null && activeComment.side === type) {
       const start = Math.min(activeComment.startLine, line);
       const end = Math.max(activeComment.endLine, line);
@@ -190,13 +204,21 @@
 
   const sbsCommentLine = $derived(
     activeComment !== null
-      ? { side: activeComment.side, startLine: activeComment.startLine, endLine: activeComment.endLine }
+      ? {
+          side: activeComment.side,
+          startLine: activeComment.startLine,
+          endLine: activeComment.endLine,
+        }
       : undefined,
   );
 
   const inlineCommentLine = $derived(
     activeComment !== null
-      ? { type: activeComment.side, startLine: activeComment.startLine, endLine: activeComment.endLine }
+      ? {
+          type: activeComment.side,
+          startLine: activeComment.startLine,
+          endLine: activeComment.endLine,
+        }
       : undefined,
   );
 </script>
@@ -207,7 +229,9 @@
     class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
     <div class="flex items-center gap-2">
-      <span class="text-xs font-medium text-text-primary truncate max-w-[300px]">
+      <span
+        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
+      >
         {file.path}
       </span>
       <span class="text-[10px] text-text-secondary">
@@ -226,7 +250,9 @@
         aria-label="Previous file"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z" />
+          <path
+            d="M7.78 12.53a.75.75 0 0 1-1.06 0L2.47 8.28a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 1.06L4.81 7h7.44a.75.75 0 0 1 0 1.5H4.81l2.97 2.97a.75.75 0 0 1 0 1.06Z"
+          />
         </svg>
       </button>
       <button
@@ -240,7 +266,9 @@
         aria-label="Next file"
       >
         <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8.22 3.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 9H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.53a.75.75 0 0 1 0-1.06Z" />
+          <path
+            d="M8.22 3.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.19 9H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.53a.75.75 0 0 1 0-1.06Z"
+          />
         </svg>
       </button>
     </div>

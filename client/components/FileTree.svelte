@@ -184,11 +184,7 @@
       // Check if this directory needs lazy loading
       if (onDirectoryExpand !== undefined) {
         const node = findNodeInTree(tree, path);
-        if (
-          node !== null &&
-          node.isDirectory &&
-          node.children === undefined
-        ) {
+        if (node !== null && node.isDirectory && node.children === undefined) {
           const newLoading = new Set(loadingPaths);
           newLoading.add(path);
           loadingPaths = newLoading;
@@ -206,10 +202,7 @@
   /**
    * Find a node in the tree by path
    */
-  function findNodeInTree(
-    node: FileNode,
-    targetPath: string,
-  ): FileNode | null {
+  function findNodeInTree(node: FileNode, targetPath: string): FileNode | null {
     if (node.path === targetPath) return node;
     if (!node.isDirectory || node.children === undefined) return null;
     for (const child of node.children) {
@@ -810,14 +803,24 @@
       {#if onNarrow}
         <button
           type="button"
-          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canNarrow ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canNarrow
+            ? 'text-text-tertiary hover:text-text-primary cursor-pointer'
+            : 'text-text-quaternary cursor-default'}"
           onclick={onNarrow}
           disabled={!canNarrow}
           title="Narrow panel"
           aria-label="Narrow file tree panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M9.78 4.22a.75.75 0 010 1.06L7.56 7.5h6.69a.75.75 0 010 1.5H7.56l2.22 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zM2.75 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5A.75.75 0 012.75 3z" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M9.78 4.22a.75.75 0 010 1.06L7.56 7.5h6.69a.75.75 0 010 1.5H7.56l2.22 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zM2.75 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5A.75.75 0 012.75 3z"
+            />
           </svg>
         </button>
       {/if}
@@ -825,14 +828,24 @@
       {#if onWiden}
         <button
           type="button"
-          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canWiden ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canWiden
+            ? 'text-text-tertiary hover:text-text-primary cursor-pointer'
+            : 'text-text-quaternary cursor-default'}"
           onclick={onWiden}
           disabled={!canWiden}
           title="Widen panel"
           aria-label="Widen file tree panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z"
+            />
           </svg>
         </button>
       {/if}
@@ -845,8 +858,16 @@
         title="Expand all"
         aria-label="Expand all directories"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
+          />
         </svg>
       </button>
       <!-- Collapse All -->
@@ -857,8 +878,16 @@
         title="Collapse all"
         aria-label="Collapse all directories"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z"
+          />
         </svg>
       </button>
     </div>

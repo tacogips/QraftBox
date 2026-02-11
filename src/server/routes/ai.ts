@@ -219,10 +219,6 @@ export function createAIRoutes(context: AIServerContext): Hono {
 
       // Ensure project_path defaults to server config
       const msg: AIPromptMessage = {
-        session_id:
-          typeof body.session_id === "string" && body.session_id.length > 0
-            ? body.session_id
-            : null,
         run_immediately: body.run_immediately === true,
         message: body.message,
         context: body.context,
@@ -459,6 +455,59 @@ export function createAIRoutes(context: AIServerContext): Hono {
         unsubscribe();
       }
     });
+  });
+
+  /**
+   * POST /api/ai/resume-session
+   *
+   * Register a resume mapping so subsequent prompts with the returned
+   * qraft_ai_session_id will resume the specified Claude CLI session.
+   *
+   * Request body:
+   * - claude_session_id: string (required) - Claude CLI session UUID
+   * - project_path: string (optional) - defaults to server projectPath
+   *
+   * Response:
+   * - qraft_ai_session_id: string - derived session group ID for client use
+   */
+  app.post("/resume-session", async (c) => {
+    try {
+      const body = await c.req.json<Record<string, unknown>>();
+
+      const claudeSessionId = body["claude_session_id"];
+      if (
+        typeof claudeSessionId !== "string" ||
+        claudeSessionId.length === 0
+      ) {
+        const errorResponse: ErrorResponse = {
+          error: "claude_session_id is required",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      const projectPath =
+        typeof body["project_path"] === "string" &&
+        body["project_path"].length > 0
+          ? body["project_path"]
+          : context.projectPath;
+
+      const qraftAiSessionId =
+        context.sessionManager.registerResumeMapping(
+          claudeSessionId,
+          projectPath,
+        );
+
+      return c.json({ qraft_ai_session_id: qraftAiSessionId });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to register resume mapping";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
   });
 
   /**

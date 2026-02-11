@@ -125,7 +125,9 @@
         </svg>
 
         <!-- Label -->
-        <span class="text-text-primary text-text-tertiary text-sm">Copy Path</span>
+        <span class="text-text-primary text-text-tertiary text-sm"
+          >Copy Path</span
+        >
       </button>
 
       <!-- Open in Editor Action (if callback provided) -->

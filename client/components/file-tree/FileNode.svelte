@@ -118,7 +118,9 @@
 <button
   bind:this={buttonEl}
   type="button"
-  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(node.status)}"
+  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(
+    node.status,
+  )}"
   class:bg-accent-subtle={selected && !node.status}
   class:border-l-4={selected}
   class:border-accent-emphasis={selected}
@@ -173,11 +175,15 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):hover {
+  .file-node:not(.status-added):not(.status-modified):not(
+      .status-deleted
+    ):hover {
     background-color: var(--color-bg-tertiary);
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):active {
+  .file-node:not(.status-added):not(.status-modified):not(
+      .status-deleted
+    ):active {
     background-color: var(--color-bg-tertiary);
   }
 

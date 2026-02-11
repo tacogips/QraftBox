@@ -1,158 +1,158 @@
 <script lang="ts">
-import type { SearchScope } from "../../src/types/search";
+  import type { SearchScope } from "../../src/types/search";
 
-/**
- * SearchInput Component
- *
- * Search input field with scope selector for the diff viewer.
- *
- * Props:
- * - query: Current search query
- * - scope: Current search scope
- * - resultCount: Total number of results (for display)
- * - currentIndex: Current result index (for display)
- * - loading: Whether search is in progress
- * - error: Error message to display
- * - onQueryChange: Callback when query changes
- * - onScopeChange: Callback when scope changes
- * - onSubmit: Callback when search is submitted (Enter)
- * - onClose: Callback when search is closed (Escape)
- * - onNext: Callback to go to next result
- * - onPrev: Callback to go to previous result
- *
- * Design:
- * - Compact search bar with integrated controls
- * - Scope toggle buttons
- * - Keyboard navigation (Enter to search, Escape to close)
- * - Visual indication of regex validity
- */
+  /**
+   * SearchInput Component
+   *
+   * Search input field with scope selector for the diff viewer.
+   *
+   * Props:
+   * - query: Current search query
+   * - scope: Current search scope
+   * - resultCount: Total number of results (for display)
+   * - currentIndex: Current result index (for display)
+   * - loading: Whether search is in progress
+   * - error: Error message to display
+   * - onQueryChange: Callback when query changes
+   * - onScopeChange: Callback when scope changes
+   * - onSubmit: Callback when search is submitted (Enter)
+   * - onClose: Callback when search is closed (Escape)
+   * - onNext: Callback to go to next result
+   * - onPrev: Callback to go to previous result
+   *
+   * Design:
+   * - Compact search bar with integrated controls
+   * - Scope toggle buttons
+   * - Keyboard navigation (Enter to search, Escape to close)
+   * - Visual indication of regex validity
+   */
 
-interface Props {
-  query: string;
-  scope: SearchScope;
-  resultCount?: number;
-  currentIndex?: number;
-  loading?: boolean;
-  error?: string | null;
-  onQueryChange: (query: string) => void;
-  onScopeChange: (scope: SearchScope) => void;
-  onSubmit: () => void;
-  onClose: () => void;
-  onNext?: () => void;
-  onPrev?: () => void;
-}
+  interface Props {
+    query: string;
+    scope: SearchScope;
+    resultCount?: number;
+    currentIndex?: number;
+    loading?: boolean;
+    error?: string | null;
+    onQueryChange: (query: string) => void;
+    onScopeChange: (scope: SearchScope) => void;
+    onSubmit: () => void;
+    onClose: () => void;
+    onNext?: () => void;
+    onPrev?: () => void;
+  }
 
-// Svelte 5 props syntax
-const {
-  query,
-  scope,
-  resultCount = 0,
-  currentIndex = -1,
-  loading = false,
-  error = null,
-  onQueryChange,
-  onScopeChange,
-  onSubmit,
-  onClose,
-  onNext = undefined,
-  onPrev = undefined,
-}: Props = $props();
+  // Svelte 5 props syntax
+  const {
+    query,
+    scope,
+    resultCount = 0,
+    currentIndex = -1,
+    loading = false,
+    error = null,
+    onQueryChange,
+    onScopeChange,
+    onSubmit,
+    onClose,
+    onNext = undefined,
+    onPrev = undefined,
+  }: Props = $props();
 
-// Regex validity state
-let isValidRegex = $state(true);
-let regexError = $state<string | null>(null);
+  // Regex validity state
+  let isValidRegex = $state(true);
+  let regexError = $state<string | null>(null);
 
-// Check regex validity when query changes
-$effect(() => {
-  if (query.length === 0) {
-    isValidRegex = true;
-    regexError = null;
-  } else {
-    try {
-      new RegExp(query);
+  // Check regex validity when query changes
+  $effect(() => {
+    if (query.length === 0) {
       isValidRegex = true;
       regexError = null;
-    } catch (e) {
-      isValidRegex = false;
-      regexError = e instanceof Error ? e.message : "Invalid regex";
+    } else {
+      try {
+        new RegExp(query);
+        isValidRegex = true;
+        regexError = null;
+      } catch (e) {
+        isValidRegex = false;
+        regexError = e instanceof Error ? e.message : "Invalid regex";
+      }
+    }
+  });
+
+  /**
+   * Get result count display text
+   */
+  const resultText = $derived.by(() => {
+    if (loading) {
+      return "Searching...";
+    }
+    if (query.length === 0) {
+      return "";
+    }
+    if (!isValidRegex) {
+      return "Invalid regex";
+    }
+    if (resultCount === 0) {
+      return "No results";
+    }
+    return `${currentIndex + 1} of ${resultCount}`;
+  });
+
+  /**
+   * Scope options
+   */
+  const scopeOptions: { value: SearchScope; label: string; title: string }[] = [
+    { value: "file", label: "File", title: "Search in current file" },
+    { value: "changed", label: "Changed", title: "Search in changed files" },
+    { value: "all", label: "All", title: "Search entire repository" },
+  ];
+
+  /**
+   * Handle input change
+   */
+  function handleInput(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    onQueryChange(target.value);
+  }
+
+  /**
+   * Handle keyboard events
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (isValidRegex) {
+        onSubmit();
+      }
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+    } else if (event.key === "F3" || (event.ctrlKey && event.key === "g")) {
+      event.preventDefault();
+      if (event.shiftKey && onPrev !== undefined) {
+        onPrev();
+      } else if (onNext !== undefined) {
+        onNext();
+      }
     }
   }
-});
 
-/**
- * Get result count display text
- */
-const resultText = $derived.by(() => {
-  if (loading) {
-    return "Searching...";
+  /**
+   * Handle scope button click
+   */
+  function handleScopeClick(newScope: SearchScope): void {
+    onScopeChange(newScope);
   }
-  if (query.length === 0) {
-    return "";
+
+  /**
+   * Focus input on mount
+   */
+  function handleInputMount(element: HTMLInputElement): void {
+    setTimeout(() => {
+      element.focus();
+      element.select();
+    }, 100);
   }
-  if (!isValidRegex) {
-    return "Invalid regex";
-  }
-  if (resultCount === 0) {
-    return "No results";
-  }
-  return `${currentIndex + 1} of ${resultCount}`;
-});
-
-/**
- * Scope options
- */
-const scopeOptions: { value: SearchScope; label: string; title: string }[] = [
-  { value: "file", label: "File", title: "Search in current file" },
-  { value: "changed", label: "Changed", title: "Search in changed files" },
-  { value: "all", label: "All", title: "Search entire repository" },
-];
-
-/**
- * Handle input change
- */
-function handleInput(event: Event): void {
-  const target = event.target as HTMLInputElement;
-  onQueryChange(target.value);
-}
-
-/**
- * Handle keyboard events
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    if (isValidRegex) {
-      onSubmit();
-    }
-  } else if (event.key === "Escape") {
-    event.preventDefault();
-    onClose();
-  } else if (event.key === "F3" || (event.ctrlKey && event.key === "g")) {
-    event.preventDefault();
-    if (event.shiftKey && onPrev !== undefined) {
-      onPrev();
-    } else if (onNext !== undefined) {
-      onNext();
-    }
-  }
-}
-
-/**
- * Handle scope button click
- */
-function handleScopeClick(newScope: SearchScope): void {
-  onScopeChange(newScope);
-}
-
-/**
- * Focus input on mount
- */
-function handleInputMount(element: HTMLInputElement): void {
-  setTimeout(() => {
-    element.focus();
-    element.select();
-  }, 100);
-}
 </script>
 
 <div
@@ -334,16 +334,16 @@ function handleInputMount(element: HTMLInputElement): void {
 </div>
 
 <style>
-/* Screen reader only */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
+  /* Screen reader only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
 </style>
