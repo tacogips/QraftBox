@@ -114,5 +114,18 @@
     },
     "createdAt": 1770801014981,
     "replies": []
+  },
+  {
+    "id": "1260822e-ec13-41f3-9078-6352e8d8adbe",
+    "commitHash": "419649bc5e2294b4d1a71705dc371f71f0ab3685",
+    "filePath": "file1.txt",
+    "lineNumber": 1,
+    "body": "Workflow comment",
+    "author": {
+      "name": "tacogips",
+      "email": "me@tacogips.me"
+    },
+    "createdAt": 1770801017015,
+    "replies": []
   }
 ]
