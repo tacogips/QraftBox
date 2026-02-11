@@ -8,10 +8,7 @@
     type AISession,
   } from "../../src/types/ai";
   import { screenFromHash, type ScreenType } from "./lib/app-routing";
-  import {
-    annotateTreeWithStatus,
-    buildFileTree,
-  } from "./lib/file-tree-utils";
+  import { annotateTreeWithStatus, buildFileTree } from "./lib/file-tree-utils";
   import {
     type PromptQueueItem,
     type RecentProject,
@@ -349,7 +346,8 @@
     getQueuedSessions: () => queuedSessions,
     setQueuedSessions: (value) => (queuedSessions = value),
     getRecentlyCompletedSessions: () => recentlyCompletedSessions,
-    setRecentlyCompletedSessions: (value) => (recentlyCompletedSessions = value),
+    setRecentlyCompletedSessions: (value) =>
+      (recentlyCompletedSessions = value),
     getServerPromptQueue: () => serverPromptQueue,
     setServerPromptQueue: (value) => (serverPromptQueue = value),
     setQueueStatus: (value) => (queueStatus = value),
@@ -360,8 +358,7 @@
   });
 
   const {
-    handleAIPanelSubmit,
-    handleInlineCommentSubmit,
+    submitPrompt,
     fetchPromptQueue,
     fetchActiveSessions,
     handleCancelActiveSession,
@@ -588,11 +585,10 @@
         onNarrowSidebar={narrowSidebar}
         onWidenSidebar={widenSidebar}
         onSetViewMode={setViewMode}
-        onInlineCommentSubmit={handleInlineCommentSubmit}
+        onSubmitPrompt={submitPrompt}
         onNewSession={handleNewSession}
         onResumeCliSession={handleResumeCliSession}
         onCancelActiveSession={handleCancelActiveSession}
-        onCodeViewAISubmit={handleAIPanelSubmit}
         onToggleAiPanel={() => {
           aiPanelCollapsed = !aiPanelCollapsed;
         }}

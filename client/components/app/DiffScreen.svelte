@@ -1,15 +1,12 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
-  import type {
-    QueueStatus,
-    FileReference,
-    AISession,
-  } from "../../../src/types/ai";
+  import type { QueueStatus, AISession } from "../../../src/types/ai";
+  import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
-  import CodeViewAIPanel from "../../src/components/CodeViewAIPanel.svelte";
+  import AIPromptPanel from "../../src/components/AIPromptPanel.svelte";
   import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
   import SessionToolbar from "../SessionToolbar.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
@@ -62,11 +59,10 @@
     onNarrowSidebar,
     onWidenSidebar,
     onSetViewMode,
-    onInlineCommentSubmit,
+    onSubmitPrompt,
     onNewSession,
     onResumeCliSession,
     onCancelActiveSession,
-    onCodeViewAISubmit,
     onToggleAiPanel,
     onSearchSession,
   }: {
@@ -112,25 +108,33 @@
     onNarrowSidebar: () => void;
     onWidenSidebar: () => void;
     onSetViewMode: (mode: ViewMode) => void;
-    onInlineCommentSubmit: (
-      startLine: number,
-      endLine: number,
-      side: "old" | "new",
-      filePath: string,
-      prompt: string,
+    onSubmitPrompt: (
+      message: string,
       immediate: boolean,
+      context: AIPromptContext,
     ) => Promise<void>;
     onNewSession: () => void;
     onResumeCliSession: (resumeQraftId: string) => void;
     onCancelActiveSession: (sessionId: string) => Promise<void>;
-    onCodeViewAISubmit: (
-      prompt: string,
-      immediate: boolean,
-      refs: readonly FileReference[],
-    ) => Promise<void>;
     onToggleAiPanel: () => void;
     onSearchSession: () => void;
   } = $props();
+
+  function handleInlineCommentSubmit(
+    startLine: number,
+    endLine: number,
+    _side: "old" | "new",
+    filePath: string,
+    prompt: string,
+    immediate: boolean,
+  ): void {
+    void onSubmitPrompt(prompt, immediate, {
+      primaryFile: { path: filePath, startLine, endLine, content: "" },
+      references: [],
+      diffSummary: undefined,
+      // resumeSessionId omitted: inline prompts create a new session
+    });
+  }
 </script>
 
 <div class="flex flex-1 overflow-hidden">
@@ -211,7 +215,7 @@
         <div class="px-2 pb-2">
           <CurrentStateView
             file={selectedFile}
-            onCommentSubmit={onInlineCommentSubmit}
+            onCommentSubmit={handleInlineCommentSubmit}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -223,7 +227,7 @@
             mode={effectiveViewMode === "side-by-side"
               ? "side-by-side"
               : "inline"}
-            onCommentSubmit={onInlineCommentSubmit}
+            onCommentSubmit={handleInlineCommentSubmit}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -238,7 +242,7 @@
           isBinary={fileContent.isBinary}
           isImage={fileContent.isImage}
           mimeType={fileContent.mimeType}
-          onCommentSubmit={onInlineCommentSubmit}
+          onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else if fileContentLoading}
         <div class="p-8 text-center text-text-secondary">Loading file...</div>
@@ -250,7 +254,7 @@
           isBinary={fileContent.isBinary}
           isImage={fileContent.isImage}
           mimeType={fileContent.mimeType}
-          onCommentSubmit={onInlineCommentSubmit}
+          onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else}
         <div class="p-8 text-center text-text-secondary">
@@ -443,12 +447,18 @@
       onResumeSession={onResumeCliSession}
     />
 
-    <CodeViewAIPanel
+    <AIPromptPanel
       collapsed={aiPanelCollapsed}
       {queueStatus}
       changedFiles={changedFilePaths}
       allFiles={changedFilePaths}
-      onSubmit={onCodeViewAISubmit}
+      onSubmit={(prompt, immediate, refs) =>
+        onSubmitPrompt(prompt, immediate, {
+          primaryFile: undefined,
+          references: refs,
+          diffSummary: undefined,
+          // TODO: pass resumeSessionId to continue current session
+        })}
       onToggle={onToggleAiPanel}
       {onNewSession}
       {onSearchSession}

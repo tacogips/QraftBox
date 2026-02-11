@@ -46,7 +46,6 @@ export type AISessionInfo = {
   completedAt?: string | undefined;
   context: unknown;
   currentActivity?: string | undefined;
-  claudeSessionId?: string | undefined;
 };
 
 function ensureOk(response: Response, message: string): Response {

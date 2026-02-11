@@ -38,19 +38,41 @@ interface AIFeatureDeps {
   navigateToScreen: (screen: ScreenType) => void;
 }
 
+/**
+ * Context for AI prompt submission.
+ *
+ * Session behavior:
+ * - Bottom AI panel (AIPromptPanel): passes `resumeSessionId` with the
+ *   current session ID to continue an existing conversation.
+ * - Inline comment prompt: passes `resumeSessionId: undefined` to start
+ *   a new independent session (does not affect the current panel session).
+ *
+ * TODO: `submitPrompt` does not yet branch on `resumeSessionId`.
+ *       Currently all submits use `deps.getQraftAiSessionId()`.
+ */
+export interface AIPromptContext {
+  primaryFile:
+    | {
+        path: string;
+        startLine: number;
+        endLine: number;
+        content: string;
+      }
+    | undefined;
+  references: readonly FileReference[];
+  diffSummary: string | undefined;
+  /**
+   * Session ID to resume. When set, the prompt continues an existing
+   * session's conversation. When undefined, a new session is created.
+   */
+  resumeSessionId?: QraftAiSessionId;
+}
+
 export function createAIFeatureController(deps: AIFeatureDeps): {
-  handleAIPanelSubmit: (
-    prompt: string,
+  submitPrompt: (
+    message: string,
     immediate: boolean,
-    refs: readonly FileReference[],
-  ) => Promise<void>;
-  handleInlineCommentSubmit: (
-    startLine: number,
-    endLine: number,
-    side: "old" | "new",
-    filePath: string,
-    prompt: string,
-    immediate: boolean,
+    context: AIPromptContext,
   ) => Promise<void>;
   fetchPromptQueue: () => Promise<void>;
   fetchActiveSessions: () => Promise<void>;
@@ -84,11 +106,11 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
       for (const info of sessions) {
         const session: AISession = {
           ...info,
+          id: info.id as QraftAiSessionId,
           state: info.state as AISession["state"],
           context: info.context as AISession["context"],
           turns: [],
           currentActivity: info.currentActivity,
-          claudeSessionId: info.claudeSessionId,
         };
 
         if (session.state === "running") {
@@ -115,22 +137,18 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     }
   }
 
-  async function handleAIPanelSubmit(
-    prompt: string,
+  async function submitPrompt(
+    message: string,
     immediate: boolean,
-    refs: readonly FileReference[],
+    context: AIPromptContext,
   ): Promise<void> {
     if (deps.getContextId() === null) return;
 
     try {
       await submitAIPrompt({
         runImmediately: immediate,
-        message: prompt,
-        context: {
-          primaryFile: undefined,
-          references: refs,
-          diffSummary: undefined,
-        },
+        message,
+        context,
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: deps.getQraftAiSessionId(),
       });
@@ -139,41 +157,6 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
       void fetchActiveSessions();
     } catch (error) {
       console.error("AI prompt submit error:", error);
-    }
-  }
-
-  async function handleInlineCommentSubmit(
-    startLine: number,
-    endLine: number,
-    _side: "old" | "new",
-    filePath: string,
-    prompt: string,
-    immediate: boolean,
-  ): Promise<void> {
-    if (deps.getContextId() === null) return;
-
-    try {
-      await submitAIPrompt({
-        runImmediately: immediate,
-        message: prompt,
-        context: {
-          primaryFile: {
-            path: filePath,
-            startLine,
-            endLine,
-            content: "",
-          },
-          references: [],
-          diffSummary: undefined,
-        },
-        projectPath: deps.getProjectPath(),
-        qraftAiSessionId: deps.getQraftAiSessionId(),
-      });
-
-      void fetchPromptQueue();
-      void fetchActiveSessions();
-    } catch (error) {
-      console.error("AI inline prompt submit error:", error);
     }
   }
 
@@ -234,8 +217,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   }
 
   return {
-    handleAIPanelSubmit,
-    handleInlineCommentSubmit,
+    submitPrompt,
     fetchPromptQueue,
     fetchActiveSessions,
     handleCancelActiveSession,
