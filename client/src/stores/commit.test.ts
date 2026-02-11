@@ -38,20 +38,12 @@ describe("Commit Store", () => {
       expect(store.isCommitting).toBe(false);
     });
 
-    test("should have no commit result initially", () => {
-      expect(store.commitResult).toBeNull();
-    });
-
     test("should have idle status initially", () => {
       expect(store.status).toBe("idle");
     });
 
     test("should have no error initially", () => {
       expect(store.error).toBeNull();
-    });
-
-    test("should have no session ID initially", () => {
-      expect(store.sessionId).toBeNull();
     });
 
     test("initial state matches exported constant", () => {
@@ -63,10 +55,8 @@ describe("Commit Store", () => {
       );
       expect(store.commitMessage).toEqual(initialCommitState.commitMessage);
       expect(store.isCommitting).toEqual(initialCommitState.isCommitting);
-      expect(store.commitResult).toEqual(initialCommitState.commitResult);
       expect(store.status).toEqual(initialCommitState.status);
       expect(store.error).toEqual(initialCommitState.error);
-      expect(store.sessionId).toEqual(initialCommitState.sessionId);
     });
   });
 
@@ -160,7 +150,6 @@ describe("Commit Store", () => {
 
       await store.previewCommit();
       expect(store.status).toBe("idle");
-      expect(store.sessionId).not.toBeNull();
     });
 
     test("should clear error before preview", async () => {
@@ -241,26 +230,6 @@ describe("Commit Store", () => {
       expect(store.status).toBe("success");
     });
 
-    test("should set session ID after execution", async () => {
-      store.selectPrompt("conventional-commit");
-      store._setStagedFiles?.(
-        [
-          {
-            path: "test.ts",
-            status: "M",
-            additions: 10,
-            deletions: 5,
-          },
-        ],
-        "diff content",
-      );
-
-      await store.executeCommit();
-
-      expect(store.sessionId).not.toBeNull();
-      expect(store.sessionId).toContain("session_");
-    });
-
     test("should prevent concurrent commits", async () => {
       store.selectPrompt("conventional-commit");
       store._setStagedFiles?.(
@@ -335,13 +304,13 @@ describe("Commit Store", () => {
       );
 
       await store.executeCommit();
-      const sessionId = store.sessionId;
+      const statusBefore = store.status;
 
       // Cancel after completion should do nothing
       store.cancel();
 
-      // Session ID should remain (commit is done)
-      expect(store.sessionId).toBe(sessionId);
+      // Status should remain (commit is done)
+      expect(store.status).toBe(statusBefore);
     });
   });
 
@@ -368,10 +337,8 @@ describe("Commit Store", () => {
       expect(store.selectedPromptId).toBeNull();
       expect(store.commitMessage).toBe("");
       expect(store.isCommitting).toBe(false);
-      expect(store.commitResult).toBeNull();
       expect(store.status).toBe("idle");
       expect(store.error).toBeNull();
-      expect(store.sessionId).toBeNull();
     });
 
     test("should clear all state including errors", () => {
@@ -385,27 +352,6 @@ describe("Commit Store", () => {
       expect(store.status).toBe("idle");
     });
 
-    test("should clear session ID", async () => {
-      store.selectPrompt("conventional-commit");
-      store._setStagedFiles?.(
-        [
-          {
-            path: "test.ts",
-            status: "M",
-            additions: 10,
-            deletions: 5,
-          },
-        ],
-        "diff content",
-      );
-      await store.executeCommit();
-
-      expect(store.sessionId).not.toBeNull();
-
-      store.reset();
-
-      expect(store.sessionId).toBeNull();
-    });
   });
 
   describe("Type Safety", () => {
@@ -420,14 +366,6 @@ describe("Commit Store", () => {
       });
     });
 
-    test("commitResult property is readonly", () => {
-      // TypeScript should prevent assignment at compile time
-      // This test just verifies the getter exists and works
-      expect(store.commitResult).toBeNull();
-
-      // The following would cause a TypeScript error:
-      // store.commitResult = { ... }
-    });
   });
 
   describe("Context ID", () => {

@@ -11,7 +11,7 @@ import type {
   AIConfig,
   AIProgressEvent,
   ClaudeSessionId,
-  QraftSessionId,
+  QraftAiSessionId,
   WorktreeId,
 } from "../../types/ai.js";
 
@@ -207,7 +207,7 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       await expect(
-        manager.cancel("nonexistent-session" as QraftSessionId),
+        manager.cancel("nonexistent-session" as QraftAiSessionId),
       ).rejects.toThrow("Session not found: nonexistent-session");
     });
 
@@ -311,7 +311,7 @@ describe("createSessionManager", () => {
     test("returns null for unknown session", () => {
       const manager = createSessionManager();
 
-      const session = manager.getSession("unknown-session" as QraftSessionId);
+      const session = manager.getSession("unknown-session" as QraftAiSessionId);
       expect(session).toBeNull();
     });
   });
@@ -387,7 +387,7 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const unsubscribe = manager.subscribe(
-        "unknown-session" as QraftSessionId,
+        "unknown-session" as QraftAiSessionId,
         () => {
           // Should not crash
         },

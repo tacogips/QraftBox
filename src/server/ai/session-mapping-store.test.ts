@@ -205,6 +205,73 @@ describe("SessionMappingStore", () => {
     });
   });
 
+  describe("isQraftBoxSession", () => {
+    test("returns true for sessions created with source='qraftbox'", () => {
+      const claudeSessionId = "qraftbox-created-session" as ClaudeSessionId;
+      const projectPath = "/test/project";
+      const worktreeId = "main" as WorktreeId;
+
+      store.upsert(claudeSessionId, projectPath, worktreeId, "qraftbox");
+
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(true);
+    });
+
+    test("returns false for sessions created with source='auto'", () => {
+      const claudeSessionId = "auto-discovered-session" as ClaudeSessionId;
+      const projectPath = "/test/project";
+      const worktreeId = "main" as WorktreeId;
+
+      store.upsert(claudeSessionId, projectPath, worktreeId, "auto");
+
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(false);
+    });
+
+    test("returns false for sessions created without explicit source (defaults to 'auto')", () => {
+      const claudeSessionId = "default-source-session" as ClaudeSessionId;
+      const projectPath = "/test/project";
+      const worktreeId = "main" as WorktreeId;
+
+      store.upsert(claudeSessionId, projectPath, worktreeId);
+
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(false);
+    });
+
+    test("returns false for non-existent sessions", () => {
+      const nonExistentId = "non-existent-session" as ClaudeSessionId;
+      expect(store.isQraftBoxSession(nonExistentId)).toBe(false);
+    });
+
+    test("preserves 'qraftbox' source on upsert", () => {
+      const claudeSessionId = "qraftbox-session-preserve" as ClaudeSessionId;
+      const projectPath1 = "/test/project1";
+      const projectPath2 = "/test/project2";
+      const worktreeId = "main" as WorktreeId;
+
+      // First upsert with 'qraftbox' source
+      store.upsert(claudeSessionId, projectPath1, worktreeId, "qraftbox");
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(true);
+
+      // Second upsert with 'auto' source should NOT downgrade
+      store.upsert(claudeSessionId, projectPath2, worktreeId, "auto");
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(true);
+    });
+
+    test("upgrades 'auto' to 'qraftbox' on upsert", () => {
+      const claudeSessionId = "auto-to-qraftbox-upgrade" as ClaudeSessionId;
+      const projectPath1 = "/test/project1";
+      const projectPath2 = "/test/project2";
+      const worktreeId = "main" as WorktreeId;
+
+      // First upsert with 'auto' source
+      store.upsert(claudeSessionId, projectPath1, worktreeId, "auto");
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(false);
+
+      // Second upsert with 'qraftbox' source should upgrade
+      store.upsert(claudeSessionId, projectPath2, worktreeId, "qraftbox");
+      expect(store.isQraftBoxSession(claudeSessionId)).toBe(true);
+    });
+  });
+
   describe("close", () => {
     test("closes database connection without error", () => {
       const testStore = createInMemorySessionMappingStore();

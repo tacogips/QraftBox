@@ -208,21 +208,12 @@ function updateRecentDirectories(
  */
 export function createWorkspaceStore(): WorkspaceStore {
   let state: WorkspaceStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<WorkspaceStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -519,7 +510,6 @@ export function createWorkspaceStore(): WorkspaceStore {
 
     reset(): void {
       state = createInitialState();
-      notifyListeners();
 
       // Clear localStorage
       try {

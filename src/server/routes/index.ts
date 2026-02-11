@@ -192,13 +192,12 @@ export function getNonContextRouteGroups(
       prefix: "/browse",
       routes: createBrowseRoutes(),
     },
-    // AI routes - POST /api/ai/prompt
+    // AI routes
     {
       prefix: "/ai",
       routes: createAIRoutes({
         projectPath: "", // Will be set by request
         sessionManager: config.sessionManager,
-        promptStore: config.promptStore,
       }),
     },
     // Local prompt management routes - /api/prompts

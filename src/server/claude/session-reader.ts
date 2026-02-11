@@ -21,7 +21,7 @@ import {
   isClaudeSessionIndex,
   isClaudeSessionEntry,
 } from "../../types/claude-session";
-import { SessionRegistry } from "./session-registry";
+import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import { stripSystemTags } from "../../utils/strip-system-tags";
 import {
   deriveQraftAiSessionIdFromClaude,
@@ -64,12 +64,15 @@ export interface ListSessionsOptions {
  */
 export class ClaudeSessionReader {
   private readonly projectsDir: string;
-  private readonly sessionRegistry: SessionRegistry;
+  private readonly mappingStore: SessionMappingStore | undefined;
   private readonly agentSessionReader: AgentSessionReader;
 
-  constructor(projectsDir?: string, sessionRegistry?: SessionRegistry) {
+  constructor(
+    projectsDir?: string,
+    mappingStore?: SessionMappingStore | undefined,
+  ) {
     this.projectsDir = projectsDir ?? CLAUDE_PROJECTS_DIR;
-    this.sessionRegistry = sessionRegistry ?? new SessionRegistry();
+    this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
   }
@@ -725,12 +728,18 @@ export class ClaudeSessionReader {
   private async detectSource(
     entry: ClaudeSessionEntry,
   ): Promise<SessionSource> {
-    // Primary detection: Check qraftbox session registry
-    const isQraftBox = await this.sessionRegistry.isQraftBoxSession(
-      entry.sessionId,
-    );
-    if (isQraftBox) {
-      return "qraftbox";
+    // Primary detection: Check SQLite mapping store for qraftbox-created sessions
+    if (this.mappingStore !== undefined) {
+      try {
+        const isQraftBox = this.mappingStore.isQraftBoxSession(
+          entry.sessionId as ClaudeSessionId,
+        );
+        if (isQraftBox) {
+          return "qraftbox";
+        }
+      } catch {
+        // Best-effort: continue to fallback detection
+      }
     }
 
     // Fallback detection: Pattern matching for qraftbox context markers

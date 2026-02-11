@@ -4,7 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ClaudeSessionReader } from "./session-reader";
-import { SessionRegistry } from "./session-registry";
+import {
+  createInMemorySessionMappingStore,
+  type SessionMappingStore,
+} from "../ai/session-mapping-store";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -12,24 +15,23 @@ import type {
   ClaudeSessionIndex,
   ClaudeSessionEntry,
 } from "../../types/claude-session";
+import type { ClaudeSessionId, WorktreeId } from "../../types/ai";
 
 describe("ClaudeSessionReader", () => {
   let tempDir: string;
   let projectsDir: string;
-  let registryPath: string;
   let reader: ClaudeSessionReader;
-  let registry: SessionRegistry;
+  let mappingStore: SessionMappingStore;
 
   beforeEach(async () => {
     // Create temporary test directory
     tempDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
     projectsDir = join(tempDir, ".claude", "projects");
-    registryPath = join(tempDir, "session-registry.json");
 
     await mkdir(projectsDir, { recursive: true });
 
-    registry = new SessionRegistry(registryPath);
-    reader = new ClaudeSessionReader(projectsDir, registry);
+    mappingStore = createInMemorySessionMappingStore();
+    reader = new ClaudeSessionReader(projectsDir, mappingStore);
   });
 
   afterEach(async () => {
@@ -232,7 +234,12 @@ describe("ClaudeSessionReader", () => {
       );
 
       // Register session-1 as qraftbox session
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
     });
 
     it("should list all sessions by default", async () => {
@@ -434,7 +441,12 @@ describe("ClaudeSessionReader", () => {
     });
 
     it("should include source in returned session", async () => {
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
 
       const session = await reader.getSession("session-1");
 
@@ -457,7 +469,12 @@ describe("ClaudeSessionReader", () => {
         join(projectDir, "sessions-index.json"),
         JSON.stringify(index, null, 2),
       );
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
 
       const result = await reader.listSessions();
 

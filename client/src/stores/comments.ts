@@ -173,21 +173,12 @@ function generateId(): string {
  */
 export function createCommentsStore(): CommentsStore {
   let state: CommentsStoreState = { ...initialCommentsState };
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<CommentsStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -477,7 +468,6 @@ export function createCommentsStore(): CommentsStore {
 
     reset(): void {
       state = { ...initialCommentsState };
-      notifyListeners();
     },
   };
 }

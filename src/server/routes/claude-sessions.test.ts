@@ -8,28 +8,21 @@ import { join } from "path";
 import { mkdtemp, writeFile, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import type { ClaudeSessionIndex } from "../../types/claude-session";
-import type { QraftBoxSessionRegistry } from "../claude/session-registry";
 
 describe("Claude Sessions Routes", () => {
   let app: ReturnType<typeof createClaudeSessionsRoutes>;
   let testProjectsDir: string;
-  let testRegistryPath: string;
 
   beforeEach(async () => {
     // Create temporary directories
     const tempBase = await mkdtemp(join(tmpdir(), "claude-sessions-test-"));
     testProjectsDir = join(tempBase, "projects");
-    testRegistryPath = join(tempBase, "registry.json");
 
     await mkdir(testProjectsDir, { recursive: true });
 
     // Create test projects with session indices
     await createTestProject1();
     await createTestProject2();
-
-    // Create empty session registry
-    const emptyRegistry: QraftBoxSessionRegistry = { sessions: [] };
-    await writeFile(testRegistryPath, JSON.stringify(emptyRegistry, null, 2));
 
     // Create routes with test configuration
     // Note: We need to modify the route creation to accept dependencies

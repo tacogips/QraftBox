@@ -7,16 +7,13 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type {
-  AIPromptRequest,
   AIProgressEvent,
   AIPromptMessage,
-  QraftSessionId,
+  QraftAiSessionId,
   PromptId,
   WorktreeId,
 } from "../../types/ai";
-import { validateAIPromptRequest } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
-import type { PromptStore } from "../../types/local-prompt";
 import { createLogger } from "../logger.js";
 
 /**
@@ -25,7 +22,6 @@ import { createLogger } from "../logger.js";
 export interface AIServerContext {
   readonly projectPath: string;
   readonly sessionManager: SessionManager;
-  readonly promptStore?: PromptStore | undefined;
 }
 
 /**
@@ -37,47 +33,12 @@ interface ErrorResponse {
 }
 
 /**
- * Subscribe to session events and sync prompt status on terminal events.
- * Fire-and-forget - errors are silently ignored.
- */
-function syncPromptWithSession(
-  sessionManager: SessionManager,
-  promptStore: PromptStore,
-  sessionId: QraftSessionId,
-  promptId: PromptId,
-): void {
-  const unsubscribe = sessionManager.subscribe(sessionId, (event) => {
-    if (event.type === "completed") {
-      void promptStore
-        .update(promptId, { status: "completed" })
-        .catch(() => {});
-      unsubscribe();
-    } else if (event.type === "error") {
-      const errorData = event.data as { message?: string };
-      void promptStore
-        .update(promptId, {
-          status: "failed",
-          error:
-            typeof errorData.message === "string"
-              ? errorData.message
-              : "Session failed",
-        })
-        .catch(() => {});
-      unsubscribe();
-    } else if (event.type === "cancelled") {
-      void promptStore
-        .update(promptId, { status: "cancelled" })
-        .catch(() => {});
-      unsubscribe();
-    }
-  });
-}
-
-/**
  * Create AI routes
  *
  * Routes:
- * - POST /api/ai/prompt - Submit a prompt
+ * - POST /api/ai/submit - Submit a prompt
+ * - GET /api/ai/prompt-queue - Get prompt queue state
+ * - POST /api/ai/prompt-queue/:id/cancel - Cancel a queued prompt
  * - GET /api/ai/queue/status - Get queue status
  * - GET /api/ai/sessions - List all sessions
  * - GET /api/ai/sessions/:id - Get session details
@@ -90,104 +51,6 @@ function syncPromptWithSession(
 export function createAIRoutes(context: AIServerContext): Hono {
   const logger = createLogger("AIRoutes");
   const app = new Hono();
-
-  /**
-   * POST /api/ai/prompt
-   *
-   * Submit a prompt for execution.
-   */
-  app.post("/prompt", async (c) => {
-    try {
-      const body = await c.req.json<AIPromptRequest>();
-
-      // Ensure projectPath is set
-      const request: AIPromptRequest = {
-        ...body,
-        options: {
-          ...body.options,
-          projectPath: body.options.projectPath || context.projectPath,
-        },
-      };
-
-      // Validate request
-      const validation = validateAIPromptRequest(request);
-      if (!validation.valid) {
-        const errorResponse: ErrorResponse = {
-          error: validation.error ?? "Invalid request",
-          code: 400,
-        };
-        return c.json(errorResponse, 400);
-      }
-
-      // Auto-persist prompt to local store for crash recovery
-      let localPromptId: PromptId | undefined;
-      if (context.promptStore !== undefined) {
-        try {
-          const localPrompt = await context.promptStore.create({
-            prompt: request.prompt,
-            context: request.context,
-            projectPath: request.options.projectPath,
-          });
-          localPromptId = localPrompt.id;
-          await context.promptStore.update(localPromptId, {
-            status: "dispatching",
-          });
-        } catch {
-          // Non-critical: prompt persistence failure should not block execution
-        }
-      }
-
-      try {
-        // Submit to session manager
-        const result = await context.sessionManager.submit(request);
-
-        // Update prompt with dispatch session ID and subscribe for completion sync
-        if (context.promptStore !== undefined && localPromptId !== undefined) {
-          try {
-            await context.promptStore.update(localPromptId, {
-              status: "dispatched",
-              dispatchSessionId: result.sessionId,
-            });
-          } catch {
-            // Non-critical
-          }
-
-          // Subscribe to session events for prompt status sync
-          syncPromptWithSession(
-            context.sessionManager,
-            context.promptStore,
-            result.sessionId,
-            localPromptId,
-          );
-        }
-
-        return c.json(result);
-      } catch (submitError) {
-        // Mark prompt as failed if dispatch failed
-        if (context.promptStore !== undefined && localPromptId !== undefined) {
-          const errorMessage =
-            submitError instanceof Error
-              ? submitError.message
-              : "Failed to submit prompt";
-          void context.promptStore
-            .update(localPromptId, {
-              status: "failed",
-              error: errorMessage,
-            })
-            .catch(() => {});
-        }
-        throw submitError;
-      }
-    } catch (e) {
-      const errorMessage =
-        e instanceof Error ? e.message : "Failed to submit prompt";
-      const errorResponse: ErrorResponse = {
-        error: errorMessage,
-        code: 500,
-      };
-      return c.json(errorResponse, 500);
-    }
-  });
 
   /**
    * POST /api/ai/submit
@@ -318,7 +181,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * Get details for a specific session.
    */
   app.get("/sessions/:id", (c) => {
-    const sessionId = c.req.param("id") as QraftSessionId;
+    const sessionId = c.req.param("id") as QraftAiSessionId;
     const session = context.sessionManager.getSession(sessionId);
 
     if (session === null) {
@@ -338,7 +201,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * SSE stream for session progress events.
    */
   app.get("/sessions/:id/stream", async (c) => {
-    const sessionId = c.req.param("id") as QraftSessionId;
+    const sessionId = c.req.param("id") as QraftAiSessionId;
     const session = context.sessionManager.getSession(sessionId);
 
     if (session === null) {
@@ -466,7 +329,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * Cancel a session.
    */
   app.post("/sessions/:id/cancel", async (c) => {
-    const sessionId = c.req.param("id") as QraftSessionId;
+    const sessionId = c.req.param("id") as QraftAiSessionId;
 
     try {
       await context.sessionManager.cancel(sessionId);

@@ -141,21 +141,12 @@ export const initialQueueState: QueueStoreState = createInitialState();
  */
 export function createQueueStore(): QueueStore {
   let state: QueueStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<QueueStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -485,7 +476,6 @@ export function createQueueStore(): QueueStore {
 
     reset(): void {
       state = createInitialState();
-      notifyListeners();
     },
   };
 }

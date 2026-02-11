@@ -18,8 +18,8 @@ import {
 } from "../claude/session-reader";
 import { stripSystemTags } from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
-import { generateWorktreeId } from "../ai/session-manager.js";
-import type { QraftAiSessionId, ClaudeSessionId } from "../../types/ai.js";
+import type { QraftAiSessionId } from "../../types/ai.js";
+import { SessionEnrichmentService } from "../claude/session-enrichment.js";
 
 /**
  * Error response format
@@ -56,7 +56,11 @@ export function createClaudeSessionsRoutes(
   mappingStore?: SessionMappingStore | undefined,
 ): Hono {
   const app = new Hono();
-  const sessionReader = new ClaudeSessionReader();
+  const sessionReader = new ClaudeSessionReader(undefined, mappingStore);
+  const enrichmentService =
+    mappingStore !== undefined
+      ? new SessionEnrichmentService(mappingStore)
+      : undefined;
 
   /**
    * Resolve a qraftAiSessionId to a Claude session UUID via the mapping store.
@@ -253,23 +257,8 @@ export function createClaudeSessionsRoutes(
 
       // Enrich sessions with qraftAiSessionId via batch SQLite lookup.
       // Auto-register missing mappings so the client always receives a qraft ID.
-      if (mappingStore !== undefined && response.sessions.length > 0) {
-        const claudeIds = response.sessions.map(
-          (s) => s.sessionId as ClaudeSessionId,
-        );
-        const mappings = mappingStore.batchLookupByClaudeIds(claudeIds);
-        for (const session of response.sessions) {
-          let qraftId = mappings.get(session.sessionId as ClaudeSessionId);
-          if (qraftId === undefined) {
-            const worktreeId = generateWorktreeId(session.projectPath);
-            qraftId = mappingStore.upsert(
-              session.sessionId as ClaudeSessionId,
-              session.projectPath,
-              worktreeId,
-            );
-          }
-          session.qraftAiSessionId = qraftId;
-        }
+      if (enrichmentService !== undefined && response.sessions.length > 0) {
+        enrichmentService.enrichSessionsWithQraftIds(response.sessions);
       }
 
       return c.json(response);

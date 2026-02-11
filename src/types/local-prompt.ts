@@ -9,7 +9,7 @@ import type {
   AIPromptContext,
   ClaudeSessionId,
   PromptId,
-  QraftSessionId,
+  QraftAiSessionId,
 } from "./ai";
 
 /**
@@ -40,7 +40,7 @@ export interface LocalPrompt {
   /** Current status */
   readonly status: LocalPromptStatus;
   /** QraftBox internal session ID assigned when the prompt is dispatched */
-  readonly dispatchSessionId: QraftSessionId | null;
+  readonly dispatchSessionId: QraftAiSessionId | null;
   /** ISO timestamp of creation */
   readonly createdAt: string;
   /** ISO timestamp of last update */
@@ -92,7 +92,7 @@ export interface LocalPromptListOptions {
 export interface LocalPromptUpdate {
   readonly description?: string;
   readonly status?: LocalPromptStatus;
-  readonly dispatchSessionId?: QraftSessionId | null;
+  readonly dispatchSessionId?: QraftAiSessionId | null;
   readonly error?: string | null;
   readonly prompt?: string;
 }

@@ -8,7 +8,6 @@
 import type {
   StagedFile,
   CommitRequest,
-  CommitResult,
 } from "../../../src/types/commit-context";
 
 /**
@@ -61,11 +60,6 @@ export interface CommitStoreState {
   readonly isCommitting: boolean;
 
   /**
-   * Result of last commit operation
-   */
-  readonly commitResult: CommitResult | null;
-
-  /**
    * Current operation status
    */
   readonly status: CommitStatus;
@@ -75,10 +69,6 @@ export interface CommitStoreState {
    */
   readonly error: string | null;
 
-  /**
-   * Session ID for commit operation
-   */
-  readonly sessionId: string | null;
 }
 
 /**
@@ -137,10 +127,8 @@ function createInitialState(): CommitStoreState {
     selectedPromptId: null,
     commitMessage: "",
     isCommitting: false,
-    commitResult: null,
     status: "idle",
     error: null,
-    sessionId: null,
   };
 }
 
@@ -156,21 +144,12 @@ export const initialCommitState: CommitStoreState = createInitialState();
  */
 export function createCommitStore(contextId?: string): CommitStore {
   let state: CommitStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<CommitStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -201,19 +180,12 @@ export function createCommitStore(contextId?: string): CommitStore {
     get isCommitting(): boolean {
       return state.isCommitting;
     },
-    get commitResult(): CommitResult | null {
-      return state.commitResult;
-    },
     get status(): CommitStatus {
       return state.status;
     },
     get error(): string | null {
       return state.error;
     },
-    get sessionId(): string | null {
-      return state.sessionId;
-    },
-
     // Actions
     async loadStagedFiles(): Promise<void> {
       updateState({ status: "loading", error: null });
@@ -298,13 +270,7 @@ export function createCommitStore(contextId?: string): CommitStore {
         // Suppress unused variable warning - will be used when API is connected
         void request;
 
-        // Stubbed response
-        const data = {
-          sessionId: `session_${Date.now()}`,
-        };
-
         updateState({
-          sessionId: data.sessionId,
           status: "idle",
         });
       } catch (e) {
@@ -343,7 +309,6 @@ export function createCommitStore(contextId?: string): CommitStore {
         status: "committing",
         isCommitting: true,
         error: null,
-        commitResult: null,
       });
 
       try {
@@ -367,13 +332,7 @@ export function createCommitStore(contextId?: string): CommitStore {
         // Suppress unused variable warning - will be used when API is connected
         void request;
 
-        // Stubbed response
-        const data = {
-          sessionId: `session_${Date.now()}`,
-        };
-
         updateState({
-          sessionId: data.sessionId,
           status: "success",
           isCommitting: false,
         });
@@ -402,13 +361,11 @@ export function createCommitStore(contextId?: string): CommitStore {
       updateState({
         isCommitting: false,
         status: "idle",
-        sessionId: null,
       });
     },
 
     reset(): void {
       state = createInitialState();
-      notifyListeners();
     },
 
     /**

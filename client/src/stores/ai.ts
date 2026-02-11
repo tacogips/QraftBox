@@ -6,12 +6,10 @@
  */
 
 import type {
-  AIPromptRequest,
-  AIPromptContext,
   FileReference,
   QueueStatus,
   AISessionSubmitResult,
-  SessionMode,
+  QraftAiSessionId,
 } from "../../../src/types/ai";
 import { createEmptyQueueStatus } from "../../../src/types/ai";
 
@@ -197,45 +195,12 @@ export const initialAIState: AIStoreState = createInitialState();
  */
 export function createAIStore(): AIStore {
   let state: AIStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<AIStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
-  }
-
-  /**
-   * Build prompt context from current state
-   */
-  function buildContext(): AIPromptContext {
-    const context: AIPromptContext = {
-      references: [...state.fileReferences],
-    };
-
-    // Add selected lines as primary file if present
-    if (state.selectedLines !== null) {
-      return {
-        ...context,
-        primaryFile: {
-          path: state.selectedLines.path,
-          startLine: state.selectedLines.start,
-          endLine: state.selectedLines.end,
-          content: state.selectedLines.content ?? "",
-        },
-      };
-    }
-
-    return context;
   }
 
   return {
@@ -331,34 +296,11 @@ export function createAIStore(): AIStore {
       updateState({ submitting: true, error: null });
 
       try {
-        // Build request for API call (stubbed for now)
-        const apiRequest: AIPromptRequest = {
-          prompt: state.currentPrompt,
-          context: buildContext(),
-          options: {
-            projectPath: "", // Will be filled by server
-            sessionMode: "new" as SessionMode,
-            immediate: state.executionMode === "immediate",
-          },
-        };
-
-        // TODO: Replace with actual API call
-        // Suppress unused variable warning - will be used when API is connected
-        void apiRequest;
-        // const response = await fetch("/api/ai/prompt", {
-        //   method: "POST",
-        //   headers: { "Content-Type": "application/json" },
-        //   body: JSON.stringify(request),
-        // });
-        // if (!response.ok) {
-        //   const error = await response.json();
-        //   throw new Error(error.error || "Failed to submit prompt");
-        // }
-        // const result = await response.json() as AISessionSubmitResult;
+        // Submit via /api/ai/submit endpoint (see App.svelte)
 
         // Stubbed response for now
         const result: AISessionSubmitResult = {
-          sessionId: `session_${Date.now()}`,
+          sessionId: `qs_${Date.now().toString(36)}` as QraftAiSessionId,
           immediate: state.executionMode === "immediate",
           queuePosition:
             state.executionMode === "queue"
@@ -444,7 +386,6 @@ export function createAIStore(): AIStore {
 
     reset(): void {
       state = createInitialState();
-      notifyListeners();
     },
   };
 }

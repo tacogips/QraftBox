@@ -132,18 +132,6 @@ Use a branded type whenever a `string` (or `number`) represents a specific domai
 - File content strings
 - Generic configuration values
 
-### Project Branded Types
-
-This project defines the following branded types in `src/types/ai.ts`:
-
-| Type | Format | Purpose |
-|------|--------|---------|
-| `ClaudeSessionId` | UUID from Claude CLI | Claude CLI/SDK session identifier |
-| `QraftAiSessionId` | `qs_{base36_hash}` | Hash-based group key for prompt continuity |
-| `QraftSessionId` | `session_{base36}_{random}` | QraftBox internal session identifier |
-| `PromptId` | `prompt_{base36}_{random}` | Prompt queue/store identifier |
-| `WorktreeId` | `{basename}_{hash}` | Worktree/project scope identifier |
-
 ### Adding New Branded Types
 
 When adding a new domain identifier:
@@ -182,10 +170,10 @@ function getSession(id: string): Session { /* ... */ }
 
 // GOOD - branded types prevent confusion
 interface Session {
-  id: QraftSessionId;
+  id: QraftAiSessionId;
   claudeSessionId: ClaudeSessionId;
 }
-function getSession(id: QraftSessionId): Session { /* ... */ }
+function getSession(id: QraftAiSessionId): Session { /* ... */ }
 ```
 
 ## Type Guards

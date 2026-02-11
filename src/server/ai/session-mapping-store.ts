@@ -21,6 +21,11 @@ import { createLogger } from "../logger.js";
 const logger = createLogger("session-mapping-store");
 
 /**
+ * Session source type - tracks whether session was created by QraftBox or auto-discovered
+ */
+export type SessionSource = "qraftbox" | "auto";
+
+/**
  * A single mapping row
  */
 export interface SessionMapping {
@@ -28,6 +33,7 @@ export interface SessionMapping {
   readonly claude_session_id: ClaudeSessionId;
   readonly project_path: string;
   readonly worktree_id: WorktreeId;
+  readonly source: SessionSource;
   readonly created_at: string; // ISO 8601
 }
 
@@ -39,11 +45,14 @@ export interface SessionMappingStore {
    * Register a mapping from claude_session_id to qraft_ai_session_id.
    * If a mapping for the same claude_session_id already exists, it is updated.
    * Returns the derived QraftAiSessionId.
+   *
+   * @param source - Session origin ('qraftbox' for QraftBox-created, 'auto' for auto-discovered)
    */
   upsert(
     claudeSessionId: ClaudeSessionId,
     projectPath: string,
     worktreeId: WorktreeId,
+    source?: SessionSource | undefined,
   ): QraftAiSessionId;
 
   /**
@@ -69,6 +78,11 @@ export interface SessionMappingStore {
   findByClaudeSessionId(
     claudeSessionId: ClaudeSessionId,
   ): QraftAiSessionId | undefined;
+
+  /**
+   * Check if a session was created by QraftBox (as opposed to auto-discovered).
+   */
+  isQraftBoxSession(claudeSessionId: ClaudeSessionId): boolean;
 
   /**
    * Close the database connection.
@@ -97,6 +111,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
   private readonly stmtUpsert: ReturnType<Database["prepare"]>;
   private readonly stmtFindByQraftId: ReturnType<Database["prepare"]>;
   private readonly stmtFindByClaudeId: ReturnType<Database["prepare"]>;
+  private readonly stmtIsQraftBoxSession: ReturnType<Database["prepare"]>;
 
   constructor(db: Database, claudeProjectsDir?: string) {
     this.db = db;
@@ -105,12 +120,13 @@ class SessionMappingStoreImpl implements SessionMappingStore {
 
     // Prepare all statements upfront
     this.stmtUpsert = db.prepare(`
-      INSERT INTO session_mappings (claude_session_id, qraft_ai_session_id, project_path, worktree_id, created_at)
-      VALUES (?, ?, ?, ?, datetime('now'))
+      INSERT INTO session_mappings (claude_session_id, qraft_ai_session_id, project_path, worktree_id, source, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
       ON CONFLICT(claude_session_id) DO UPDATE SET
         qraft_ai_session_id = excluded.qraft_ai_session_id,
         project_path = excluded.project_path,
         worktree_id = excluded.worktree_id,
+        source = CASE WHEN excluded.source = 'qraftbox' THEN 'qraftbox' ELSE session_mappings.source END,
         created_at = excluded.created_at
     `);
 
@@ -127,20 +143,36 @@ class SessionMappingStoreImpl implements SessionMappingStore {
       FROM session_mappings
       WHERE claude_session_id = ?
     `);
+
+    this.stmtIsQraftBoxSession = db.prepare(`
+      SELECT 1
+      FROM session_mappings
+      WHERE claude_session_id = ? AND source = 'qraftbox'
+      LIMIT 1
+    `);
   }
 
   upsert(
     claudeSessionId: ClaudeSessionId,
     projectPath: string,
     worktreeId: WorktreeId,
+    source?: SessionSource | undefined,
   ): QraftAiSessionId {
     const qraftId = deriveQraftAiSessionIdFromClaude(claudeSessionId);
-    this.stmtUpsert.run(claudeSessionId, qraftId, projectPath, worktreeId);
+    const sourceValue: SessionSource = source ?? "auto";
+    this.stmtUpsert.run(
+      claudeSessionId,
+      qraftId,
+      projectPath,
+      worktreeId,
+      sourceValue,
+    );
     logger.debug("Upserted session mapping", {
       claudeSessionId,
       qraftId,
       projectPath,
       worktreeId,
+      source: sourceValue,
     });
     return qraftId;
   }
@@ -211,6 +243,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
                 qraftAiSessionId,
                 decodedProjectPath,
                 "unknown" as WorktreeId,
+                "auto",
               );
 
               logger.info("Discovered Claude session via directory scan", {
@@ -272,6 +305,14 @@ class SessionMappingStoreImpl implements SessionMappingStore {
       | { qraft_ai_session_id: string }
       | undefined;
     return row?.qraft_ai_session_id as QraftAiSessionId | undefined;
+  }
+
+  isQraftBoxSession(claudeSessionId: ClaudeSessionId): boolean {
+    const row = this.stmtIsQraftBoxSession.get(claudeSessionId) as
+      | { 1: number }
+      | undefined
+      | null;
+    return row !== undefined && row !== null;
   }
 
   batchLookupByClaudeIds(
@@ -345,13 +386,28 @@ export function createSessionMappingStore(
       qraft_ai_session_id TEXT NOT NULL,
       project_path TEXT NOT NULL,
       worktree_id TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'auto',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 
+  // Migration: Add source column to existing databases
+  try {
+    db.exec(
+      `ALTER TABLE session_mappings ADD COLUMN source TEXT NOT NULL DEFAULT 'auto'`,
+    );
+    logger.debug("Added source column via migration");
+  } catch (error: unknown) {
+    // Column already exists - ignore (duplicate column error is expected)
+    logger.debug("Source column already exists or migration failed", {
+      error: error instanceof Error ? error.message : "Unknown migration error",
+    });
+  }
+
+  // Composite index for efficient qraft_ai_session_id lookups with ORDER BY created_at DESC
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_qraft_ai_session_id
-    ON session_mappings(qraft_ai_session_id)
+    ON session_mappings(qraft_ai_session_id, created_at DESC)
   `);
 
   logger.info("Session mapping store initialized", { dbPath: path });
@@ -380,13 +436,15 @@ export function createInMemorySessionMappingStore(
       qraft_ai_session_id TEXT NOT NULL,
       project_path TEXT NOT NULL,
       worktree_id TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'auto',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
 
+  // Composite index for efficient qraft_ai_session_id lookups with ORDER BY created_at DESC
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_qraft_ai_session_id
-    ON session_mappings(qraft_ai_session_id)
+    ON session_mappings(qraft_ai_session_id, created_at DESC)
   `);
 
   logger.debug("In-memory session mapping store initialized");
