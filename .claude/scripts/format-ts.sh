@@ -1,7 +1,9 @@
 #!/bin/bash
-# Format TypeScript files if they exist
+# Format TypeScript and Svelte files if they exist
 shopt -s nullglob globstar
-files=(src/**/*.ts)
+ts_files=(src/**/*.ts)
+svelte_files=(client/**/*.svelte)
+files=("${ts_files[@]}" "${svelte_files[@]}")
 if [ ${#files[@]} -gt 0 ]; then
   bunx prettier --write "${files[@]}"
 fi

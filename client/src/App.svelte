@@ -1086,6 +1086,7 @@
   ): Promise<void> {
     if (contextId === null) return;
 
+    console.log("!!!!!=======qraftAiSessionId:", qraftAiSessionId);
     try {
       const resp = await fetch("/api/ai/submit", {
         method: "POST",
@@ -1533,24 +1534,9 @@
   /**
    * Handle resume from Sessions screen: navigate to Changes and refresh sessions
    */
-  async function handleResumeToChanges(sessionId: string): Promise<void> {
-    // Register server-side resume mapping and update display
-    try {
-      const resp = await fetch("/api/ai/resume-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claude_session_id: sessionId }),
-      });
-      if (resp.ok) {
-        const data = (await resp.json()) as {
-          qraft_ai_session_id: QraftAiSessionId;
-        };
-        qraftAiSessionId = data.qraft_ai_session_id;
-      }
-    } catch (e) {
-      console.error("Failed to register resume mapping:", e);
-    }
-    resumeDisplaySessionId = sessionId;
+  function handleResumeToChanges(resumeQraftId: string): void {
+    qraftAiSessionId = resumeQraftId as QraftAiSessionId;
+    resumeDisplaySessionId = null;
     navigateToScreen("diff");
     void fetchActiveSessions();
     void fetchPromptQueue();
@@ -1559,24 +1545,10 @@
   /**
    * Resume a Claude CLI session from CurrentSessionPanel
    */
-  async function handleResumeCliSession(sessionId: string): Promise<void> {
+  function handleResumeCliSession(resumeQraftId: string): void {
     if (contextId === null) return;
-    try {
-      const resp = await fetch("/api/ai/resume-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ claude_session_id: sessionId }),
-      });
-      if (resp.ok) {
-        const data = (await resp.json()) as {
-          qraft_ai_session_id: QraftAiSessionId;
-        };
-        qraftAiSessionId = data.qraft_ai_session_id;
-      }
-    } catch (e) {
-      console.error("Failed to register resume mapping:", e);
-    }
-    resumeDisplaySessionId = sessionId;
+    qraftAiSessionId = resumeQraftId as QraftAiSessionId;
+    resumeDisplaySessionId = null;
     void fetchActiveSessions();
     void fetchPromptQueue();
   }
@@ -2509,8 +2481,7 @@
           {contextId}
           {projectPath}
           onNewSession={handleNewSession}
-          onResumeSession={(sessionId) =>
-            void handleResumeCliSession(sessionId)}
+          onResumeSession={(qraftId) => handleResumeCliSession(qraftId)}
         />
 
         <!-- Current Session Panel (above AI panel) -->
@@ -2525,8 +2496,7 @@
           )}
           resumeSessionId={resumeDisplaySessionId}
           onCancelSession={(id) => void handleCancelActiveSession(id)}
-          onResumeSession={(sessionId) =>
-            void handleResumeCliSession(sessionId)}
+          onResumeSession={(qraftId) => handleResumeCliSession(qraftId)}
         />
 
         <!-- AI Prompt Panel (below stats bar, does not overlap sidebar) -->

@@ -19,12 +19,10 @@ import type {
   AIPromptContext,
   QraftAiSessionId,
 } from "../../types/ai";
-import {
-  DEFAULT_AI_CONFIG,
-  deriveQraftAiSessionIdFromClaude,
-} from "../../types/ai";
+import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import type { SessionMappingStore } from "./session-mapping-store.js";
 import { SessionRegistry } from "../claude/session-registry.js";
 import { createLogger } from "../logger.js";
 import { basename } from "node:path";
@@ -160,20 +158,9 @@ export interface SessionManager {
   cancelPrompt(promptId: string): void;
 
   /**
-   * Register a resume mapping so that subsequent prompts with the returned
-   * qraft_ai_session_id will resume the given Claude CLI session.
-   *
-   * Creates a synthetic completed queue entry that links the derived
-   * qraftAiSessionId to the provided claudeSessionId.
-   *
-   * @param claudeSessionId - Claude CLI session UUID to resume
-   * @param projectPath - Project path for worktree resolution
-   * @returns The derived QraftAiSessionId to use for subsequent prompts
+   * Get the session mapping store for batch lookups (undefined if not configured).
    */
-  registerResumeMapping(
-    claudeSessionId: string,
-    projectPath: string,
-  ): QraftAiSessionId;
+  getMappingStore(): SessionMappingStore | undefined;
 }
 
 /**
@@ -248,12 +235,16 @@ function toSessionInfo(session: InternalSession): AISessionInfo {
  * Create a session manager
  *
  * @param config - AI configuration
+ * @param toolRegistry - Tool registry for MCP tools
+ * @param broadcast - Broadcast function for WebSocket events
+ * @param mappingStore - Session mapping store for persisting qraft_ai_session_id <-> claude_session_id mappings
  * @returns Session manager instance
  */
 export function createSessionManager(
   config: AIConfig = DEFAULT_AI_CONFIG,
   toolRegistry?: QraftBoxToolRegistry | undefined,
   broadcast?: BroadcastFn | undefined,
+  mappingStore?: SessionMappingStore | undefined,
 ): SessionManager {
   const logger = createLogger("SessionManager");
   const sessions = new Map<string, InternalSession>();
@@ -709,12 +700,30 @@ export function createSessionManager(
    * Resolve the resumeSessionId for the next prompt in queue.
    *
    * Priority:
+   * 0. Persistent SQLite lookup by qraft_ai_session_id (if mappingStore available)
    * 1. If prompt has a qraft_ai_session_id, look for the most recently completed
    *    prompt in the same group to inherit its resultClaudeSessionId
    * 2. Otherwise, fall back to same-worktree lookup
    * 3. If none found, start a new session (undefined)
    */
   function resolveResumeSessionId(prompt: QueuedPrompt): string | undefined {
+    // 0. Persistent SQLite lookup by qraft_ai_session_id
+    if (
+      mappingStore !== undefined &&
+      prompt.qraftAiSessionId !== undefined &&
+      prompt.qraftAiSessionId.length > 0
+    ) {
+      const stored = mappingStore.findClaudeSessionId(prompt.qraftAiSessionId);
+      if (stored !== undefined) {
+        logger.info("Resolved resume session via SQLite mapping", {
+          promptId: prompt.id,
+          qraftAiSessionId: prompt.qraftAiSessionId,
+          resumeSessionId: stored,
+        });
+        return stored;
+      }
+    }
+
     // 1. Match by qraft_ai_session_id (client-generated group key)
     if (
       prompt.qraftAiSessionId !== undefined &&
@@ -811,6 +820,22 @@ export function createSessionManager(
             if (completedSession?.claudeSessionId !== undefined) {
               next.resultClaudeSessionId = completedSession.claudeSessionId;
             }
+            // Persist mapping to SQLite for cross-restart continuity
+            if (
+              mappingStore !== undefined &&
+              next.resultClaudeSessionId !== undefined &&
+              next.resultClaudeSessionId.length > 0
+            ) {
+              try {
+                mappingStore.upsert(
+                  next.resultClaudeSessionId,
+                  next.projectPath,
+                  next.worktreeId,
+                );
+              } catch {
+                // Non-critical: SQLite write failure should not affect queue operation
+              }
+            }
             trimPromptHistory();
             broadcastQueueUpdate();
             // Dispatch next prompt in queue
@@ -844,6 +869,22 @@ export function createSessionManager(
             const session = self.getSession(result.sessionId);
             if (session?.claudeSessionId !== undefined) {
               next.resultClaudeSessionId = session.claudeSessionId;
+            }
+            // Persist mapping to SQLite
+            if (
+              mappingStore !== undefined &&
+              next.resultClaudeSessionId !== undefined &&
+              next.resultClaudeSessionId.length > 0
+            ) {
+              try {
+                mappingStore.upsert(
+                  next.resultClaudeSessionId,
+                  next.projectPath,
+                  next.worktreeId,
+                );
+              } catch {
+                // Non-critical
+              }
             }
             broadcastQueueUpdate();
           } else if (
@@ -1134,40 +1175,8 @@ export function createSessionManager(
       }
     },
 
-    registerResumeMapping(
-      claudeSessionId: string,
-      projectPath: string,
-    ): QraftAiSessionId {
-      const qraftAiSessionId =
-        deriveQraftAiSessionIdFromClaude(claudeSessionId);
-      const worktreeId = generateWorktreeId(projectPath);
-
-      // Insert a synthetic completed entry so resolveResumeSessionId
-      // can find the mapping via qraftAiSessionId group lookup.
-      const synthetic: QueuedPrompt = {
-        id: generatePromptId(),
-        message: `[resume mapping for ${claudeSessionId}]`,
-        context: { references: [] },
-        projectPath,
-        runImmediately: false,
-        worktreeId,
-        qraftAiSessionId,
-        status: "completed",
-        resultClaudeSessionId: claudeSessionId,
-        currentActivity: undefined,
-        error: undefined,
-        createdAt: new Date(),
-        internalSessionId: undefined,
-      };
-      promptQueue.push(synthetic);
-      trimPromptHistory();
-
-      logger.info("Registered resume mapping", {
-        qraftAiSessionId,
-        claudeSessionId,
-      });
-
-      return qraftAiSessionId;
+    getMappingStore(): SessionMappingStore | undefined {
+      return mappingStore;
     },
   };
 

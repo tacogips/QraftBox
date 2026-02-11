@@ -1,14 +1,20 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from "vitest";
 import { createQueueStore, type QueueStore } from "./queue";
 
 describe("createQueueStore", () => {
   let store: QueueStore;
   let fetchMock: Mock<typeof global.fetch>;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     store = createQueueStore();
     fetchMock = vi.fn();
     global.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    // Restore original fetch to avoid polluting other test files
+    global.fetch = originalFetch;
   });
 
   async function loadWithSessions(

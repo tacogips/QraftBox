@@ -23,6 +23,7 @@ import {
 } from "../../types/claude-session";
 import { SessionRegistry } from "./session-registry";
 import { stripSystemTags } from "../../utils/strip-system-tags";
+import { deriveQraftAiSessionIdFromClaude } from "../../types/ai";
 import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
 import { createProductionContainer } from "claude-code-agent/src/container";
 
@@ -151,6 +152,7 @@ export class ClaudeSessionReader {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
+            qraftAiSessionId: deriveQraftAiSessionIdFromClaude(entry.sessionId),
           };
 
           // Apply additional filters
@@ -171,6 +173,9 @@ export class ClaudeSessionReader {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
+              qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+                entry.sessionId,
+              ),
             };
 
             // Apply additional filters
@@ -230,6 +235,7 @@ export class ClaudeSessionReader {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
+            qraftAiSessionId: deriveQraftAiSessionIdFromClaude(entry.sessionId),
           };
         }
       } catch (error: unknown) {
@@ -246,6 +252,9 @@ export class ClaudeSessionReader {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
+              qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+                entry.sessionId,
+              ),
             };
           }
         } catch (buildError: unknown) {

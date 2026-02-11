@@ -186,11 +186,8 @@ describe("GitHub Authentication", () => {
         throw new Error("Unexpected URL");
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_valid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user).toEqual({
@@ -220,11 +217,8 @@ describe("GitHub Authentication", () => {
         }),
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_valid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user).toEqual({
@@ -246,11 +240,8 @@ describe("GitHub Authentication", () => {
         }),
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_valid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user?.email).toBe("");
@@ -262,11 +253,8 @@ describe("GitHub Authentication", () => {
         status: 401,
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_invalid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user).toBe(null);
@@ -277,11 +265,8 @@ describe("GitHub Authentication", () => {
         throw new Error("Network error");
       });
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_valid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user).toBe(null);
@@ -295,11 +280,8 @@ describe("GitHub Authentication", () => {
         },
       }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globalThis.fetch as any) = mockFetch;
-
       process.env["GITHUB_TOKEN"] = "ghp_valid_token";
-      const auth = createGitHubAuth();
+      const auth = createGitHubAuth({ fetch: mockFetch as any });
       const user = await auth.getUser();
 
       expect(user).toBe(null);

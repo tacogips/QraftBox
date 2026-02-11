@@ -448,7 +448,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const result = manager.submitPrompt({
-
         run_immediately: true,
         message: "Test prompt via queue",
         project_path: "/tmp/test",
@@ -473,7 +472,6 @@ describe("createSessionManager", () => {
       );
 
       manager.submitPrompt({
-
         run_immediately: true,
         message: "Broadcast test",
         project_path: "/tmp/test",
@@ -483,25 +481,6 @@ describe("createSessionManager", () => {
         (b) => b.event === "ai:queue_update",
       );
       expect(queueUpdates.length).toBeGreaterThanOrEqual(1);
-    });
-
-    test("registerResumeMapping creates synthetic queue entry for session resolution", () => {
-      const manager = createSessionManager();
-
-      const qraftAiSessionId = manager.registerResumeMapping(
-        "existing-claude-session",
-        "/tmp/test",
-      );
-
-      expect(qraftAiSessionId).toMatch(/^qs_/);
-
-      const queue = manager.getPromptQueue();
-      const synthetic = queue.find(
-        (p) => p.qraft_ai_session_id === qraftAiSessionId,
-      );
-      expect(synthetic).toBeDefined();
-      expect(synthetic?.claude_session_id).toBe("existing-claude-session");
-      expect(synthetic?.status).toBe("completed");
     });
 
     test("throws when AI disabled", () => {
@@ -517,7 +496,6 @@ describe("createSessionManager", () => {
 
       expect(() =>
         manager.submitPrompt({
-  
           run_immediately: true,
           message: "Should fail",
           project_path: "/tmp/test",
@@ -537,7 +515,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager(config);
 
       const { promptId } = manager.submitPrompt({
-
         run_immediately: false,
         message: "To be cancelled",
         project_path: "/tmp/test",
@@ -675,7 +652,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const result = manager.submitPrompt({
-
         run_immediately: true,
         message: "Test worktree_id",
         project_path: "/tmp/test-project",
@@ -689,7 +665,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const result = manager.submitPrompt({
-
         run_immediately: true,
         message: "Test explicit worktree_id",
         project_path: "/tmp/test-project",
@@ -708,7 +683,6 @@ describe("createSessionManager", () => {
       const projectPath = "/tmp/test-project-auto";
 
       const result = manager.submitPrompt({
-
         run_immediately: true,
         message: "Test auto-generated worktree_id",
         project_path: projectPath,
@@ -722,14 +696,12 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt 1",
         project_path: "/tmp/project-a",
       });
 
       manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt 2",
         project_path: "/tmp/project-b",
@@ -743,7 +715,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const result1 = manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt for project A",
         project_path: "/tmp/project-a",
@@ -751,7 +722,6 @@ describe("createSessionManager", () => {
       });
 
       manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt for project B",
         project_path: "/tmp/project-b",
@@ -768,7 +738,6 @@ describe("createSessionManager", () => {
       const manager = createSessionManager();
 
       const result1 = manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt 1 in worktree A",
         project_path: "/tmp/project-a",
@@ -776,7 +745,6 @@ describe("createSessionManager", () => {
       });
 
       const result2 = manager.submitPrompt({
-
         run_immediately: true,
         message: "Prompt 2 in worktree B",
         project_path: "/tmp/project-b",
@@ -798,7 +766,6 @@ describe("createSessionManager", () => {
       const projectPath = "/tmp/test-empty-worktree";
 
       const result = manager.submitPrompt({
-
         run_immediately: true,
         message: "Test empty worktree_id",
         project_path: projectPath,

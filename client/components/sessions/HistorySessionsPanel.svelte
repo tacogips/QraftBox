@@ -72,7 +72,7 @@
   interface Props {
     contextId: string;
     completedSessions: readonly AISession[];
-    onResumeSession: (sessionId: string) => void;
+    onResumeSession: (qraftAiSessionId: string) => void;
     onSelectSession: (sessionId: string) => void;
     onClearCompleted?: (() => void) | undefined;
   }
@@ -268,7 +268,7 @@
     if (item.kind === "qraftbox") {
       return `qb-${item.session.id}`;
     }
-    return `cli-${item.session.sessionId}`;
+    return `cli-${item.session.qraftAiSessionId}`;
   }
 
   /**
@@ -582,7 +582,9 @@
         <!-- Reusable accordion row snippet -->
         {#snippet sessionRow(item: UnifiedSessionItem, isFirst: boolean)}
           {@const itemId =
-            item.kind === "qraftbox" ? item.session.id : item.session.sessionId}
+            item.kind === "qraftbox"
+              ? item.session.id
+              : item.session.qraftAiSessionId}
           {@const isExpanded = expandedSessionIds.has(itemId)}
           {@const summary = sessionSummaries.get(itemId)}
           {@const isLoadingSummary = summaryLoading.has(itemId)}

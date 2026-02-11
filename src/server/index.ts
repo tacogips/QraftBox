@@ -21,6 +21,7 @@ import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
 import { createLogger } from "./logger";
 import type { RecentDirectoryStore } from "./workspace/recent-store";
+import { createSessionMappingStore } from "./ai/session-mapping-store";
 
 /**
  * Server options for creating the Hono instance
@@ -124,6 +125,8 @@ export function createServer(options: ServerOptions): Hono {
     logger.error("Failed to initialize tool registry", e);
   });
 
+  const mappingStore = createSessionMappingStore();
+
   const sessionManager = createSessionManager(
     {
       ...DEFAULT_AI_CONFIG,
@@ -133,6 +136,7 @@ export function createServer(options: ServerOptions): Hono {
     },
     toolRegistry,
     options.broadcast,
+    mappingStore,
   );
   const promptStore = createPromptStore();
 

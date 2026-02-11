@@ -18,7 +18,7 @@
 
   interface Props {
     item: UnifiedSessionItem;
-    onResumeSession?: ((sessionId: string) => void) | undefined;
+    onResumeSession?: ((qraftAiSessionId: string) => void) | undefined;
     onSelectSession?: ((sessionId: string) => void) | undefined;
   }
 
@@ -34,9 +34,9 @@
     }
   }
 
-  function handleClaudeResume(sessionId: string): void {
+  function handleClaudeResume(qraftAiSessionId: string): void {
     if (onResumeSession !== undefined) {
-      onResumeSession(sessionId);
+      onResumeSession(qraftAiSessionId);
     }
   }
 

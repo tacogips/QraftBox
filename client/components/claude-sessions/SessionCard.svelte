@@ -104,7 +104,7 @@
    * Handle resume button click
    */
   function handleResume(): void {
-    onResume(session.sessionId);
+    onResume(session.qraftAiSessionId);
   }
 
   /**
@@ -112,7 +112,7 @@
    */
   function handleView(): void {
     if (onView !== undefined) {
-      onView(session.sessionId);
+      onView(session.qraftAiSessionId);
     }
   }
 </script>

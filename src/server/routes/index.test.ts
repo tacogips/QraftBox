@@ -66,6 +66,7 @@ describe("Route Registry", () => {
       getSession: mock(() => null),
       subscribe: mock(() => () => {}),
       cancel: mock(async () => {}),
+      getMappingStore: mock(() => undefined),
     } as unknown as SessionManager;
 
     config = {

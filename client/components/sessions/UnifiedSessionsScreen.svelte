@@ -22,7 +22,7 @@
   interface Props {
     contextId: string;
     projectPath: string;
-    onResumeToChanges?: ((sessionId: string) => void) | undefined;
+    onResumeToChanges?: ((qraftAiSessionId: string) => void) | undefined;
   }
 
   const {
@@ -163,12 +163,14 @@
   /**
    * Handle resume session (Claude CLI)
    * After resume, navigate to Changes screen if callback provided
+   * The sessionId here is actually the qraft_ai_session_id from the session data
    */
-  async function handleResumeSession(sessionId: string): Promise<void> {
+  async function handleResumeSession(qraftAiSessionId: string): Promise<void> {
     try {
-      await claudeSessionsStore.resumeSession(sessionId);
+      // Server-side resumeSession API accepts qraft_ai_session_id
+      await claudeSessionsStore.resumeSession(qraftAiSessionId);
       if (onResumeToChanges !== undefined) {
-        onResumeToChanges(sessionId);
+        onResumeToChanges(qraftAiSessionId);
       }
     } catch (e) {
       console.error("Failed to resume session:", e);

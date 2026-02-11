@@ -21,10 +21,12 @@ import type {
   ProjectInfo,
   SessionListResponse,
 } from "../../../src/types/claude-session";
+import type { QraftAiSessionId } from "../../../src/types/ai";
 
 describe("createClaudeSessionsStore", () => {
   let store: ClaudeSessionsStore;
   let fetchMock: Mock<typeof global.fetch>;
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     store = createClaudeSessionsStore();
@@ -34,6 +36,8 @@ describe("createClaudeSessionsStore", () => {
   });
 
   afterEach(() => {
+    // Restore original fetch to avoid polluting other test files
+    global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
 
@@ -151,6 +155,7 @@ describe("createClaudeSessionsStore", () => {
       isSidechain: false,
       source: "qraftbox",
       projectEncoded: "-g-gits-tacogips-qraftbox",
+      qraftAiSessionId: "qs_test123" as QraftAiSessionId,
     };
 
     it("should fetch sessions successfully", async () => {

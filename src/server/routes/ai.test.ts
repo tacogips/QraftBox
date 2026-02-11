@@ -28,7 +28,7 @@ describe("AI Routes", () => {
       })),
       getPromptQueue: vi.fn(() => []),
       cancelPrompt: vi.fn(),
-      registerResumeMapping: vi.fn(() => "qs_test123" as import("../../types/ai").QraftAiSessionId),
+      getMappingStore: vi.fn(() => undefined),
     };
 
     app = createAIRoutes({

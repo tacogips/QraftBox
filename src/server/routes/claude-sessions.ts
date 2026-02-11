@@ -17,6 +17,9 @@ import {
   type SessionSummary,
 } from "../claude/session-reader";
 import { stripSystemTags } from "../../utils/strip-system-tags";
+import type { SessionMappingStore } from "../ai/session-mapping-store.js";
+import { generateWorktreeId } from "../ai/session-manager.js";
+import type { QraftAiSessionId } from "../../types/ai.js";
 
 /**
  * Error response format
@@ -46,11 +49,29 @@ interface ResumeSessionResponse {
  * - GET /api/claude/sessions/:id/summary - Get session summary with tool usage and tasks
  * - POST /api/claude/sessions/:id/resume - Resume a session
  *
+ * @param mappingStore - Optional session mapping store for enriching sessions with qraftAiSessionId
  * @returns Hono app with Claude sessions routes mounted
  */
-export function createClaudeSessionsRoutes(): Hono {
+export function createClaudeSessionsRoutes(
+  mappingStore?: SessionMappingStore | undefined,
+): Hono {
   const app = new Hono();
   const sessionReader = new ClaudeSessionReader();
+
+  /**
+   * Resolve a qraftAiSessionId to a Claude session UUID via the mapping store.
+   * Returns undefined if no mapping exists.
+   */
+  function resolveClaudeSessionId(
+    qraftAiSessionId: string,
+  ): string | undefined {
+    if (mappingStore === undefined) {
+      return undefined;
+    }
+    return mappingStore.findClaudeSessionId(
+      qraftAiSessionId as QraftAiSessionId,
+    );
+  }
 
   /**
    * GET /api/claude/projects
@@ -230,6 +251,25 @@ export function createClaudeSessionsRoutes(): Hono {
         session.summary = stripSystemTags(session.summary);
       }
 
+      // Enrich sessions with qraftAiSessionId via batch SQLite lookup.
+      // Auto-register missing mappings so the client always receives a qraft ID.
+      if (mappingStore !== undefined && response.sessions.length > 0) {
+        const claudeIds = response.sessions.map((s) => s.sessionId);
+        const mappings = mappingStore.batchLookupByClaudeIds(claudeIds);
+        for (const session of response.sessions) {
+          let qraftId = mappings.get(session.sessionId);
+          if (qraftId === undefined) {
+            const worktreeId = generateWorktreeId(session.projectPath);
+            qraftId = mappingStore.upsert(
+              session.sessionId,
+              session.projectPath,
+              worktreeId,
+            );
+          }
+          session.qraftAiSessionId = qraftId;
+        }
+      }
+
       return c.json(response);
     } catch (e) {
       const errorMessage =
@@ -245,12 +285,13 @@ export function createClaudeSessionsRoutes(): Hono {
   /**
    * GET /api/claude/sessions/:id
    *
-   * Get a specific session by ID.
+   * Get a specific session by qraftAiSessionId.
+   * Resolves qraftAiSessionId to Claude UUID internally.
    */
   app.get("/sessions/:id", async (c) => {
-    const sessionId = c.req.param("id");
+    const qraftId = c.req.param("id");
 
-    if (!sessionId || sessionId.length === 0) {
+    if (!qraftId || qraftId.length === 0) {
       const errorResponse: ErrorResponse = {
         error: "Session ID is required",
         code: 400,
@@ -259,12 +300,22 @@ export function createClaudeSessionsRoutes(): Hono {
     }
 
     try {
+      // Resolve qraftAiSessionId to Claude UUID
+      const claudeSessionId = resolveClaudeSessionId(qraftId);
+      if (claudeSessionId === undefined) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${qraftId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
       const session: ExtendedSessionEntry | null =
-        await sessionReader.getSession(sessionId);
+        await sessionReader.getSession(claudeSessionId);
 
       if (session === null) {
         const errorResponse: ErrorResponse = {
-          error: `Session not found: ${sessionId}`,
+          error: `Session not found: ${qraftId}`,
           code: 404,
         };
         return c.json(errorResponse, 404);
@@ -272,6 +323,10 @@ export function createClaudeSessionsRoutes(): Hono {
 
       session.firstPrompt = stripSystemTags(session.firstPrompt);
       session.summary = stripSystemTags(session.summary);
+
+      // Overwrite with authoritative mapping store value
+      session.qraftAiSessionId = qraftId as QraftAiSessionId;
+
       return c.json(session);
     } catch (e) {
       const errorMessage =
@@ -287,21 +342,31 @@ export function createClaudeSessionsRoutes(): Hono {
   /**
    * GET /api/claude/sessions/:id/transcript
    *
-   * Get transcript events for a specific session.
+   * Get transcript events for a specific session by qraftAiSessionId.
    *
    * Query parameters:
    * - offset: Skip first N events (default: 0)
    * - limit: Return at most N events (default: 200, max: 1000)
    */
   app.get("/sessions/:id/transcript", async (c) => {
-    const sessionId = c.req.param("id");
+    const qraftId = c.req.param("id");
 
-    if (!sessionId || sessionId.length === 0) {
+    if (!qraftId || qraftId.length === 0) {
       const errorResponse: ErrorResponse = {
         error: "Session ID is required",
         code: 400,
       };
       return c.json(errorResponse, 400);
+    }
+
+    // Resolve qraftAiSessionId to Claude UUID
+    const claudeSessionId = resolveClaudeSessionId(qraftId);
+    if (claudeSessionId === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Session not found: ${qraftId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
     }
 
     // Parse query parameters
@@ -343,14 +408,14 @@ export function createClaudeSessionsRoutes(): Hono {
 
     try {
       const result = await sessionReader.readTranscript(
-        sessionId,
+        claudeSessionId,
         offset,
         limit,
       );
 
       if (result === null) {
         const errorResponse: ErrorResponse = {
-          error: `Session not found: ${sessionId}`,
+          error: `Session not found: ${qraftId}`,
           code: 404,
         };
         return c.json(errorResponse, 404);
@@ -358,7 +423,7 @@ export function createClaudeSessionsRoutes(): Hono {
 
       return c.json({
         events: result.events,
-        sessionId,
+        qraftAiSessionId: qraftId,
         offset,
         limit,
         total: result.total,
@@ -378,11 +443,12 @@ export function createClaudeSessionsRoutes(): Hono {
    * GET /api/claude/sessions/:id/summary
    *
    * Get session summary with tool usage, tasks, and file modifications.
+   * Accepts qraftAiSessionId as :id param.
    */
   app.get("/sessions/:id/summary", async (c) => {
-    const sessionId = c.req.param("id");
+    const qraftId = c.req.param("id");
 
-    if (!sessionId || sessionId.length === 0) {
+    if (!qraftId || qraftId.length === 0) {
       const errorResponse: ErrorResponse = {
         error: "Session ID is required",
         code: 400,
@@ -390,13 +456,23 @@ export function createClaudeSessionsRoutes(): Hono {
       return c.json(errorResponse, 400);
     }
 
+    // Resolve qraftAiSessionId to Claude UUID
+    const claudeSessionId = resolveClaudeSessionId(qraftId);
+    if (claudeSessionId === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Session not found: ${qraftId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
     try {
       const summary: SessionSummary | null =
-        await sessionReader.getSessionSummary(sessionId);
+        await sessionReader.getSessionSummary(claudeSessionId);
 
       if (summary === null) {
         const errorResponse: ErrorResponse = {
-          error: `Session not found: ${sessionId}`,
+          error: `Session not found: ${qraftId}`,
           code: 404,
         };
         return c.json(errorResponse, 404);
@@ -417,16 +493,17 @@ export function createClaudeSessionsRoutes(): Hono {
   /**
    * POST /api/claude/sessions/:id/resume
    *
-   * Resume a Claude session with an optional prompt.
+   * Resume a session with an optional prompt.
+   * Accepts qraftAiSessionId as :id param.
    * Currently returns instructions - actual session spawning to be implemented later.
    *
    * Request body:
    * - prompt (optional): Additional prompt to send when resuming
    */
   app.post("/sessions/:id/resume", async (c) => {
-    const sessionId = c.req.param("id");
+    const qraftId = c.req.param("id");
 
-    if (!sessionId || sessionId.length === 0) {
+    if (!qraftId || qraftId.length === 0) {
       const errorResponse: ErrorResponse = {
         error: "Session ID is required",
         code: 400,
@@ -468,24 +545,33 @@ export function createClaudeSessionsRoutes(): Hono {
     }
 
     try {
+      // Resolve qraftAiSessionId to Claude UUID
+      const claudeSessionId = resolveClaudeSessionId(qraftId);
+      if (claudeSessionId === undefined) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${qraftId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
       // Verify session exists
       const session: ExtendedSessionEntry | null =
-        await sessionReader.getSession(sessionId);
+        await sessionReader.getSession(claudeSessionId);
 
       if (session === null) {
         const errorResponse: ErrorResponse = {
-          error: `Session not found: ${sessionId}`,
+          error: `Session not found: ${qraftId}`,
           code: 404,
         };
         return c.json(errorResponse, 404);
       }
 
       // Return instructions for resuming the session
-      // Actual session spawning will be implemented in a future task
       const instructions = [
-        `To resume session ${sessionId}:`,
+        `To resume session ${qraftId}:`,
         `1. Navigate to: ${session.projectPath}`,
-        `2. Run: claude-code resume ${sessionId}`,
+        `2. Run: claude-code resume ${claudeSessionId}`,
       ];
 
       if (prompt) {
@@ -493,7 +579,7 @@ export function createClaudeSessionsRoutes(): Hono {
       }
 
       const response: ResumeSessionResponse = {
-        sessionId,
+        sessionId: qraftId,
         instructions: instructions.join("\n"),
         prompt,
       };

@@ -22,7 +22,7 @@
   import { stripSystemTags } from "../../src/utils/strip-system-tags";
 
   interface SessionEntry {
-    readonly sessionId: string;
+    readonly qraftAiSessionId: string;
     readonly firstPrompt: string;
     readonly summary: string;
     readonly messageCount: number;
@@ -168,8 +168,8 @@
   /**
    * Handle resume session button click
    */
-  function handleResumeClick(sessionId: string): void {
-    onResumeSession(sessionId);
+  function handleResumeClick(qraftAiSessionId: string): void {
+    onResumeSession(qraftAiSessionId);
     closePopup();
   }
 
@@ -386,14 +386,14 @@
           </div>
         {:else}
           <!-- Session Rows -->
-          {#each sessions as session (session.sessionId)}
+          {#each sessions as session (session.qraftAiSessionId)}
             <div
               class="flex items-center gap-2 px-3 py-2 hover:bg-bg-hover border-b border-border-default/50 last:border-b-0"
             >
               <!-- Resume Button -->
               <button
                 type="button"
-                onclick={() => handleResumeClick(session.sessionId)}
+                onclick={() => handleResumeClick(session.qraftAiSessionId)}
                 class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
                      bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
                      border border-accent-emphasis/30 hover:border-accent-emphasis/60

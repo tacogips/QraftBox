@@ -146,7 +146,9 @@ export function getContextScopedRouteGroups(
     // These routes don't need context
     {
       prefix: "/claude-sessions",
-      routes: createClaudeSessionsRoutes(),
+      routes: createClaudeSessionsRoutes(
+        config.sessionManager.getMappingStore(),
+      ),
     },
     // Prompt routes - GET /api/ctx/:contextId/prompts
     // These routes don't need context

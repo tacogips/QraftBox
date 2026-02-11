@@ -237,14 +237,14 @@
   }
 
   /**
-   * Fetch a specific CLI session by ID
+   * Fetch a specific CLI session by qraftAiSessionId
    */
-  async function fetchCliSessionById(sessionId: string): Promise<void> {
+  async function fetchCliSessionById(qraftAiSessionId: string): Promise<void> {
     if (contextId === null) return;
     cliSessionLoading = true;
     try {
       const resp = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}`,
+        `/api/ctx/${contextId}/claude-sessions/sessions/${qraftAiSessionId}`,
       );
       if (!resp.ok) return;
       const session = (await resp.json()) as ExtendedSessionEntry;
@@ -286,12 +286,12 @@
     }
   }
 
-  async function fetchSessionSummary(sessionId: string): Promise<void> {
+  async function fetchSessionSummary(qraftAiSessionId: string): Promise<void> {
     if (contextId === null || sessionSummary !== null || summaryLoading) return;
     summaryLoading = true;
     try {
       const resp = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/summary`,
+        `/api/ctx/${contextId}/claude-sessions/sessions/${qraftAiSessionId}/summary`,
       );
       if (resp.ok) {
         sessionSummary = (await resp.json()) as SessionSummaryData;
@@ -306,7 +306,7 @@
   function toggleSession(): void {
     sessionExpanded = !sessionExpanded;
     if (sessionExpanded && displayMode === "cli" && recentCliSession !== null) {
-      void fetchSessionSummary(recentCliSession.sessionId);
+      void fetchSessionSummary(recentCliSession.qraftAiSessionId);
     }
   }
 
@@ -636,7 +636,7 @@
                   type="button"
                   onclick={(e) => {
                     e.stopPropagation();
-                    onResumeSession(recentCliSession.sessionId);
+                    onResumeSession(recentCliSession.qraftAiSessionId);
                   }}
                   class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded
                          bg-bg-tertiary hover:bg-bg-hover text-text-primary
@@ -795,7 +795,7 @@
             </div>
 
             <SessionTranscriptInline
-              sessionId={recentCliSession.sessionId}
+              sessionId={recentCliSession.qraftAiSessionId}
               {contextId}
               maxMessages={3}
             />
