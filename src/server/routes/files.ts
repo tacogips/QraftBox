@@ -8,7 +8,11 @@
 import { Hono } from "hono";
 import type { ServerContext } from "../../types/index.js";
 import type { FileNode } from "../../types/git.js";
-import { getFileTree, getAllFiles } from "../git/files.js";
+import {
+  getFileTree,
+  getAllFiles,
+  getDirectoryChildren,
+} from "../git/files.js";
 import { getFileContent, getChangedFiles } from "../git/diff.js";
 import {
   detectBinary,
@@ -128,18 +132,39 @@ export function createFileRoutes(context: ServerContext): Hono {
   /**
    * GET /files
    *
-   * Get file tree with optional diff-only mode.
+   * Get file tree with optional diff-only mode and shallow loading.
    *
    * Query parameters:
    * - mode (optional): "diff-only" | "all" (default: "all")
+   * - shallow (optional): "true" to load only top-level entries (ignored in diff-only mode)
    */
   app.get("/", async (c) => {
     const mode = c.req.query("mode");
     const diffOnly = mode === "diff-only";
+    const shallow = c.req.query("shallow") === "true";
 
     try {
-      const tree = await getFileTree(context.projectPath, diffOnly);
-      const totalFiles = countFiles(tree);
+      let tree: FileNode;
+      let totalFiles: number;
+
+      if (shallow && !diffOnly) {
+        // Lazy loading: return only top-level entries
+        const children = await getDirectoryChildren(context.projectPath, "");
+        tree = {
+          name: "",
+          path: "",
+          type: "directory" as const,
+          children,
+          status: undefined,
+          isBinary: undefined,
+        };
+        // Count total files for display
+        const allFiles = await getAllFiles(context.projectPath);
+        totalFiles = allFiles.length;
+      } else {
+        tree = await getFileTree(context.projectPath, diffOnly);
+        totalFiles = countFiles(tree);
+      }
 
       // Count changed files
       let changedFiles = 0;
@@ -162,6 +187,31 @@ export function createFileRoutes(context: ServerContext): Hono {
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to retrieve file tree";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /children
+   *
+   * Get immediate children of a directory (for lazy loading).
+   *
+   * Query parameters:
+   * - path (optional): Directory path relative to repo root, empty for root
+   */
+  app.get("/children", async (c) => {
+    const dirPath = c.req.query("path") ?? "";
+
+    try {
+      const children = await getDirectoryChildren(context.projectPath, dirPath);
+      return c.json({ children });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to list directory children";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

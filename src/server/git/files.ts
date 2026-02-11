@@ -90,6 +90,96 @@ export async function getAllFiles(
 }
 
 /**
+ * Get immediate children of a directory (for lazy loading)
+ *
+ * Uses `git ls-files` to list tracked files under a directory,
+ * then extracts unique immediate children (files and subdirectories).
+ * Directory children have `children: undefined` to indicate not-yet-loaded.
+ *
+ * @param projectPath - Path to git repository
+ * @param dirPath - Directory path relative to repo root ("" for root)
+ * @returns Promise resolving to array of immediate child FileNodes
+ * @throws Error if git command fails
+ *
+ * @example
+ * ```typescript
+ * const rootChildren = await getDirectoryChildren('/path/to/repo', '');
+ * // [{ name: 'src', path: 'src', type: 'directory', children: undefined }, ...]
+ *
+ * const srcChildren = await getDirectoryChildren('/path/to/repo', 'src');
+ * // [{ name: 'main.ts', path: 'src/main.ts', type: 'file', children: undefined }, ...]
+ * ```
+ */
+export async function getDirectoryChildren(
+  projectPath: string,
+  dirPath: string,
+): Promise<readonly FileNode[]> {
+  const args =
+    dirPath === "" ? ["ls-files"] : ["ls-files", "--", dirPath + "/"];
+
+  const result = await execGit(args, { cwd: projectPath });
+
+  if (result.exitCode !== 0) {
+    throw new Error(`Failed to list files: ${result.stderr}`);
+  }
+
+  const files = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const prefix = dirPath === "" ? "" : dirPath + "/";
+  const prefixLen = prefix.length;
+
+  // Track unique immediate children: name -> type
+  const childrenMap = new Map<string, "file" | "directory">();
+
+  for (const filePath of files) {
+    const relativePath = filePath.substring(prefixLen);
+    const slashIndex = relativePath.indexOf("/");
+
+    if (slashIndex === -1) {
+      // Direct child file
+      childrenMap.set(relativePath, "file");
+    } else {
+      // Subdirectory (only add once)
+      const dirName = relativePath.substring(0, slashIndex);
+      if (!childrenMap.has(dirName)) {
+        childrenMap.set(dirName, "directory");
+      }
+    }
+  }
+
+  // Build sorted FileNode array
+  const children: FileNode[] = [];
+  for (const [name, type] of childrenMap) {
+    const path = prefix + name;
+    children.push({
+      name,
+      path,
+      type,
+      children: undefined, // Not loaded for directories, N/A for files
+      status: undefined,
+      isBinary:
+        type === "file"
+          ? isBinaryExtension(path)
+            ? true
+            : undefined
+          : undefined,
+    });
+  }
+
+  // Sort: directories first, then files, alphabetically within each group
+  children.sort((a, b) => {
+    if (a.type === "directory" && b.type === "file") return -1;
+    if (a.type === "file" && b.type === "directory") return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return children;
+}
+
+/**
  * Merge file status information into a file tree
  *
  * Walks the tree and annotates nodes with status from FileStatus array.

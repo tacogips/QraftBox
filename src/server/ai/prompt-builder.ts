@@ -326,9 +326,7 @@ export function buildPromptWithContext(request: AIPromptRequest): string {
     parts.push("");
   }
 
-  // Add user prompt
-  parts.push("# User Request");
-  parts.push("");
+  // Add user prompt as-is (no artificial heading)
   parts.push(request.prompt);
 
   return parts.join("\n");

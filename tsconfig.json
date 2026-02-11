@@ -46,7 +46,12 @@
     /* Completeness */
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+
+    /* Path mappings for claude-code-agent subpath imports */
+    "paths": {
+      "claude-code-agent/src/*": ["./node_modules/claude-code-agent/src/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "exclude": ["node_modules", "dist"]

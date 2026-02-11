@@ -33,7 +33,7 @@ import { readdirSync, statSync } from "node:fs";
 import {
   ClaudeCodeToolAgent,
   type ToolAgentSession,
-} from "../../../../claude-code-agent/src/sdk/index.js";
+} from "claude-code-agent/src/sdk/index.js";
 
 /**
  * Internal session representation

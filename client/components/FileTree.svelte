@@ -61,6 +61,17 @@
      * Whether the sidebar can be widened further
      */
     canWiden?: boolean;
+
+    /**
+     * Callback to load children of a directory (lazy loading)
+     */
+    onDirectoryExpand?: (path: string) => Promise<void>;
+
+    /**
+     * Callback to load the full tree (for expand-all and filtering).
+     * Returns the full tree for immediate use.
+     */
+    onLoadFullTree?: () => Promise<FileNode | undefined>;
   }
 
   const {
@@ -75,6 +86,8 @@
     onWiden = undefined,
     canNarrow = true,
     canWiden = true,
+    onDirectoryExpand = undefined,
+    onLoadFullTree = undefined,
   }: Props = $props();
 
   /**
@@ -96,6 +109,11 @@
    * Status dropdown open state
    */
   let statusDropdownOpen = $state(false);
+
+  /**
+   * Paths of directories currently being loaded
+   */
+  let loadingPaths = $state<Set<string>>(new Set());
 
   /**
    * Uncommitted file count from git status
@@ -152,16 +170,66 @@
   });
 
   /**
-   * Toggle directory expansion
+   * Toggle directory expansion, triggering lazy load if children are not yet loaded
    */
   function toggleDirectory(path: string): void {
     const newExpanded = new Set(expandedPaths);
     if (newExpanded.has(path)) {
       newExpanded.delete(path);
+      expandedPaths = newExpanded;
     } else {
       newExpanded.add(path);
+      expandedPaths = newExpanded;
+
+      // Check if this directory needs lazy loading
+      if (onDirectoryExpand !== undefined) {
+        const node = findNodeInTree(tree, path);
+        if (
+          node !== null &&
+          node.isDirectory &&
+          node.children === undefined
+        ) {
+          const newLoading = new Set(loadingPaths);
+          newLoading.add(path);
+          loadingPaths = newLoading;
+
+          void onDirectoryExpand(path).finally(() => {
+            const updated = new Set(loadingPaths);
+            updated.delete(path);
+            loadingPaths = updated;
+          });
+        }
+      }
     }
-    expandedPaths = newExpanded;
+  }
+
+  /**
+   * Find a node in the tree by path
+   */
+  function findNodeInTree(
+    node: FileNode,
+    targetPath: string,
+  ): FileNode | null {
+    if (node.path === targetPath) return node;
+    if (!node.isDirectory || node.children === undefined) return null;
+    for (const child of node.children) {
+      const found = findNodeInTree(child, targetPath);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  /**
+   * Check if the tree has any directories with unloaded children
+   */
+  function hasUnloadedDirectories(node: FileNode): boolean {
+    if (node.isDirectory) {
+      if (node.children === undefined) return true;
+      for (const child of node.children) {
+        if (hasUnloadedDirectories(child)) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -181,10 +249,15 @@
   }
 
   /**
-   * Expand all directories in the current tree
+   * Expand all directories in the current tree.
+   * If tree has unloaded directories, loads the full tree first.
    */
-  function expandAll(): void {
-    const source = filteredTree ?? tree;
+  async function expandAll(): Promise<void> {
+    let treeForExpand: FileNode | undefined;
+    if (onLoadFullTree !== undefined && hasUnloadedDirectories(tree)) {
+      treeForExpand = await onLoadFullTree();
+    }
+    const source = treeForExpand ?? filteredTree ?? tree;
     expandedPaths = new Set(collectDirectoryPaths(source));
   }
 
@@ -249,11 +322,33 @@
   });
 
   /**
+   * When filter text is entered and tree has unloaded directories,
+   * load the full tree so filtering works across all files.
+   */
+  $effect(() => {
+    if (
+      filterText !== "" &&
+      hasUnloadedDirectories(tree) &&
+      onLoadFullTree !== undefined
+    ) {
+      void onLoadFullTree();
+    }
+  });
+
+  /**
    * Filter tree based on mode and filename filter (recursive)
    */
   function filterTree(node: FileNode): FileNode | null {
     if (node.isDirectory) {
-      if (!node.children) {
+      if (node.children === undefined) {
+        // Not loaded yet (lazy loading) - keep in "all" mode with no active filters
+        if (mode === "diff" || filterText !== "" || statusFilter !== null) {
+          return null;
+        }
+        return node;
+      }
+
+      if (node.children.length === 0) {
         return null;
       }
 
@@ -836,10 +931,40 @@
       </button>
 
       <!-- Children (if expanded) -->
-      {#if isExpanded(node.path) && node.children}
-        {#each node.children as child (child.path)}
-          {@render treeNode(child, depth + 1)}
-        {/each}
+      {#if isExpanded(node.path)}
+        {#if node.children !== undefined}
+          {#each node.children as child (child.path)}
+            {@render treeNode(child, depth + 1)}
+          {/each}
+        {:else if loadingPaths.has(node.path)}
+          <div
+            class="flex items-center gap-1.5 py-1 text-xs text-text-tertiary"
+            style="padding-left: {1 + (depth + 1) * 1.5}rem"
+          >
+            <svg
+              class="animate-spin w-3 h-3"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="3"
+                opacity="0.25"
+              />
+              <path
+                d="M4 12a8 8 0 018-8"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>Loading...</span>
+          </div>
+        {/if}
       {/if}
     </div>
   {:else}

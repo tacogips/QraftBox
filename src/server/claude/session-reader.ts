@@ -23,8 +23,8 @@ import {
 } from "../../types/claude-session";
 import { SessionRegistry } from "./session-registry";
 import { stripSystemTags } from "../../utils/strip-system-tags";
-import { SessionReader as AgentSessionReader } from "../../../../claude-code-agent/src/sdk/index";
-import { createProductionContainer } from "../../../../claude-code-agent/src/container";
+import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
+import { createProductionContainer } from "claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 

@@ -366,7 +366,7 @@
     allFilesLoading = allFilesTree === null;
     allFilesTreeStale = false;
     try {
-      const resp = await fetch(`/api/ctx/${ctxId}/files?mode=all`);
+      const resp = await fetch(`/api/ctx/${ctxId}/files?mode=all&shallow=true`);
       if (!resp.ok) throw new Error(`Files API error: ${resp.status}`);
       const data = (await resp.json()) as { tree: ServerFileNode };
       allFilesTree = convertServerTree(data.tree);
@@ -417,6 +417,84 @@
       children: node.children?.map(convertServerTree),
       status,
     };
+  }
+
+  /**
+   * Fetch immediate children of a directory (lazy loading)
+   */
+  async function fetchDirectoryChildren(
+    ctxId: string,
+    dirPath: string,
+  ): Promise<FileNode[]> {
+    const resp = await fetch(
+      `/api/ctx/${ctxId}/files/children?path=${encodeURIComponent(dirPath)}`,
+    );
+    if (!resp.ok) throw new Error(`Children API error: ${resp.status}`);
+    const data = (await resp.json()) as { children: ServerFileNode[] };
+    return data.children.map(convertServerTree);
+  }
+
+  /**
+   * Insert loaded children into the allFilesTree at the specified directory path
+   */
+  function insertChildrenIntoTree(
+    node: FileNode,
+    dirPath: string,
+    children: readonly FileNode[],
+  ): FileNode {
+    if (node.path === dirPath && node.isDirectory) {
+      return { ...node, children };
+    }
+    if (!node.isDirectory || node.children === undefined) {
+      return node;
+    }
+    const updatedChildren = node.children.map((child) => {
+      if (
+        child.isDirectory &&
+        (child.path === dirPath || dirPath.startsWith(child.path + "/"))
+      ) {
+        return insertChildrenIntoTree(child, dirPath, children);
+      }
+      return child;
+    });
+    const changed = updatedChildren.some(
+      (c, i) => c !== node.children![i],
+    );
+    return changed ? { ...node, children: updatedChildren } : node;
+  }
+
+  /**
+   * Handle lazy loading when a directory is expanded in the file tree
+   */
+  async function handleDirectoryExpand(dirPath: string): Promise<void> {
+    if (contextId === null) return;
+    try {
+      const children = await fetchDirectoryChildren(contextId, dirPath);
+      if (allFilesTree !== null) {
+        allFilesTree = insertChildrenIntoTree(allFilesTree, dirPath, children);
+      }
+    } catch (e) {
+      console.error(`Failed to load directory children for ${dirPath}:`, e);
+    }
+  }
+
+  /**
+   * Load the full file tree (used for expand-all and filtering).
+   * Returns the full annotated tree for immediate use by the caller.
+   */
+  async function handleLoadFullTree(): Promise<FileNode | undefined> {
+    if (contextId === null) return undefined;
+    try {
+      const resp = await fetch(`/api/ctx/${contextId}/files?mode=all`);
+      if (!resp.ok) return undefined;
+      const data = (await resp.json()) as { tree: ServerFileNode };
+      const fullTree = convertServerTree(data.tree);
+      allFilesTree = fullTree;
+      return annotateTreeWithStatus(fullTree, diffStatusMap);
+    } catch (e) {
+      console.error("Failed to load full tree:", e);
+      return undefined;
+    }
   }
 
   /**
@@ -2191,6 +2269,8 @@
                     void fetchAllFiles(contextId);
                   }
                 }}
+                onDirectoryExpand={handleDirectoryExpand}
+                onLoadFullTree={handleLoadFullTree}
                 onNarrow={narrowSidebar}
                 onWiden={widenSidebar}
                 canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
