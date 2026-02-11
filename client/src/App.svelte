@@ -539,7 +539,7 @@
   />
 
   <!-- Main Area -->
-  <div class="flex flex-1 overflow-hidden">
+  <div class="flex flex-1 min-h-0 overflow-hidden">
     {#if currentScreen === "diff"}
       <DiffScreen
         {activeTabIsGitRepo}

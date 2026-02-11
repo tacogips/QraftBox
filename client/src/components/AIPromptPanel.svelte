@@ -146,7 +146,7 @@
 
 <div
   class="ai-prompt-panel shrink-0 border-t border-border-default bg-bg-secondary
-         {collapsed ? 'h-16' : 'h-64'} transition-all duration-200"
+         {collapsed ? 'h-24' : 'h-64'} transition-all duration-200"
 >
   <div class="h-full flex flex-col">
     <!-- Header with toggle button and queue status -->

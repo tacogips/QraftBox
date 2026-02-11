@@ -137,7 +137,7 @@
   }
 </script>
 
-<div class="flex flex-1 overflow-hidden">
+<div class="flex flex-1 min-h-0 overflow-hidden">
   <div class="relative flex shrink-0">
     {#if !sidebarCollapsed}
       <aside
@@ -190,8 +190,8 @@
     </button>
   </div>
 
-  <div class="flex flex-col flex-1 min-w-0">
-    <main class="flex-1 overflow-auto bg-bg-primary">
+  <div class="flex flex-col flex-1 min-w-0 min-h-0">
+    <main class="flex-1 min-h-0 overflow-auto bg-bg-primary">
       {#if !activeTabIsGitRepo}
         <div
           class="flex flex-col items-center justify-center h-full text-text-tertiary gap-2"
@@ -437,7 +437,6 @@
 
     <CurrentSessionPanel
       {contextId}
-      {projectPath}
       running={runningSessions}
       queued={queuedSessions}
       recentlyCompleted={recentlyCompletedSessions}

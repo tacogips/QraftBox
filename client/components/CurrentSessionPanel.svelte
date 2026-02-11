@@ -34,7 +34,6 @@
 
   interface Props {
     contextId: string | null;
-    projectPath: string;
     running: readonly AISession[];
     queued: readonly AISession[];
     recentlyCompleted: readonly AISession[];
@@ -49,7 +48,6 @@
 
   const {
     contextId,
-    projectPath,
     running,
     queued,
     recentlyCompleted,
@@ -258,34 +256,6 @@
     }
   }
 
-  async function fetchRecentCliSession(): Promise<void> {
-    if (contextId === null) return;
-    try {
-      const params = new URLSearchParams({
-        offset: "0",
-        limit: "1",
-        sortBy: "modified",
-        sortOrder: "desc",
-      });
-      if (projectPath.length > 0) {
-        params.set("workingDirectoryPrefix", projectPath);
-      }
-      const resp = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
-      );
-      if (!resp.ok) return;
-      const data = (await resp.json()) as {
-        sessions: ExtendedSessionEntry[];
-        total: number;
-      };
-      if (data.sessions.length > 0 && data.sessions[0] !== undefined) {
-        recentCliSession = data.sessions[0];
-      }
-    } catch {
-      // Silently ignore
-    }
-  }
-
   async function fetchSessionSummary(qraftAiSessionId: string): Promise<void> {
     if (contextId === null || sessionSummary !== null || summaryLoading) return;
     summaryLoading = true;
@@ -315,7 +285,9 @@
     if (resumeSessionId !== null) {
       void fetchCliSessionById(resumeSessionId);
     } else {
-      void fetchRecentCliSession();
+      recentCliSession = null;
+      sessionSummary = null;
+      cliSessionLoading = false;
     }
   });
 </script>
