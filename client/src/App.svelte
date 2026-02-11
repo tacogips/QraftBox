@@ -396,6 +396,7 @@
     type: "file" | "directory";
     children?: ServerFileNode[];
     status?: string;
+    isBinary?: boolean;
   }
 
   function convertServerTree(node: ServerFileNode): FileNode {
@@ -411,6 +412,7 @@
       isDirectory: node.type === "directory",
       children: node.children?.map(convertServerTree),
       status,
+      isBinary: node.isBinary === true ? true : undefined,
     };
   }
 
@@ -522,6 +524,9 @@
     path: string;
     content: string;
     language: string;
+    isBinary?: boolean;
+    isImage?: boolean;
+    mimeType?: string;
   } | null>(null);
   let fileContentLoading = $state(false);
 
@@ -540,14 +545,20 @@
         path: string;
         content: string;
         language: string;
+        isBinary?: boolean;
+        isImage?: boolean;
+        mimeType?: string;
       };
       fileContent = {
         path: data.path,
         content: data.content,
         language: data.language,
+        isBinary: data.isBinary === true ? true : undefined,
+        isImage: data.isImage === true ? true : undefined,
+        mimeType: data.mimeType,
       };
-    } catch (e) {
-      console.error("Failed to fetch file content:", e);
+    } catch (fileContentError) {
+      console.error("Failed to fetch file content:", fileContentError);
       fileContent = null;
     } finally {
       fileContentLoading = false;
@@ -2288,6 +2299,9 @@
               path={fileContent.path}
               content={fileContent.content}
               language={fileContent.language}
+              isBinary={fileContent.isBinary}
+              isImage={fileContent.isImage}
+              mimeType={fileContent.mimeType}
               onCommentSubmit={handleInlineCommentSubmit}
             />
           {:else if fileContentLoading}
@@ -2300,6 +2314,9 @@
               path={fileContent.path}
               content={fileContent.content}
               language={fileContent.language}
+              isBinary={fileContent.isBinary}
+              isImage={fileContent.isImage}
+              mimeType={fileContent.mimeType}
               onCommentSubmit={handleInlineCommentSubmit}
             />
           {:else}

@@ -150,6 +150,16 @@
     {node.name}
   </span>
 
+  <!-- Binary Badge -->
+  {#if node.isBinary === true}
+    <span
+      class="text-[10px] font-medium text-text-tertiary bg-bg-tertiary px-1 rounded shrink-0"
+      aria-label="Binary file"
+    >
+      BIN
+    </span>
+  {/if}
+
   <!-- Status Badge -->
   {#if node.status !== undefined}
     <span

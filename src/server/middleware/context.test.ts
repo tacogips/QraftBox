@@ -49,6 +49,7 @@ function createMockContextManager(
       resolveSlug: async () => undefined,
       removeSlug: async () => {},
       getAllProjects: async () => new Map(),
+      getAllPaths: async (): Promise<ReadonlySet<string>> => new Set(),
     })),
   };
 }

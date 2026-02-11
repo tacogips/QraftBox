@@ -34,7 +34,9 @@ describe("createServer", () => {
 
   test("should create Hono instance", () => {
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     expect(app).toBeDefined();
@@ -43,7 +45,9 @@ describe("createServer", () => {
 
   test("should respond to health check", async () => {
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     const response = await app.request("/api/health");
@@ -60,7 +64,9 @@ describe("createServer", () => {
 
   test("should handle errors with error handler", async () => {
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     // Request a non-existent route (should 404)
@@ -73,7 +79,9 @@ describe("createServer", () => {
 
   test("should serve static files with correct MIME type", async () => {
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     // Request static file (will fail since dist/client doesn't exist in test)
@@ -103,7 +111,9 @@ describe("startServer and stopServer", () => {
     };
 
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     // Start server
@@ -135,7 +145,9 @@ describe("startServer and stopServer", () => {
     };
 
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     const server = startServer(app, config);
@@ -176,7 +188,9 @@ describe("Server integration", () => {
     };
 
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     const server = startServer(app, config);
@@ -213,7 +227,9 @@ describe("Server integration", () => {
     };
 
     const contextManager = createContextManager();
-    const recentStore = createRecentDirectoryStore({ baseDir: testDir });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
     const app = createServer({ config, contextManager, recentStore });
 
     const server = startServer(app, config);

@@ -79,8 +79,10 @@ export class ClaudeSessionReader {
 
   /**
    * List all Claude projects with session metadata
+   *
+   * @param pathFilter - Optional path prefix to filter projects (e.g., "/g/gits/tacogips")
    */
-  async listProjects(): Promise<ProjectInfo[]> {
+  async listProjects(pathFilter?: string): Promise<ProjectInfo[]> {
     if (!existsSync(this.projectsDir)) {
       return [];
     }
@@ -93,32 +95,55 @@ export class ClaudeSessionReader {
         continue;
       }
 
+      // Early filtering: skip directories that clearly can't match pathFilter
+      if (pathFilter !== undefined) {
+        const simpleDecoded = entry.name.replace(/-/g, "/");
+        // Only skip if it's definitely not a match (doesn't start with filter)
+        // AND the filter doesn't contain hyphens (which could cause ambiguity)
+        if (
+          !simpleDecoded.startsWith(pathFilter) &&
+          !pathFilter.includes("-")
+        ) {
+          continue;
+        }
+      }
+
       const projectDir = join(this.projectsDir, entry.name);
       const indexPath = join(projectDir, "sessions-index.json");
+
+      let projectInfo: ProjectInfo | null = null;
 
       try {
         // Try reading sessions-index.json first
         const index = await this.readSessionIndex(indexPath);
-        projects.push({
+        projectInfo = {
           path: index.originalPath,
           encoded: entry.name,
           sessionCount: index.entries.length,
           lastModified: this.getLatestModified(index.entries),
-        });
+        };
       } catch (error: unknown) {
         // If index doesn't exist, try building from JSONL files
         try {
-          const projectInfo = await this.buildProjectFromJsonl(
+          projectInfo = await this.buildProjectFromJsonl(
             projectDir,
             entry.name,
           );
-          if (projectInfo !== null) {
-            projects.push(projectInfo);
-          }
         } catch (buildError: unknown) {
           // Skip projects that can't be processed either way
           continue;
         }
+      }
+
+      // Final pathFilter check with actual decoded path from index
+      if (projectInfo !== null) {
+        if (
+          pathFilter !== undefined &&
+          !projectInfo.path.startsWith(pathFilter)
+        ) {
+          continue;
+        }
+        projects.push(projectInfo);
       }
     }
 
@@ -132,17 +157,12 @@ export class ClaudeSessionReader {
     options: ListSessionsOptions = {},
   ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
-    const projects = await this.listProjects();
 
-    // Filter projects by working directory prefix if specified
-    const filteredProjects = options.workingDirectoryPrefix
-      ? projects.filter((p) =>
-          p.path.startsWith(options.workingDirectoryPrefix!),
-        )
-      : projects;
+    // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
+    const projects = await this.listProjects(options.workingDirectoryPrefix);
 
-    // Read sessions from filtered projects
-    for (const project of filteredProjects) {
+    // Read sessions from projects (filtering already done in listProjects)
+    for (const project of projects) {
       const projectDir = join(this.projectsDir, project.encoded);
       const indexPath = join(projectDir, "sessions-index.json");
 

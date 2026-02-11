@@ -1,8 +1,9 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { existsSync } from "node:fs";
+import { Database } from "bun:sqlite";
 import { createProjectRegistry } from "./project-registry";
 
 describe("ProjectRegistry", () => {
@@ -20,7 +21,8 @@ describe("ProjectRegistry", () => {
 
   describe("getOrCreateSlug", () => {
     test("creates slug for new path", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const dbPath = join(testDir, "test.db");
+      const registry = createProjectRegistry({ dbPath });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -29,7 +31,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("returns same slug for same path on repeated calls", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
       const slug1 = await registry.getOrCreateSlug(path);
@@ -39,23 +44,28 @@ describe("ProjectRegistry", () => {
     });
 
     test("persists slug to disk", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const dbPath = join(testDir, "test.db");
+      const registry = createProjectRegistry({ dbPath });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
 
-      // Read file directly
-      const filePath = join(testDir, "projects.json");
-      expect(existsSync(filePath)).toBe(true);
+      // Verify database exists and has the entry
+      expect(existsSync(dbPath)).toBe(true);
 
-      const content = await readFile(filePath, "utf-8");
-      const data = JSON.parse(content);
-
-      expect(data.projects[slug]).toBe(path);
+      const db = new Database(dbPath);
+      const row = db
+        .prepare("SELECT path FROM registered_projects WHERE slug = ?")
+        .get(slug) as { path: string } | undefined | null;
+      expect(row?.path).toBe(path);
+      db.close();
     });
 
     test("handles paths with special characters", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/My Project (2024)";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -64,12 +74,12 @@ describe("ProjectRegistry", () => {
     });
 
     test("handles collision by appending suffix", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const dbPath = join(testDir, "test.db");
+      const jsonPath = join(testDir, "projects.json");
 
-      // Pre-populate registry file with conflicting slug
-      const filePath = join(testDir, "projects.json");
+      // Pre-populate JSON with conflicting slug
       await writeFile(
-        filePath,
+        jsonPath,
         JSON.stringify({
           projects: {
             "qraftbox-abc123": "/different/path/QraftBox",
@@ -78,34 +88,46 @@ describe("ProjectRegistry", () => {
         "utf-8",
       );
 
-      // Try to create slug for path that would generate same base slug
-      // We need to find a path that hashes to abc123
+      const registry = createProjectRegistry({
+        dbPath,
+        jsonMigrationPath: jsonPath,
+      });
+
+      // The migrated entry should be loaded
+      const migrated = await registry.getAllProjects();
+      expect(migrated.size).toBe(1);
+      expect(migrated.get("qraftbox-abc123")).toBe("/different/path/QraftBox");
+
+      // Try to create slug for a different path that generates same base slug
       const testPath = "/example/projects/QraftBox";
       const slug = await registry.getOrCreateSlug(testPath);
 
-      // Should either be the original or have a suffix
+      // Should either be the original or have a suffix (depending on hash collision)
       expect(slug).toMatch(/^qraftbox-[0-9a-f]{6}(-\d+)?$/);
 
-      // Verify both slugs exist
+      // Verify both entries exist
       const allProjects = await registry.getAllProjects();
-      expect(allProjects.size).toBeGreaterThanOrEqual(2);
+      expect(allProjects.size).toBe(2);
     });
 
     test("creates directory structure on first use", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const dbPath = join(testDir, "test.db");
+      const registry = createProjectRegistry({ dbPath });
       const path = "/example/projects/QraftBox";
 
       expect(existsSync(testDir)).toBe(true);
 
       await registry.getOrCreateSlug(path);
 
-      // Verify file was created
-      const filePath = join(testDir, "projects.json");
-      expect(existsSync(filePath)).toBe(true);
+      // Verify database was created
+      expect(existsSync(dbPath)).toBe(true);
     });
 
     test("normalizes basename to lowercase", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/UPPERCASE-Project";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -114,7 +136,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("replaces multiple non-alphanumeric chars with single hyphen", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/foo___bar";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -125,7 +150,10 @@ describe("ProjectRegistry", () => {
 
   describe("resolveSlug", () => {
     test("returns path for existing slug", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -135,27 +163,21 @@ describe("ProjectRegistry", () => {
     });
 
     test("returns undefined for non-existent slug", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       const resolved = await registry.resolveSlug("non-existent-slug");
 
       expect(resolved).toBeUndefined();
     });
 
-    test("returns undefined when registry file does not exist", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
-
-      const resolved = await registry.resolveSlug("any-slug");
-
-      expect(resolved).toBeUndefined();
-    });
-
-    test("handles corrupted registry file gracefully", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
-
-      // Write invalid JSON
-      const filePath = join(testDir, "projects.json");
-      await writeFile(filePath, "{ invalid json", "utf-8");
+    test("returns undefined when registry database is empty", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       const resolved = await registry.resolveSlug("any-slug");
 
@@ -165,7 +187,10 @@ describe("ProjectRegistry", () => {
 
   describe("removeSlug", () => {
     test("removes existing slug", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -176,22 +201,27 @@ describe("ProjectRegistry", () => {
     });
 
     test("persists removal to disk", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const dbPath = join(testDir, "test.db");
+      const registry = createProjectRegistry({ dbPath });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
       await registry.removeSlug(slug);
 
-      // Read file directly
-      const filePath = join(testDir, "projects.json");
-      const content = await readFile(filePath, "utf-8");
-      const data = JSON.parse(content);
-
-      expect(data.projects[slug]).toBeUndefined();
+      // Verify database no longer has the entry
+      const db = new Database(dbPath);
+      const row = db
+        .prepare("SELECT path FROM registered_projects WHERE slug = ?")
+        .get(slug) as { path: string } | undefined | null;
+      expect(row === null || row === undefined).toBe(true);
+      db.close();
     });
 
     test("does nothing when slug does not exist", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       // Should not throw
       await registry.removeSlug("non-existent-slug");
@@ -200,15 +230,21 @@ describe("ProjectRegistry", () => {
       expect(allProjects.size).toBe(0);
     });
 
-    test("does nothing when registry file does not exist", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+    test("does nothing when registry database is empty", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       // Should not throw
       await registry.removeSlug("any-slug");
     });
 
     test("removes from reverse index", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
       const slug = await registry.getOrCreateSlug(path);
@@ -222,7 +258,10 @@ describe("ProjectRegistry", () => {
 
   describe("getAllProjects", () => {
     test("returns empty map when no projects", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       const projects = await registry.getAllProjects();
 
@@ -230,7 +269,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("returns all registered projects", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path1 = "/example/projects/QraftBox";
       const path2 = "/example/projects/OtherProject";
 
@@ -245,7 +287,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("returns read-only map", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
       await registry.getOrCreateSlug(path);
@@ -256,8 +301,11 @@ describe("ProjectRegistry", () => {
       expect(projects).toBeInstanceOf(Map);
     });
 
-    test("returns empty map when registry file does not exist", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+    test("returns empty map when registry database is empty", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
 
       const projects = await registry.getAllProjects();
 
@@ -265,49 +313,49 @@ describe("ProjectRegistry", () => {
     });
   });
 
-  describe("caching behavior", () => {
-    test("caches registry data after first load", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+  describe("getAllPaths", () => {
+    test("returns empty set when no projects", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
+
+      const paths = await registry.getAllPaths();
+
+      expect(paths.size).toBe(0);
+    });
+
+    test("returns all registered project paths", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path1 = "/example/projects/QraftBox";
       const path2 = "/example/projects/OtherProject";
 
-      // First operation loads from disk
-      const slug1 = await registry.getOrCreateSlug(path1);
-
-      // Manually modify file on disk
-      const filePath = join(testDir, "projects.json");
-      await writeFile(
-        filePath,
-        JSON.stringify({
-          projects: {
-            [slug1]: path1,
-            "manual-slug": "/manual/path",
-          },
-        }),
-        "utf-8",
-      );
-
-      // Second operation should use cache, not see manual change
+      await registry.getOrCreateSlug(path1);
       await registry.getOrCreateSlug(path2);
-      const allProjects = await registry.getAllProjects();
 
-      // Should not include manually added slug because cache was already loaded
-      expect(allProjects.get("manual-slug")).toBeUndefined();
-      expect(allProjects.size).toBe(2);
+      const paths = await registry.getAllPaths();
+
+      expect(paths.size).toBe(2);
+      expect(paths.has(path1)).toBe(true);
+      expect(paths.has(path2)).toBe(true);
     });
 
-    test("invalidates cache on write operations", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+    test("returns read-only set", async () => {
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path = "/example/projects/QraftBox";
 
-      const slug = await registry.getOrCreateSlug(path);
+      await registry.getOrCreateSlug(path);
 
-      // Remove operation writes to disk
-      await registry.removeSlug(slug);
+      const paths = await registry.getAllPaths();
 
-      // Verify removal is reflected
-      const resolved = await registry.resolveSlug(slug);
-      expect(resolved).toBeUndefined();
+      // Set should be read-only (TypeScript enforces this at compile time)
+      expect(paths).toBeInstanceOf(Set);
     });
   });
 
@@ -321,8 +369,12 @@ describe("ProjectRegistry", () => {
       );
 
       try {
-        const registry1 = createProjectRegistry({ baseDir: testDir1 });
-        const registry2 = createProjectRegistry({ baseDir: testDir2 });
+        const registry1 = createProjectRegistry({
+          dbPath: join(testDir1, "test.db"),
+        });
+        const registry2 = createProjectRegistry({
+          dbPath: join(testDir2, "test.db"),
+        });
         const path = "/example/projects/QraftBox";
 
         const slug1 = await registry1.getOrCreateSlug(path);
@@ -337,7 +389,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("generates different slugs for different paths", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path1 = "/example/projects/QraftBox";
       const path2 = "/different/location/QraftBox";
 
@@ -349,7 +404,10 @@ describe("ProjectRegistry", () => {
     });
 
     test("hash is based on full path, not just basename", async () => {
-      const registry = createProjectRegistry({ baseDir: testDir });
+      const registry = createProjectRegistry({
+        dbPath: join(testDir, "test.db"),
+        jsonMigrationPath: join(testDir, "nonexistent.json"),
+      });
       const path1 = "/path/a/QraftBox";
       const path2 = "/path/b/QraftBox";
 

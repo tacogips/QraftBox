@@ -71,7 +71,9 @@ describe("Route Registry", () => {
 
     config = {
       contextManager: mockContextManager,
-      recentStore: createRecentDirectoryStore({ baseDir: testDir }),
+      recentStore: createRecentDirectoryStore({
+        dbPath: join(testDir, "recent.db"),
+      }),
       sessionManager: mockSessionManager,
       configDir: undefined,
     };

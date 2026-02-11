@@ -1,18 +1,14 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join, basename } from "node:path";
-import { existsSync } from "node:fs";
+import { Database } from "bun:sqlite";
+import { mkdirSync, existsSync, readFileSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
 import { homedir } from "node:os";
+import { createLogger } from "../logger.js";
 
-/**
- * Data structure stored in projects.json
- */
-interface ProjectRegistryData {
-  readonly projects: Record<string, string>; // slug -> absolute path
-}
+const logger = createLogger("ProjectRegistry");
 
 /**
  * Manages URL-safe project slugs with persistent storage.
- * Each project directory gets a persistent, URL-safe slug stored in ~/.local/QraftBox/projects.json.
+ * Each project directory gets a persistent, URL-safe slug stored in SQLite.
  */
 export interface ProjectRegistry {
   /**
@@ -46,14 +42,13 @@ export interface ProjectRegistry {
    * @returns Promise resolving to read-only map of slug -> absolute path
    */
   getAllProjects(): Promise<ReadonlyMap<string, string>>;
-}
 
-/**
- * In-memory cache of registry data
- */
-interface RegistryCache {
-  data: ProjectRegistryData | null;
-  reverseIndex: Map<string, string> | null; // path -> slug
+  /**
+   * Get all registered project absolute paths as a Set.
+   *
+   * @returns Promise resolving to read-only set of absolute paths
+   */
+  getAllPaths(): Promise<ReadonlySet<string>>;
 }
 
 /**
@@ -61,34 +56,35 @@ interface RegistryCache {
  */
 export interface ProjectRegistryOptions {
   /**
-   * Base directory for registry storage. Defaults to ~/.local/QraftBox
-   * Mainly for testing purposes.
+   * Path to the SQLite database file. Defaults to ~/.local/QraftBox/project-registry.db
    */
-  readonly baseDir?: string;
+  readonly dbPath?: string;
+
+  /**
+   * Path to projects.json for migration. Defaults to ~/.local/QraftBox/projects.json
+   */
+  readonly jsonMigrationPath?: string;
 }
 
 /**
- * Get the path to the projects.json file.
- *
- * @param baseDir - Base directory override (for testing)
- * @returns Absolute path to projects.json
+ * Data structure from legacy projects.json
  */
-function getRegistryFilePath(baseDir?: string): string {
-  const dir = baseDir ?? join(homedir(), ".local", "QraftBox");
-  return join(dir, "projects.json");
+interface LegacyProjectRegistryData {
+  readonly projects: Record<string, string>; // slug -> absolute path
 }
 
 /**
- * Ensure the registry directory exists.
- *
- * @param baseDir - Base directory override (for testing)
- * @returns Promise that resolves when directory is created
+ * Default database path
  */
-async function ensureRegistryDir(baseDir?: string): Promise<void> {
-  const dir = baseDir ?? join(homedir(), ".local", "QraftBox");
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
-  }
+export function defaultProjectRegistryDbPath(): string {
+  return join(homedir(), ".local", "QraftBox", "project-registry.db");
+}
+
+/**
+ * Default JSON migration path
+ */
+function defaultJsonMigrationPath(): string {
+  return join(homedir(), ".local", "QraftBox", "projects.json");
 }
 
 /**
@@ -136,20 +132,18 @@ function findUniqueSlug(baseSlug: string, existingSlugs: Set<string>): string {
 }
 
 /**
- * Read registry data from disk.
+ * Migrate legacy projects.json to SQLite (synchronous)
  *
- * @param baseDir - Base directory override (for testing)
- * @returns Promise resolving to registry data
+ * @param db - SQLite database instance
+ * @param jsonPath - Path to legacy projects.json file
  */
-async function readRegistry(baseDir?: string): Promise<ProjectRegistryData> {
-  const filePath = getRegistryFilePath(baseDir);
-
-  if (!existsSync(filePath)) {
-    return { projects: {} };
+function migrateLegacyJson(db: Database, jsonPath: string): void {
+  if (!existsSync(jsonPath)) {
+    return; // No legacy file to migrate
   }
 
   try {
-    const content = await readFile(filePath, "utf-8");
+    const content = readFileSync(jsonPath, "utf-8");
     const data = JSON.parse(content) as unknown;
 
     // Validate structure
@@ -159,46 +153,137 @@ async function readRegistry(baseDir?: string): Promise<ProjectRegistryData> {
       "projects" in data &&
       typeof data.projects === "object"
     ) {
-      return data as ProjectRegistryData;
+      const legacyData = data as LegacyProjectRegistryData;
+      const entries = Object.entries(legacyData.projects);
+
+      if (entries.length === 0) {
+        logger.info("Legacy projects.json is empty, skipping migration");
+        return;
+      }
+
+      // Bulk insert in transaction
+      const insertStmt = db.prepare(
+        "INSERT OR IGNORE INTO registered_projects (slug, path) VALUES (?, ?)",
+      );
+
+      db.transaction(() => {
+        for (const [slug, projectPath] of entries) {
+          insertStmt.run(slug, projectPath);
+        }
+      })();
+
+      logger.info("Migrated legacy projects.json to SQLite", {
+        migratedCount: entries.length,
+        jsonPath,
+      });
+    }
+  } catch (error) {
+    logger.warn("Failed to migrate legacy projects.json", { jsonPath });
+  }
+}
+
+/**
+ * Internal implementation of ProjectRegistry
+ */
+class ProjectRegistryImpl implements ProjectRegistry {
+  private readonly db: Database;
+  private readonly stmtGetByPath: ReturnType<Database["prepare"]>;
+  private readonly stmtGetBySlug: ReturnType<Database["prepare"]>;
+  private readonly stmtGetAllSlugs: ReturnType<Database["prepare"]>;
+  private readonly stmtInsert: ReturnType<Database["prepare"]>;
+  private readonly stmtDelete: ReturnType<Database["prepare"]>;
+  private readonly stmtGetAllProjects: ReturnType<Database["prepare"]>;
+  private readonly stmtGetAllPaths: ReturnType<Database["prepare"]>;
+
+  constructor(db: Database) {
+    this.db = db;
+
+    // Prepare all statements upfront
+    this.stmtGetByPath = db.prepare(
+      "SELECT slug FROM registered_projects WHERE path = ?",
+    );
+
+    this.stmtGetBySlug = db.prepare(
+      "SELECT path FROM registered_projects WHERE slug = ?",
+    );
+
+    this.stmtGetAllSlugs = db.prepare("SELECT slug FROM registered_projects");
+
+    this.stmtInsert = db.prepare(
+      "INSERT INTO registered_projects (slug, path) VALUES (?, ?)",
+    );
+
+    this.stmtDelete = db.prepare(
+      "DELETE FROM registered_projects WHERE slug = ?",
+    );
+
+    this.stmtGetAllProjects = db.prepare(
+      "SELECT slug, path FROM registered_projects",
+    );
+
+    this.stmtGetAllPaths = db.prepare("SELECT path FROM registered_projects");
+  }
+
+  async getOrCreateSlug(absolutePath: string): Promise<string> {
+    // Check if this path already has a slug
+    const existingRow = this.stmtGetByPath.get(absolutePath) as
+      | { slug: string }
+      | undefined
+      | null;
+
+    if (existingRow !== undefined && existingRow !== null) {
+      return existingRow.slug;
     }
 
-    // Invalid format, return empty
-    return { projects: {} };
-  } catch (error) {
-    // Failed to read or parse, return empty
-    return { projects: {} };
-  }
-}
+    // Generate new slug
+    const baseSlug = generateSlug(absolutePath);
 
-/**
- * Write registry data to disk.
- *
- * @param data - Registry data to write
- * @param baseDir - Base directory override (for testing)
- * @returns Promise that resolves when write is complete
- */
-async function writeRegistry(
-  data: ProjectRegistryData,
-  baseDir?: string,
-): Promise<void> {
-  await ensureRegistryDir(baseDir);
-  const filePath = getRegistryFilePath(baseDir);
-  const content = JSON.stringify(data, null, 2);
-  await writeFile(filePath, content, "utf-8");
-}
+    // Get all existing slugs to find unique one
+    const existingSlugRows = this.stmtGetAllSlugs.all() as Array<{
+      slug: string;
+    }>;
+    const existingSlugs = new Set(existingSlugRows.map((row) => row.slug));
+    const uniqueSlug = findUniqueSlug(baseSlug, existingSlugs);
 
-/**
- * Build a reverse index (path -> slug) from registry data.
- *
- * @param data - Registry data
- * @returns Map of absolute path -> slug
- */
-function buildReverseIndex(data: ProjectRegistryData): Map<string, string> {
-  const reverseIndex = new Map<string, string>();
-  for (const [slug, path] of Object.entries(data.projects)) {
-    reverseIndex.set(path, slug);
+    // Insert atomically (transaction ensures read-check-insert atomicity)
+    this.db.transaction(() => {
+      this.stmtInsert.run(uniqueSlug, absolutePath);
+    })();
+
+    logger.debug("Created new slug", { slug: uniqueSlug, path: absolutePath });
+    return uniqueSlug;
   }
-  return reverseIndex;
+
+  async resolveSlug(slug: string): Promise<string | undefined> {
+    const row = this.stmtGetBySlug.get(slug) as
+      | { path: string }
+      | undefined
+      | null;
+
+    if (row === undefined || row === null) {
+      return undefined;
+    }
+
+    return row.path;
+  }
+
+  async removeSlug(slug: string): Promise<void> {
+    this.stmtDelete.run(slug);
+    logger.debug("Removed slug", { slug });
+  }
+
+  async getAllProjects(): Promise<ReadonlyMap<string, string>> {
+    const rows = this.stmtGetAllProjects.all() as Array<{
+      slug: string;
+      path: string;
+    }>;
+    return new Map(rows.map((row) => [row.slug, row.path]));
+  }
+
+  async getAllPaths(): Promise<ReadonlySet<string>> {
+    const rows = this.stmtGetAllPaths.all() as Array<{ path: string }>;
+    return new Set(rows.map((row) => row.path));
+  }
 }
 
 /**
@@ -210,83 +295,67 @@ function buildReverseIndex(data: ProjectRegistryData): Map<string, string> {
 export function createProjectRegistry(
   options?: ProjectRegistryOptions,
 ): ProjectRegistry {
-  const baseDir = options?.baseDir;
-  const cache: RegistryCache = {
-    data: null,
-    reverseIndex: null,
-  };
+  const dbPath = options?.dbPath ?? defaultProjectRegistryDbPath();
+  const jsonMigrationPath =
+    options?.jsonMigrationPath ?? defaultJsonMigrationPath();
 
-  /**
-   * Load registry data into cache if not already loaded.
-   *
-   * @returns Promise that resolves when cache is populated
-   */
-  async function ensureLoaded(): Promise<void> {
-    if (cache.data === null) {
-      cache.data = await readRegistry(baseDir);
-      cache.reverseIndex = buildReverseIndex(cache.data);
-    }
-  }
+  // Ensure parent directory exists
+  mkdirSync(dirname(dbPath), { recursive: true });
 
-  return {
-    async getOrCreateSlug(absolutePath: string): Promise<string> {
-      await ensureLoaded();
+  // Open database
+  const db = new Database(dbPath);
 
-      // Check if this path already has a slug
-      const existingSlug = cache.reverseIndex?.get(absolutePath);
-      if (existingSlug !== undefined) {
-        return existingSlug;
-      }
+  // Enable WAL mode for better concurrent read performance
+  db.exec("PRAGMA journal_mode=WAL");
 
-      // Generate new slug
-      const baseSlug = generateSlug(absolutePath);
-      const existingSlugs = new Set(Object.keys(cache.data?.projects ?? {}));
-      const uniqueSlug = findUniqueSlug(baseSlug, existingSlugs);
+  // Create schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS registered_projects (
+      slug TEXT PRIMARY KEY,
+      path TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
 
-      // Update cache and persist
-      if (cache.data !== null && cache.reverseIndex !== null) {
-        const newProjects = {
-          ...cache.data.projects,
-          [uniqueSlug]: absolutePath,
-        };
-        cache.data = { projects: newProjects };
-        cache.reverseIndex.set(absolutePath, uniqueSlug);
-        await writeRegistry(cache.data, baseDir);
-      }
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_registered_projects_path
+    ON registered_projects(path)
+  `);
 
-      return uniqueSlug;
-    },
+  // Migrate legacy JSON if exists
+  migrateLegacyJson(db, jsonMigrationPath);
 
-    async resolveSlug(slug: string): Promise<string | undefined> {
-      await ensureLoaded();
-      const path = cache.data?.projects[slug];
-      return path ?? undefined;
-    },
+  logger.info("Project registry initialized", { dbPath });
 
-    async removeSlug(slug: string): Promise<void> {
-      await ensureLoaded();
+  return new ProjectRegistryImpl(db);
+}
 
-      if (cache.data === null || cache.reverseIndex === null) {
-        return;
-      }
+/**
+ * Create an in-memory project registry for testing.
+ *
+ * @returns ProjectRegistry instance backed by in-memory database
+ */
+export function createInMemoryProjectRegistry(): ProjectRegistry {
+  const db = new Database(":memory:");
 
-      const path = cache.data.projects[slug];
-      if (path === undefined) {
-        return;
-      }
+  // Enable WAL mode
+  db.exec("PRAGMA journal_mode=WAL");
 
-      // Remove from cache and persist
-      const newProjects = { ...cache.data.projects };
-      delete newProjects[slug];
-      cache.data = { projects: newProjects };
-      cache.reverseIndex.delete(path);
-      await writeRegistry(cache.data, baseDir);
-    },
+  // Create schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS registered_projects (
+      slug TEXT PRIMARY KEY,
+      path TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
 
-    async getAllProjects(): Promise<ReadonlyMap<string, string>> {
-      await ensureLoaded();
-      const entries = Object.entries(cache.data?.projects ?? {});
-      return new Map(entries);
-    },
-  };
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_registered_projects_path
+    ON registered_projects(path)
+  `);
+
+  logger.debug("In-memory project registry initialized");
+
+  return new ProjectRegistryImpl(db);
 }

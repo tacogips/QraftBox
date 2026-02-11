@@ -34,6 +34,11 @@ export interface FileNode {
    * undefined for unchanged files or directories
    */
   readonly status?: "added" | "modified" | "deleted";
+
+  /**
+   * Whether this file is binary (true if binary, undefined if text)
+   */
+  readonly isBinary?: boolean;
 }
 
 /**

@@ -19,6 +19,9 @@
     path: string;
     content: string;
     language: string;
+    isBinary?: boolean;
+    isImage?: boolean;
+    mimeType?: string;
     onCommentSubmit?: (
       startLine: number,
       endLine: number,
@@ -33,6 +36,9 @@
     path,
     content,
     language,
+    isBinary = undefined,
+    isImage = undefined,
+    mimeType = undefined,
     onCommentSubmit = undefined,
   }: Props = $props();
 
@@ -115,15 +121,33 @@
     </div>
   </div>
 
-  {#if lines.length === 0}
+  {#if isBinary === true && isImage === true}
+    <!-- Binary Image File -->
+    <div class="flex items-center justify-center p-8">
+      <img
+        src="data:{mimeType ?? 'image/png'};base64,{content}"
+        alt={path}
+        class="max-w-full max-h-[80vh] object-contain"
+      />
+    </div>
+  {:else if isBinary === true}
+    <!-- Non-Image Binary File -->
+    <div
+      class="flex flex-col items-center justify-center py-12 text-text-secondary text-sm gap-2"
+    >
+      <div class="text-base font-medium">Binary file</div>
+      <div class="text-xs">{mimeType ?? "unknown type"}</div>
+      <div class="text-xs text-text-tertiary">{path}</div>
+    </div>
+  {:else if lines.length === 0}
     <div
       class="flex items-center justify-center py-12 text-text-secondary text-sm"
     >
       Empty file
     </div>
   {:else}
-    {#each lines as line, index}
-      {@const lineNumber = index + 1}
+    {#each lines as line, lineIndex}
+      {@const lineNumber = lineIndex + 1}
       {@const inRange = commentRangeLines.includes(lineNumber)}
       <div class="flex group/line {inRange ? 'bg-accent-muted' : ''}">
         <!-- Line number gutter with "+" button -->
@@ -137,9 +161,9 @@
                      rounded bg-accent-emphasis text-white text-xs font-bold
                      opacity-0 group-hover/line:opacity-100
                      hover:bg-accent-fg transition-opacity z-10 cursor-pointer"
-              onclick={(e) => {
-                e.stopPropagation();
-                handleCommentOpen(lineNumber, e.shiftKey);
+              onclick={(clickEvent) => {
+                clickEvent.stopPropagation();
+                handleCommentOpen(lineNumber, clickEvent.shiftKey);
               }}
               aria-label="Add comment on line {lineNumber}">+</button
             >
@@ -149,8 +173,10 @@
 
         <!-- Line content -->
         <div class="flex-1 px-2 overflow-x-auto">
-          {#if highlightedHtml[index] !== undefined}
-            <span class="highlighted-line">{@html highlightedHtml[index]}</span>
+          {#if highlightedHtml[lineIndex] !== undefined}
+            <span class="highlighted-line"
+              >{@html highlightedHtml[lineIndex]}</span
+            >
           {:else}
             <pre class="m-0 p-0">{line}</pre>
           {/if}
@@ -167,16 +193,16 @@
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder={commentPlaceholder}
             bind:value={commentText}
-            onkeydown={(e) => {
+            onkeydown={(keyEvent) => {
               if (
-                e.key === "Enter" &&
-                e.ctrlKey &&
+                keyEvent.key === "Enter" &&
+                keyEvent.ctrlKey &&
                 onCommentSubmit !== undefined
               ) {
-                e.preventDefault();
+                keyEvent.preventDefault();
                 handleCommentSubmit(commentText, true);
               }
-              if (e.key === "Escape") {
+              if (keyEvent.key === "Escape") {
                 handleCommentCancel();
               }
             }}

@@ -351,7 +351,6 @@ describe("Commit Store", () => {
       expect(store.error).toBeNull();
       expect(store.status).toBe("idle");
     });
-
   });
 
   describe("Type Safety", () => {
@@ -365,7 +364,6 @@ describe("Commit Store", () => {
         deletions: 5,
       });
     });
-
   });
 
   describe("Context ID", () => {

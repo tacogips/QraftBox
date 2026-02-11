@@ -1,9 +1,18 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { existsSync } from "node:fs";
+/**
+ * Recent Directory Store
+ *
+ * SQLite-backed persistent store for recently opened directories.
+ * Stores up to 20 most recent directories in ~/.local/QraftBox/recent.db.
+ */
+
+import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { RecentDirectory } from "../../types/workspace";
-import { sortRecentDirectories } from "../../types/workspace";
+import type { RecentDirectory } from "../../types/workspace.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("RecentDirectoryStore");
 
 /**
  * Maximum number of recent directories to store
@@ -11,15 +20,8 @@ import { sortRecentDirectories } from "../../types/workspace";
 const MAX_RECENT = 20;
 
 /**
- * Data structure stored in recent.json
- */
-interface RecentRegistryData {
-  readonly recent: readonly RecentDirectory[];
-}
-
-/**
  * Manages recently opened directories with persistent storage.
- * Stores up to 20 most recent directories in ~/.local/QraftBox/recent.json.
+ * Stores up to 20 most recent directories in SQLite database.
  */
 export interface RecentDirectoryStore {
   /**
@@ -53,93 +55,95 @@ export interface RecentDirectoryStore {
  */
 export interface RecentDirectoryStoreOptions {
   /**
-   * Base directory for storage. Defaults to ~/.local/QraftBox
+   * Path to SQLite database file. Defaults to ~/.local/QraftBox/recent.db
    * Mainly for testing purposes.
    */
-  readonly baseDir?: string;
+  readonly dbPath?: string | undefined;
 }
 
 /**
- * In-memory cache of recent directory data
+ * Default database path
  */
-interface RecentCache {
-  data: RecentRegistryData | null;
+export function defaultRecentDbPath(): string {
+  return join(homedir(), ".local", "QraftBox", "recent.db");
 }
 
 /**
- * Get the path to the recent.json file.
- *
- * @param baseDir - Base directory override (for testing)
- * @returns Absolute path to recent.json
+ * Internal implementation of RecentDirectoryStore
  */
-function getRecentFilePath(baseDir?: string): string {
-  const dir = baseDir ?? join(homedir(), ".local", "QraftBox");
-  return join(dir, "recent.json");
-}
+class RecentDirectoryStoreImpl implements RecentDirectoryStore {
+  private readonly stmtUpsert: ReturnType<Database["prepare"]>;
+  private readonly stmtRemove: ReturnType<Database["prepare"]>;
+  private readonly stmtGetAll: ReturnType<Database["prepare"]>;
+  private readonly stmtCleanup: ReturnType<Database["prepare"]>;
 
-/**
- * Ensure the storage directory exists.
- *
- * @param baseDir - Base directory override (for testing)
- * @returns Promise that resolves when directory is created
- */
-async function ensureRecentDir(baseDir?: string): Promise<void> {
-  const dir = baseDir ?? join(homedir(), ".local", "QraftBox");
-  if (!existsSync(dir)) {
-    await mkdir(dir, { recursive: true });
+  constructor(db: Database) {
+    // Prepare all statements upfront
+    this.stmtUpsert = db.prepare(`
+      INSERT OR REPLACE INTO recent_directories (path, name, last_opened, is_git_repo)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    this.stmtRemove = db.prepare(`
+      DELETE FROM recent_directories WHERE path = ?
+    `);
+
+    this.stmtGetAll = db.prepare(`
+      SELECT path, name, last_opened, is_git_repo
+      FROM recent_directories
+      ORDER BY last_opened DESC
+      LIMIT ?
+    `);
+
+    this.stmtCleanup = db.prepare(`
+      DELETE FROM recent_directories
+      WHERE path NOT IN (
+        SELECT path FROM recent_directories
+        ORDER BY last_opened DESC
+        LIMIT ?
+      )
+    `);
   }
-}
 
-/**
- * Read recent directory data from disk.
- *
- * @param baseDir - Base directory override (for testing)
- * @returns Promise resolving to recent directory data
- */
-async function readRecent(baseDir?: string): Promise<RecentRegistryData> {
-  const filePath = getRecentFilePath(baseDir);
+  async add(entry: RecentDirectory): Promise<void> {
+    const lastOpened = Date.now();
+    const isGitRepo = entry.isGitRepo ? 1 : 0;
 
-  if (!existsSync(filePath)) {
-    return { recent: [] };
-  }
+    this.stmtUpsert.run(entry.path, entry.name, lastOpened, isGitRepo);
+    logger.debug("Added recent directory", {
+      path: entry.path,
+      name: entry.name,
+    });
 
-  try {
-    const content = await readFile(filePath, "utf-8");
-    const data = JSON.parse(content) as unknown;
-
-    // Validate structure
-    if (
-      typeof data === "object" &&
-      data !== null &&
-      "recent" in data &&
-      Array.isArray(data.recent)
-    ) {
-      return data as RecentRegistryData;
+    // Cleanup excess rows beyond MAX_RECENT
+    const result = this.stmtCleanup.run(MAX_RECENT);
+    if (result.changes > 0) {
+      logger.debug("Cleaned up old entries", { deletedCount: result.changes });
     }
-
-    // Invalid format, return empty
-    return { recent: [] };
-  } catch (error) {
-    // Failed to read or parse, return empty
-    return { recent: [] };
   }
-}
 
-/**
- * Write recent directory data to disk.
- *
- * @param data - Recent directory data to write
- * @param baseDir - Base directory override (for testing)
- * @returns Promise that resolves when write is complete
- */
-async function writeRecent(
-  data: RecentRegistryData,
-  baseDir?: string,
-): Promise<void> {
-  await ensureRecentDir(baseDir);
-  const filePath = getRecentFilePath(baseDir);
-  const content = JSON.stringify(data, null, 2);
-  await writeFile(filePath, content, "utf-8");
+  async remove(path: string): Promise<void> {
+    this.stmtRemove.run(path);
+    logger.debug("Removed recent directory", { path });
+  }
+
+  async getAll(): Promise<readonly RecentDirectory[]> {
+    const rows = this.stmtGetAll.all(MAX_RECENT) as Array<{
+      path: string;
+      name: string;
+      last_opened: number;
+      is_git_repo: number;
+    }>;
+
+    return rows.map(
+      (row): RecentDirectory => ({
+        path: row.path,
+        name: row.name,
+        lastOpened: row.last_opened,
+        isGitRepo: row.is_git_repo === 1,
+      }),
+    );
+  }
 }
 
 /**
@@ -151,88 +155,66 @@ async function writeRecent(
 export function createRecentDirectoryStore(
   options?: RecentDirectoryStoreOptions,
 ): RecentDirectoryStore {
-  const baseDir = options?.baseDir;
-  const cache: RecentCache = {
-    data: null,
-  };
+  const dbPath = options?.dbPath ?? defaultRecentDbPath();
 
-  /**
-   * Load recent directory data into cache if not already loaded.
-   *
-   * @returns Promise that resolves when cache is populated
-   */
-  async function ensureLoaded(): Promise<void> {
-    if (cache.data === null) {
-      cache.data = await readRecent(baseDir);
-    }
-  }
+  // Ensure parent directory exists
+  mkdirSync(dirname(dbPath), { recursive: true });
 
-  return {
-    async add(entry: RecentDirectory): Promise<void> {
-      await ensureLoaded();
+  // Open database
+  const db = new Database(dbPath);
 
-      if (cache.data === null) {
-        return;
-      }
+  // Enable WAL mode for better concurrent read performance
+  db.exec("PRAGMA journal_mode=WAL");
 
-      // Find existing entry with same path
-      const existingIndex = cache.data.recent.findIndex(
-        (r) => r.path === entry.path,
-      );
+  // Create schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recent_directories (
+      path TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      last_opened INTEGER NOT NULL,
+      is_git_repo INTEGER NOT NULL DEFAULT 0
+    )
+  `);
 
-      let updatedRecent: RecentDirectory[];
+  // Create index for last_opened ordering
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_recent_directories_last_opened
+    ON recent_directories(last_opened DESC)
+  `);
 
-      if (existingIndex !== -1) {
-        // Update existing entry (merge fields, set new lastOpened)
-        const existing = cache.data.recent[existingIndex];
-        if (existing === undefined) {
-          return;
-        }
-        const updated: RecentDirectory = {
-          ...existing,
-          ...entry,
-          lastOpened: Date.now(),
-        };
-        updatedRecent = [...cache.data.recent];
-        updatedRecent[existingIndex] = updated;
-      } else {
-        // Add new entry
-        updatedRecent = [...cache.data.recent, entry];
-      }
+  logger.info("Recent directory store initialized", { dbPath });
 
-      // Sort by most recent and trim to MAX_RECENT
-      const sorted = sortRecentDirectories(updatedRecent);
-      const trimmed = sorted.slice(0, MAX_RECENT);
+  return new RecentDirectoryStoreImpl(db);
+}
 
-      // Update cache and persist
-      cache.data = { recent: trimmed };
-      await writeRecent(cache.data, baseDir);
-    },
+/**
+ * Create an in-memory recent directory store for testing.
+ *
+ * @returns RecentDirectoryStore instance backed by in-memory database
+ */
+export function createInMemoryRecentDirectoryStore(): RecentDirectoryStore {
+  const db = new Database(":memory:");
 
-    async remove(path: string): Promise<void> {
-      await ensureLoaded();
+  // Enable WAL mode
+  db.exec("PRAGMA journal_mode=WAL");
 
-      if (cache.data === null) {
-        return;
-      }
+  // Create schema
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS recent_directories (
+      path TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      last_opened INTEGER NOT NULL,
+      is_git_repo INTEGER NOT NULL DEFAULT 0
+    )
+  `);
 
-      // Filter out the entry with matching path
-      const filtered = cache.data.recent.filter((r) => r.path !== path);
+  // Create index for last_opened ordering
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_recent_directories_last_opened
+    ON recent_directories(last_opened DESC)
+  `);
 
-      // Update cache and persist
-      cache.data = { recent: filtered };
-      await writeRecent(cache.data, baseDir);
-    },
+  logger.debug("In-memory recent directory store initialized");
 
-    async getAll(): Promise<readonly RecentDirectory[]> {
-      await ensureLoaded();
-
-      if (cache.data === null) {
-        return [];
-      }
-
-      // Return sorted by lastOpened descending
-      return sortRecentDirectories(cache.data.recent);
-    },
-  };
+  return new RecentDirectoryStoreImpl(db);
 }

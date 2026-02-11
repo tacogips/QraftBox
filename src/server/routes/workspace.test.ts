@@ -84,7 +84,7 @@ describe("GET /api/workspace", () => {
     );
     contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
-      baseDir: recentStoreTestDir,
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
     });
     app = createWorkspaceRoutes(contextManager, recentStore);
   });
@@ -121,7 +121,7 @@ describe("POST /api/workspace/tabs", () => {
     );
     contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
-      baseDir: recentStoreTestDir,
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
     });
     app = createWorkspaceRoutes(contextManager, recentStore);
   });
@@ -376,7 +376,7 @@ describe("DELETE /api/workspace/tabs/:id", () => {
     );
     contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
-      baseDir: recentStoreTestDir,
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
     });
     app = createWorkspaceRoutes(contextManager, recentStore);
   });
@@ -508,7 +508,7 @@ describe("POST /api/workspace/tabs/:id/activate", () => {
     );
     contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
-      baseDir: recentStoreTestDir,
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
     });
     app = createWorkspaceRoutes(contextManager, recentStore);
   });
@@ -608,7 +608,7 @@ describe("GET /api/workspace/recent", () => {
     );
     contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
-      baseDir: recentStoreTestDir,
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
     });
     app = createWorkspaceRoutes(contextManager, recentStore);
   });

@@ -68,7 +68,6 @@ export interface CommitStoreState {
    * Error message if operation failed
    */
   readonly error: string | null;
-
 }
 
 /**
