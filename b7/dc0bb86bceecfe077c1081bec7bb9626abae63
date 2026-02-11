@@ -70,12 +70,13 @@
     "commitHash": "b7dc0bb86bceecfe077c1081bec7bb9626abae63",
     "filePath": "file1.txt",
     "lineNumber": 1,
-    "body": "Original comment",
+    "body": "Updated comment",
     "author": {
       "name": "tacogips",
       "email": "me@tacogips.me"
     },
     "createdAt": 1770825262768,
-    "replies": []
+    "replies": [],
+    "updatedAt": 1770825262777
   }
 ]
