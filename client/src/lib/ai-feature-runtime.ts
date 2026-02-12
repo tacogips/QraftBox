@@ -197,8 +197,6 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: deps.getQraftAiSessionId(),
       };
-      console.log(`!!!!! prompt ${JSON.stringify(payload)}`);
-
       await submitAIPrompt(payload);
 
       void fetchPromptQueue();

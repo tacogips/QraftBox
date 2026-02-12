@@ -250,7 +250,6 @@ class ClaudeAgentRunner implements AgentRunner {
         });
 
         // Start or resume session
-        console.log(`!!!! resume session ${params.resumeSessionId}`);
         toolAgentSession =
           params.resumeSessionId !== undefined
             ? await agent.startSession({
