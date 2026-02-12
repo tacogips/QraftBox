@@ -859,7 +859,6 @@
               <SessionSearchPopup
                 {contextId}
                 {projectPath}
-                {completedSessions}
                 onResumeSession={handleResumeFromSearch}
                 onClose={closeSessionPopup}
               />
