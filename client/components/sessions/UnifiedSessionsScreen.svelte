@@ -37,13 +37,11 @@
   const queueStore = createQueueStore();
   let runningSessions = $state<readonly AISession[]>([]);
   let queuedSessions = $state<readonly AISession[]>([]);
-  let completedSessions = $state<readonly AISession[]>([]);
   let pendingPrompts = $state<LocalPrompt[]>([]);
 
   function syncFromQueueStore(): void {
     runningSessions = [...queueStore.running];
     queuedSessions = [...queueStore.queued];
-    completedSessions = [...queueStore.completed];
   }
 
   /**
@@ -178,18 +176,6 @@
   }
 
   /**
-   * Handle clear completed
-   */
-  async function handleClearCompleted(): Promise<void> {
-    try {
-      await queueStore.clearCompleted();
-      syncFromQueueStore();
-    } catch (e) {
-      console.error("Failed to clear completed:", e);
-    }
-  }
-
-  /**
    * Handle resume pending prompt - dispatch it
    */
   async function handleResumePendingPrompt(promptId: string): Promise<void> {
@@ -295,10 +281,8 @@
     <!-- Session history list (always visible) -->
     <HistorySessionsPanel
       {contextId}
-      {completedSessions}
       onResumeSession={handleResumeSession}
       onSelectSession={() => {}}
-      onClearCompleted={handleClearCompleted}
     />
   </div>
 </div>

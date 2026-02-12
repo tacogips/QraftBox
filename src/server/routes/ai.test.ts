@@ -30,6 +30,7 @@ describe("AI Routes", () => {
       getPromptQueue: vi.fn(() => []),
       cancelPrompt: vi.fn(),
       getMappingStore: vi.fn(() => undefined),
+      listCompletedRows: vi.fn(() => []),
     };
 
     app = createAIRoutes({

@@ -2,35 +2,29 @@
   /**
    * HistorySessionsPanel Component
    *
-   * Merges completed QraftBox sessions with Claude CLI sessions into
-   * a single chronologically sorted list with date grouping,
-   * search, and pagination.
+   * Displays a unified chronologically sorted session list with date grouping,
+   * search, and pagination. The server merges QraftBox + CLI sessions.
    *
    * Props:
    * - contextId: Context ID for API calls
-   * - completedSessions: Completed/failed/cancelled QraftBox sessions
-   * - onResumeSession: Callback for resuming claude-cli sessions
+   * - onResumeSession: Callback for resuming sessions
    * - onSelectSession: Callback for viewing session details
-   * - onClearCompleted: Callback to clear completed QraftBox sessions
    *
    * Features:
-   * - Merged chronological list from two data sources
+   * - Server-side merge and deduplication (QraftBox + CLI)
    * - Date grouping (Today, Yesterday, Older)
    * - Search via SearchInput
    * - Accordion list with inline transcript viewer
    * - Session summary with tool usage, files modified, and tasks
    * - Pagination with "Load More" button
    * - Loading and error states
-   * - "Clear Completed" button for QraftBox completed sessions
    */
 
   import { claudeSessionsStore } from "../../src/stores/claude-sessions";
-  import type { AISession } from "../../../src/types/ai";
   import type {
     ExtendedSessionEntry,
     SessionFilters,
   } from "../../../src/types/claude-session";
-  import type { UnifiedSessionItem } from "../../src/types/unified-session";
   import SearchInput from "../claude-sessions/SearchInput.svelte";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
@@ -71,19 +65,11 @@
 
   interface Props {
     contextId: string;
-    completedSessions: readonly AISession[];
     onResumeSession: (qraftAiSessionId: string) => void;
     onSelectSession: (sessionId: string) => void;
-    onClearCompleted?: (() => void) | undefined;
   }
 
-  const {
-    contextId,
-    completedSessions,
-    onResumeSession,
-    onSelectSession,
-    onClearCompleted = undefined,
-  }: Props = $props();
+  const { contextId, onResumeSession, onSelectSession }: Props = $props();
 
   /**
    * Expanded session IDs for accordion
@@ -148,107 +134,21 @@
   }
 
   /**
-   * Get sort date for a unified session item
-   */
-  function getSortDate(item: UnifiedSessionItem): string {
-    if (item.kind === "qraftbox") {
-      return item.session.completedAt ?? item.session.createdAt;
-    }
-    return item.session.modified;
-  }
-
-  /**
-   * Local search query state for filtering QraftBox sessions client-side
-   */
-  let localSearchQuery = $state("");
-
-  /**
-   * Merge completed QraftBox sessions with Claude CLI sessions
-   * and sort chronologically (most recent first)
-   */
-  const mergedSessions = $derived.by(() => {
-    const items: UnifiedSessionItem[] = [];
-    const query = localSearchQuery.toLowerCase();
-    const cliQraftIds = new Set(
-      cliSessions.map((session) => session.qraftAiSessionId),
-    );
-
-    // Keep only the newest completed QraftBox entry per conversation group.
-    // Key priority:
-    // 1) clientSessionId (true chained conversation)
-    // 2) session id fallback for standalone execution
-    const latestQraftByGroup = new Map<string, AISession>();
-
-    for (const session of completedSessions) {
-      const groupKey = session.clientSessionId ?? session.id;
-      const existing = latestQraftByGroup.get(groupKey);
-      if (existing === undefined) {
-        latestQraftByGroup.set(groupKey, session);
-        continue;
-      }
-      const existingTime = new Date(
-        existing.completedAt ?? existing.createdAt,
-      ).getTime();
-      const candidateTime = new Date(
-        session.completedAt ?? session.createdAt,
-      ).getTime();
-      if (candidateTime > existingTime) {
-        latestQraftByGroup.set(groupKey, session);
-      }
-    }
-
-    // Add QraftBox completed sessions, optionally filtered by local search
-    for (const session of latestQraftByGroup.values()) {
-      // If Claude CLI already has the same qraft_ai_session_id,
-      // hide the duplicate QraftBox row in history.
-      if (
-        session.clientSessionId !== undefined &&
-        cliQraftIds.has(session.clientSessionId)
-      ) {
-        continue;
-      }
-
-      if (query.length > 0) {
-        const matchesPrompt = stripSystemTags(session.prompt)
-          .toLowerCase()
-          .includes(query);
-        if (!matchesPrompt) continue;
-      }
-      items.push({ kind: "qraftbox", session });
-    }
-
-    // Add Claude CLI sessions (already filtered server-side by the store)
-    for (const s of cliSessions) {
-      items.push({ kind: "claude-cli", session: s });
-    }
-
-    // Sort by most recent first
-    items.sort((a, b) => {
-      const dateA = getSortDate(a);
-      const dateB = getSortDate(b);
-      return new Date(dateB).getTime() - new Date(dateA).getTime();
-    });
-
-    return items;
-  });
-
-  /**
-   * Group merged sessions by date
+   * Group sessions by date (server returns merged + sorted list)
    */
   const groupedSessions = $derived.by(() => {
     const groups: {
-      today: UnifiedSessionItem[];
-      yesterday: UnifiedSessionItem[];
-      older: UnifiedSessionItem[];
+      today: ExtendedSessionEntry[];
+      yesterday: ExtendedSessionEntry[];
+      older: ExtendedSessionEntry[];
     } = {
       today: [],
       yesterday: [],
       older: [],
     };
 
-    for (const item of mergedSessions) {
-      const dateStr = getSortDate(item);
-      const group = getDateGroup(dateStr);
+    for (const item of cliSessions) {
+      const group = getDateGroup(item.modified);
       groups[group].push(item);
     }
 
@@ -258,23 +158,22 @@
   /**
    * Whether there are any sessions to display
    */
-  const hasSessions = $derived(mergedSessions.length > 0);
+  const hasSessions = $derived(cliSessions.length > 0);
 
   /**
-   * Whether more Claude CLI sessions can be loaded
+   * Whether more sessions can be loaded
    */
   const hasMore = $derived(cliSessions.length < cliTotal);
 
   /**
    * Total session count for display
    */
-  const totalCount = $derived(mergedSessions.length);
+  const totalCount = $derived(cliSessions.length);
 
   /**
    * Handle search input
    */
   function handleSearch(query: string): void {
-    localSearchQuery = query;
     claudeSessionsStore.setFilters({ searchQuery: query || undefined });
     // setFilters triggers fetchSessions internally; sync after a tick
     setTimeout(syncFromStore, 100);
@@ -298,33 +197,35 @@
   }
 
   /**
-   * Get a unique key for each unified session item
+   * Get a unique key for each session item
    */
-  function getItemKey(item: UnifiedSessionItem): string {
-    if (item.kind === "qraftbox") {
-      return `qb-${item.session.id}`;
-    }
-    return `cli-${item.session.qraftAiSessionId}`;
+  function getItemKey(item: ExtendedSessionEntry): string {
+    return item.qraftAiSessionId;
   }
 
   /**
    * Toggle session expansion in accordion
    */
-  function toggleSessionExpansion(
-    sessionId: string,
-    kind: "qraftbox" | "claude-cli",
-  ): void {
+  function toggleSessionExpansion(sessionId: string): void {
     const newSet = new Set(expandedSessionIds);
     if (newSet.has(sessionId)) {
       newSet.delete(sessionId);
     } else {
       newSet.add(sessionId);
-      // Only fetch summary for CLI sessions (QraftBox sessions use in-memory data)
-      if (kind === "claude-cli") {
+      // Fetch summary if session has a CLI transcript file
+      if (item_has_transcript(sessionId)) {
         void fetchSessionSummary(sessionId);
       }
     }
     expandedSessionIds = newSet;
+  }
+
+  /**
+   * Check if a session has a CLI transcript file (non-empty fullPath)
+   */
+  function item_has_transcript(sessionId: string): boolean {
+    const session = cliSessions.find((s) => s.qraftAiSessionId === sessionId);
+    return session !== undefined && session.fullPath.length > 0;
   }
 
   /**
@@ -465,26 +366,8 @@
     <div class="text-sm text-text-tertiary shrink-0">
       {#if totalCount > 0}
         {totalCount} session{totalCount !== 1 ? "s" : ""}
-        {#if mergedSessions.length !== totalCount}
-          (showing {mergedSessions.length})
-        {/if}
       {/if}
     </div>
-
-    <!-- Clear Completed Button -->
-    {#if completedSessions.length > 0 && onClearCompleted !== undefined}
-      <button
-        type="button"
-        onclick={onClearCompleted}
-        class="shrink-0 px-3 py-1.5 text-xs font-medium rounded-md
-               bg-bg-tertiary hover:bg-bg-hover text-text-secondary hover:text-danger-fg
-               focus:outline-none focus:ring-2 focus:ring-accent-emphasis
-               transition-colors duration-150"
-        aria-label="Clear completed QraftBox sessions"
-      >
-        Clear Completed
-      </button>
-    {/if}
 
     <!-- Spacer pushes search to right -->
     <div class="flex-1"></div>
@@ -616,11 +499,8 @@
       <!-- Session List (Grouped by Date) -->
       <div class="session-list space-y-6" role="list">
         <!-- Reusable accordion row snippet -->
-        {#snippet sessionRow(item: UnifiedSessionItem, isFirst: boolean)}
-          {@const itemId =
-            item.kind === "qraftbox"
-              ? item.session.id
-              : item.session.qraftAiSessionId}
+        {#snippet sessionRow(item: ExtendedSessionEntry, isFirst: boolean)}
+          {@const itemId = item.qraftAiSessionId}
           {@const isExpanded = expandedSessionIds.has(itemId)}
           {@const summary = sessionSummaries.get(itemId)}
           {@const isLoadingSummary = summaryLoading.has(itemId)}
@@ -629,25 +509,19 @@
             (summary.toolUsage.length > 0 ||
               summary.filesModified.length > 0 ||
               summary.tasks.length > 0)}
-          {@const isQraftBoxSource =
-            item.kind === "qraftbox" ||
-            (item.kind === "claude-cli" && item.session.source === "qraftbox")}
-          {@const displayTitle = stripSystemTags(
-            item.kind === "qraftbox"
-              ? item.session.prompt
-              : item.session.firstPrompt,
-          )}
+          {@const isQraftBoxSource = item.source === "qraftbox"}
+          {@const displayTitle = stripSystemTags(item.firstPrompt)}
 
           <!-- Accordion Row (contents = layout-invisible wrapper for sticky) -->
           <div class="contents">
             <!-- Header Row (clickable, sticky) -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              onclick={() => toggleSessionExpansion(itemId, item.kind)}
+              onclick={() => toggleSessionExpansion(itemId)}
               onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  toggleSessionExpansion(itemId, item.kind);
+                  toggleSessionExpansion(itemId);
                 }
               }}
               role="button"
@@ -699,23 +573,19 @@
               <!-- Title (first user prompt; server strips system tags) -->
               <span class="flex-1 text-sm text-text-primary truncate">
                 {displayTitle ||
-                  stripSystemTags(
-                    item.kind === "claude-cli"
-                      ? item.session.summary || item.session.firstPrompt
-                      : item.session.prompt,
-                  )}
+                  stripSystemTags(item.summary || item.firstPrompt)}
               </span>
 
               <!-- Message count -->
-              {#if item.kind === "claude-cli"}
+              {#if item.messageCount > 0}
                 <span class="text-xs text-text-tertiary shrink-0">
-                  {item.session.messageCount} msgs
+                  {item.messageCount} msgs
                 </span>
               {/if}
 
               <!-- Relative time -->
               <span class="text-xs text-text-tertiary shrink-0">
-                {getRelativeTime(getSortDate(item))}
+                {getRelativeTime(item.modified)}
               </span>
             </div>
 
@@ -923,8 +793,12 @@
                   </div>
                 {/if}
 
-                <!-- Inline Transcript: QraftBox sessions use in-memory data, CLI sessions fetch from disk -->
-                {#if item.kind === "qraftbox"}
+                <!-- Inline Transcript -->
+                {#if item.fullPath.length > 0}
+                  <!-- CLI session with transcript file on disk -->
+                  <SessionTranscriptInline sessionId={itemId} {contextId} />
+                {:else}
+                  <!-- QraftBox-only session (no CLI transcript file) -->
                   <div class="px-4 py-3">
                     <!-- User prompt -->
                     <div
@@ -939,11 +813,11 @@
                       <div
                         class="px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
                       >
-                        {stripSystemTags(item.session.prompt)}
+                        {stripSystemTags(item.firstPrompt)}
                       </div>
                     </div>
-                    <!-- Assistant response -->
-                    {#if item.session.lastAssistantMessage}
+                    <!-- Assistant summary -->
+                    {#if item.summary.length > 0}
                       <div
                         class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
                       >
@@ -956,12 +830,8 @@
                         <div
                           class="px-3 py-2 text-xs font-mono whitespace-pre-wrap break-words text-text-primary max-h-[300px] overflow-y-auto"
                         >
-                          {stripSystemTags(item.session.lastAssistantMessage)}
+                          {stripSystemTags(item.summary)}
                         </div>
-                      </div>
-                    {:else if item.session.state === "failed"}
-                      <div class="text-xs text-danger-fg py-2">
-                        Session failed.
                       </div>
                     {:else}
                       <div class="text-xs text-success-fg py-2">
@@ -969,8 +839,6 @@
                       </div>
                     {/if}
                   </div>
-                {:else}
-                  <SessionTranscriptInline sessionId={itemId} {contextId} />
                 {/if}
               </div>
             {/if}

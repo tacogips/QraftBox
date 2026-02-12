@@ -21,8 +21,8 @@
    */
 
   import type { QueueStatus, FileReference } from "../../src/types/ai";
-  import { stripSystemTags } from "../../src/utils/strip-system-tags";
   import FileAutocomplete from "./FileAutocomplete.svelte";
+  import SessionSearchPopup from "./SessionSearchPopup.svelte";
 
   interface Props {
     contextId: string | null;
@@ -92,22 +92,7 @@
   let showDraftDropdown = $state(false);
   let drafts = $state<DraftData[]>([]);
 
-  interface SessionEntry {
-    readonly qraftAiSessionId: string;
-    readonly firstPrompt: string;
-    readonly summary: string;
-    readonly messageCount: number;
-    readonly modified: string;
-    readonly model?: string | undefined;
-  }
-
   let isSessionPopupOpen = $state(false);
-  let sessionSearchQuery = $state("");
-  let sessionSearchDebounceTimer: number | null = $state(null);
-  let sessionDebouncedSearchQuery = $state("");
-  let sessionSearchResults = $state<readonly SessionEntry[]>([]);
-  let isSessionSearchLoading = $state(false);
-  let sessionSearchError = $state<string | null>(null);
   let sessionPopupRef: HTMLDivElement | null = $state(null);
 
   function loadDraftsFromStorage(): void {
@@ -226,15 +211,10 @@
 
   function toggleSessionPopup(): void {
     isSessionPopupOpen = !isSessionPopupOpen;
-    if (isSessionPopupOpen && sessionSearchResults.length === 0) {
-      void fetchSessionSearchResults("");
-    }
   }
 
   function closeSessionPopup(): void {
     isSessionPopupOpen = false;
-    sessionSearchQuery = "";
-    sessionDebouncedSearchQuery = "";
   }
 
   function handleCollapsePanel(): void {
@@ -245,92 +225,10 @@
     onToggle();
   }
 
-  function handleSessionSearchInput(event: Event): void {
-    const target = event.target as HTMLInputElement;
-    sessionSearchQuery = target.value;
-
-    if (sessionSearchDebounceTimer !== null) {
-      clearTimeout(sessionSearchDebounceTimer);
-    }
-
-    sessionSearchDebounceTimer = window.setTimeout(() => {
-      sessionDebouncedSearchQuery = sessionSearchQuery;
-      void fetchSessionSearchResults(sessionSearchQuery);
-      sessionSearchDebounceTimer = null;
-    }, 300);
-  }
-
-  async function fetchSessionSearchResults(query: string): Promise<void> {
-    if (contextId === null) {
-      sessionSearchError = "Context ID not available";
-      return;
-    }
-
-    isSessionSearchLoading = true;
-    sessionSearchError = null;
-
-    try {
-      const params = new URLSearchParams({
-        offset: "0",
-        limit: "20",
-        sortBy: "modified",
-        sortOrder: "desc",
-      });
-
-      if (projectPath.length > 0) {
-        params.set("workingDirectoryPrefix", projectPath);
-      }
-      if (query.length > 0) {
-        params.set("search", query);
-      }
-
-      const response = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
-      );
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Failed to fetch sessions: ${text}`);
-      }
-
-      const data = (await response.json()) as {
-        sessions: SessionEntry[];
-        total: number;
-      };
-      sessionSearchResults = data.sessions;
-    } catch (error) {
-      sessionSearchError =
-        error instanceof Error ? error.message : "Unknown error";
-      sessionSearchResults = [];
-    } finally {
-      isSessionSearchLoading = false;
-    }
-  }
-
   function handleResumeFromSearch(qraftAiSessionId: string): void {
     if (onResumeSession === undefined) return;
     onResumeSession(qraftAiSessionId);
     closeSessionPopup();
-  }
-
-  function truncateSessionText(text: string, maxLen = 80): string {
-    const stripped = stripSystemTags(text).replaceAll("\n", " ");
-    if (stripped.length <= maxLen) return stripped;
-    return stripped.slice(0, maxLen) + "...";
-  }
-
-  function getRelativeTime(isoDate: string): string {
-    const date = new Date(isoDate);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return "yesterday";
-    return `${diffDays}d ago`;
   }
 
   /**
@@ -661,123 +559,12 @@
             role="dialog"
             aria-label="Session search"
           >
-            <div class="p-3 border-b border-border-default shrink-0">
-              <div class="relative">
-                <div
-                  class="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-tertiary"
-                  aria-hidden="true"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                  >
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="m21 21-4.35-4.35" />
-                  </svg>
-                </div>
-                <input
-                  type="text"
-                  value={sessionSearchQuery}
-                  oninput={handleSessionSearchInput}
-                  placeholder="Search sessions..."
-                  class="w-full pl-8 pr-3 py-1.5 text-sm rounded
-                         bg-bg-secondary border border-border-default
-                         text-text-primary placeholder-text-tertiary
-                         focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                  aria-label="Search sessions"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-              </div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto">
-              {#if isSessionSearchLoading}
-                <div class="flex items-center justify-center py-8">
-                  <svg
-                    class="animate-spin h-5 w-5 text-accent-fg"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    />
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                </div>
-              {:else if sessionSearchError !== null}
-                <div class="p-4 text-center text-danger-fg text-sm">
-                  <p class="font-medium">Error loading sessions</p>
-                  <p class="text-xs text-text-tertiary mt-1">
-                    {sessionSearchError}
-                  </p>
-                </div>
-              {:else if sessionSearchResults.length === 0}
-                <div class="p-8 text-center text-text-tertiary text-sm">
-                  {#if sessionDebouncedSearchQuery.length > 0}
-                    <p>No sessions found for "{sessionDebouncedSearchQuery}"</p>
-                  {:else}
-                    <p>No sessions found</p>
-                  {/if}
-                </div>
-              {:else}
-                {#each sessionSearchResults as session (session.qraftAiSessionId)}
-                  <div
-                    class="flex items-center gap-2 px-3 py-2 hover:bg-bg-hover border-b border-border-default/50 last:border-b-0"
-                  >
-                    <button
-                      type="button"
-                      onclick={() =>
-                        handleResumeFromSearch(session.qraftAiSessionId)}
-                      class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
-                             bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
-                             border border-accent-emphasis/30 hover:border-accent-emphasis/60
-                             transition-colors"
-                      title="Resume this session"
-                    >
-                      Resume
-                    </button>
-
-                    <div class="flex-1 min-w-0">
-                      <p class="text-xs text-text-primary truncate">
-                        {truncateSessionText(
-                          session.firstPrompt || session.summary,
-                        )}
-                      </p>
-                      <div
-                        class="flex items-center gap-2 mt-0.5 text-[10px] text-text-tertiary"
-                      >
-                        <span>{session.messageCount} msgs</span>
-                        <span>•</span>
-                        <span>{getRelativeTime(session.modified)}</span>
-                        {#if session.model !== undefined}
-                          <span>•</span>
-                          <span class="truncate">{session.model}</span>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              {/if}
-            </div>
+            <SessionSearchPopup
+              {contextId}
+              {projectPath}
+              onResumeSession={handleResumeFromSearch}
+              onClose={closeSessionPopup}
+            />
           </div>
         {/if}
       </div>
@@ -1069,125 +856,13 @@
               role="dialog"
               aria-label="Session search"
             >
-              <div class="p-3 border-b border-border-default shrink-0">
-                <div class="relative">
-                  <div
-                    class="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-tertiary"
-                    aria-hidden="true"
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    >
-                      <circle cx="11" cy="11" r="8" />
-                      <path d="m21 21-4.35-4.35" />
-                    </svg>
-                  </div>
-                  <input
-                    type="text"
-                    value={sessionSearchQuery}
-                    oninput={handleSessionSearchInput}
-                    placeholder="Search sessions..."
-                    class="w-full pl-8 pr-3 py-1.5 text-sm rounded
-                           bg-bg-secondary border border-border-default
-                           text-text-primary placeholder-text-tertiary
-                           focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                    aria-label="Search sessions"
-                    autocomplete="off"
-                    spellcheck="false"
-                  />
-                </div>
-              </div>
-
-              <div class="flex-1 overflow-y-auto">
-                {#if isSessionSearchLoading}
-                  <div class="flex items-center justify-center py-8">
-                    <svg
-                      class="animate-spin h-5 w-5 text-accent-fg"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                    >
-                      <circle
-                        class="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        stroke-width="4"
-                      />
-                      <path
-                        class="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                  </div>
-                {:else if sessionSearchError !== null}
-                  <div class="p-4 text-center text-danger-fg text-sm">
-                    <p class="font-medium">Error loading sessions</p>
-                    <p class="text-xs text-text-tertiary mt-1">
-                      {sessionSearchError}
-                    </p>
-                  </div>
-                {:else if sessionSearchResults.length === 0}
-                  <div class="p-8 text-center text-text-tertiary text-sm">
-                    {#if sessionDebouncedSearchQuery.length > 0}
-                      <p>
-                        No sessions found for "{sessionDebouncedSearchQuery}"
-                      </p>
-                    {:else}
-                      <p>No sessions found</p>
-                    {/if}
-                  </div>
-                {:else}
-                  {#each sessionSearchResults as session (session.qraftAiSessionId)}
-                    <div
-                      class="flex items-center gap-2 px-3 py-2 hover:bg-bg-hover border-b border-border-default/50 last:border-b-0"
-                    >
-                      <button
-                        type="button"
-                        onclick={() =>
-                          handleResumeFromSearch(session.qraftAiSessionId)}
-                        class="shrink-0 px-2 py-0.5 text-[10px] font-medium rounded
-                               bg-accent-muted/60 hover:bg-accent-muted text-accent-fg
-                               border border-accent-emphasis/30 hover:border-accent-emphasis/60
-                               transition-colors"
-                        title="Resume this session"
-                      >
-                        Resume
-                      </button>
-
-                      <div class="flex-1 min-w-0">
-                        <p class="text-xs text-text-primary truncate">
-                          {truncateSessionText(
-                            session.firstPrompt || session.summary,
-                          )}
-                        </p>
-                        <div
-                          class="flex items-center gap-2 mt-0.5 text-[10px] text-text-tertiary"
-                        >
-                          <span>{session.messageCount} msgs</span>
-                          <span>•</span>
-                          <span>{getRelativeTime(session.modified)}</span>
-                          {#if session.model !== undefined}
-                            <span>•</span>
-                            <span class="truncate">{session.model}</span>
-                          {/if}
-                        </div>
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
+              <SessionSearchPopup
+                {contextId}
+                {projectPath}
+                {completedSessions}
+                onResumeSession={handleResumeFromSearch}
+                onClose={closeSessionPopup}
+              />
             </div>
           {/if}
         </div>

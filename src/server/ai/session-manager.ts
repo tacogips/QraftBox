@@ -143,6 +143,11 @@ export interface SessionManager {
    * Get the session mapping store for batch lookups (undefined if not configured).
    */
   getMappingStore(): SessionMappingStore | undefined;
+
+  /**
+   * List completed/failed/cancelled sessions as raw rows (includes projectPath)
+   */
+  listCompletedRows(): readonly AiSessionRow[];
 }
 
 /**
@@ -980,6 +985,13 @@ export function createSessionManager(
 
     getMappingStore(): SessionMappingStore | undefined {
       return mappingStore;
+    },
+
+    listCompletedRows(): readonly AiSessionRow[] {
+      const completed = store.listByState("completed");
+      const failed = store.listByState("failed");
+      const cancelled = store.listByState("cancelled");
+      return [...completed, ...failed, ...cancelled];
     },
   };
 
