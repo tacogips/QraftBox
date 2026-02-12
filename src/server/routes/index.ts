@@ -34,6 +34,7 @@ import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
 import type { RecentDirectoryStore } from "../workspace/recent-store.js";
+import type { OpenTabsStore } from "../workspace/open-tabs-store.js";
 
 /**
  * Route group definition
@@ -53,6 +54,8 @@ export interface RouteGroup {
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
   readonly recentStore: RecentDirectoryStore;
+  readonly openTabsStore?: OpenTabsStore | undefined;
+  readonly activeTabPath?: string | undefined;
   readonly sessionManager: SessionManager;
   readonly promptStore?: PromptStore | undefined;
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
@@ -186,6 +189,8 @@ export function getNonContextRouteGroups(
         config.contextManager,
         config.recentStore,
         config.initialTabs,
+        config.openTabsStore,
+        config.activeTabPath,
       ),
     },
     // Directory browsing routes - GET /api/browse

@@ -7,6 +7,7 @@ import { createServer, startServer, stopServer } from "./index";
 import type { CLIConfig } from "../types/index";
 import { createContextManager } from "./workspace/context-manager";
 import { createRecentDirectoryStore } from "./workspace/recent-store";
+import { createInMemoryOpenTabsStore } from "./workspace/open-tabs-store";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +38,13 @@ describe("createServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     expect(app).toBeDefined();
     expect(typeof app.fetch).toBe("function");
@@ -48,7 +55,13 @@ describe("createServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const response = await app.request("/api/health");
     expect(response.status).toBe(200);
@@ -67,7 +80,13 @@ describe("createServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     // Request a non-existent route (should 404)
     const response = await app.request("/api/nonexistent");
@@ -82,7 +101,13 @@ describe("createServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     // Request static file (will fail since dist/client doesn't exist in test)
     // But middleware should be mounted
@@ -114,7 +139,13 @@ describe("startServer and stopServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     // Start server
     const server = startServer(app, config);
@@ -148,7 +179,13 @@ describe("startServer and stopServer", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 
@@ -191,7 +228,13 @@ describe("Server integration", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 
@@ -230,7 +273,13 @@ describe("Server integration", () => {
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
     });
-    const app = createServer({ config, contextManager, recentStore });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 

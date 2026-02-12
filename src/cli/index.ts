@@ -16,6 +16,7 @@ import type { FileWatcher } from "../server/watcher/index.js";
 import { createWatcherBroadcaster } from "../server/watcher/broadcast.js";
 import type { WatcherBroadcaster } from "../server/watcher/broadcast.js";
 import { createRecentDirectoryStore } from "../server/workspace/recent-store";
+import { createOpenTabsStore } from "../server/workspace/open-tabs-store";
 import { createLogger } from "../server/logger";
 
 const logger = createLogger("CLI");
@@ -262,16 +263,33 @@ export async function main(): Promise<void> {
     // Create recent store for persistent tracking
     const recentStore = createRecentDirectoryStore();
 
+    // Create open tabs store for tab persistence
+    const openTabsStore = createOpenTabsStore();
+
     // Determine which project directories to open
     let dirsToOpen = [...config.projectDirs];
+    let activeTabPath: string | null = null;
 
-    // If no --project-dir specified, restore the most recent project
+    // If no --project-dir specified, restore previously open tabs
     if (dirsToOpen.length === 0) {
-      const recentDirs = await recentStore.getAll();
-      const mostRecent = recentDirs[0];
-      if (mostRecent !== undefined) {
-        logger.info(`Restoring previous project: ${mostRecent.path}`);
-        dirsToOpen.push(mostRecent.path);
+      const openTabs = await openTabsStore.getAll();
+      if (openTabs.length > 0) {
+        logger.info(`Restoring ${openTabs.length} previously open tab(s)`);
+        for (const openTab of openTabs) {
+          dirsToOpen.push(openTab.path);
+        }
+        const activeEntry = openTabs.find((openTab) => openTab.isActive);
+        if (activeEntry !== undefined) {
+          activeTabPath = activeEntry.path;
+        }
+      } else {
+        // Fall back to most recent project
+        const recentDirs = await recentStore.getAll();
+        const mostRecent = recentDirs[0];
+        if (mostRecent !== undefined) {
+          logger.info(`Restoring previous project: ${mostRecent.path}`);
+          dirsToOpen.push(mostRecent.path);
+        }
       }
     }
 
@@ -300,6 +318,8 @@ export async function main(): Promise<void> {
       config,
       contextManager,
       recentStore,
+      openTabsStore,
+      activeTabPath: activeTabPath ?? undefined,
       initialTabs,
       broadcast: (event: string, data: unknown) => {
         wsManager.broadcast(event, data);

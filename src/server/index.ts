@@ -21,6 +21,7 @@ import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
 import { createLogger } from "./logger";
 import type { RecentDirectoryStore } from "./workspace/recent-store";
+import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
 
 /**
@@ -30,6 +31,8 @@ export interface ServerOptions {
   readonly config: CLIConfig;
   readonly contextManager: ContextManager;
   readonly recentStore: RecentDirectoryStore;
+  readonly openTabsStore: OpenTabsStore;
+  readonly activeTabPath?: string | undefined;
   readonly initialTabs?:
     | readonly import("../types/workspace").WorkspaceTab[]
     | undefined;
@@ -162,6 +165,8 @@ export function createServer(options: ServerOptions): Hono {
   mountAllRoutes(app, {
     contextManager: options.contextManager,
     recentStore: options.recentStore,
+    openTabsStore: options.openTabsStore,
+    activeTabPath: options.activeTabPath,
     sessionManager,
     promptStore,
     toolRegistry,

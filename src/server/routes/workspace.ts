@@ -25,6 +25,7 @@ import {
   updateTabAccessTime,
 } from "../../types/workspace";
 import type { RecentDirectoryStore } from "../workspace/recent-store";
+import type { OpenTabsStore, OpenTabEntry } from "../workspace/open-tabs-store";
 
 /**
  * Error response format
@@ -91,6 +92,37 @@ async function addToRecentDirectories(
 }
 
 /**
+ * Persist workspace state to open tabs store
+ *
+ * Converts current workspace tabs into OpenTabEntry format and saves to store.
+ * Only persists if openTabsStore is provided.
+ *
+ * @param workspace - Current workspace state
+ * @param openTabsStore - Open tabs store instance
+ * @returns Promise that resolves when save is complete
+ */
+async function persistWorkspaceState(
+  workspace: Workspace,
+  openTabsStore: OpenTabsStore | undefined,
+): Promise<void> {
+  if (openTabsStore === undefined) {
+    return;
+  }
+
+  const openTabEntries: OpenTabEntry[] = workspace.tabs.map(
+    (tab, tabIndex): OpenTabEntry => ({
+      path: tab.path,
+      name: tab.name,
+      tabOrder: tabIndex,
+      isActive: workspace.activeTabId === tab.id,
+      isGitRepo: tab.isGitRepo,
+    }),
+  );
+
+  await openTabsStore.save(openTabEntries);
+}
+
+/**
  * Create workspace routes
  *
  * Routes:
@@ -103,21 +135,36 @@ async function addToRecentDirectories(
  * @param contextManager - Context manager instance
  * @param recentStore - Recent directory store
  * @param initialTabs - Optional initial tabs to populate workspace at startup
+ * @param openTabsStore - Optional open tabs store for persistence
+ * @param activeTabPath - Optional path to the active tab from restored state
  * @returns Hono app with workspace routes mounted
  */
 export function createWorkspaceRoutes(
   contextManager: ContextManager,
   recentStore: RecentDirectoryStore,
   initialTabs?: readonly WorkspaceTab[] | undefined,
+  openTabsStore?: OpenTabsStore | undefined,
+  activeTabPath?: string | undefined,
 ): Hono {
   // Initialize workspace with initial tabs if provided
   if (initialTabs !== undefined && initialTabs.length > 0) {
-    const firstTab = initialTabs[0];
+    // Find active tab: prefer activeTabPath, fall back to first tab
+    let activeTab: WorkspaceTab | undefined;
+    if (activeTabPath !== undefined) {
+      activeTab = initialTabs.find((tab) => tab.path === activeTabPath);
+    }
+    if (activeTab === undefined) {
+      activeTab = initialTabs[0];
+    }
+
     currentWorkspace = {
       tabs: [...initialTabs],
-      activeTabId: firstTab !== undefined ? firstTab.id : null,
+      activeTabId: activeTab !== undefined ? activeTab.id : null,
       maxTabs: 10,
     };
+
+    // Persist initial workspace state
+    void persistWorkspaceState(currentWorkspace, openTabsStore);
   }
 
   const app = new Hono();
@@ -221,6 +268,9 @@ export function createWorkspaceRoutes(
       // Update recent directories (reopening counts as recent access)
       await addToRecentDirectories(updatedTab, recentStore);
 
+      // Persist workspace state
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
+
       const response: OpenTabResponse = {
         tab: updatedTab,
         workspace: currentWorkspace,
@@ -241,6 +291,9 @@ export function createWorkspaceRoutes(
 
       // Add to recent directories
       await addToRecentDirectories(tab, recentStore);
+
+      // Persist workspace state
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
 
       const response: OpenTabResponse = {
         tab,
@@ -273,7 +326,7 @@ export function createWorkspaceRoutes(
    * - 400: Invalid context ID format
    * - 404: Tab not found
    */
-  app.delete("/tabs/:id", (c) => {
+  app.delete("/tabs/:id", async (c) => {
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -316,6 +369,9 @@ export function createWorkspaceRoutes(
       activeTabId: newActiveTabId,
     };
 
+    // Persist workspace state
+    await persistWorkspaceState(currentWorkspace, openTabsStore);
+
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
     };
@@ -337,7 +393,7 @@ export function createWorkspaceRoutes(
    * - 400: Invalid context ID format
    * - 404: Tab not found
    */
-  app.post("/tabs/:id/activate", (c) => {
+  app.post("/tabs/:id/activate", async (c) => {
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -371,6 +427,9 @@ export function createWorkspaceRoutes(
       ),
       activeTabId: updatedTab.id,
     };
+
+    // Persist workspace state
+    await persistWorkspaceState(currentWorkspace, openTabsStore);
 
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
