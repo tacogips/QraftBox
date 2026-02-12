@@ -11,6 +11,61 @@
   import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
 
+  // AI panel resize constants
+  const AI_PANEL_HEIGHT_KEY = "qraftbox-ai-panel-height";
+  const AI_PANEL_MIN_HEIGHT = 120;
+  const AI_PANEL_MAX_HEIGHT = 600;
+  const AI_PANEL_DEFAULT_HEIGHT = 256;
+
+  function loadAiPanelHeight(): number {
+    try {
+      const stored = localStorage.getItem(AI_PANEL_HEIGHT_KEY);
+      if (stored !== null) {
+        const val = parseInt(stored, 10);
+        if (
+          !isNaN(val) &&
+          val >= AI_PANEL_MIN_HEIGHT &&
+          val <= AI_PANEL_MAX_HEIGHT
+        ) {
+          return val;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return AI_PANEL_DEFAULT_HEIGHT;
+  }
+
+  let aiPanelHeight = $state(loadAiPanelHeight());
+
+  function handleResizeMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = aiPanelHeight;
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    function onMouseMove(e: MouseEvent): void {
+      const deltaY = startY - e.clientY;
+      aiPanelHeight = Math.min(
+        AI_PANEL_MAX_HEIGHT,
+        Math.max(AI_PANEL_MIN_HEIGHT, startHeight + deltaY),
+      );
+    }
+
+    function onMouseUp(): void {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(AI_PANEL_HEIGHT_KEY, String(aiPanelHeight));
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
   type FileContent = {
     path: string;
     content: string;
@@ -66,6 +121,7 @@
     onNewSession,
     onResumeCliSession,
     onCancelActiveSession,
+    onCancelQueuedPrompt,
     onToggleAiPanel,
   }: {
     activeTabIsGitRepo: boolean;
@@ -121,6 +177,7 @@
     onNewSession: () => void;
     onResumeCliSession: (resumeQraftId: string) => void;
     onCancelActiveSession: (sessionId: string) => Promise<void>;
+    onCancelQueuedPrompt: (promptId: string) => Promise<void>;
     onToggleAiPanel: () => void;
   } = $props();
 
@@ -182,7 +239,7 @@
 
     <button
       type="button"
-      class="absolute top-3 -right-5 z-10 w-5 h-10 flex items-center justify-center
+      class="absolute top-3 -right-5 z-20 w-5 h-10 flex items-center justify-center
              bg-bg-secondary border border-l-0 border-border-default
              rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
              transition-colors cursor-pointer"
@@ -434,36 +491,56 @@
       </div>
     </div>
 
-    <CurrentSessionPanel
-      {contextId}
-      currentClientSessionId={currentQraftAiSessionId}
-      running={runningSessions}
-      queued={queuedSessions}
-      recentlyCompleted={recentlyCompletedSessions}
-      {pendingPrompts}
-      resumeSessionId={resumeDisplaySessionId}
-      onCancelSession={onCancelActiveSession}
-      onResumeSession={onResumeCliSession}
-      {onNewSession}
-    />
+    <!-- Drag handle to resize AI panel (above CurrentSessionPanel) -->
+    <div
+      class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
+             group hover:bg-accent-muted/40 transition-colors"
+      onmousedown={handleResizeMouseDown}
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="Resize AI panel"
+    >
+      <div
+        class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+      ></div>
+    </div>
 
-    <AIPromptPanel
-      {contextId}
-      {projectPath}
-      collapsed={aiPanelCollapsed}
-      {queueStatus}
-      changedFiles={changedFilePaths}
-      allFiles={changedFilePaths}
-      onSubmit={(prompt, immediate, refs) =>
-        onSubmitPrompt(prompt, immediate, {
-          primaryFile: undefined,
-          references: refs,
-          diffSummary: undefined,
-          // TODO: pass resumeSessionId to continue current session
-        })}
-      onToggle={onToggleAiPanel}
-      {onNewSession}
-      onResumeSession={onResumeCliSession}
-    />
+    <div
+      class="shrink-0 flex flex-col min-h-0 overflow-hidden"
+      style:height="{aiPanelHeight}px"
+    >
+      <CurrentSessionPanel
+        {contextId}
+        currentClientSessionId={currentQraftAiSessionId}
+        running={runningSessions}
+        queued={queuedSessions}
+        recentlyCompleted={recentlyCompletedSessions}
+        {pendingPrompts}
+        resumeSessionId={resumeDisplaySessionId}
+        onCancelSession={onCancelActiveSession}
+        {onCancelQueuedPrompt}
+        onResumeSession={onResumeCliSession}
+        {onNewSession}
+      />
+
+      <AIPromptPanel
+        {contextId}
+        {projectPath}
+        collapsed={aiPanelCollapsed}
+        {queueStatus}
+        changedFiles={changedFilePaths}
+        allFiles={changedFilePaths}
+        onSubmit={(prompt, immediate, refs) =>
+          onSubmitPrompt(prompt, immediate, {
+            primaryFile: undefined,
+            references: refs,
+            diffSummary: undefined,
+            // TODO: pass resumeSessionId to continue current session
+          })}
+        onToggle={onToggleAiPanel}
+        {onNewSession}
+        onResumeSession={onResumeCliSession}
+      />
+    </div>
   </div>
 </div>

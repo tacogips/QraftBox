@@ -46,6 +46,7 @@
     }[];
     resumeSessionId?: string | null;
     onCancelSession: (id: string) => void;
+    onCancelQueuedPrompt?: (id: string) => Promise<void>;
     onResumeSession: (sessionId: string) => void;
     onNewSession?: () => void;
     onSearchSession?: () => void;
@@ -61,6 +62,7 @@
     pendingPrompts,
     resumeSessionId = null,
     onCancelSession,
+    onCancelQueuedPrompt,
     onResumeSession,
     onNewSession,
     onSearchSession,
@@ -414,9 +416,36 @@
               >
                 {index + 1}.
               </span>
-              <span class="text-text-secondary truncate">
+              <span class="text-text-secondary truncate flex-1 min-w-0">
                 {truncateText(item.text, 120)}
               </span>
+              {#if onCancelQueuedPrompt !== undefined}
+                <button
+                  type="button"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void onCancelQueuedPrompt(item.id);
+                  }}
+                  class="shrink-0 p-0.5 rounded hover:bg-danger-subtle text-text-tertiary hover:text-danger-fg transition-colors"
+                  title="Cancel queued prompt"
+                  aria-label="Cancel queued prompt"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              {/if}
             </div>
           {/each}
         </div>

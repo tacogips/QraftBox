@@ -367,6 +367,7 @@
     fetchPromptQueue,
     fetchActiveSessions,
     handleCancelActiveSession,
+    handleCancelQueuedPrompt,
     handleResumeToChanges,
     handleResumeCliSession,
     handleNewSession,
@@ -603,6 +604,7 @@
         onNewSession={handleNewSession}
         onResumeCliSession={handleResumeCliSession}
         onCancelActiveSession={handleCancelActiveSession}
+        onCancelQueuedPrompt={handleCancelQueuedPrompt}
         onToggleAiPanel={() => {
           aiPanelCollapsed = !aiPanelCollapsed;
         }}

@@ -453,10 +453,8 @@
 <svelte:window on:keydown={handleGlobalKeydown} on:click={handleWindowClick} />
 
 <div
-  class="ai-prompt-panel shrink-0
-         bg-bg-secondary border-t border-border-default
-         transition-all duration-300 ease-in-out
-         {collapsed ? 'h-14' : 'h-64'}"
+  class="ai-prompt-panel bg-bg-secondary border-t border-border-default
+         {collapsed ? 'shrink-0 h-14' : 'flex-1 min-h-0 flex flex-col'}"
   role="region"
   aria-label="AI Prompt Panel"
 >
@@ -879,7 +877,7 @@
       </div>
     </div>
 
-    <div class="h-52 p-4 flex flex-col">
+    <div class="flex-1 min-h-0 p-4 flex flex-col">
       <!-- Input area -->
       <div class="flex-1 flex gap-3 min-h-0">
         <!-- Prompt input -->

@@ -7,6 +7,7 @@ import {
 } from "../../../src/types/ai";
 import {
   cancelAISessionApi,
+  cancelQueuedPromptApi,
   fetchAISessionsApi,
   fetchPromptQueueApi,
   submitAIPrompt,
@@ -94,6 +95,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   fetchPromptQueue: () => Promise<void>;
   fetchActiveSessions: () => Promise<void>;
   handleCancelActiveSession: (sessionId: string) => Promise<void>;
+  handleCancelQueuedPrompt: (promptId: string) => Promise<void>;
   handleResumeToChanges: (resumeQraftId: string) => void;
   handleResumeCliSession: (resumeQraftId: string) => void;
   handleNewSession: () => void;
@@ -221,6 +223,18 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     }
   }
 
+  async function handleCancelQueuedPrompt(promptId: string): Promise<void> {
+    try {
+      await cancelQueuedPromptApi(promptId);
+      deps.setServerPromptQueue(
+        deps.getServerPromptQueue().filter((prompt) => prompt.id !== promptId),
+      );
+      void fetchPromptQueue();
+    } catch (error) {
+      console.error("Failed to cancel queued prompt:", error);
+    }
+  }
+
   function handleResumeToChanges(resumeQraftId: string): void {
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
     deps.setResumeDisplaySessionId(resumeQraftId);
@@ -269,6 +283,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     fetchPromptQueue,
     fetchActiveSessions,
     handleCancelActiveSession,
+    handleCancelQueuedPrompt,
     handleResumeToChanges,
     handleResumeCliSession,
     handleNewSession,

@@ -264,3 +264,10 @@ export async function cancelAISessionApi(sessionId: string): Promise<void> {
   });
   ensureOk(response, "Failed to cancel session");
 }
+
+export async function cancelQueuedPromptApi(promptId: string): Promise<void> {
+  const response = await fetch(`/api/ai/prompt-queue/${promptId}/cancel`, {
+    method: "POST",
+  });
+  ensureOk(response, "Failed to cancel queued prompt");
+}
