@@ -30,7 +30,6 @@
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
-  import ProjectScreen from "../components/project/ProjectScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
@@ -629,28 +628,20 @@
     {:else if currentScreen === "project"}
       <!-- Project Screen -->
       <main class="flex-1 overflow-hidden">
-        {#if contextId !== null}
-          <ProjectScreen
-            {contextId}
-            {projectPath}
-            onProjectChanged={() => void init()}
-          />
-        {:else}
-          <ProjectSelectionScreen
-            {pickingDirectory}
-            {newProjectLoading}
-            {newProjectPath}
-            {newProjectError}
-            {availableRecentProjects}
-            onPickDirectory={pickDirectory}
-            onNewProjectPathChange={(value) => {
-              newProjectPath = value;
-            }}
-            onOpenProject={openProjectByPath}
-            onOpenRecentProject={openRecentProject}
-            onRemoveRecentProject={removeRecentProject}
-          />
-        {/if}
+        <ProjectSelectionScreen
+          {pickingDirectory}
+          {newProjectLoading}
+          {newProjectPath}
+          {newProjectError}
+          {availableRecentProjects}
+          onPickDirectory={pickDirectory}
+          onNewProjectPathChange={(value) => {
+            newProjectPath = value;
+          }}
+          onOpenProject={openProjectByPath}
+          onOpenRecentProject={openRecentProject}
+          onRemoveRecentProject={removeRecentProject}
+        />
       </main>
     {:else if currentScreen === "tools"}
       <!-- Tools Screen -->

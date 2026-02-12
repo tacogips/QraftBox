@@ -158,6 +158,40 @@ describe("OpenTabsStore", () => {
     expect(retrieved[2]?.tabOrder).toBe(2);
   });
 
+  test("isInitialized should return false before any save", async () => {
+    const store = createInMemoryOpenTabsStore();
+
+    expect(await store.isInitialized()).toBe(false);
+  });
+
+  test("isInitialized should return true after save", async () => {
+    const store = createInMemoryOpenTabsStore();
+
+    await store.save([]);
+
+    expect(await store.isInitialized()).toBe(true);
+  });
+
+  test("isInitialized should return true after saving empty tabs (all closed)", async () => {
+    const store = createInMemoryOpenTabsStore();
+
+    const tabs: OpenTabEntry[] = [
+      {
+        path: "/home/user/project1",
+        name: "project1",
+        tabOrder: 0,
+        isActive: true,
+        isGitRepo: true,
+      },
+    ];
+
+    await store.save(tabs);
+    await store.save([]);
+
+    expect(await store.isInitialized()).toBe(true);
+    expect(await store.getAll()).toHaveLength(0);
+  });
+
   test("save should correctly convert boolean to integer flags", async () => {
     const store = createInMemoryOpenTabsStore();
 

@@ -272,18 +272,24 @@ export async function main(): Promise<void> {
 
     // If no --project-dir specified, restore previously open tabs
     if (dirsToOpen.length === 0) {
-      const openTabs = await openTabsStore.getAll();
-      if (openTabs.length > 0) {
-        logger.info(`Restoring ${openTabs.length} previously open tab(s)`);
-        for (const openTab of openTabs) {
-          dirsToOpen.push(openTab.path);
-        }
-        const activeEntry = openTabs.find((openTab) => openTab.isActive);
-        if (activeEntry !== undefined) {
-          activeTabPath = activeEntry.path;
+      const storeInitialized = await openTabsStore.isInitialized();
+      if (storeInitialized) {
+        // Store has been used before - trust saved state (even if empty)
+        const openTabs = await openTabsStore.getAll();
+        if (openTabs.length > 0) {
+          logger.info(`Restoring ${openTabs.length} previously open tab(s)`);
+          for (const openTab of openTabs) {
+            dirsToOpen.push(openTab.path);
+          }
+          const activeEntry = openTabs.find((openTab) => openTab.isActive);
+          if (activeEntry !== undefined) {
+            activeTabPath = activeEntry.path;
+          }
+        } else {
+          logger.info("No open tabs to restore (all were closed)");
         }
       } else {
-        // Fall back to most recent project
+        // First run ever - fall back to most recent project
         const recentDirs = await recentStore.getAll();
         const mostRecent = recentDirs[0];
         if (mostRecent !== undefined) {

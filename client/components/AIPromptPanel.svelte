@@ -781,12 +781,6 @@
           </svg>
         </button>
 
-        <kbd
-          class="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-tertiary rounded"
-        >
-          A
-        </kbd>
-
         {#if onNewSession !== undefined}
           <button
             type="button"
@@ -865,6 +859,14 @@
             </div>
           {/if}
         </div>
+
+        {#if projectPath}
+          <span
+            class="text-xs text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap max-w-xs"
+            style="direction: rtl; text-align: left;"
+            title={projectPath}>&lrm;{projectPath}</span
+          >
+        {/if}
       </div>
 
       <div class="flex items-center gap-3">

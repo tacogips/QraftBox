@@ -32,6 +32,7 @@ export interface OpenTabsStore {
   /**
    * Save all open tabs in a single transaction.
    * Replaces all existing tabs with the provided list.
+   * Also marks the store as initialized.
    *
    * @param tabs - All open tabs to persist (order matters)
    * @returns Promise that resolves when save is complete
@@ -44,6 +45,14 @@ export interface OpenTabsStore {
    * @returns Promise resolving to readonly array of open tabs
    */
   getAll(): Promise<readonly OpenTabEntry[]>;
+
+  /**
+   * Check if the store has ever been saved to.
+   * Used to distinguish "first run ever" from "user closed all tabs".
+   *
+   * @returns Promise resolving to true if save() has been called at least once
+   */
+  isInitialized(): Promise<boolean>;
 
   /**
    * Remove all open tabs.
@@ -79,6 +88,8 @@ class OpenTabsStoreImpl implements OpenTabsStore {
   private readonly stmtInsert: ReturnType<Database["prepare"]>;
   private readonly stmtGetAll: ReturnType<Database["prepare"]>;
   private readonly stmtClear: ReturnType<Database["prepare"]>;
+  private readonly stmtSetMeta: ReturnType<Database["prepare"]>;
+  private readonly stmtGetMeta: ReturnType<Database["prepare"]>;
 
   constructor(db: Database) {
     this.db = db;
@@ -97,6 +108,14 @@ class OpenTabsStoreImpl implements OpenTabsStore {
 
     this.stmtClear = db.prepare(`
       DELETE FROM open_tabs
+    `);
+
+    this.stmtSetMeta = db.prepare(`
+      INSERT OR REPLACE INTO open_tabs_meta (key, value) VALUES (?, ?)
+    `);
+
+    this.stmtGetMeta = db.prepare(`
+      SELECT value FROM open_tabs_meta WHERE key = ?
     `);
   }
 
@@ -118,11 +137,19 @@ class OpenTabsStoreImpl implements OpenTabsStore {
           isGitRepo,
         );
       }
+
+      // Mark store as initialized
+      this.stmtSetMeta.run("initialized", "1");
     });
 
     transaction();
 
     logger.debug("Saved open tabs", { count: tabs.length });
+  }
+
+  async isInitialized(): Promise<boolean> {
+    const row = this.stmtGetMeta.get("initialized") as { value: string } | null;
+    return row !== null && row.value === "1";
   }
 
   async getAll(): Promise<readonly OpenTabEntry[]> {
@@ -188,6 +215,14 @@ export function createOpenTabsStore(
     ON open_tabs(tab_order ASC)
   `);
 
+  // Create metadata table for tracking initialization state
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS open_tabs_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
   logger.info("Open tabs store initialized", { dbPath });
 
   return new OpenTabsStoreImpl(db);
@@ -219,6 +254,14 @@ export function createInMemoryOpenTabsStore(): OpenTabsStore {
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_open_tabs_tab_order
     ON open_tabs(tab_order ASC)
+  `);
+
+  // Create metadata table for tracking initialization state
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS open_tabs_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
   `);
 
   logger.debug("In-memory open tabs store initialized");
