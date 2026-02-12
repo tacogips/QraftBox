@@ -14,7 +14,7 @@
   // AI panel resize constants
   const AI_PANEL_HEIGHT_KEY = "qraftbox-ai-panel-height";
   const AI_PANEL_MIN_HEIGHT = 120;
-  const AI_PANEL_DEFAULT_HEIGHT = 256;
+  const AI_PANEL_DEFAULT_HEIGHT = 400;
   // Minimum space reserved for file viewer + stats bar + drag handle
   const FILE_VIEWER_MIN_HEIGHT = 48;
 
@@ -514,7 +514,7 @@
 
     <div
       class="shrink-0 flex flex-col min-h-0 overflow-hidden"
-      style:height="{aiPanelHeight}px"
+      style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
     >
       <CurrentSessionPanel
         {contextId}
@@ -527,7 +527,6 @@
         onCancelSession={onCancelActiveSession}
         {onCancelQueuedPrompt}
         onResumeSession={onResumeCliSession}
-        {onNewSession}
         expandTrigger={sessionExpandTrigger}
       />
 
