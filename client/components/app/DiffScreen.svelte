@@ -243,7 +243,7 @@
 
     <button
       type="button"
-      class="absolute top-3 -right-5 z-20 w-5 h-10 flex items-center justify-center
+      class="absolute top-12 -right-4 z-20 w-4 h-7 flex items-center justify-center
              bg-bg-secondary border border-l-0 border-border-default
              rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
              transition-colors cursor-pointer"
@@ -251,7 +251,7 @@
       aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
       title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
     >
-      <span class="text-xs leading-none"
+      <span class="text-[9px] leading-none"
         >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
       >
     </button>
