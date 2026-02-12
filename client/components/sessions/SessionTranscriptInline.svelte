@@ -160,6 +160,16 @@
   );
 
   /**
+   * Whether we have optimistic messages to show as fallback when transcript
+   * is not yet available (e.g. new session where CLI session file hasn't
+   * been created yet).
+   */
+  const hasOptimisticContent = $derived(
+    (optimisticUserMessage ?? "").length > 0 ||
+      (optimisticAssistantMessage ?? "").length > 0,
+  );
+
+  /**
    * Fetch transcript events from API
    */
   async function fetchTranscript(options?: {
@@ -177,7 +187,13 @@
 
       if (!response.ok) {
         const errorData = (await response.json()) as { error: string };
+        // Keep existing data on silent refresh (don't regress from success)
         if (isSilentRefresh && loadingState.status === "success") {
+          return;
+        }
+        // On silent refresh from error state, stay in error silently
+        // (auto-refresh will retry and recover once session is created)
+        if (isSilentRefresh && loadingState.status === "error") {
           return;
         }
         loadingState = {
@@ -194,7 +210,10 @@
         total: data.total,
       };
     } catch (error: unknown) {
-      if (isSilentRefresh && loadingState.status === "success") {
+      if (
+        isSilentRefresh &&
+        (loadingState.status === "success" || loadingState.status === "error")
+      ) {
         return;
       }
       loadingState = {
@@ -576,7 +595,7 @@
   {/if}
 
   <!-- Content area -->
-  {#if loadingState.status === "loading"}
+  {#if loadingState.status === "loading" && !hasOptimisticContent}
     <div class="flex items-center justify-center py-12">
       <div class="flex items-center gap-2 text-text-tertiary">
         <svg
@@ -602,7 +621,7 @@
         <span class="text-sm">Loading transcript...</span>
       </div>
     </div>
-  {:else if loadingState.status === "error"}
+  {:else if loadingState.status === "error" && !hasOptimisticContent}
     <div class="flex items-center justify-center py-12">
       <div
         class="max-w-md p-4 bg-danger-muted border border-danger-emphasis rounded-lg"
@@ -615,14 +634,14 @@
         </p>
       </div>
     </div>
-  {:else if loadingState.status === "success"}
-    {#if chatEvents.length === 0}
+  {:else if loadingState.status === "success" || hasOptimisticContent}
+    {#if chatEvents.length === 0 && !hasOptimisticContent}
       <div class="flex items-center justify-center py-12">
         <p class="text-sm text-text-tertiary">
           No user or assistant messages found
         </p>
       </div>
-    {:else if viewMode === "chat"}
+    {:else if viewMode === "chat" || (chatEvents.length === 0 && hasOptimisticContent)}
       <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
       <div
         bind:this={chatScrollContainer}

@@ -579,6 +579,18 @@
           >
             {elapsedFormatted}
           </span>
+          <button
+            type="button"
+            onclick={(e) => {
+              e.stopPropagation();
+              onCancelSession(runningSession.id);
+            }}
+            class="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded
+                   bg-danger-emphasis/10 text-danger-fg hover:bg-danger-emphasis/20
+                   border border-danger-emphasis/30 transition-colors"
+          >
+            Cancel
+          </button>
         {:else if displayMode === "completed" && completedSession !== null}
           <span class="text-[10px] text-text-tertiary shrink-0">
             {completedSession.completedAt !== undefined
@@ -599,6 +611,18 @@
             >
               {elapsedFormatted}
             </span>
+            <button
+              type="button"
+              onclick={(e) => {
+                e.stopPropagation();
+                onCancelSession(runningSession.id);
+              }}
+              class="shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded
+                     bg-danger-emphasis/10 text-danger-fg hover:bg-danger-emphasis/20
+                     border border-danger-emphasis/30 transition-colors"
+            >
+              Cancel
+            </button>
           {:else}
             <span class="text-[10px] text-text-tertiary shrink-0">
               {recentCliSession.messageCount} msgs
@@ -613,109 +637,35 @@
       <!-- Expanded content -->
       {#if sessionExpanded}
         <div class="border-t border-border-default/50 bg-bg-primary">
-          {#if displayMode === "running" && runningSession !== null && runningSession !== undefined}
-            <div class="px-4 py-2">
-              <div
-                class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2"
+          <!-- Mode-specific controls -->
+          {#if isRunning && runningSession !== null && runningSession !== undefined && runningSession.context.primaryFile !== undefined}
+            <div
+              class="px-4 py-1.5 flex items-center gap-1.5 text-[10px] text-text-tertiary border-b border-border-default/50"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
               >
-                <span
-                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
-                  >user</span
-                >
-                <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
-                  {stripSystemTags(runningSession.prompt)}
-                </p>
-              </div>
-              {#if runningSession.context.primaryFile !== undefined}
-                <div
-                  class="flex items-center gap-1.5 text-[10px] text-text-tertiary mb-2"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="10"
-                    height="10"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="2"
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                    />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                  <span class="truncate"
-                    >{runningSession.context.primaryFile.path}</span
-                  >
-                </div>
-              {/if}
-              {#if runningSession.lastAssistantMessage !== undefined && runningSession.lastAssistantMessage.length > 0}
-                <div
-                  class="border-l-4 border-success-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1 mb-2"
-                >
-                  <span
-                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-success-muted text-success-fg mb-1 inline-block"
-                    >assistant (live)</span
-                  >
-                  <p
-                    class="text-xs text-text-primary whitespace-pre-wrap font-mono mt-1 max-h-[200px] overflow-y-auto"
-                  >
-                    {stripSystemTags(runningSession.lastAssistantMessage)}
-                  </p>
-                </div>
-              {/if}
-              <div class="flex justify-end">
-                <button
-                  type="button"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    onCancelSession(runningSession.id);
-                  }}
-                  class="px-2 py-0.5 text-[10px] font-medium rounded
-                         bg-danger-emphasis/10 text-danger-fg hover:bg-danger-emphasis/20
-                         border border-danger-emphasis/30 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          {:else if displayMode === "completed" && completedSession !== null}
-            <div class="px-4 py-2">
-              <div
-                class="border-l-4 border-accent-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mb-2"
+                <path
+                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+                />
+                <polyline points="14 2 14 8 20 8" />
+              </svg>
+              <span class="truncate"
+                >{runningSession.context.primaryFile.path}</span
               >
-                <span
-                  class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-accent-muted text-accent-fg mb-1 inline-block"
-                  >user</span
-                >
-                <p class="text-xs text-text-primary whitespace-pre-wrap mt-1">
-                  {stripSystemTags(completedSession.prompt)}
-                </p>
-              </div>
-              {#if completedSession.state === "failed"}
-                <p class="text-xs text-danger-fg">Session failed.</p>
-              {:else if completedSession.lastAssistantMessage}
-                <div
-                  class="border-l-4 border-success-emphasis bg-bg-tertiary/30 rounded-r px-3 py-2 mt-1"
-                >
-                  <span
-                    class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-success-muted text-success-fg mb-1 inline-block"
-                    >assistant</span
-                  >
-                  <p
-                    class="text-xs text-text-primary whitespace-pre-wrap font-mono mt-1 max-h-[200px] overflow-y-auto"
-                  >
-                    {stripSystemTags(completedSession.lastAssistantMessage)}
-                  </p>
-                </div>
-              {:else}
-                <p class="text-xs text-success-fg">Session completed.</p>
-              {/if}
             </div>
-          {:else if recentCliSession !== null && contextId !== null}
+          {/if}
+
+          {#if recentCliSession !== null && contextId !== null && !isRunning}
             <div
               class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
             >
@@ -881,19 +831,25 @@
                 </div>
               {/if}
             </div>
+          {/if}
 
+          <!-- Unified transcript view for all display modes -->
+          {#if contextId !== null && targetCliSessionId.length > 0}
             <SessionTranscriptInline
-              sessionId={recentCliSession.qraftAiSessionId}
+              sessionId={targetCliSessionId}
               {contextId}
-              autoRefreshMs={isRunningCurrentConversation ? 1500 : 0}
-              followLatest={isRunningCurrentConversation}
-              optimisticUserMessage={isRunningCurrentConversation
+              autoRefreshMs={isRunning || isRunningCurrentConversation
+                ? 1500
+                : 0}
+              followLatest={isRunning || isRunningCurrentConversation}
+              optimisticUserMessage={isRunning || isRunningCurrentConversation
                 ? (nextQueuedPromptInCurrentConversation ??
                   (runningSession !== null && runningSession !== undefined
                     ? runningSession.prompt
                     : undefined))
                 : undefined}
-              optimisticAssistantMessage={isRunningCurrentConversation &&
+              optimisticAssistantMessage={(isRunning ||
+                isRunningCurrentConversation) &&
               runningSession !== null &&
               runningSession !== undefined
                 ? runningSession.lastAssistantMessage
