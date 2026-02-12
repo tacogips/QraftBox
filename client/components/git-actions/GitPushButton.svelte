@@ -44,7 +44,7 @@
   // Operation state
   let operating = $state(false);
   let operationPhase = $state<
-    "idle" | "committing" | "pushing" | "creating-pr"
+    "idle" | "committing" | "pushing" | "pulling" | "creating-pr"
   >("idle");
   let activeActionId = $state<string | null>(null);
   let cancellingOperation = $state(false);
@@ -256,6 +256,40 @@
       onSuccess?.();
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Push failed";
+      showToast(msg, "error");
+    } finally {
+      operating = false;
+      operationPhase = "idle";
+    }
+  }
+
+  /**
+   * Execute pull via git
+   */
+  async function handlePull(): Promise<void> {
+    operating = true;
+    operationPhase = "pulling";
+    try {
+      const pullResp = await fetch("/api/git-actions/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+      if (!pullResp.ok) {
+        const errData = (await pullResp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Pull failed: ${pullResp.status}`);
+      }
+      const pullResult = (await pullResp.json()) as GitActionResult;
+      if (!pullResult.success) {
+        throw new Error(pullResult.error ?? "Pull failed");
+      }
+
+      showToast("Pull completed", "success");
+      onSuccess?.();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Pull failed";
       showToast(msg, "error");
     } finally {
       operating = false;
@@ -477,6 +511,35 @@
 <svelte:window onclick={handleWindowClick} />
 
 <div class="flex items-center gap-1 git-actions-menu-container">
+  <!-- Pull button -->
+  <button
+    type="button"
+    class="px-3 py-1 text-xs font-medium border border-border-default rounded
+           bg-attention-emphasis text-white hover:opacity-90
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+           flex items-center gap-1.5"
+    onclick={() => void handlePull()}
+    disabled={!isGitRepo || operating}
+    title={!isGitRepo ? "Not a git repository" : ""}
+  >
+    {#if operating && operationPhase === "pulling"}
+      <svg
+        class="animate-spin"
+        width="12"
+        height="12"
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <path d="M8 1.5a6.5 6.5 0 1 1-4.6 1.9" stroke-linecap="round" />
+      </svg>
+      Pulling...
+    {:else}
+      Pull
+    {/if}
+  </button>
+
   <!-- Commit button -->
   <button
     type="button"

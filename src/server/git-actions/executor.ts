@@ -50,8 +50,12 @@ const cancelledActions = new Set<string>();
  * operations (e.g. branch checkout) can be blocked while an operation
  * is in progress.
  */
-let currentOperationPhase: "idle" | "committing" | "pushing" | "creating-pr" =
-  "idle";
+let currentOperationPhase:
+  | "idle"
+  | "committing"
+  | "pushing"
+  | "pulling"
+  | "creating-pr" = "idle";
 
 /**
  * Returns the current operation phase.
@@ -60,6 +64,7 @@ export function getOperationPhase():
   | "idle"
   | "committing"
   | "pushing"
+  | "pulling"
   | "creating-pr" {
   return currentOperationPhase;
 }
@@ -425,6 +430,94 @@ export async function executePush(
       success: false,
       output: "",
       error: `Failed to execute push: ${errorMessage}`,
+    };
+  } finally {
+    currentOperationPhase = "idle";
+  }
+}
+
+/**
+ * Execute git pull
+ *
+ * Fetches and merges changes from remote repository.
+ * Runs git fetch origin first, then git pull.
+ *
+ * @param projectPath - Absolute path to project repository
+ * @returns Pull execution result
+ */
+export async function executePull(
+  projectPath: string,
+): Promise<GitActionResult> {
+  currentOperationPhase = "pulling";
+  try {
+    // First, run git fetch origin
+    let proc = Bun.spawn(["git", "fetch", "origin"], {
+      cwd: projectPath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    // Wait for process to complete (2 min timeout)
+    const timeoutMs = 2 * 60 * 1000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Git pull timeout")), timeoutMs),
+    );
+
+    let [stdout, stderr, exitCode] = await Promise.race([
+      Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]),
+      timeoutPromise,
+    ]);
+
+    if (exitCode !== 0) {
+      return {
+        success: false,
+        output: stdout,
+        error:
+          stderr.length > 0 ? stderr : `Git fetch exited with code ${exitCode}`,
+      };
+    }
+
+    // Then run git pull
+    proc = Bun.spawn(["git", "pull"], {
+      cwd: projectPath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    [stdout, stderr, exitCode] = await Promise.race([
+      Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]),
+      timeoutPromise,
+    ]);
+
+    if (exitCode === 0) {
+      // Git writes pull output to stdout or stderr
+      const output = stdout.length > 0 ? stdout : stderr;
+      return {
+        success: true,
+        output,
+      };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `Git pull exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to execute pull: ${errorMessage}`,
     };
   } finally {
     currentOperationPhase = "idle";

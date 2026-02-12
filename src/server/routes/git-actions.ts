@@ -14,6 +14,7 @@ import type {
 import {
   executeCommit,
   executePush,
+  executePull,
   executeCreatePR,
   executeUpdatePR,
   cancelGitAction,
@@ -44,6 +45,13 @@ interface CommitRequest {
  * Request body for POST /push
  */
 interface PushRequest {
+  readonly projectPath: string;
+}
+
+/**
+ * Request body for POST /pull
+ */
+interface PullRequest {
   readonly projectPath: string;
 }
 
@@ -100,6 +108,7 @@ async function validateGitRepo(
  * Routes:
  * - POST /commit - Execute AI-powered commit
  * - POST /push - Execute git push (direct, no AI)
+ * - POST /pull - Execute git pull (direct, no AI)
  * - POST /create-pr - Execute AI-powered PR creation
  * - POST /update-pr - Execute AI-powered PR update
  * - POST /cancel - Cancel running AI commit/PR action
@@ -196,6 +205,45 @@ export function createGitActionsRoutes(): Hono {
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to execute push";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /pull
+   *
+   * Execute git pull (direct git command, no AI).
+   */
+  app.post("/pull", async (c) => {
+    try {
+      const body = await c.req.json<PullRequest>();
+
+      // Validate projectPath
+      if (!isNonEmptyString(body.projectPath)) {
+        const errorResponse: ErrorResponse = {
+          error: "projectPath must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Validate git repository
+      const gitError = await validateGitRepo(body.projectPath);
+      if (gitError !== null) {
+        return c.json(gitError, 400);
+      }
+
+      // Execute pull
+      const result: GitActionResult = await executePull(body.projectPath);
+
+      return c.json(result);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to execute pull";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
