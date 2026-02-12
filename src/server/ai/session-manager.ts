@@ -233,18 +233,28 @@ export function createSessionManager(
    * Priority:
    * 0. Persistent SQLite lookup by clientSessionId via mappingStore
    * 1. AiSessionStore lookup by clientSessionId (most recent session with claude ID)
-   * 2. AiSessionStore lookup by worktreeId (fallback)
-   * 3. If none found, start a new session (undefined)
+   * 2. If clientSessionId was present but not found in steps 0-1, return undefined (start new session)
+   * 3. AiSessionStore lookup by worktreeId (fallback - ONLY when no clientSessionId)
+   * 4. If none found, start a new session (undefined)
+   *
+   * Rationale for step 2:
+   * When a user clicks "New Session" in the UI, a fresh clientSessionId is generated on the client.
+   * If this clientSessionId has no mapping in SQLite (step 0) or in-memory store (step 1),
+   * it means the user explicitly requested a NEW session. We must NOT fall back to the worktreeId
+   * lookup, which would incorrectly resume a previous session for that worktree.
+   *
+   * The worktreeId fallback (step 3) is ONLY for the case when clientSessionId is absent/empty,
+   * typically when the user sends a prompt without explicitly selecting a session context.
    */
   function resolveResumeSessionId(
     session: AiSessionRow,
   ): ClaudeSessionId | undefined {
-    // 0. Persistent SQLite mapping store lookup
-    if (
-      mappingStore !== undefined &&
+    const hasClientSessionId =
       session.clientSessionId !== undefined &&
-      session.clientSessionId.length > 0
-    ) {
+      session.clientSessionId.length > 0;
+
+    // 0. Persistent SQLite mapping store lookup
+    if (hasClientSessionId && mappingStore !== undefined) {
       const stored = mappingStore.findClaudeSessionId(session.clientSessionId);
       if (stored !== undefined) {
         logger.info("Resolved resume session via SQLite mapping", {
@@ -257,10 +267,7 @@ export function createSessionManager(
     }
 
     // 1. AiSessionStore lookup by clientSessionId
-    if (
-      session.clientSessionId !== undefined &&
-      session.clientSessionId.length > 0
-    ) {
+    if (hasClientSessionId) {
       const resumeId = store.findResumeByClientSessionId(
         session.clientSessionId,
       );
@@ -272,9 +279,19 @@ export function createSessionManager(
         });
         return resumeId;
       }
+
+      // 2. clientSessionId was present but not found - user requested NEW session
+      logger.info(
+        "clientSessionId present but not found in SQLite or store - starting new session",
+        {
+          sessionId: session.id,
+          clientSessionId: session.clientSessionId,
+        },
+      );
+      return undefined;
     }
 
-    // 2. AiSessionStore lookup by worktreeId
+    // 3. AiSessionStore lookup by worktreeId (fallback - ONLY when no clientSessionId)
     if (session.worktreeId !== undefined && session.worktreeId.length > 0) {
       const resumeId = store.findResumeByWorktreeId(session.worktreeId);
       if (resumeId !== undefined) {
@@ -287,6 +304,7 @@ export function createSessionManager(
       }
     }
 
+    // 4. No match found - start new session
     return undefined;
   }
 
