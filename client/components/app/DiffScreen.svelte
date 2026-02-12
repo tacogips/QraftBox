@@ -14,19 +14,16 @@
   // AI panel resize constants
   const AI_PANEL_HEIGHT_KEY = "qraftbox-ai-panel-height";
   const AI_PANEL_MIN_HEIGHT = 120;
-  const AI_PANEL_MAX_HEIGHT = 600;
   const AI_PANEL_DEFAULT_HEIGHT = 256;
+  // Minimum space reserved for file viewer + stats bar + drag handle
+  const FILE_VIEWER_MIN_HEIGHT = 48;
 
   function loadAiPanelHeight(): number {
     try {
       const stored = localStorage.getItem(AI_PANEL_HEIGHT_KEY);
       if (stored !== null) {
         const val = parseInt(stored, 10);
-        if (
-          !isNaN(val) &&
-          val >= AI_PANEL_MIN_HEIGHT &&
-          val <= AI_PANEL_MAX_HEIGHT
-        ) {
+        if (!isNaN(val) && val >= AI_PANEL_MIN_HEIGHT) {
           return val;
         }
       }
@@ -37,11 +34,15 @@
   }
 
   let aiPanelHeight = $state(loadAiPanelHeight());
+  let contentColumnRef: HTMLDivElement | null = $state(null);
 
   function handleResizeMouseDown(event: MouseEvent): void {
     event.preventDefault();
     const startY = event.clientY;
     const startHeight = aiPanelHeight;
+    // Compute max from actual container height at drag start
+    const containerHeight = contentColumnRef?.clientHeight ?? 800;
+    const maxHeight = containerHeight - FILE_VIEWER_MIN_HEIGHT;
 
     document.body.style.cursor = "row-resize";
     document.body.style.userSelect = "none";
@@ -49,7 +50,7 @@
     function onMouseMove(e: MouseEvent): void {
       const deltaY = startY - e.clientY;
       aiPanelHeight = Math.min(
-        AI_PANEL_MAX_HEIGHT,
+        maxHeight,
         Math.max(AI_PANEL_MIN_HEIGHT, startHeight + deltaY),
       );
     }
@@ -181,6 +182,8 @@
     onToggleAiPanel: () => void;
   } = $props();
 
+  let sessionExpandTrigger = $state(0);
+
   function handleInlineCommentSubmit(
     startLine: number,
     endLine: number,
@@ -189,6 +192,7 @@
     prompt: string,
     immediate: boolean,
   ): void {
+    sessionExpandTrigger++;
     void onSubmitPrompt(prompt, immediate, {
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
@@ -521,6 +525,7 @@
         {onCancelQueuedPrompt}
         onResumeSession={onResumeCliSession}
         {onNewSession}
+        expandTrigger={sessionExpandTrigger}
       />
 
       <AIPromptPanel
@@ -530,13 +535,15 @@
         {queueStatus}
         changedFiles={changedFilePaths}
         allFiles={changedFilePaths}
-        onSubmit={(prompt, immediate, refs) =>
-          onSubmitPrompt(prompt, immediate, {
+        onSubmit={(prompt, immediate, refs) => {
+          sessionExpandTrigger++;
+          void onSubmitPrompt(prompt, immediate, {
             primaryFile: undefined,
             references: refs,
             diffSummary: undefined,
             // TODO: pass resumeSessionId to continue current session
-          })}
+          });
+        }}
         onToggle={onToggleAiPanel}
         {onNewSession}
         onResumeSession={onResumeCliSession}

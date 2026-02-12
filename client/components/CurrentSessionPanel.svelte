@@ -51,6 +51,7 @@
     onNewSession?: () => void;
     onSearchSession?: () => void;
     onChangePage?: () => void;
+    expandTrigger?: number;
   }
 
   const {
@@ -67,6 +68,7 @@
     onNewSession,
     onSearchSession,
     onChangePage,
+    expandTrigger = 0,
   }: Props = $props();
 
   /**
@@ -84,6 +86,14 @@
    */
   let sessionExpanded = $state(false);
   let queueExpanded = $state(false);
+  let lastExpandTrigger = 0;
+
+  $effect(() => {
+    if (expandTrigger > lastExpandTrigger) {
+      sessionExpanded = true;
+      lastExpandTrigger = expandTrigger;
+    }
+  });
 
   /**
    * Session summary data (loaded on expand for CLI sessions)
