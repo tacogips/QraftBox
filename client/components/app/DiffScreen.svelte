@@ -498,19 +498,21 @@
       </div>
     </div>
 
-    <!-- Drag handle to resize AI panel (above CurrentSessionPanel) -->
-    <div
-      class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
-             group hover:bg-accent-muted/40 transition-colors"
-      onmousedown={handleResizeMouseDown}
-      role="separator"
-      aria-orientation="horizontal"
-      aria-label="Resize AI panel"
-    >
+    <!-- Drag handle to resize AI panel (only visible when expanded) -->
+    {#if !aiPanelCollapsed}
       <div
-        class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-      ></div>
-    </div>
+        class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
+               group hover:bg-accent-muted/40 transition-colors"
+        onmousedown={handleResizeMouseDown}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize AI panel"
+      >
+        <div
+          class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+        ></div>
+      </div>
+    {/if}
 
     <div
       class="shrink-0 flex flex-col min-h-0 overflow-hidden"
