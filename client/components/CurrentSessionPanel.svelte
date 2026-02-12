@@ -375,7 +375,7 @@
 
 {#if hasContent}
   <div
-    class="current-session-panel border-t border-border-default bg-bg-secondary
+    class="current-session-panel border-t border-border-default bg-bg-secondary overflow-y-auto
            {isRunning ? 'session-running-glow' : ''}"
     role="region"
     aria-label="Current session status"

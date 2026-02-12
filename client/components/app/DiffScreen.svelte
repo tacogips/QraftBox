@@ -515,7 +515,7 @@
     {/if}
 
     <div
-      class="shrink-0 flex flex-col min-h-0 overflow-hidden"
+      class="shrink-0 flex flex-col min-h-0"
       style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
     >
       <CurrentSessionPanel

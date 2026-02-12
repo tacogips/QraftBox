@@ -199,7 +199,7 @@
             aria-label="Message {index + 1} of {turns.length}"
             aria-hidden={index !== currentIndex}
           >
-            <div class="max-w-lg mx-auto h-full overflow-y-auto">
+            <div class="max-w-xs mx-auto h-full overflow-y-auto">
               <MessageCard {turn} isToolResponse={isToolResponse(index)} />
             </div>
           </div>

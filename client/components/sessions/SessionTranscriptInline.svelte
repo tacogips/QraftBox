@@ -488,6 +488,57 @@
   }
 
   /**
+   * Swipe / drag state for carousel
+   */
+  let dragStartX: number | null = $state(null);
+  let isDragging = $state(false);
+
+  const SWIPE_THRESHOLD = 50;
+
+  function handleTouchStart(e: TouchEvent): void {
+    const touch = e.touches[0];
+    if (touch !== undefined) {
+      dragStartX = touch.clientX;
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent): void {
+    if (dragStartX === null) return;
+    const touch = e.changedTouches[0];
+    if (touch === undefined) return;
+    const diff = dragStartX - touch.clientX;
+    if (diff > SWIPE_THRESHOLD) {
+      handleNext();
+    } else if (diff < -SWIPE_THRESHOLD) {
+      handlePrevious();
+    }
+    dragStartX = null;
+  }
+
+  function handlePointerDown(e: PointerEvent): void {
+    if (e.pointerType === "touch") return;
+    dragStartX = e.clientX;
+    isDragging = true;
+  }
+
+  function handlePointerMove(e: PointerEvent): void {
+    if (!isDragging) return;
+    e.preventDefault();
+  }
+
+  function handlePointerUp(e: PointerEvent): void {
+    if (!isDragging || dragStartX === null) return;
+    const diff = dragStartX - e.clientX;
+    if (diff > SWIPE_THRESHOLD) {
+      handleNext();
+    } else if (diff < -SWIPE_THRESHOLD) {
+      handlePrevious();
+    }
+    dragStartX = null;
+    isDragging = false;
+  }
+
+  /**
    * Handle keyboard navigation in carousel mode
    */
   function handleKeyDown(e: KeyboardEvent): void {
@@ -542,13 +593,58 @@
         </button>
       </div>
 
-      <!-- Jump to first/last buttons -->
+      <!-- Navigation buttons: previous/next + jump to first/last -->
       {#if chatEvents.length > 0}
         <div class="flex items-center gap-0.5">
           <button
             type="button"
+            onclick={handlePrevious}
+            disabled={currentIndex === 0}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Previous message"
+            title="Previous message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onclick={handleNext}
+            disabled={currentIndex >= chatEvents.length - 1}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Next message"
+            title="Next message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          <button
+            type="button"
             onclick={handleGoToFirst}
-            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+            disabled={currentIndex === 0}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Jump to first message"
             title="Jump to first message"
           >
@@ -570,7 +666,8 @@
           <button
             type="button"
             onclick={handleGoToLast}
-            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
+            disabled={currentIndex >= chatEvents.length - 1}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Jump to last message"
             title="Jump to last message"
           >
@@ -848,22 +945,31 @@
           </svg>
         </button>
 
-        <!-- Horizontal card track -->
-        <div class="overflow-hidden">
+        <!-- Horizontal card track (swipe + drag enabled) -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="overflow-hidden select-none"
+          ontouchstart={handleTouchStart}
+          ontouchend={handleTouchEnd}
+          onpointerdown={handlePointerDown}
+          onpointermove={handlePointerMove}
+          onpointerup={handlePointerUp}
+          onpointerleave={handlePointerUp}
+        >
           <div
             class="flex gap-3 transition-transform duration-300 ease-in-out"
-            style="transform: translateX(calc(17.5% - {currentIndex *
-              65}% - {currentIndex * 12}px))"
+            style="transform: translateX(calc(27.5% - {currentIndex *
+              45}% - {currentIndex * 12}px))"
           >
             {#each chatEvents as event, index (getEventId(event, index))}
               {@const textContent = extractTextContent(event)}
               {@const isCurrent = index === currentIndex}
 
-              <!-- Each card: 65% width, neighbors peek from sides -->
+              <!-- Each card: 45% width, neighbors peek from sides -->
               <button
                 type="button"
                 onclick={() => handleGoToIndex(index)}
-                class="w-[65%] shrink-0 text-left transition-all duration-300
+                class="w-[45%] shrink-0 text-left transition-all duration-300
                        {isCurrent
                   ? 'opacity-100 scale-100'
                   : 'opacity-40 scale-95'}"

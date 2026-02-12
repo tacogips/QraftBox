@@ -877,7 +877,7 @@
       </div>
     </div>
 
-    <div class="flex-1 min-h-0 p-4 flex flex-col">
+    <div class="flex-1 min-h-0 p-4 flex flex-col overflow-hidden">
       <!-- Input area -->
       <div class="flex-1 flex gap-3 min-h-0">
         <!-- Prompt input -->
