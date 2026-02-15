@@ -73,8 +73,20 @@
    */
   type ViewMode = "chat" | "carousel";
 
+  const VIEW_MODE_STORAGE_KEY = "qraftbox:session-transcript-view-mode";
+
+  function loadViewMode(): ViewMode {
+    try {
+      const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (stored === "chat" || stored === "carousel") return stored;
+    } catch {
+      // localStorage unavailable
+    }
+    return "chat";
+  }
+
   let loadingState: LoadingState = $state({ status: "idle" });
-  let viewMode: ViewMode = $state("chat");
+  let viewMode: ViewMode = $state(loadViewMode());
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
@@ -223,6 +235,17 @@
       };
     }
   }
+
+  /**
+   * Persist view mode to localStorage
+   */
+  $effect(() => {
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {
+      // localStorage unavailable
+    }
+  });
 
   /**
    * Initial fetch on mount

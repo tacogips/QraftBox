@@ -35,6 +35,42 @@
 
   let aiPanelHeight = $state(loadAiPanelHeight());
   let contentColumnRef: HTMLDivElement | null = $state(null);
+  let isIphone = $state(false);
+  let isPhoneViewport = $state(false);
+
+  function detectIphone(): boolean {
+    const ua = navigator.userAgent;
+    const isIphoneUa =
+      /iPhone|iPod/i.test(ua) ||
+      (/Macintosh/i.test(ua) &&
+        "maxTouchPoints" in navigator &&
+        navigator.maxTouchPoints > 1);
+    return isIphoneUa && window.innerWidth <= 430;
+  }
+
+  function detectPhoneViewport(): boolean {
+    return window.innerWidth <= 480;
+  }
+
+  $effect(() => {
+    const update = (): void => {
+      isIphone = detectIphone();
+      isPhoneViewport = detectPhoneViewport();
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  });
+
+  $effect(() => {
+    if (isIphone && selectedHasDiff && effectiveViewMode === "side-by-side") {
+      onSetViewMode("inline");
+    }
+  });
 
   function handleResizeMouseDown(event: MouseEvent): void {
     event.preventDefault();
@@ -208,11 +244,15 @@
   }
 </script>
 
-<div class="flex flex-1 min-h-0 overflow-hidden">
-  <div class="relative flex shrink-0">
+<div class="relative flex flex-1 min-h-0 overflow-hidden">
+  <div
+    class="relative {isPhoneViewport
+      ? 'absolute left-0 top-0 bottom-0 z-30'
+      : 'flex shrink-0'}"
+  >
     {#if !sidebarCollapsed}
       <aside
-        class="border-r border-border-default bg-bg-secondary overflow-auto"
+        class="h-full border-r border-border-default bg-bg-secondary overflow-auto"
         style:width="{sidebarWidth}px"
       >
         {#if loading}
@@ -250,7 +290,9 @@
 
     <button
       type="button"
-      class="absolute top-12 -right-4 z-20 w-4 h-7 flex items-center justify-center
+      class="absolute top-12 z-20 flex items-center justify-center
+             {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
+             {isPhoneViewport && sidebarCollapsed ? '-left-0.5' : '-right-4'}
              bg-bg-secondary border border-l-0 border-border-default
              rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
              transition-colors cursor-pointer"
@@ -258,7 +300,7 @@
       aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
       title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
     >
-      <span class="text-[9px] leading-none"
+      <span class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
         >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
       >
     </button>
@@ -266,7 +308,10 @@
 
   <div
     bind:this={contentColumnRef}
-    class="flex flex-col flex-1 min-w-0 min-h-0"
+    class="flex flex-col flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
+    style:transform={isPhoneViewport && !sidebarCollapsed
+      ? `translateX(${sidebarWidth}px)`
+      : "translateX(0px)"}
   >
     <main class="flex-1 min-h-0 overflow-auto bg-bg-primary">
       {#if loading}
@@ -388,41 +433,43 @@
           </svg>
         </button>
 
-        <button
-          type="button"
-          class="p-1 border-l border-border-default transition-colors
-                 {!selectedHasDiff
-            ? 'text-text-disabled cursor-not-allowed opacity-40'
-            : effectiveViewMode === 'side-by-side'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-          onclick={() => {
-            if (selectedHasDiff) onSetViewMode("side-by-side");
-          }}
-          disabled={!selectedHasDiff}
-          title="Side by Side"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect
-              x="1"
-              y="2"
-              width="6"
-              height="12"
-              rx="1"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-            <rect
-              x="9"
-              y="2"
-              width="6"
-              height="12"
-              rx="1"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-          </svg>
-        </button>
+        {#if !isIphone}
+          <button
+            type="button"
+            class="p-1 border-l border-border-default transition-colors
+                   {!selectedHasDiff
+              ? 'text-text-disabled cursor-not-allowed opacity-40'
+              : effectiveViewMode === 'side-by-side'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => {
+              if (selectedHasDiff) onSetViewMode("side-by-side");
+            }}
+            disabled={!selectedHasDiff}
+            title="Side by Side"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect
+                x="1"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <rect
+                x="9"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+            </svg>
+          </button>
+        {/if}
 
         <button
           type="button"
@@ -436,7 +483,7 @@
             if (selectedHasDiff) onSetViewMode("inline");
           }}
           disabled={!selectedHasDiff}
-          title="Inline"
+          title={isIphone ? "Stack" : "Inline"}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <rect

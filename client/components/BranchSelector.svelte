@@ -69,6 +69,11 @@
   /** Dropdown fixed position */
   let dropdownTop = $state(0);
   let dropdownLeft = $state(0);
+  let isPhoneViewport = $state(false);
+
+  function detectPhoneViewport(): boolean {
+    return window.innerWidth <= 768;
+  }
 
   /**
    * Toggle dropdown open/close
@@ -109,7 +114,13 @@
     if (triggerRef !== undefined) {
       const rect = triggerRef.getBoundingClientRect();
       dropdownTop = rect.bottom + 4;
-      dropdownLeft = rect.left;
+      const viewportPadding = 8;
+      const estimatedPopoverWidth = Math.min(320, window.innerWidth - 16);
+      const maxLeft = Math.max(
+        viewportPadding,
+        window.innerWidth - estimatedPopoverWidth - viewportPadding,
+      );
+      dropdownLeft = Math.min(Math.max(rect.left, viewportPadding), maxLeft);
     }
     isOpen = true;
     errorMessage = null;
@@ -291,17 +302,36 @@
       clearInterval(intervalId);
     };
   });
+
+  $effect(() => {
+    const updateViewport = (): void => {
+      isPhoneViewport = detectPhoneViewport();
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.addEventListener("orientationchange", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", updateViewport);
+    };
+  });
 </script>
 
 <!-- Trigger button -->
 <button
   bind:this={triggerRef}
   type="button"
-  class="font-mono text-accent-fg hover:text-accent-emphasis hover:underline cursor-pointer text-sm flex items-center gap-1 transition-colors"
+  class="font-mono text-accent-fg hover:text-accent-emphasis hover:underline cursor-pointer
+         {isPhoneViewport ? 'text-base px-2 py-1.5 min-h-[40px] gap-1.5' : 'text-sm'}
+         flex items-center transition-colors"
   onclick={toggle}
   title="Click to switch branches"
 >
-  <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+  <svg
+    class="{isPhoneViewport ? 'w-4.5 h-4.5' : 'w-3.5 h-3.5'} shrink-0"
+    viewBox="0 0 16 16"
+    fill="currentColor"
+  >
     <path
       fill-rule="evenodd"
       d="M11.75 2.5a.75.75 0 100 1.5.75.75 0 000-1.5zm-2.25.75a2.25 2.25 0 113 2.122V6A2.5 2.5 0 0110 8.5H6a1 1 0 00-1 1v1.128a2.251 2.251 0 11-1.5 0V5.372a2.25 2.25 0 111.5 0v1.836A2.492 2.492 0 016 7h4a1 1 0 001-1v-.628A2.25 2.25 0 019.5 3.25zM4.25 12a.75.75 0 100 1.5.75.75 0 000-1.5zM3.5 3.25a.75.75 0 111.5 0 .75.75 0 01-1.5 0z"
@@ -309,7 +339,9 @@
   </svg>
   <span>{currentBranch}</span>
   <svg
-    class="w-3 h-3 shrink-0 transition-transform {isOpen ? 'rotate-180' : ''}"
+    class="{isPhoneViewport ? 'w-4 h-4' : 'w-3 h-3'} shrink-0 transition-transform {isOpen
+      ? 'rotate-180'
+      : ''}"
     viewBox="0 0 16 16"
     fill="currentColor"
   >
@@ -331,7 +363,7 @@
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="fixed w-80 max-h-96 bg-bg-primary border border-border-default rounded-md shadow-lg z-50 flex flex-col"
+    class="fixed w-[min(20rem,calc(100vw-1rem))] max-h-96 bg-bg-primary border border-border-default rounded-md shadow-lg z-50 flex flex-col"
     style="top: {dropdownTop}px; left: {dropdownLeft}px;"
     onkeydown={handleKeydown}
   >

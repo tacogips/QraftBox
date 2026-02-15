@@ -32,6 +32,11 @@
     | { type: "error"; message: string }
     | { type: "pong" };
 
+  type TerminalDimensions = {
+    rows: number;
+    cols: number;
+  };
+
   let terminalHost = $state<HTMLDivElement | undefined>(undefined);
   let terminalInstance = $state<Terminal | null>(null);
   let fitAddon = $state<FitAddon | null>(null);
@@ -43,6 +48,13 @@
   let activeSessionId = $state<string | null>(null);
   let lastContextId = $state(contextId);
   let checkingExistingSession = $state(false);
+  let terminalContainer = $state<HTMLDivElement | undefined>(undefined);
+  let terminalHeightPx = $state<number | null>(null);
+  let isPhoneViewport = $state(false);
+
+  function detectPhoneViewport(): boolean {
+    return window.innerWidth <= 768;
+  }
 
   function buildWebSocketUrl(
     websocketPath: string,
@@ -87,7 +99,7 @@
     }
 
     const createdTerminal = new Terminal({
-      convertEol: true,
+      convertEol: false,
       cursorBlink: true,
       fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
       fontSize: 13,
@@ -121,6 +133,83 @@
 
   function focusTerminal(): void {
     terminalInstance?.focus();
+  }
+
+  function sendResize(dimensions: TerminalDimensions): void {
+    if (webSocket === null || webSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    webSocket.send(
+      JSON.stringify({
+        type: "resize",
+        rows: dimensions.rows,
+        cols: dimensions.cols,
+      }),
+    );
+  }
+
+  function fitAndResizeTerminal(): void {
+    if (fitAddon === null || terminalInstance === null) {
+      return;
+    }
+    fitAddon.fit();
+    const dimensions = fitAddon.proposeDimensions();
+    if (dimensions !== undefined) {
+      sendResize(dimensions);
+    }
+  }
+
+  function getMaxTerminalHeightPx(): number {
+    const minHeightPx = isPhoneViewport ? 180 : 260;
+    if (terminalContainer === undefined) {
+      return Math.max(minHeightPx, Math.floor(window.innerHeight * 0.8));
+    }
+    const reservedSpacePx = isPhoneViewport ? 28 : 88;
+    return Math.max(
+      minHeightPx,
+      terminalContainer.clientHeight - reservedSpacePx,
+    );
+  }
+
+  function clampTerminalHeight(heightPx: number): number {
+    const minHeightPx = isPhoneViewport ? 180 : 260;
+    return Math.max(minHeightPx, Math.min(getMaxTerminalHeightPx(), heightPx));
+  }
+
+  function ensureTerminalHeight(): void {
+    if (terminalHeightPx !== null) {
+      return;
+    }
+    const initialRatio = isPhoneViewport ? 0.96 : 0.75;
+    terminalHeightPx = clampTerminalHeight(
+      Math.floor(getMaxTerminalHeightPx() * initialRatio),
+    );
+  }
+
+  function resizeTerminalHeight(deltaPx: number): void {
+    ensureTerminalHeight();
+    if (terminalHeightPx === null) {
+      return;
+    }
+    terminalHeightPx = clampTerminalHeight(terminalHeightPx + deltaPx);
+    requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  }
+
+  function maximizeTerminalHeight(): void {
+    terminalHeightPx = getMaxTerminalHeightPx();
+    requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  }
+
+  function resetTerminalHeight(): void {
+    terminalHeightPx = null;
+    ensureTerminalHeight();
+    requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
   }
 
   function handleServerMessage(serverMessage: ServerMessage): void {
@@ -193,7 +282,7 @@
       createdWebSocket.onopen = () => {
         isConnecting = false;
         isConnected = true;
-        fitAddon?.fit();
+        fitAndResizeTerminal();
         focusTerminal();
       };
 
@@ -276,13 +365,25 @@
   });
 
   onMount(() => {
+    const updateViewport = (): void => {
+      isPhoneViewport = detectPhoneViewport();
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
     void tryResumeExistingSession();
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+    };
   });
 
   $effect(() => {
     if (isConnected && fitAddon !== null) {
+      ensureTerminalHeight();
       const resizeHandler = (): void => {
-        fitAddon?.fit();
+        if (terminalHeightPx !== null) {
+          terminalHeightPx = clampTerminalHeight(terminalHeightPx);
+        }
+        fitAndResizeTerminal();
       };
 
       window.addEventListener("resize", resizeHandler);
@@ -298,7 +399,7 @@
 </script>
 
 <main class="terminal-screen flex-1 min-h-0 bg-bg-primary">
-  <div class="h-full w-full p-6">
+  <div class="h-full w-full p-2 sm:p-6">
     {#if !isConnected && !isConnecting}
       <div class="h-full w-full flex items-center justify-center">
         <div class="text-center">
@@ -316,8 +417,47 @@
         </div>
       </div>
     {:else}
-      <div class="h-full w-full flex flex-col gap-2">
-        <div class="flex justify-end">
+      <div
+        class="h-full w-full flex flex-col gap-2"
+        bind:this={terminalContainer}
+      >
+        <div class="flex justify-end gap-2 flex-wrap">
+          <button
+            type="button"
+            class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
+                   bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            onclick={() => {
+              resizeTerminalHeight(120);
+            }}
+          >
+            +
+          </button>
+          <button
+            type="button"
+            class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
+                   bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            onclick={() => {
+              resizeTerminalHeight(-120);
+            }}
+          >
+            -
+          </button>
+          <button
+            type="button"
+            class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
+                   bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            onclick={maximizeTerminalHeight}
+          >
+            max
+          </button>
+          <button
+            type="button"
+            class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
+                   bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            onclick={resetTerminalHeight}
+          >
+            reset
+          </button>
           <button
             type="button"
             class="px-3 py-1.5 text-xs font-medium rounded-md border border-border-default
@@ -330,7 +470,8 @@
           </button>
         </div>
         <div
-          class="flex-1 min-h-0 w-full rounded-md border border-border-default overflow-hidden bg-slate-900"
+          class="shrink-0 min-h-0 w-full rounded-md border border-border-default overflow-hidden bg-slate-900"
+          style={`height: ${terminalHeightPx ?? (isPhoneViewport ? Math.floor(window.innerHeight * 0.55) : 480)}px;`}
           onclick={focusTerminal}
           onkeydown={focusTerminal}
           role="button"

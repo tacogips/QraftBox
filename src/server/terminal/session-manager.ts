@@ -25,6 +25,11 @@ type TerminalClientMessage =
       readonly data: string;
     }
   | {
+      readonly type: "resize";
+      readonly rows: number;
+      readonly cols: number;
+    }
+  | {
       readonly type: "ping";
     };
 
@@ -51,6 +56,8 @@ interface TerminalSession {
   process: Subprocess<"pipe", "pipe", "pipe"> | undefined;
   socket: ServerTerminalSocket | undefined;
   bufferedOutput: string[];
+  rows: number;
+  cols: number;
   readonly createdAt: number;
 }
 
@@ -160,6 +167,7 @@ export function createTerminalSessionManager(): TerminalSessionManager {
     });
 
     session.process = spawnedProcess;
+    void applyTerminalSize(session);
 
     void streamProcessOutput(spawnedProcess.stdout, (outputChunk) => {
       emitOutput(session, outputChunk);
@@ -201,6 +209,24 @@ export function createTerminalSessionManager(): TerminalSessionManager {
         sessionIdByCwd.delete(session.cwd);
         sessions.delete(session.id);
       });
+  }
+
+  async function applyTerminalSize(session: TerminalSession): Promise<void> {
+    if (session.process === undefined) {
+      return;
+    }
+    const rows = Math.max(10, Math.min(500, Math.floor(session.rows)));
+    const cols = Math.max(20, Math.min(500, Math.floor(session.cols)));
+    try {
+      session.process.stdin.write(`stty rows ${rows} cols ${cols}\r`);
+    } catch (error) {
+      logger.debug("Failed to apply terminal size", {
+        sessionId: session.id,
+        rows,
+        cols,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   function flushBufferedOutput(session: TerminalSession): void {
@@ -247,6 +273,8 @@ export function createTerminalSessionManager(): TerminalSessionManager {
         process: undefined,
         socket: undefined,
         bufferedOutput: [],
+        rows: 24,
+        cols: 80,
         createdAt: Date.now(),
       };
       sessions.set(sessionId, session);
@@ -337,6 +365,13 @@ export function createTerminalSessionManager(): TerminalSessionManager {
 
       if (clientMessage.type === "ping") {
         sendMessage(session, { type: "pong" });
+        return;
+      }
+
+      if (clientMessage.type === "resize") {
+        session.rows = clientMessage.rows;
+        session.cols = clientMessage.cols;
+        void applyTerminalSize(session);
         return;
       }
 

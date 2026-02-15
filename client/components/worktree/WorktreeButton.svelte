@@ -60,6 +60,11 @@
   // Fixed dropdown position
   let dropdownTop = $state(0);
   let dropdownLeft = $state(0);
+  let isPhoneViewport = $state(false);
+
+  function detectPhoneViewport(): boolean {
+    return window.innerWidth <= 768;
+  }
 
   /**
    * Fetch worktree list
@@ -94,7 +99,13 @@
     if (el !== undefined) {
       const rect = el.getBoundingClientRect();
       dropdownTop = rect.bottom + 4;
-      dropdownLeft = rect.left;
+      const viewportPadding = 8;
+      const estimatedPopoverWidth = Math.min(320, window.innerWidth - 16);
+      const maxLeft = Math.max(
+        viewportPadding,
+        window.innerWidth - estimatedPopoverWidth - viewportPadding,
+      );
+      dropdownLeft = Math.min(Math.max(rect.left, viewportPadding), maxLeft);
     }
   }
 
@@ -234,6 +245,19 @@
     if (p.length <= max) return p;
     return "..." + p.slice(p.length - max + 3);
   }
+
+  $effect(() => {
+    const updateViewport = (): void => {
+      isPhoneViewport = detectPhoneViewport();
+    };
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.addEventListener("orientationchange", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.removeEventListener("orientationchange", updateViewport);
+    };
+  });
 </script>
 
 <!-- Backdrop to close dropdowns -->
@@ -252,7 +276,7 @@
   <button
     type="button"
     bind:this={buttonRef}
-    class="px-2 py-1.5 text-sm transition-colors h-full flex items-center gap-1
+    class="{isPhoneViewport ? 'px-3 py-2 min-h-[40px]' : 'px-2 py-1.5'} text-sm transition-colors h-full flex items-center gap-1
            {disabled
       ? 'text-text-tertiary cursor-not-allowed opacity-50'
       : createOpen
@@ -266,8 +290,8 @@
   >
     <!-- Git branch icon -->
     <svg
-      width="14"
-      height="14"
+      width={isPhoneViewport ? "16" : "14"}
+      height={isPhoneViewport ? "16" : "14"}
       viewBox="0 0 16 16"
       fill="currentColor"
       class="shrink-0"
@@ -283,7 +307,7 @@
   <button
     type="button"
     bind:this={arrowRef}
-    class="px-1 py-1.5 text-sm transition-colors h-full flex items-center
+    class="{isPhoneViewport ? 'px-2.5 py-2 min-h-[40px] min-w-[32px]' : 'px-1 py-1.5'} text-sm transition-colors h-full flex items-center justify-center
            {disabled
       ? 'text-text-tertiary cursor-not-allowed opacity-50'
       : listOpen
@@ -296,8 +320,8 @@
     {disabled}
   >
     <svg
-      width="12"
-      height="12"
+      width={isPhoneViewport ? "14" : "12"}
+      height={isPhoneViewport ? "14" : "12"}
       viewBox="0 0 16 16"
       fill="currentColor"
       class="transition-transform {listOpen ? 'rotate-180' : ''}"
@@ -312,7 +336,7 @@
 <!-- Create Worktree Popover (fixed position) -->
 {#if createOpen}
   <div
-    class="fixed w-80 bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50"
+    class="fixed w-[min(20rem,calc(100vw-1rem))] bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50"
     style="top: {dropdownTop}px; left: {dropdownLeft}px;"
   >
     <div class="p-3 border-b border-border-default">
@@ -415,7 +439,7 @@
 <!-- Worktree List Dropdown (fixed position) -->
 {#if listOpen}
   <div
-    class="fixed w-80 max-h-96 bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50 flex flex-col"
+    class="fixed w-[min(20rem,calc(100vw-1rem))] max-h-96 bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50 flex flex-col"
     style="top: {dropdownTop}px; left: {dropdownLeft}px;"
   >
     <div class="p-3 border-b border-border-default shrink-0">

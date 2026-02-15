@@ -94,6 +94,52 @@
 
   let isSessionPopupOpen = $state(false);
   let sessionPopupRef: HTMLDivElement | null = $state(null);
+  let isIphone = $state(false);
+
+  function detectIphone(): boolean {
+    const ua = navigator.userAgent;
+    const isIphoneUa =
+      /iPhone|iPod/i.test(ua) ||
+      (/Macintosh/i.test(ua) &&
+        "maxTouchPoints" in navigator &&
+        navigator.maxTouchPoints > 1);
+    return isIphoneUa && window.innerWidth <= 430;
+  }
+
+  $effect(() => {
+    const update = (): void => {
+      isIphone = detectIphone();
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  });
+
+  const collapsedDraftButtonClass = $derived(
+    isIphone ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm",
+  );
+  const collapsedSubmitButtonClass = $derived(
+    isIphone ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm",
+  );
+  const collapsedSubmitMoreButtonClass = $derived(
+    isIphone ? "h-8 px-1.5" : "h-9 px-2",
+  );
+  const expandedControlColumnClass = $derived(
+    isIphone ? "flex flex-col gap-2 w-24" : "flex flex-col gap-3 w-32",
+  );
+  const expandedDraftButtonClass = $derived(
+    isIphone ? "w-full min-h-[32px] text-xs" : "w-full min-h-[36px] text-sm",
+  );
+  const expandedSubmitButtonClass = $derived(
+    isIphone ? "flex-1 min-h-[36px] text-xs" : "flex-1 min-h-[44px] text-sm",
+  );
+  const expandedSubmitMoreButtonClass = $derived(
+    isIphone ? "px-1.5 min-h-[36px]" : "px-2 min-h-[44px]",
+  );
 
   function loadDraftsFromStorage(): void {
     try {
@@ -665,9 +711,9 @@
         <button
           type="button"
           onclick={toggleDraftDropdown}
-          class="h-9 px-3
+          class="{collapsedDraftButtonClass}
                  bg-bg-tertiary hover:bg-bg-hover
-                 text-text-secondary text-sm font-medium rounded
+                 text-text-secondary font-medium rounded
                  border border-border-default
                  transition-all duration-150
                  focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
@@ -727,9 +773,9 @@
           type="button"
           onclick={handleSubmit}
           disabled={prompt.trim().length === 0}
-          class="h-9 px-3
+          class="{collapsedSubmitButtonClass}
                  bg-success-emphasis hover:brightness-110
-                 text-white text-sm font-medium rounded-l
+                 text-white font-medium rounded-l
                  disabled:opacity-50 disabled:cursor-not-allowed
                  transition-all duration-150
                  focus:outline-none focus:ring-2 focus:ring-success-emphasis"
@@ -741,7 +787,7 @@
           type="button"
           onclick={toggleDropdown}
           disabled={prompt.trim().length === 0}
-          class="h-9 px-2
+          class="{collapsedSubmitMoreButtonClass}
                  bg-success-emphasis hover:brightness-110
                  text-white rounded-r
                  border-l border-white/20
@@ -1003,15 +1049,15 @@
         </div>
 
         <!-- Controls: Draft + Split button -->
-        <div class="flex flex-col gap-3 w-32">
+        <div class={expandedControlColumnClass}>
           <!-- Draft button -->
           <div class="draft-button-container relative">
             <button
               type="button"
               onclick={toggleDraftDropdown}
-              class="w-full min-h-[36px]
+              class="{expandedDraftButtonClass}
                      bg-bg-tertiary hover:bg-bg-hover
-                     text-text-secondary text-sm font-medium rounded
+                     text-text-secondary font-medium rounded
                      border border-border-default
                      transition-all duration-150
                      focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
@@ -1066,15 +1112,15 @@
           </div>
 
           <div class="split-button-container relative flex-1 flex flex-col">
-            <div class="flex min-h-[44px]">
+            <div class={isIphone ? "flex min-h-[36px]" : "flex min-h-[44px]"}>
               <!-- Main Submit button -->
               <button
                 type="button"
                 onclick={handleSubmit}
                 disabled={prompt.trim().length === 0}
-                class="flex-1 min-h-[44px]
+                class="{expandedSubmitButtonClass}
                        bg-success-emphasis hover:brightness-110
-                       text-white text-sm font-medium rounded-l
+                       text-white font-medium rounded-l
                        disabled:opacity-50 disabled:cursor-not-allowed
                        transition-all duration-150
                        focus:outline-none focus:ring-2 focus:ring-success-emphasis"
@@ -1086,7 +1132,7 @@
                 type="button"
                 onclick={toggleDropdown}
                 disabled={prompt.trim().length === 0}
-                class="px-2 min-h-[44px]
+                class="{expandedSubmitMoreButtonClass}
                        bg-success-emphasis hover:brightness-110
                        text-white rounded-r
                        border-l border-white/20
