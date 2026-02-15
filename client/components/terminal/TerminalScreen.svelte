@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { Terminal } from "@xterm/xterm";
   import { FitAddon } from "@xterm/addon-fit";
   import "@xterm/xterm/css/xterm.css";
@@ -14,7 +14,17 @@
     sessionId: string;
     websocketPath: string;
     websocketUrl?: string;
+    reused?: boolean;
   };
+
+  type StatusResponse =
+    | { hasSession: false }
+    | {
+        hasSession: true;
+        sessionId: string;
+        websocketPath: string;
+        websocketUrl?: string;
+      };
 
   type ServerMessage =
     | { type: "output"; data: string }
@@ -32,6 +42,7 @@
   let connectionError = $state<string | null>(null);
   let activeSessionId = $state<string | null>(null);
   let lastContextId = $state(contextId);
+  let checkingExistingSession = $state(false);
 
   function buildWebSocketUrl(
     websocketPath: string,
@@ -215,9 +226,44 @@
     }
   }
 
+  async function tryResumeExistingSession(): Promise<void> {
+    if (isConnecting || isConnected || checkingExistingSession) {
+      return;
+    }
+
+    checkingExistingSession = true;
+    try {
+      const response = await fetch(`/api/ctx/${contextId}/terminal/status`);
+      if (!response.ok) {
+        return;
+      }
+      const status = (await response.json()) as StatusResponse;
+      if (status.hasSession) {
+        await connect();
+      }
+    } catch {
+      // Ignore status check failures.
+    } finally {
+      checkingExistingSession = false;
+    }
+  }
+
   function disconnect(): void {
-    disposeTerminalResources();
-    connectionError = null;
+    if (isConnecting) {
+      return;
+    }
+    void (async () => {
+      try {
+        await fetch(`/api/ctx/${contextId}/terminal/disconnect`, {
+          method: "POST",
+        });
+      } catch {
+        // Ignore network errors; client resources will still be cleaned up.
+      } finally {
+        disposeTerminalResources();
+        connectionError = null;
+      }
+    })();
   }
 
   $effect(() => {
@@ -225,7 +271,12 @@
       lastContextId = contextId;
       disposeTerminalResources();
       connectionError = null;
+      void tryResumeExistingSession();
     }
+  });
+
+  onMount(() => {
+    void tryResumeExistingSession();
   });
 
   $effect(() => {

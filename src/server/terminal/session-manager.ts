@@ -9,6 +9,12 @@ export type TerminalSocketData = {
 export interface TerminalConnectResult {
   readonly sessionId: string;
   readonly websocketPath: string;
+  readonly reused: boolean;
+}
+
+export interface TerminalSessionInfo {
+  readonly sessionId: string;
+  readonly websocketPath: string;
 }
 
 type ServerTerminalSocket = ServerWebSocket<TerminalSocketData>;
@@ -51,9 +57,11 @@ interface TerminalSession {
 export interface TerminalSessionManager {
   createSession(cwd: string): TerminalConnectResult;
   hasSession(sessionId: string): boolean;
+  getSessionByCwd(cwd: string): TerminalSessionInfo | null;
   handleOpen(sessionId: string, socket: ServerTerminalSocket): void;
   handleMessage(socket: ServerTerminalSocket, message: string | Buffer): void;
   handleClose(socket: ServerTerminalSocket): void;
+  closeSessionByCwd(cwd: string): boolean;
   closeSession(sessionId: string): void;
   closeAll(): void;
 }
@@ -91,6 +99,7 @@ async function streamProcessOutput(
 export function createTerminalSessionManager(): TerminalSessionManager {
   const logger = createLogger("Terminal");
   const sessions = new Map<string, TerminalSession>();
+  const sessionIdByCwd = new Map<string, string>();
   const socketToSessionId = new WeakMap<ServerTerminalSocket, string>();
 
   function sendMessage(
@@ -189,6 +198,7 @@ export function createTerminalSessionManager(): TerminalSessionManager {
             // Ignore close errors.
           }
         }
+        sessionIdByCwd.delete(session.cwd);
         sessions.delete(session.id);
       });
   }
@@ -217,6 +227,19 @@ export function createTerminalSessionManager(): TerminalSessionManager {
 
   return {
     createSession(cwd: string): TerminalConnectResult {
+      const existingSessionId = sessionIdByCwd.get(cwd);
+      if (existingSessionId !== undefined) {
+        const existingSession = sessions.get(existingSessionId);
+        if (existingSession !== undefined) {
+          return {
+            sessionId: existingSession.id,
+            websocketPath: `/ws/terminal/${existingSession.id}`,
+            reused: true,
+          };
+        }
+        sessionIdByCwd.delete(cwd);
+      }
+
       const sessionId = crypto.randomUUID();
       const session: TerminalSession = {
         id: sessionId,
@@ -227,17 +250,35 @@ export function createTerminalSessionManager(): TerminalSessionManager {
         createdAt: Date.now(),
       };
       sessions.set(sessionId, session);
+      sessionIdByCwd.set(cwd, sessionId);
 
       logger.debug("Created terminal session", { sessionId, cwd });
 
       return {
         sessionId,
         websocketPath: `/ws/terminal/${sessionId}`,
+        reused: false,
       };
     },
 
     hasSession(sessionId: string): boolean {
       return sessions.has(sessionId);
+    },
+
+    getSessionByCwd(cwd: string): TerminalSessionInfo | null {
+      const sessionId = sessionIdByCwd.get(cwd);
+      if (sessionId === undefined) {
+        return null;
+      }
+      const session = sessions.get(sessionId);
+      if (session === undefined) {
+        sessionIdByCwd.delete(cwd);
+        return null;
+      }
+      return {
+        sessionId: session.id,
+        websocketPath: `/ws/terminal/${session.id}`,
+      };
     },
 
     handleOpen(sessionId: string, socket: ServerTerminalSocket): void {
@@ -331,17 +372,16 @@ export function createTerminalSessionManager(): TerminalSessionManager {
       if (session.socket === socket) {
         session.socket = undefined;
       }
+      logger.debug("Terminal socket detached", { sessionId });
+    },
 
-      if (session.process !== undefined) {
-        try {
-          session.process.kill();
-        } catch {
-          // Process may already be gone.
-        }
+    closeSessionByCwd(cwd: string): boolean {
+      const sessionId = sessionIdByCwd.get(cwd);
+      if (sessionId === undefined) {
+        return false;
       }
-
-      sessions.delete(sessionId);
-      logger.debug("Terminal session closed", { sessionId });
+      this.closeSession(sessionId);
+      return true;
     },
 
     closeSession(sessionId: string): void {
@@ -366,6 +406,7 @@ export function createTerminalSessionManager(): TerminalSessionManager {
         }
       }
 
+      sessionIdByCwd.delete(session.cwd);
       sessions.delete(sessionId);
     },
 
