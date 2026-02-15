@@ -30,6 +30,7 @@
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
+  import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
@@ -652,6 +653,13 @@
             {projectPath}
             onResumeToChanges={handleResumeToChanges}
           />
+        {/if}
+      </main>
+    {:else if currentScreen === "terminal"}
+      <!-- Terminal Screen -->
+      <main class="flex-1 overflow-hidden">
+        {#if contextId !== null}
+          <TerminalScreen {contextId} />
         {/if}
       </main>
     {:else if currentScreen === "project"}

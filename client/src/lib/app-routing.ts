@@ -1,6 +1,7 @@
 export type ScreenType =
   | "files"
   | "commits"
+  | "terminal"
   | "sessions"
   | "project"
   | "tools"
@@ -9,6 +10,7 @@ export type ScreenType =
 export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "files",
   "commits",
+  "terminal",
   "sessions",
   "project",
   "tools",

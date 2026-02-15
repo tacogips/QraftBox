@@ -24,6 +24,10 @@ import type { RecentDirectoryStore } from "./workspace/recent-store";
 import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
 import type { ProjectWatcherManager } from "./watcher/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSocketData,
+} from "./terminal/session-manager";
 
 /**
  * Server options for creating the Hono instance
@@ -41,6 +45,8 @@ export interface ServerOptions {
   readonly broadcast?: ((event: string, data: unknown) => void) | undefined;
   /** Optional project watcher manager for multi-project file watching */
   readonly watcherManager?: ProjectWatcherManager | undefined;
+  /** Optional terminal session manager for browser terminal feature */
+  readonly terminalSessionManager?: TerminalSessionManager | undefined;
 }
 
 /**
@@ -179,6 +185,7 @@ export function createServer(options: ServerOptions): Hono {
     },
     initialTabs: options.initialTabs,
     watcherManager: options.watcherManager,
+    terminalSessionManager: options.terminalSessionManager,
   });
 
   // Static file serving and SPA fallback
@@ -211,9 +218,20 @@ export function startServer(
   app: Hono,
   config: CLIConfig,
   wsManager?: WebSocketManager | undefined,
+  terminalSessionManager?: TerminalSessionManager | undefined,
 ): Server {
   const logger = createLogger("Server");
   if (wsManager !== undefined) {
+    type SocketData =
+      | {
+          readonly channel: "realtime";
+        }
+      | TerminalSocketData;
+    const isTerminalSocket = (
+      socket: ServerWebSocket<SocketData>,
+    ): socket is ServerWebSocket<TerminalSocketData> =>
+      socket.data.channel === "terminal";
+
     // Capture wsManager in a const for use inside handlers
     const manager = wsManager;
 
@@ -223,8 +241,46 @@ export function startServer(
         server: import("bun").Server,
       ): Response | Promise<Response> | undefined {
         const url = new URL(req.url);
+        const terminalPathMatch = url.pathname.match(
+          /^\/ws\/terminal\/([^/]+)$/,
+        );
+        if (terminalPathMatch !== null) {
+          const terminalSessionId = terminalPathMatch[1];
+          if (
+            terminalSessionManager === undefined ||
+            terminalSessionId === undefined ||
+            !terminalSessionManager.hasSession(terminalSessionId)
+          ) {
+            return new Response("Unknown terminal session", { status: 404 });
+          }
+
+          if (
+            server.upgrade(req, {
+              data: {
+                channel: "terminal",
+                sessionId: terminalSessionId,
+              },
+            })
+          ) {
+            logger.debug("Terminal WebSocket upgrade accepted", {
+              sessionId: terminalSessionId,
+            });
+            return undefined;
+          }
+          logger.error("Terminal WebSocket upgrade failed", {
+            sessionId: terminalSessionId,
+          });
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+
         if (url.pathname === "/ws") {
-          if (server.upgrade(req)) {
+          if (
+            server.upgrade(req, {
+              data: {
+                channel: "realtime",
+              },
+            })
+          ) {
             logger.debug("WebSocket upgrade accepted");
             return undefined;
           }
@@ -234,14 +290,37 @@ export function startServer(
         return app.fetch(req, server);
       },
       websocket: {
-        open(ws: ServerWebSocket<unknown>): void {
-          manager.handleOpen(ws);
+        open(ws: ServerWebSocket<SocketData>): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleOpen(ws.data.sessionId, ws);
+            } else {
+              ws.close();
+            }
+            return;
+          }
+          manager.handleOpen(ws as ServerWebSocket<unknown>);
         },
-        close(ws: ServerWebSocket<unknown>): void {
-          manager.handleClose(ws);
+        close(ws: ServerWebSocket<SocketData>): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleClose(ws);
+            }
+            return;
+          }
+          manager.handleClose(ws as ServerWebSocket<unknown>);
         },
-        message(ws: ServerWebSocket<unknown>, message: string | Buffer): void {
-          manager.handleMessage(ws, message);
+        message(
+          ws: ServerWebSocket<SocketData>,
+          message: string | Buffer,
+        ): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleMessage(ws, message);
+            }
+            return;
+          }
+          manager.handleMessage(ws as ServerWebSocket<unknown>, message);
         },
       },
       port: config.port,

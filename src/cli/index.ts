@@ -16,6 +16,7 @@ import type { ProjectWatcherManager } from "../server/watcher/manager.js";
 import { createRecentDirectoryStore } from "../server/workspace/recent-store";
 import { createOpenTabsStore } from "../server/workspace/open-tabs-store";
 import { createLogger } from "../server/logger";
+import { createTerminalSessionManager } from "../server/terminal/session-manager";
 
 const logger = createLogger("CLI");
 
@@ -315,6 +316,7 @@ export async function main(): Promise<void> {
 
     // Create WebSocket manager for realtime updates
     const wsManager = createWebSocketManager();
+    const terminalSessionManager = createTerminalSessionManager();
 
     // Create project watcher manager if watching is enabled
     if (config.watch) {
@@ -333,8 +335,9 @@ export async function main(): Promise<void> {
         wsManager.broadcast(event, data);
       },
       watcherManager,
+      terminalSessionManager,
     });
-    const server = startServer(app, config, wsManager);
+    const server = startServer(app, config, wsManager, terminalSessionManager);
 
     logger.info(`Server started on http://${server.hostname}:${server.port}`);
 
@@ -354,6 +357,7 @@ export async function main(): Promise<void> {
       if (watcherManager !== undefined) {
         await watcherManager.stopAll();
       }
+      terminalSessionManager.closeAll();
       wsManager.close();
       server.stop();
     });

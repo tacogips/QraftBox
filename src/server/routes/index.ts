@@ -36,6 +36,8 @@ import type { ModelConfig } from "../../types/system-info.js";
 import type { RecentDirectoryStore } from "../workspace/recent-store.js";
 import type { OpenTabsStore } from "../workspace/open-tabs-store.js";
 import type { ProjectWatcherManager } from "../watcher/manager.js";
+import type { TerminalSessionManager } from "../terminal/session-manager.js";
+import { createTerminalRoutes } from "./terminal.js";
 
 /**
  * Route group definition
@@ -66,6 +68,7 @@ export interface MountRoutesConfig {
     | readonly import("../../types/workspace").WorkspaceTab[]
     | undefined;
   readonly watcherManager?: ProjectWatcherManager | undefined;
+  readonly terminalSessionManager?: TerminalSessionManager | undefined;
 }
 
 /**
@@ -168,6 +171,18 @@ export function getContextScopedRouteGroups(
       prefix: "/branches",
       routes: createBranchRoutesWithMiddleware(),
     },
+    // Terminal routes - POST /api/ctx/:contextId/terminal/connect
+    // Wrapped to extract context from middleware
+    ...(config.terminalSessionManager !== undefined
+      ? [
+          {
+            prefix: "/terminal",
+            routes: createTerminalRoutesWithMiddleware(
+              config.terminalSessionManager,
+            ),
+          },
+        ]
+      : []),
   ];
 }
 
@@ -530,6 +545,35 @@ function createBranchRoutesWithMiddleware(): Hono<{
     const branchRoutes = createBranchRoutes(serverContext);
     return branchRoutes.fetch(
       createRelativeRequest(c.req.raw, "/branches"),
+      c.env,
+    );
+  });
+
+  return app;
+}
+
+/**
+ * Create terminal routes that get ServerContext from middleware.
+ */
+function createTerminalRoutesWithMiddleware(
+  terminalSessionManager: TerminalSessionManager,
+): Hono<{
+  Variables: ContextVariables;
+}> {
+  const app = new Hono<{ Variables: ContextVariables }>();
+
+  app.use("*", async (c) => {
+    const serverContext = c.get("serverContext");
+    if (serverContext === undefined) {
+      return c.json({ error: "Server context not available", code: 500 }, 500);
+    }
+
+    const terminalRoutes = createTerminalRoutes(
+      serverContext,
+      terminalSessionManager,
+    );
+    return terminalRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/terminal"),
       c.env,
     );
   });
