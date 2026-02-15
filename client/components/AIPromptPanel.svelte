@@ -436,6 +436,50 @@
   }
 
   /**
+   * Handle dragover to allow file path drops from the file tree
+   */
+  function handleFileDragOver(event: DragEvent): void {
+    if (
+      event.dataTransfer?.types.includes("application/x-qraftbox-path") === true
+    ) {
+      event.preventDefault();
+      if (event.dataTransfer !== null) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+    }
+  }
+
+  /**
+   * Handle drop of file paths from the file tree.
+   * Inserts @{path} at cursor position with spaces to avoid concatenation.
+   */
+  function handleFileDrop(event: DragEvent): void {
+    const filePath =
+      event.dataTransfer?.getData("application/x-qraftbox-path") ?? "";
+    if (filePath === "") return;
+    event.preventDefault();
+
+    const insertion = `@${filePath}`;
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    const cursorPos = target.selectionStart ?? prompt.length;
+
+    const before = prompt.slice(0, cursorPos);
+    const after = prompt.slice(cursorPos);
+
+    let prefix = "";
+    let suffix = "";
+
+    if (before.length > 0 && !before.endsWith(" ") && !before.endsWith("\n")) {
+      prefix = " ";
+    }
+    if (after.length > 0 && !after.startsWith(" ") && !after.startsWith("\n")) {
+      suffix = " ";
+    }
+
+    prompt = before + prefix + insertion + suffix + after;
+  }
+
+  /**
    * Store textarea reference
    */
   function setTextareaRef(element: HTMLTextAreaElement): void {
@@ -575,6 +619,8 @@
           bind:value={prompt}
           oninput={handleInputSingleLine}
           onkeydown={handleKeydownSingleLine}
+          ondragover={handleFileDragOver}
+          ondrop={handleFileDrop}
           use:setInputRef
           placeholder="Ask AI about your code... (Use @ to reference files)"
           class="w-full h-9 px-3 py-1.5
@@ -887,6 +933,8 @@
             bind:value={prompt}
             oninput={handleInput}
             onkeydown={handleKeydown}
+            ondragover={handleFileDragOver}
+            ondrop={handleFileDrop}
             use:setTextareaRef
             placeholder="Ask AI about your code... (Use @ to reference files)"
             class="flex-1 w-full px-3 py-2

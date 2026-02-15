@@ -1024,6 +1024,11 @@
         class="directory-button w-full text-left px-4 py-1 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5"
         style="padding-left: {1 + depth * 1.5}rem"
         onclick={() => toggleDirectory(node.path)}
+        draggable="true"
+        ondragstart={(e: DragEvent) => {
+          e.dataTransfer?.setData("application/x-qraftbox-path", node.path);
+          e.dataTransfer?.setData("text/plain", node.path);
+        }}
         aria-label="Toggle directory {node.name}"
       >
         <!-- Chevron Icon -->

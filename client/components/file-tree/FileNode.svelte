@@ -140,6 +140,11 @@
   class:border-accent-emphasis={selected}
   style="padding-left: {leftPadding}rem"
   onclick={onSelect}
+  draggable="true"
+  ondragstart={(e: DragEvent) => {
+    e.dataTransfer?.setData("application/x-qraftbox-path", node.path);
+    e.dataTransfer?.setData("text/plain", node.path);
+  }}
   aria-label="Select file {node.name}"
   aria-selected={selected}
 >
