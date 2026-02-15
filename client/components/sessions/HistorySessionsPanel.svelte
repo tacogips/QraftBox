@@ -339,6 +339,17 @@
   }
 
   /**
+   * Handle accordion header click - only toggle if user is not selecting text
+   */
+  function handleAccordionClick(sessionId: string): void {
+    const selection = window.getSelection();
+    if (selection !== null && selection.toString().length > 0) {
+      return;
+    }
+    toggleSessionExpansion(sessionId);
+  }
+
+  /**
    * Subscribe to store changes and sync reactive state.
    * The parent (UnifiedSessionsScreen) configures and triggers fetches via $effect;
    * this subscription ensures we update local reactive state whenever the store changes.
@@ -517,7 +528,7 @@
             <!-- Header Row (clickable, sticky) -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              onclick={() => toggleSessionExpansion(itemId)}
+              onclick={() => handleAccordionClick(itemId)}
               onkeydown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
@@ -526,7 +537,7 @@
               }}
               role="button"
               tabindex={0}
-              class="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm cursor-pointer select-none {isFirst
+              class="sticky top-0 z-10 w-full flex items-center gap-2 px-4 py-3 bg-bg-primary hover:bg-bg-secondary transition-colors text-left border shadow-sm cursor-pointer select-text {isFirst
                 ? ''
                 : 'mt-3'} {isExpanded
                 ? 'rounded-t-lg border-accent-emphasis/40'

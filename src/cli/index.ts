@@ -11,10 +11,8 @@ import { loadConfig, validateConfig } from "./config";
 import { createContextManager } from "../server/workspace/context-manager";
 import { createServer, startServer } from "../server/index";
 import { createWebSocketManager } from "../server/websocket/index.js";
-import { createFileWatcher } from "../server/watcher/index.js";
-import type { FileWatcher } from "../server/watcher/index.js";
-import { createWatcherBroadcaster } from "../server/watcher/broadcast.js";
-import type { WatcherBroadcaster } from "../server/watcher/broadcast.js";
+import { createProjectWatcherManager } from "../server/watcher/manager.js";
+import type { ProjectWatcherManager } from "../server/watcher/manager.js";
 import { createRecentDirectoryStore } from "../server/workspace/recent-store";
 import { createOpenTabsStore } from "../server/workspace/open-tabs-store";
 import { createLogger } from "../server/logger";
@@ -235,8 +233,7 @@ export function setupShutdownHandlers(cleanup: () => Promise<void>): void {
  * @returns Promise that resolves when startup is complete
  */
 export async function main(): Promise<void> {
-  let watcher: FileWatcher | undefined = undefined;
-  let broadcaster: WatcherBroadcaster | undefined = undefined;
+  let watcherManager: ProjectWatcherManager | undefined = undefined;
 
   try {
     // Parse CLI arguments
@@ -319,6 +316,11 @@ export async function main(): Promise<void> {
     // Create WebSocket manager for realtime updates
     const wsManager = createWebSocketManager();
 
+    // Create project watcher manager if watching is enabled
+    if (config.watch) {
+      watcherManager = createProjectWatcherManager(wsManager);
+    }
+
     // Create and start the HTTP server with WebSocket support
     const app = createServer({
       config,
@@ -330,30 +332,27 @@ export async function main(): Promise<void> {
       broadcast: (event: string, data: unknown) => {
         wsManager.broadcast(event, data);
       },
+      watcherManager,
     });
     const server = startServer(app, config, wsManager);
 
     logger.info(`Server started on http://${server.hostname}:${server.port}`);
 
-    // Start file watcher for realtime updates
-    if (config.watch) {
-      watcher = createFileWatcher(config.projectPath);
-      broadcaster = createWatcherBroadcaster(watcher, wsManager);
-      broadcaster.start();
-      await watcher.start();
+    // Start file watchers for all initial tabs
+    if (config.watch && watcherManager !== undefined) {
+      for (const tab of initialTabs) {
+        await watcherManager.addProject(tab.path);
+      }
       logger.info(
-        `File watching: enabled (WebSocket at ws://${server.hostname}:${server.port}/ws)`,
+        `File watching: enabled for ${initialTabs.length} project(s) (WebSocket at ws://${server.hostname}:${server.port}/ws)`,
       );
     }
 
     // Setup graceful shutdown
     setupShutdownHandlers(async () => {
-      // Stop watcher if active
-      if (watcher !== undefined) {
-        await watcher.stop();
-      }
-      if (broadcaster !== undefined) {
-        broadcaster.stop();
+      // Stop all watchers if active
+      if (watcherManager !== undefined) {
+        await watcherManager.stopAll();
       }
       wsManager.close();
       server.stop();

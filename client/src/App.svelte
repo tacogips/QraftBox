@@ -178,6 +178,11 @@
   let showIgnored = $state(false);
 
   /**
+   * Whether to show all files including non-git files (default: hidden)
+   */
+  let showAllFiles = $state(false);
+
+  /**
    * Map of file paths to their diff status
    */
   const diffStatusMap = $derived(
@@ -200,6 +205,7 @@
     setFileContent: (value) => (fileContent = value),
     setFileContentLoading: (value) => (fileContentLoading = value),
     getShowIgnored: () => showIgnored,
+    getShowAllFiles: () => showAllFiles,
   });
 
   const {
@@ -272,6 +278,8 @@
     setPickingDirectory: (value) => (pickingDirectory = value),
     setLoading: (value) => (loading = value),
     getFileTreeMode: () => fileTreeMode,
+    setFileTreeMode: (value) => (fileTreeMode = value),
+    setShowAllFiles: (value) => (showAllFiles = value),
     setDiffFiles: (value) => (diffFiles = value),
     setSelectedPath: (value) => (selectedPath = value),
     setAllFilesTree: (value) => (allFilesTree = value as FileNode | null),
@@ -451,7 +459,7 @@
       event.key === "a" &&
       !event.ctrlKey &&
       !event.metaKey &&
-      currentScreen === "diff"
+      currentScreen === "files"
     ) {
       event.preventDefault();
       aiPanelCollapsed = !aiPanelCollapsed;
@@ -545,7 +553,7 @@
 
   <!-- Main Area -->
   <div class="flex flex-1 min-h-0 overflow-hidden">
-    {#if currentScreen === "diff"}
+    {#if currentScreen === "files"}
       <DiffScreen
         {activeTabIsGitRepo}
         {loading}
@@ -589,6 +597,15 @@
         {showIgnored}
         onShowIgnoredChange={(value) => {
           showIgnored = value;
+          allFilesTree = null;
+          allFilesTreeStale = true;
+          if (contextId !== null && fileTreeMode === "all") {
+            void fetchAllFiles(contextId);
+          }
+        }}
+        {showAllFiles}
+        onShowAllFilesChange={(value) => {
+          showAllFiles = value;
           allFilesTree = null;
           allFilesTreeStale = true;
           if (contextId !== null && fileTreeMode === "all") {

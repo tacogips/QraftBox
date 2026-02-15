@@ -102,9 +102,8 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   handleSearchSession: () => void;
   hasActiveSessionWork: () => boolean;
 } {
-  let stickyCompletedSession:
-    | { session: AISession; expiresAt: number }
-    | null = null;
+  let stickyCompletedSession: { session: AISession; expiresAt: number } | null =
+    null;
 
   async function fetchPromptQueue(): Promise<void> {
     try {
@@ -150,7 +149,10 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
           const terminalTime = new Date(terminalAt).getTime();
           // Keep terminal sessions visible briefly even when timestamps are missing
           // or malformed, to avoid a jarring panel disappear right after completion.
-          if (Number.isNaN(terminalTime) || now - terminalTime < recentWindowMs) {
+          if (
+            Number.isNaN(terminalTime) ||
+            now - terminalTime < recentWindowMs
+          ) {
             recentCompleted.push(session);
           }
         }
@@ -238,7 +240,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   function handleResumeToChanges(resumeQraftId: string): void {
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
     deps.setResumeDisplaySessionId(resumeQraftId);
-    deps.navigateToScreen("diff");
+    deps.navigateToScreen("files");
     void fetchActiveSessions();
     void fetchPromptQueue();
   }

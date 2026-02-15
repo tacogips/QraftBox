@@ -395,10 +395,10 @@
     <button
       type="button"
       class="px-3 py-1.5 text-sm transition-colors h-full border-b-2
-             {currentScreen === 'diff'
+             {currentScreen === 'files'
         ? 'text-text-primary font-semibold border-accent-emphasis'
         : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-      onclick={() => onNavigateToScreen("diff")}
+      onclick={() => onNavigateToScreen("files")}
     >
       Files
     </button>

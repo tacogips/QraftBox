@@ -48,9 +48,19 @@
     showIgnored?: boolean;
 
     /**
+     * Whether all files (including non-git) are currently shown
+     */
+    showAllFiles?: boolean;
+
+    /**
      * Callback when show-ignored toggle changes
      */
     onShowIgnoredChange?: (value: boolean) => void;
+
+    /**
+     * Callback when show-all-files toggle changes
+     */
+    onShowAllFilesChange?: (value: boolean) => void;
 
     /**
      * Callback to narrow the sidebar width
@@ -93,7 +103,9 @@
     changedCount = undefined,
     contextId = null,
     showIgnored = false,
+    showAllFiles = false,
     onShowIgnoredChange = undefined,
+    onShowAllFilesChange = undefined,
     onNarrow = undefined,
     onWiden = undefined,
     canNarrow = true,
@@ -354,7 +366,11 @@
       }
 
       if (node.children.length === 0) {
-        return null;
+        // Empty directory - keep visible in "all" mode with no active filters
+        if (mode === "diff" || filterText !== "" || statusFilter !== null) {
+          return null;
+        }
+        return node;
       }
 
       const filteredChildren = node.children
@@ -909,6 +925,43 @@
               />
             </svg>
           {/if}
+        </button>
+      {/if}
+      <!-- Toggle show all files -->
+      {#if onShowAllFilesChange}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {showAllFiles
+            ? 'text-text-primary'
+            : 'text-text-tertiary hover:text-text-primary'}"
+          onclick={() => onShowAllFilesChange?.(!showAllFiles)}
+          title={showAllFiles
+            ? "Show git-managed files only"
+            : "Show all files (including non-git)"}
+          aria-label={showAllFiles
+            ? "Show git-managed files only"
+            : "Show all files (including non-git)"}
+          aria-pressed={showAllFiles}
+        >
+          <!-- Folder tree icon -->
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+            />
+            {#if showAllFiles}
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            {/if}
+          </svg>
         </button>
       {/if}
       <span class="w-px h-3 bg-border-default mx-0.5"></span>

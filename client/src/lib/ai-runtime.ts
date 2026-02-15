@@ -106,7 +106,9 @@ export function createSessionStreamController(deps: {
   }
 
   function applyProgressEvent(event: SessionProgressEvent): void {
-    deps.setRunningSessions(updateRunningSessions(deps.getRunningSessions(), event));
+    deps.setRunningSessions(
+      updateRunningSessions(deps.getRunningSessions(), event),
+    );
   }
 
   function closeSessionStream(sessionId: string): void {

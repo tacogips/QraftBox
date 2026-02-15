@@ -21,7 +21,10 @@
     language: string;
     isBinary?: boolean;
     isImage?: boolean;
+    isVideo?: boolean;
+    isPdf?: boolean;
     mimeType?: string;
+    rawFileUrl?: string;
     onCommentSubmit?: (
       startLine: number,
       endLine: number,
@@ -38,7 +41,10 @@
     language,
     isBinary = undefined,
     isImage = undefined,
+    isVideo = undefined,
+    isPdf = undefined,
     mimeType = undefined,
+    rawFileUrl = undefined,
     onCommentSubmit = undefined,
   }: Props = $props();
 
@@ -122,16 +128,39 @@
   </div>
 
   {#if isBinary === true && isImage === true}
-    <!-- Binary Image File -->
+    <!-- Image File -->
     <div class="flex items-center justify-center p-8">
-      <img
-        src="data:{mimeType ?? 'image/png'};base64,{content}"
-        alt={path}
-        class="max-w-full max-h-[80vh] object-contain"
-      />
+      {#if rawFileUrl !== undefined}
+        <img
+          src={rawFileUrl}
+          alt={path}
+          class="max-w-full max-h-[80vh] object-contain"
+        />
+      {:else}
+        <img
+          src="data:{mimeType ?? 'image/png'};base64,{content}"
+          alt={path}
+          class="max-w-full max-h-[80vh] object-contain"
+        />
+      {/if}
+    </div>
+  {:else if isBinary === true && isVideo === true && rawFileUrl !== undefined}
+    <!-- Video File -->
+    <div class="flex items-center justify-center p-8">
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video controls class="max-w-full max-h-[80vh]" src={rawFileUrl}> </video>
+    </div>
+  {:else if isBinary === true && isPdf === true && rawFileUrl !== undefined}
+    <!-- PDF File -->
+    <div class="w-full h-full min-h-[80vh] p-2">
+      <iframe
+        src={rawFileUrl}
+        title={path}
+        class="w-full h-full min-h-[80vh] border border-border-default rounded"
+      ></iframe>
     </div>
   {:else if isBinary === true}
-    <!-- Non-Image Binary File -->
+    <!-- Non-previewable Binary File -->
     <div
       class="flex flex-col items-center justify-center py-12 text-text-secondary text-sm gap-2"
     >

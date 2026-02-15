@@ -34,6 +34,8 @@ interface WorkspaceControllerDeps {
   setPickingDirectory: SetState<boolean>;
   setLoading: SetState<boolean>;
   getFileTreeMode: GetState<"diff" | "all">;
+  setFileTreeMode: SetState<"diff" | "all">;
+  setShowAllFiles: SetState<boolean>;
   setDiffFiles: SetState<DiffFile[]>;
   setSelectedPath: SetState<string | null>;
   setAllFilesTree: SetState<unknown | null>;
@@ -46,7 +48,10 @@ interface WorkspaceControllerDeps {
 
 function persistRecentProjects(recentProjects: RecentProject[]): void {
   try {
-    localStorage.setItem("qraftbox:recent-projects", JSON.stringify(recentProjects));
+    localStorage.setItem(
+      "qraftbox:recent-projects",
+      JSON.stringify(recentProjects),
+    );
   } catch {
     // Ignore
   }
@@ -168,13 +173,18 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
         if (deps.getFileTreeMode() === "all") {
           void deps.fetchAllFiles(tabId);
         }
+      } else {
+        // Non-git directory: force all-files mode with filesystem listing
+        deps.setFileTreeMode("all");
+        deps.setShowAllFiles(true);
+        void deps.fetchAllFiles(tabId);
       }
 
       void deps.fetchPromptQueue();
       void deps.fetchActiveSessions();
 
       if (deps.getCurrentScreen() === "project") {
-        navigateToScreen("diff");
+        navigateToScreen("files");
       } else if (tab.projectSlug.length > 0) {
         const hash = buildScreenHash(tab.projectSlug, deps.getCurrentScreen());
         if (window.location.hash !== hash) {
@@ -188,7 +198,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
     }
   }
 
-  async function closeProjectTab(tabId: string, event: MouseEvent): Promise<void> {
+  async function closeProjectTab(
+    tabId: string,
+    event: MouseEvent,
+  ): Promise<void> {
     event.stopPropagation();
     const closingTab = deps.getWorkspaceTabs().find((tab) => tab.id === tabId);
 
@@ -226,8 +239,14 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
       deps.setContextId(nextTab.id);
       deps.setProjectPath(nextTab.path);
       resetProjectState();
-      await fetchDiff(nextTab.id);
-      if (deps.getFileTreeMode() === "all") {
+      if (nextTab.isGitRepo) {
+        await fetchDiff(nextTab.id);
+        if (deps.getFileTreeMode() === "all") {
+          void deps.fetchAllFiles(nextTab.id);
+        }
+      } else {
+        deps.setFileTreeMode("all");
+        deps.setShowAllFiles(true);
         void deps.fetchAllFiles(nextTab.id);
       }
       void deps.fetchPromptQueue();
@@ -387,10 +406,18 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
       const activeTab = deps
         .getWorkspaceTabs()
         .find((tab) => tab.id === deps.getContextId());
-      if (activeTab?.isGitRepo === true && deps.getContextId() !== null) {
-        await fetchDiff(deps.getContextId() as string);
-        if (deps.getFileTreeMode() === "all") {
-          void deps.fetchAllFiles(deps.getContextId() as string);
+      const activeContextId = deps.getContextId();
+      if (activeContextId !== null) {
+        if (activeTab?.isGitRepo === true) {
+          await fetchDiff(activeContextId);
+          if (deps.getFileTreeMode() === "all") {
+            void deps.fetchAllFiles(activeContextId);
+          }
+        } else {
+          // Non-git directory: force all-files mode with filesystem listing
+          deps.setFileTreeMode("all");
+          deps.setShowAllFiles(true);
+          void deps.fetchAllFiles(activeContextId);
         }
       }
 

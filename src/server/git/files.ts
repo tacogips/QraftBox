@@ -9,7 +9,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { FileNode, FileStatus, FileStatusCode } from "../../types/git";
 import { createFileNode } from "../../types/git";
-import { execGit } from "./executor";
+import { execGit, unquoteGitPath } from "./executor";
 import { isBinaryExtension } from "./binary.js";
 
 /**
@@ -50,7 +50,7 @@ export async function getFileTree(
     } else {
       const changedFiles = result.stdout
         .split("\n")
-        .map((line) => line.trim())
+        .map((line) => unquoteGitPath(line.trim()))
         .filter((line) => line.length > 0);
 
       // Also include untracked files in diff view
@@ -96,7 +96,7 @@ export async function getAllFiles(
 
   return result.stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unquoteGitPath(line.trim()))
     .filter((line) => line.length > 0);
 }
 
@@ -124,7 +124,7 @@ export async function getUntrackedFiles(
 
   return result.stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unquoteGitPath(line.trim()))
     .filter((line) => line.length > 0);
 }
 
@@ -163,7 +163,7 @@ export async function getIgnoredFiles(
 
   return result.stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unquoteGitPath(line.trim()))
     .filter((line) => line.length > 0);
 }
 
@@ -191,8 +191,13 @@ export async function getIgnoredFiles(
 export async function getDirectoryChildren(
   projectPath: string,
   dirPath: string,
-  options?: { showIgnored?: boolean } | undefined,
+  options?: { showIgnored?: boolean; showAllFiles?: boolean } | undefined,
 ): Promise<readonly FileNode[]> {
+  // Filesystem-based listing: use readdir to show ALL files
+  if (options?.showAllFiles === true) {
+    return getDirectoryChildrenFromFilesystem(projectPath, dirPath);
+  }
+
   const args =
     dirPath === "" ? ["ls-files"] : ["ls-files", "--", dirPath + "/"];
 
@@ -217,7 +222,7 @@ export async function getDirectoryChildren(
 
   const trackedFiles = result.stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => unquoteGitPath(line.trim()))
     .filter((line) => line.length > 0);
 
   const prefix = dirPath === "" ? "" : dirPath + "/";
@@ -643,4 +648,118 @@ export function markBinaryFiles(root: FileNode): FileNode {
   }
 
   return processNode(root);
+}
+
+/**
+ * List directory children using filesystem readdir (shows ALL files)
+ *
+ * Uses readdir to list all filesystem entries, then cross-references with
+ * git to annotate status (tracked, untracked, ignored).
+ * Skips the .git directory.
+ *
+ * @param projectPath - Path to git repository
+ * @param dirPath - Directory path relative to repo root ("" for root)
+ * @returns Promise resolving to array of immediate child FileNodes
+ */
+async function getDirectoryChildrenFromFilesystem(
+  projectPath: string,
+  dirPath: string,
+): Promise<readonly FileNode[]> {
+  const fullDirPath = dirPath === "" ? projectPath : join(projectPath, dirPath);
+
+  let entries: import("node:fs").Dirent[];
+  try {
+    entries = await readdir(fullDirPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  // Try to get git status for annotation (gracefully handle non-git dirs)
+  const gitArgs =
+    dirPath === "" ? ["ls-files"] : ["ls-files", "--", dirPath + "/"];
+  const [gitResult, untrackedFiles] = await Promise.all([
+    execGit(gitArgs, { cwd: projectPath }).catch(() => ({
+      exitCode: 1,
+      stdout: "",
+      stderr: "",
+    })),
+    getUntrackedFiles(projectPath, dirPath),
+  ]);
+
+  const prefix = dirPath === "" ? "" : dirPath + "/";
+  const prefixLen = prefix.length;
+
+  // Detect whether this is a git repository (git ls-files succeeded)
+  const isGitRepo = gitResult.exitCode === 0;
+
+  // Build sets of immediate child names that are tracked or untracked
+  const trackedNames = new Set<string>();
+  const untrackedNames = new Set<string>();
+
+  if (isGitRepo) {
+    for (const line of gitResult.stdout.split("\n")) {
+      const trimmed = unquoteGitPath(line.trim());
+      if (trimmed.length === 0) continue;
+      const relative = trimmed.substring(prefixLen);
+      const slashIndex = relative.indexOf("/");
+      trackedNames.add(
+        slashIndex === -1 ? relative : relative.substring(0, slashIndex),
+      );
+    }
+  }
+
+  for (const filePath of untrackedFiles) {
+    const relative = filePath.substring(prefixLen);
+    const slashIndex = relative.indexOf("/");
+    untrackedNames.add(
+      slashIndex === -1 ? relative : relative.substring(0, slashIndex),
+    );
+  }
+
+  // Build children from filesystem entries
+  const children: FileNode[] = [];
+  for (const entry of entries) {
+    if (entry.name === ".git") continue;
+
+    const path = prefix + entry.name;
+    const isDir = entry.isDirectory();
+
+    // For non-git directories, don't assign status (no ignored/untracked)
+    let status: FileStatusCode | undefined;
+    if (!isGitRepo) {
+      status = undefined;
+    } else if (isDir) {
+      if (trackedNames.has(entry.name) || untrackedNames.has(entry.name)) {
+        status = undefined;
+      } else {
+        status = "ignored";
+      }
+    } else {
+      if (trackedNames.has(entry.name)) {
+        status = undefined;
+      } else if (untrackedNames.has(entry.name)) {
+        status = "untracked";
+      } else {
+        status = "ignored";
+      }
+    }
+
+    children.push({
+      name: entry.name,
+      path,
+      type: isDir ? "directory" : "file",
+      children: undefined,
+      status,
+      isBinary: !isDir && isBinaryExtension(path) ? true : undefined,
+    });
+  }
+
+  // Sort: directories first, then files, alphabetically
+  children.sort((a, b) => {
+    if (a.type === "directory" && b.type === "file") return -1;
+    if (a.type === "file" && b.type === "directory") return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  return children;
 }

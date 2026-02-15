@@ -35,6 +35,7 @@ import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
 import type { RecentDirectoryStore } from "../workspace/recent-store.js";
 import type { OpenTabsStore } from "../workspace/open-tabs-store.js";
+import type { ProjectWatcherManager } from "../watcher/manager.js";
 
 /**
  * Route group definition
@@ -64,6 +65,7 @@ export interface MountRoutesConfig {
   readonly initialTabs?:
     | readonly import("../../types/workspace").WorkspaceTab[]
     | undefined;
+  readonly watcherManager?: ProjectWatcherManager | undefined;
 }
 
 /**
@@ -191,6 +193,7 @@ export function getNonContextRouteGroups(
         config.initialTabs,
         config.openTabsStore,
         config.activeTabPath,
+        config.watcherManager,
       ),
     },
     // Directory browsing routes - GET /api/browse
@@ -293,7 +296,6 @@ export function mountAllRoutes(app: Hono, config: MountRoutesConfig): void {
   // Non-git routes (claude-sessions, prompts) are excluded so they work for any directory.
   const GIT_REQUIRED_PREFIXES: ReadonlySet<string> = new Set([
     "/diff",
-    "/files",
     "/status",
     "/commits",
     "/search",

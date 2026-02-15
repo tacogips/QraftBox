@@ -48,6 +48,8 @@ export type BinaryExtension =
 export interface BinaryDetectionResult {
   readonly isBinary: boolean;
   readonly isImage: boolean;
+  readonly isVideo: boolean;
+  readonly isPdf: boolean;
   readonly extension: string;
   readonly mimeType?: string | undefined;
 }
@@ -116,6 +118,16 @@ const IMAGE_EXTENSIONS = new Set<string>([
   "ico",
   "bmp",
 ]);
+
+/**
+ * Set of known video file extensions
+ */
+const VIDEO_EXTENSIONS = new Set<string>(["mp4", "webm", "mov"]);
+
+/**
+ * Set of known PDF file extensions
+ */
+const PDF_EXTENSIONS = new Set<string>(["pdf"]);
 
 /**
  * Map of file extensions to MIME types
@@ -216,6 +228,43 @@ export function isImageExtension(filePath: string): boolean {
 }
 
 /**
+ * Check if file path has a known video extension
+ *
+ * @param filePath - Path to check
+ * @returns True if extension is a video format
+ *
+ * @example
+ * ```typescript
+ * isVideoExtension('video.mp4'); // true
+ * isVideoExtension('clip.webm'); // true
+ * isVideoExtension('movie.mov'); // true
+ * isVideoExtension('image.png'); // false
+ * ```
+ */
+export function isVideoExtension(filePath: string): boolean {
+  const ext = extractExtension(filePath);
+  return ext.length > 0 && VIDEO_EXTENSIONS.has(ext);
+}
+
+/**
+ * Check if file path has a PDF extension
+ *
+ * @param filePath - Path to check
+ * @returns True if extension is PDF
+ *
+ * @example
+ * ```typescript
+ * isPdfExtension('document.pdf'); // true
+ * isPdfExtension('file.PDF'); // true (case-insensitive)
+ * isPdfExtension('text.txt'); // false
+ * ```
+ */
+export function isPdfExtension(filePath: string): boolean {
+  const ext = extractExtension(filePath);
+  return ext.length > 0 && PDF_EXTENSIONS.has(ext);
+}
+
+/**
  * Detect binary content by scanning for null bytes or control characters
  *
  * Scans the first portion of the buffer (up to 8KB) for indicators of binary data.
@@ -295,12 +344,16 @@ export function detectBinary(
   const extension = extractExtension(filePath);
   const isBinaryExt = isBinaryExtension(filePath);
   const isImageExt = isImageExtension(filePath);
+  const isVideoExt = isVideoExtension(filePath);
+  const isPdfExt = isPdfExtension(filePath);
 
   // If extension indicates binary, trust it
   if (isBinaryExt) {
     return {
       isBinary: true,
       isImage: isImageExt,
+      isVideo: isVideoExt,
+      isPdf: isPdfExt,
       extension,
       mimeType: getMimeType(filePath),
     };
@@ -312,6 +365,8 @@ export function detectBinary(
     return {
       isBinary: isBinaryContent,
       isImage: false,
+      isVideo: false,
+      isPdf: false,
       extension,
       mimeType: isBinaryContent ? undefined : getMimeType(filePath),
     };
@@ -321,6 +376,8 @@ export function detectBinary(
   return {
     isBinary: false,
     isImage: false,
+    isVideo: false,
+    isPdf: false,
     extension,
     mimeType: getMimeType(filePath),
   };

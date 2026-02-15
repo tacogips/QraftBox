@@ -49,6 +49,8 @@ interface FileContentResponse {
   readonly size: number;
   readonly isBinary: boolean;
   readonly isImage?: boolean | undefined;
+  readonly isVideo?: boolean | undefined;
+  readonly isPdf?: boolean | undefined;
   readonly mimeType?: string | undefined;
   readonly badge?: string | undefined;
   readonly isPartial?: boolean | undefined;
@@ -149,11 +151,13 @@ export function createFileRoutes(context: ServerContext): Hono {
       let totalFiles: number;
 
       const showIgnored = c.req.query("showIgnored") === "true";
+      const showAllFiles = c.req.query("showAllFiles") === "true";
 
       if (shallow && !diffOnly) {
         // Lazy loading: return only top-level entries
         const children = await getDirectoryChildren(context.projectPath, "", {
           showIgnored,
+          showAllFiles,
         });
         tree = {
           name: "",
@@ -164,11 +168,16 @@ export function createFileRoutes(context: ServerContext): Hono {
           isBinary: undefined,
         };
         // Count total files for display (tracked + untracked)
-        const [allFiles, untrackedFiles] = await Promise.all([
-          getAllFiles(context.projectPath),
-          getUntrackedFiles(context.projectPath),
-        ]);
-        totalFiles = allFiles.length + untrackedFiles.length;
+        // For non-git directories, count from the tree children
+        if (showAllFiles) {
+          totalFiles = children.length;
+        } else {
+          const [allFiles, untrackedFiles] = await Promise.all([
+            getAllFiles(context.projectPath),
+            getUntrackedFiles(context.projectPath),
+          ]);
+          totalFiles = allFiles.length + untrackedFiles.length;
+        }
       } else {
         tree = await getFileTree(context.projectPath, diffOnly);
         totalFiles = countFiles(tree);
@@ -180,9 +189,13 @@ export function createFileRoutes(context: ServerContext): Hono {
         // In diff-only mode, all files in tree are changed
         changedFiles = totalFiles;
       } else {
-        // Count changed files from git status
-        const changed = await getChangedFiles(context.projectPath);
-        changedFiles = changed.length;
+        // Count changed files from git status (skip for non-git dirs)
+        try {
+          const changed = await getChangedFiles(context.projectPath);
+          changedFiles = changed.length;
+        } catch {
+          changedFiles = 0;
+        }
       }
 
       const response: FilesResponse = {
@@ -214,17 +227,73 @@ export function createFileRoutes(context: ServerContext): Hono {
   app.get("/children", async (c) => {
     const dirPath = c.req.query("path") ?? "";
     const showIgnored = c.req.query("showIgnored") === "true";
+    const showAllFiles = c.req.query("showAllFiles") === "true";
 
     try {
       const children = await getDirectoryChildren(
         context.projectPath,
         dirPath,
-        { showIgnored },
+        { showIgnored, showAllFiles },
       );
       return c.json({ children });
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to list directory children";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /file-raw/*
+   *
+   * Serve raw binary file content with proper Content-Type header.
+   * Used for displaying videos, PDFs, and other binary files.
+   * The wildcard captures the full file path after /file-raw/
+   */
+  app.get("/file-raw/*", async (c) => {
+    const filePath = c.req.path.replace("/file-raw/", "");
+
+    if (filePath.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "File path is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const fullPath = `${context.projectPath}/${filePath}`;
+      const file = Bun.file(fullPath);
+
+      // Check if file exists
+      const exists = await file.exists();
+      if (!exists) {
+        const errorResponse: ErrorResponse = {
+          error: `File not found: ${filePath}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      const binaryInfo = detectBinary(filePath);
+      const contentType = binaryInfo.mimeType ?? "application/octet-stream";
+
+      const blob = await file.arrayBuffer();
+
+      return new Response(blob, {
+        status: 200,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(file.size),
+          "Cache-Control": "no-cache",
+        },
+      });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : String(e);
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,
@@ -275,12 +344,14 @@ export function createFileRoutes(context: ServerContext): Hono {
       const binaryInfo = detectBinary(filePath, contentBuffer);
       const isBinary = binaryInfo.isBinary;
       const isImage = binaryInfo.isImage;
+      const isVideo = binaryInfo.isVideo;
+      const isPdf = binaryInfo.isPdf;
       const mimeType = binaryInfo.mimeType;
 
       // Determine badge based on binary type
       let badge: string | undefined = undefined;
       if (isBinary) {
-        badge = isImage ? "IMG" : "BIN";
+        badge = isImage ? "IMG" : isVideo ? "VID" : isPdf ? "PDF" : "BIN";
       }
 
       // For binary images, convert content to base64
@@ -326,6 +397,8 @@ export function createFileRoutes(context: ServerContext): Hono {
         size,
         isBinary,
         isImage: isImage ? true : undefined,
+        isVideo: isVideo ? true : undefined,
+        isPdf: isPdf ? true : undefined,
         mimeType,
         badge,
         isPartial: isPartial ? true : undefined,

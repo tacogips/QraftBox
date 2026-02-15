@@ -23,6 +23,7 @@ import { createLogger } from "./logger";
 import type { RecentDirectoryStore } from "./workspace/recent-store";
 import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
+import type { ProjectWatcherManager } from "./watcher/manager";
 
 /**
  * Server options for creating the Hono instance
@@ -38,6 +39,8 @@ export interface ServerOptions {
     | undefined;
   /** Optional broadcast callback for WebSocket-based AI queue updates */
   readonly broadcast?: ((event: string, data: unknown) => void) | undefined;
+  /** Optional project watcher manager for multi-project file watching */
+  readonly watcherManager?: ProjectWatcherManager | undefined;
 }
 
 /**
@@ -175,6 +178,7 @@ export function createServer(options: ServerOptions): Hono {
       assistantModel: options.config.assistantModel,
     },
     initialTabs: options.initialTabs,
+    watcherManager: options.watcherManager,
   });
 
   // Static file serving and SPA fallback

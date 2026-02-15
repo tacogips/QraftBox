@@ -1,5 +1,5 @@
 export type ScreenType =
-  | "diff"
+  | "files"
   | "commits"
   | "sessions"
   | "project"
@@ -7,7 +7,7 @@ export type ScreenType =
   | "system-info";
 
 export const VALID_SCREENS: ReadonlySet<string> = new Set([
-  "diff",
+  "files",
   "commits",
   "sessions",
   "project",
@@ -24,10 +24,10 @@ export function parseHash(hashValue: string): {
 
   if (parts.length >= 2) {
     const slug = parts[0] ?? null;
-    const page = parts[1] ?? "diff";
+    const page = parts[1] ?? "files";
     return {
       slug,
-      screen: VALID_SCREENS.has(page) ? (page as ScreenType) : "diff",
+      screen: VALID_SCREENS.has(page) ? (page as ScreenType) : "files",
     };
   }
 
@@ -36,10 +36,10 @@ export function parseHash(hashValue: string): {
     if (VALID_SCREENS.has(single)) {
       return { slug: null, screen: single as ScreenType };
     }
-    return { slug: single, screen: "diff" };
+    return { slug: single, screen: "files" };
   }
 
-  return { slug: null, screen: "diff" };
+  return { slug: null, screen: "files" };
 }
 
 export function screenFromHash(hashValue: string): ScreenType {

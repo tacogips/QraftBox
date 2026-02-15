@@ -2,7 +2,7 @@
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
   import type { QueueStatus, AISession } from "../../../src/types/ai";
-  import type { PromptQueueItem } from "../../src/lib/app-api";
+  import { buildRawFileUrl, type PromptQueueItem } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
@@ -113,6 +113,8 @@
     onFileSelect,
     onFileTreeModeChange,
     onShowIgnoredChange,
+    showAllFiles,
+    onShowAllFilesChange,
     onDirectoryExpand,
     onLoadFullTree,
     onNarrowSidebar,
@@ -161,10 +163,12 @@
     resumeDisplaySessionId: string | null;
     currentQraftAiSessionId: string;
     showIgnored: boolean;
+    showAllFiles: boolean;
     onToggleSidebar: () => void;
     onFileSelect: (path: string) => void;
     onFileTreeModeChange: (mode: "diff" | "all") => void;
     onShowIgnoredChange: (value: boolean) => void;
+    onShowAllFilesChange: (value: boolean) => void;
     onDirectoryExpand: (dirPath: string) => Promise<void>;
     onLoadFullTree: () => Promise<FileNode | undefined>;
     onNarrowSidebar: () => void;
@@ -209,9 +213,7 @@
         class="border-r border-border-default bg-bg-secondary overflow-auto"
         style:width="{sidebarWidth}px"
       >
-        {#if !activeTabIsGitRepo}
-          <div class="p-4 text-sm text-text-tertiary">Not a git repository</div>
-        {:else if loading}
+        {#if loading}
           <div class="p-4 text-sm text-text-secondary">Loading files...</div>
         {:else if error !== null}
           <div class="p-4 text-sm text-danger-fg">{error}</div>
@@ -228,8 +230,10 @@
             changedCount={diffFiles.length}
             {contextId}
             {showIgnored}
+            {showAllFiles}
             onModeChange={onFileTreeModeChange}
             {onShowIgnoredChange}
+            {onShowAllFilesChange}
             {onDirectoryExpand}
             {onLoadFullTree}
             onNarrow={onNarrowSidebar}
@@ -262,22 +266,7 @@
     class="flex flex-col flex-1 min-w-0 min-h-0"
   >
     <main class="flex-1 min-h-0 overflow-auto bg-bg-primary">
-      {#if !activeTabIsGitRepo}
-        <div
-          class="flex flex-col items-center justify-center h-full text-text-tertiary gap-2"
-        >
-          <svg width="32" height="32" viewBox="0 0 16 16" fill="currentColor">
-            <path
-              fill-rule="evenodd"
-              d="M4.72.22a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 01-1.06-1.06l1-1zm3.78 0a.75.75 0 011.06 0l1 1a.75.75 0 01-1.06 1.06l-.47-.47-.47.47a.75.75 0 11-1.06-1.06l1-1zM1.5 3.25a.75.75 0 01.75-.75h11.5a.75.75 0 01.75.75v2a.75.75 0 01-.75.75H2.25a.75.75 0 01-.75-.75v-2zm.75 7.25a.75.75 0 00-.75.75v2c0 .414.336.75.75.75h11.5a.75.75 0 00.75-.75v-2a.75.75 0 00-.75-.75H2.25z"
-            />
-          </svg>
-          <span class="text-sm">Not a git repository</span>
-          <span class="text-xs"
-            >Changes view is not available for non-git directories</span
-          >
-        </div>
-      {:else if loading}
+      {#if loading}
         <div class="p-8 text-center text-text-secondary">Loading diff...</div>
       {:else if error !== null}
         <div class="p-8 text-center text-danger-fg">{error}</div>
@@ -311,7 +300,12 @@
           language={fileContent.language}
           isBinary={fileContent.isBinary}
           isImage={fileContent.isImage}
+          isVideo={fileContent.isVideo}
+          isPdf={fileContent.isPdf}
           mimeType={fileContent.mimeType}
+          rawFileUrl={fileContent.ctxId !== undefined
+            ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
+            : undefined}
           onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else if fileContentLoading}
@@ -323,7 +317,12 @@
           language={fileContent.language}
           isBinary={fileContent.isBinary}
           isImage={fileContent.isImage}
+          isVideo={fileContent.isVideo}
+          isPdf={fileContent.isPdf}
           mimeType={fileContent.mimeType}
+          rawFileUrl={fileContent.ctxId !== undefined
+            ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
+            : undefined}
           onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else}

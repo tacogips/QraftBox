@@ -11,7 +11,10 @@ import {
   fetchFileContentApi,
 } from "./app-api";
 
-type DiffStatusMap = Map<string, "added" | "modified" | "deleted" | "untracked">;
+type DiffStatusMap = Map<
+  string,
+  "added" | "modified" | "deleted" | "untracked"
+>;
 
 type SetState<T> = (value: T) => void;
 type GetState<T> = () => T;
@@ -22,7 +25,10 @@ export type FileContent = {
   language: string;
   isBinary?: boolean;
   isImage?: boolean;
+  isVideo?: boolean;
+  isPdf?: boolean;
   mimeType?: string;
+  ctxId?: string;
 };
 
 interface FileViewDeps {
@@ -36,6 +42,7 @@ interface FileViewDeps {
   setFileContent: SetState<FileContent | null>;
   setFileContentLoading: SetState<boolean>;
   getShowIgnored: GetState<boolean>;
+  getShowAllFiles: GetState<boolean>;
 }
 
 export function loadSidebarWidth(params: {
@@ -87,7 +94,11 @@ export function createFileViewController(deps: FileViewDeps): {
 
     try {
       const showIgnored = deps.getShowIgnored();
-      const tree = await fetchAllFilesTreeApi(ctxId, true, { showIgnored });
+      const showAllFiles = deps.getShowAllFiles();
+      const tree = await fetchAllFilesTreeApi(ctxId, true, {
+        showIgnored,
+        showAllFiles,
+      });
       deps.setAllFilesTree(convertServerTree(tree));
     } catch (error) {
       console.error("Failed to fetch all files:", error);
@@ -99,7 +110,11 @@ export function createFileViewController(deps: FileViewDeps): {
   async function refreshAllFiles(ctxId: string): Promise<void> {
     try {
       const showIgnored = deps.getShowIgnored();
-      const tree = await fetchAllFilesTreeApi(ctxId, false, { showIgnored });
+      const showAllFiles = deps.getShowAllFiles();
+      const tree = await fetchAllFilesTreeApi(ctxId, false, {
+        showIgnored,
+        showAllFiles,
+      });
       deps.setAllFilesTree(convertServerTree(tree));
       deps.setAllFilesTreeStale(false);
     } catch (error) {
@@ -113,8 +128,10 @@ export function createFileViewController(deps: FileViewDeps): {
 
     try {
       const showIgnored = deps.getShowIgnored();
+      const showAllFiles = deps.getShowAllFiles();
       const children = await fetchDirectoryChildrenApi(contextId, dirPath, {
         showIgnored,
+        showAllFiles,
       });
       const currentTree = deps.getAllFilesTree();
       if (currentTree !== null) {
@@ -134,8 +151,10 @@ export function createFileViewController(deps: FileViewDeps): {
 
     try {
       const showIgnored = deps.getShowIgnored();
+      const showAllFiles = deps.getShowAllFiles();
       const tree = await fetchAllFilesTreeApi(contextId, false, {
         showIgnored,
+        showAllFiles,
       });
       const fullTree = convertServerTree(tree);
       deps.setAllFilesTree(fullTree);
@@ -146,7 +165,10 @@ export function createFileViewController(deps: FileViewDeps): {
     }
   }
 
-  async function fetchFileContent(ctxId: string, filePath: string): Promise<void> {
+  async function fetchFileContent(
+    ctxId: string,
+    filePath: string,
+  ): Promise<void> {
     deps.setFileContentLoading(true);
     try {
       const data = await fetchFileContentApi(ctxId, filePath);
@@ -156,7 +178,10 @@ export function createFileViewController(deps: FileViewDeps): {
         language: data.language,
         isBinary: data.isBinary === true ? true : undefined,
         isImage: data.isImage === true ? true : undefined,
+        isVideo: data.isVideo === true ? true : undefined,
+        isPdf: data.isPdf === true ? true : undefined,
         mimeType: data.mimeType,
+        ctxId,
       });
     } catch (error) {
       console.error("Failed to fetch file content:", error);
@@ -166,7 +191,10 @@ export function createFileViewController(deps: FileViewDeps): {
     }
   }
 
-  function getEffectiveViewMode(selectedHasDiff: boolean, viewMode: ViewMode): ViewMode {
+  function getEffectiveViewMode(
+    selectedHasDiff: boolean,
+    viewMode: ViewMode,
+  ): ViewMode {
     return selectedHasDiff ? viewMode : "full-file";
   }
 

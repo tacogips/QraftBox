@@ -26,6 +26,7 @@ import {
 } from "../../types/workspace";
 import type { RecentDirectoryStore } from "../workspace/recent-store";
 import type { OpenTabsStore, OpenTabEntry } from "../workspace/open-tabs-store";
+import type { ProjectWatcherManager } from "../watcher/manager";
 
 /**
  * Error response format
@@ -137,6 +138,7 @@ async function persistWorkspaceState(
  * @param initialTabs - Optional initial tabs to populate workspace at startup
  * @param openTabsStore - Optional open tabs store for persistence
  * @param activeTabPath - Optional path to the active tab from restored state
+ * @param watcherManager - Optional project watcher manager for file watching
  * @returns Hono app with workspace routes mounted
  */
 export function createWorkspaceRoutes(
@@ -145,6 +147,7 @@ export function createWorkspaceRoutes(
   initialTabs?: readonly WorkspaceTab[] | undefined,
   openTabsStore?: OpenTabsStore | undefined,
   activeTabPath?: string | undefined,
+  watcherManager?: ProjectWatcherManager | undefined,
 ): Hono {
   // Initialize workspace with initial tabs if provided
   if (initialTabs !== undefined && initialTabs.length > 0) {
@@ -295,6 +298,11 @@ export function createWorkspaceRoutes(
       // Persist workspace state
       await persistWorkspaceState(currentWorkspace, openTabsStore);
 
+      // Add watcher for this project path
+      if (watcherManager !== undefined) {
+        await watcherManager.addProject(tab.path);
+      }
+
       const response: OpenTabResponse = {
         tab,
         workspace: currentWorkspace,
@@ -371,6 +379,16 @@ export function createWorkspaceRoutes(
 
     // Persist workspace state
     await persistWorkspaceState(currentWorkspace, openTabsStore);
+
+    // Remove watcher if no other tabs share the same path
+    if (watcherManager !== undefined) {
+      const otherTabsWithSamePath = remainingTabs.some(
+        (remainingTab) => remainingTab.path === tab.path,
+      );
+      if (!otherTabsWithSamePath) {
+        await watcherManager.removeProject(tab.path);
+      }
+    }
 
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,

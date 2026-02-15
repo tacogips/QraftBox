@@ -376,6 +376,7 @@
 {#if hasContent}
   <div
     class="current-session-panel border-t border-border-default bg-bg-secondary overflow-y-auto
+           {sessionExpanded ? 'flex-1 min-h-0' : 'shrink-0'}
            {isRunning ? 'session-running-glow' : ''}"
     role="region"
     aria-label="Current session status"
@@ -470,7 +471,8 @@
         role="button"
         tabindex={0}
         class="w-full flex items-center gap-2 px-4 py-2
-               hover:bg-bg-hover transition-colors text-left cursor-pointer select-none"
+               hover:bg-bg-hover transition-colors text-left cursor-pointer select-none
+               sticky top-0 z-10 bg-bg-secondary"
       >
         <!-- Chevron -->
         <svg

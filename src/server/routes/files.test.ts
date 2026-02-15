@@ -277,7 +277,7 @@ describe("GET /file/*path", () => {
     };
     expect(data.isBinary).toBe(true);
     expect(data.isImage).toBeUndefined();
-    expect(data.badge).toBe("BIN");
+    expect(data.badge).toBe("PDF");
     expect(data.content).toBe("");
     expect(data.mimeType).toBe("application/pdf");
   });

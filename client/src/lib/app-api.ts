@@ -22,8 +22,14 @@ export type FileContentResponse = {
   language: string;
   isBinary?: boolean;
   isImage?: boolean;
+  isVideo?: boolean;
+  isPdf?: boolean;
   mimeType?: string;
 };
+
+export function buildRawFileUrl(ctxId: string, filePath: string): string {
+  return `/api/ctx/${ctxId}/files/file-raw/${filePath}`;
+}
 
 export type PromptQueueItem = {
   id: string;
@@ -134,7 +140,9 @@ export async function fetchRecentWorkspaceProjects(): Promise<RecentProject[]> {
   return data.recent;
 }
 
-export async function removeRecentWorkspaceProject(path: string): Promise<void> {
+export async function removeRecentWorkspaceProject(
+  path: string,
+): Promise<void> {
   await fetch("/api/workspace/recent", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
@@ -170,7 +178,7 @@ export async function fetchDiffFiles(ctxId: string): Promise<DiffFile[]> {
 export async function fetchAllFilesTreeApi(
   ctxId: string,
   shallow: boolean,
-  options?: { showIgnored?: boolean } | undefined,
+  options?: { showIgnored?: boolean; showAllFiles?: boolean } | undefined,
 ): Promise<ServerFileNode> {
   const params = new URLSearchParams({ mode: "all" });
   if (shallow) {
@@ -178,6 +186,9 @@ export async function fetchAllFilesTreeApi(
   }
   if (options?.showIgnored === true) {
     params.set("showIgnored", "true");
+  }
+  if (options?.showAllFiles === true) {
+    params.set("showAllFiles", "true");
   }
   const response = await fetch(`/api/ctx/${ctxId}/files?${params.toString()}`);
   ensureOk(response, "Files API error");
@@ -188,11 +199,14 @@ export async function fetchAllFilesTreeApi(
 export async function fetchDirectoryChildrenApi(
   ctxId: string,
   dirPath: string,
-  options?: { showIgnored?: boolean } | undefined,
+  options?: { showIgnored?: boolean; showAllFiles?: boolean } | undefined,
 ): Promise<ServerFileNode[]> {
   const params = new URLSearchParams({ path: dirPath });
   if (options?.showIgnored === true) {
     params.set("showIgnored", "true");
+  }
+  if (options?.showAllFiles === true) {
+    params.set("showAllFiles", "true");
   }
   const response = await fetch(
     `/api/ctx/${ctxId}/files/children?${params.toString()}`,

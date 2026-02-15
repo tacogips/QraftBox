@@ -35,7 +35,10 @@ export function createAppRealtimeController(deps: AppRealtimeDeps): {
 
     ws.onmessage = (event) => {
       try {
-        const message = JSON.parse(event.data) as { event: string; data: unknown };
+        const message = JSON.parse(event.data) as {
+          event: string;
+          data: unknown;
+        };
 
         if (message.event === "file-change") {
           const contextId = deps.getContextId();
@@ -52,9 +55,7 @@ export function createAppRealtimeController(deps: AppRealtimeDeps): {
             const currentContextId = deps.getContextId();
             if (currentContextId !== null) {
               void deps.fetchDiff(currentContextId);
-              if (deps.getFileTreeMode() === "all") {
-                void deps.refreshAllFiles(currentContextId);
-              }
+              void deps.refreshAllFiles(currentContextId);
             }
             refetchTimer = null;
           }, 500);
