@@ -92,6 +92,11 @@
      * Returns the full tree for immediate use.
      */
     onLoadFullTree?: () => Promise<FileNode | undefined>;
+
+    /**
+     * Callback to reload/refresh the file tree data
+     */
+    onReload?: () => void;
   }
 
   const {
@@ -112,6 +117,7 @@
     canWiden = true,
     onDirectoryExpand = undefined,
     onLoadFullTree = undefined,
+    onReload = undefined,
   }: Props = $props();
 
   /**
@@ -311,6 +317,14 @@
   function collectMatchPaths(node: FileNode, ancestors: string[]): Set<string> {
     const result = new Set<string>();
     if (node.isDirectory && node.children) {
+      // If directory name itself matches, mark it and all ancestors
+      if (matchesFilter(node)) {
+        for (const a of ancestors) {
+          result.add(a);
+        }
+        result.add(node.path);
+      }
+
       for (const child of node.children) {
         const childResult = collectMatchPaths(child, [...ancestors, node.path]);
         for (const p of childResult) {
@@ -355,7 +369,10 @@
   /**
    * Filter tree based on mode and filename filter (recursive)
    */
-  function filterTree(node: FileNode): FileNode | null {
+  function filterTree(
+    node: FileNode,
+    ancestorMatched: boolean = false,
+  ): FileNode | null {
     if (node.isDirectory) {
       if (node.children === undefined) {
         // Not loaded yet (lazy loading) - keep in "all" mode with no active filters
@@ -373,8 +390,11 @@
         return node;
       }
 
+      const dirNameMatches = filterText !== "" && matchesFilter(node);
+      const skipNameFilter = ancestorMatched || dirNameMatches;
+
       const filteredChildren = node.children
-        .map((child) => filterTree(child))
+        .map((child) => filterTree(child, skipNameFilter))
         .filter((child): child is FileNode => child !== null);
 
       if (filteredChildren.length === 0) {
@@ -397,8 +417,8 @@
       if (statusFilter !== null && node.status !== statusFilter) {
         return null;
       }
-      // Apply filename filter
-      if (filterText !== "" && !matchesFilter(node)) {
+      // Apply filename filter (skip if an ancestor directory matched)
+      if (!ancestorMatched && filterText !== "" && !matchesFilter(node)) {
         return null;
       }
       return node;
@@ -473,18 +493,19 @@
    */
   const filterMatchCount = $derived.by(() => {
     if (filterText === "") return 0;
-    function countFiles(node: FileNode | null): number {
-      if (node === null) return 0;
-      if (node.isDirectory && node.children) {
-        let sum = 0;
-        for (const child of node.children) {
-          sum += countFiles(filterTree(child));
-        }
-        return sum;
+    function countMatches(node: FileNode): number {
+      let count = 0;
+      if (matchesFilter(node)) {
+        count = 1;
       }
-      return 1;
+      if (node.isDirectory && node.children) {
+        for (const child of node.children) {
+          count += countMatches(child);
+        }
+      }
+      return count;
     }
-    return countFiles(filteredTree);
+    return countMatches(tree);
   });
 
   /**
@@ -831,6 +852,27 @@
   <div
     class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1 min-w-0 overflow-hidden"
   >
+    {#if onReload}
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center rounded transition-colors text-text-tertiary hover:text-text-primary shrink-0"
+        onclick={onReload}
+        title="Reload file tree"
+        aria-label="Reload file tree"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 2.5a5.487 5.487 0 00-4.131 1.869l1.204 1.204A.25.25 0 014.896 6H1.25A.25.25 0 011 5.75V2.104a.25.25 0 01.427-.177l1.38 1.38A7.001 7.001 0 0114.95 7.16a.75.75 0 11-1.49.178A5.501 5.501 0 008 2.5zM1.705 8.005a.75.75 0 01.834.656 5.501 5.501 0 009.592 2.97l-1.204-1.204a.25.25 0 01.177-.427h3.646a.25.25 0 01.25.25v3.646a.25.25 0 01-.427.177l-1.38-1.38A7.001 7.001 0 011.05 8.84a.75.75 0 01.656-.834z"
+          />
+        </svg>
+      </button>
+    {/if}
     {#if uncommittedCount > 0}
       <span class="text-[11px] text-attention-fg font-medium truncate min-w-0">
         {uncommittedCount} uncommitted

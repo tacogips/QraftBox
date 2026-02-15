@@ -126,6 +126,7 @@
     onCancelActiveSession,
     onCancelQueuedPrompt,
     onToggleAiPanel,
+    onReloadFileTree,
   }: {
     activeTabIsGitRepo: boolean;
     loading: boolean;
@@ -184,6 +185,7 @@
     onCancelActiveSession: (sessionId: string) => Promise<void>;
     onCancelQueuedPrompt: (promptId: string) => Promise<void>;
     onToggleAiPanel: () => void;
+    onReloadFileTree: () => void;
   } = $props();
 
   let sessionExpandTrigger = $state(0);
@@ -240,6 +242,7 @@
             onWiden={onWidenSidebar}
             {canNarrow}
             {canWiden}
+            onReload={onReloadFileTree}
           />
         {/if}
       </aside>

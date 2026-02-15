@@ -612,6 +612,16 @@
             void fetchAllFiles(contextId);
           }
         }}
+        onReloadFileTree={() => {
+          if (contextId !== null) {
+            void fetchDiff(contextId);
+            if (fileTreeMode === "all") {
+              allFilesTree = null;
+              allFilesTreeStale = true;
+              void fetchAllFiles(contextId);
+            }
+          }
+        }}
         onDirectoryExpand={handleDirectoryExpand}
         onLoadFullTree={handleLoadFullTree}
         onNarrowSidebar={narrowSidebar}
