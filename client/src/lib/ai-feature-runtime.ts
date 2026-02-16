@@ -84,6 +84,7 @@ export interface AIPromptContext {
    * session's conversation. When undefined, a new session is created.
    */
   resumeSessionId?: QraftAiSessionId;
+  modelProfileId?: string | undefined;
 }
 
 export function createAIFeatureController(deps: AIFeatureDeps): {
@@ -200,6 +201,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         context,
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: deps.getQraftAiSessionId(),
+        modelProfileId: context.modelProfileId,
       };
       await submitAIPrompt(payload);
 

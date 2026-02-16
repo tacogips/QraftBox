@@ -23,6 +23,7 @@ import { createLogger } from "./logger";
 import type { RecentDirectoryStore } from "./workspace/recent-store";
 import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
+import { createModelConfigStore } from "./model-config/store.js";
 import type { ProjectWatcherManager } from "./watcher/manager";
 import type {
   TerminalSessionManager,
@@ -138,6 +139,12 @@ export function createServer(options: ServerOptions): Hono {
   });
 
   const mappingStore = createSessionMappingStore();
+  const modelConfigStore = createModelConfigStore({
+    seedFromCliConfig: {
+      assistantModel: options.config.assistantModel,
+      assistantAdditionalArgs: options.config.assistantAdditionalArgs,
+    },
+  });
 
   const sessionManager = createSessionManager(
     {
@@ -183,6 +190,7 @@ export function createServer(options: ServerOptions): Hono {
       promptModel: options.config.promptModel,
       assistantModel: options.config.assistantModel,
     },
+    modelConfigStore,
     initialTabs: options.initialTabs,
     watcherManager: options.watcherManager,
     terminalSessionManager: options.terminalSessionManager,

@@ -5,7 +5,8 @@ export type ScreenType =
   | "sessions"
   | "project"
   | "tools"
-  | "system-info";
+  | "system-info"
+  | "model-config";
 
 export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "files",
@@ -15,6 +16,7 @@ export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "project",
   "tools",
   "system-info",
+  "model-config",
 ]);
 
 export function parseHash(hashValue: string): {

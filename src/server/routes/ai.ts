@@ -15,6 +15,7 @@ import type {
 } from "../../types/ai";
 import type { SessionManager } from "../ai/session-manager";
 import { createLogger } from "../logger.js";
+import type { ModelConfigStore } from "../model-config/store.js";
 
 /**
  * Server context for AI routes
@@ -22,6 +23,7 @@ import { createLogger } from "../logger.js";
 export interface AIServerContext {
   readonly projectPath: string;
   readonly sessionManager: SessionManager;
+  readonly modelConfigStore?: ModelConfigStore | undefined;
 }
 
 /**
@@ -85,6 +87,23 @@ export function createAIRoutes(context: AIServerContext): Hono {
 
       // Ensure project_path defaults to server config
       const msg: AIPromptMessage = {
+        ...(context.modelConfigStore !== undefined
+          ? (() => {
+              const selected = context.modelConfigStore.resolveForOperation(
+                "ai_ask",
+                typeof body.model_profile_id === "string" &&
+                  body.model_profile_id.trim().length > 0
+                  ? body.model_profile_id
+                  : undefined,
+              );
+              return {
+                model_profile_id: selected.profileId,
+                model_vendor: selected.vendor,
+                model_name: selected.model,
+                model_arguments: selected.arguments,
+              };
+            })()
+          : {}),
         run_immediately: body.run_immediately === true,
         message: body.message,
         context: body.context,

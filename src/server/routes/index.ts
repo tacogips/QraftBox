@@ -38,6 +38,8 @@ import type { OpenTabsStore } from "../workspace/open-tabs-store.js";
 import type { ProjectWatcherManager } from "../watcher/manager.js";
 import type { TerminalSessionManager } from "../terminal/session-manager.js";
 import { createTerminalRoutes } from "./terminal.js";
+import type { ModelConfigStore } from "../model-config/store.js";
+import { createModelConfigRoutes } from "./model-config.js";
 
 /**
  * Route group definition
@@ -69,6 +71,7 @@ export interface MountRoutesConfig {
     | undefined;
   readonly watcherManager?: ProjectWatcherManager | undefined;
   readonly terminalSessionManager?: TerminalSessionManager | undefined;
+  readonly modelConfigStore?: ModelConfigStore | undefined;
 }
 
 /**
@@ -222,6 +225,7 @@ export function getNonContextRouteGroups(
       routes: createAIRoutes({
         projectPath: "", // Will be set by request
         sessionManager: config.sessionManager,
+        modelConfigStore: config.modelConfigStore,
       }),
     },
     // Local prompt management routes - /api/prompts
@@ -248,8 +252,17 @@ export function getNonContextRouteGroups(
     // Git actions routes - POST /api/git-actions
     {
       prefix: "/git-actions",
-      routes: createGitActionsRoutes(),
+      routes: createGitActionsRoutes(config.modelConfigStore),
     },
+    // Model config routes - GET/POST/PATCH /api/model-config
+    ...(config.modelConfigStore !== undefined
+      ? [
+          {
+            prefix: "/model-config",
+            routes: createModelConfigRoutes(config.modelConfigStore),
+          },
+        ]
+      : []),
     // System info routes - GET /api/system-info
     {
       prefix: "/system-info",

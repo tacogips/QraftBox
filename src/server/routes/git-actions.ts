@@ -23,6 +23,7 @@ import {
   getOperationPhase,
 } from "../git-actions/executor.js";
 import { isGitRepository } from "../git/executor.js";
+import type { ModelConfigStore } from "../model-config/store.js";
 
 /**
  * Error response format
@@ -39,6 +40,7 @@ interface CommitRequest {
   readonly projectPath: string;
   readonly customCtx?: string;
   readonly actionId?: string;
+  readonly modelProfileId?: string;
 }
 
 /**
@@ -63,6 +65,7 @@ interface CreatePRRequest {
   readonly baseBranch: string;
   readonly customCtx?: string;
   readonly actionId?: string;
+  readonly modelProfileId?: string;
 }
 
 /**
@@ -116,7 +119,9 @@ async function validateGitRepo(
  *
  * @returns Hono app with git-actions routes
  */
-export function createGitActionsRoutes(): Hono {
+export function createGitActionsRoutes(
+  modelConfigStore?: ModelConfigStore | undefined,
+): Hono {
   const app = new Hono();
 
   /**
@@ -160,6 +165,10 @@ export function createGitActionsRoutes(): Hono {
         body.projectPath,
         body.customCtx,
         body.actionId,
+        modelConfigStore?.resolveForOperation(
+          "git_commit",
+          body.modelProfileId,
+        ),
       );
 
       return c.json(result);
@@ -291,6 +300,7 @@ export function createGitActionsRoutes(): Hono {
         body.baseBranch,
         body.customCtx,
         body.actionId,
+        modelConfigStore?.resolveForOperation("git_pr", body.modelProfileId),
       );
 
       return c.json(result);
@@ -343,6 +353,7 @@ export function createGitActionsRoutes(): Hono {
         body.baseBranch,
         body.customCtx,
         body.actionId,
+        modelConfigStore?.resolveForOperation("git_pr", body.modelProfileId),
       );
 
       return c.json(result);

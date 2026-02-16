@@ -1,5 +1,11 @@
 import type { DiffFile } from "../types/diff";
 import type { QraftAiSessionId, FileReference } from "../../../src/types/ai";
+import type {
+  ModelConfigState,
+  ModelProfile,
+  ModelVendor,
+  OperationModelBindings,
+} from "../../../src/types/model-config";
 import type { ServerFileNode } from "./file-tree-utils";
 
 export type ServerTab = {
@@ -230,6 +236,7 @@ export async function submitAIPrompt(params: {
   message: string;
   projectPath: string;
   qraftAiSessionId: QraftAiSessionId;
+  modelProfileId?: string | undefined;
   context: {
     primaryFile:
       | {
@@ -252,10 +259,74 @@ export async function submitAIPrompt(params: {
       context: params.context,
       project_path: params.projectPath,
       qraft_ai_session_id: params.qraftAiSessionId,
+      model_profile_id: params.modelProfileId,
     }),
   });
 
   ensureOk(response, "AI submit error");
+}
+
+export async function fetchModelConfigState(): Promise<ModelConfigState> {
+  const response = await fetch("/api/model-config");
+  ensureOk(response, "Model config API error");
+  return (await response.json()) as ModelConfigState;
+}
+
+export async function createModelProfileApi(input: {
+  name: string;
+  vendor: ModelVendor;
+  model: string;
+  arguments: readonly string[];
+}): Promise<ModelProfile> {
+  const response = await fetch("/api/model-config/profiles", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  ensureOk(response, "Failed to create model profile");
+  const data = (await response.json()) as { profile: ModelProfile };
+  return data.profile;
+}
+
+export async function updateModelProfileApi(
+  profileId: string,
+  input: {
+    name?: string;
+    vendor?: ModelVendor;
+    model?: string;
+    arguments?: readonly string[];
+  },
+): Promise<ModelProfile> {
+  const response = await fetch(`/api/model-config/profiles/${profileId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  ensureOk(response, "Failed to update model profile");
+  const data = (await response.json()) as { profile: ModelProfile };
+  return data.profile;
+}
+
+export async function deleteModelProfileApi(profileId: string): Promise<void> {
+  const response = await fetch(`/api/model-config/profiles/${profileId}`, {
+    method: "DELETE",
+  });
+  ensureOk(response, "Failed to delete model profile");
+}
+
+export async function updateModelBindingsApi(
+  bindings: Partial<OperationModelBindings>,
+): Promise<OperationModelBindings> {
+  const response = await fetch("/api/model-config/bindings", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bindings),
+  });
+  ensureOk(response, "Failed to update model bindings");
+  const data = (await response.json()) as {
+    operationBindings: OperationModelBindings;
+  };
+  return data.operationBindings;
 }
 
 export async function fetchPromptQueueApi(): Promise<PromptQueueItem[]> {

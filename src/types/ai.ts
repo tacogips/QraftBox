@@ -359,6 +359,14 @@ export interface AIPromptMessage {
    * and reuse it for subsequent prompts in that session.
    */
   readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+  /** Optional model profile ID to override default AI Ask profile */
+  readonly model_profile_id?: string | undefined;
+  /** Resolved model vendor snapshot at submission time */
+  readonly model_vendor?: "anthropics" | "openai" | undefined;
+  /** Resolved model name snapshot at submission time */
+  readonly model_name?: string | undefined;
+  /** Resolved CLI arguments snapshot at submission time */
+  readonly model_arguments?: readonly string[] | undefined;
 }
 
 /**

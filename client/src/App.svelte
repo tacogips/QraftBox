@@ -33,6 +33,7 @@
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
+  import ModelConfigScreen from "../components/model-config/ModelConfigScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   /**
@@ -689,6 +690,11 @@
       <!-- System Info Screen -->
       <main class="flex-1 overflow-hidden">
         <SystemInfoScreen />
+      </main>
+    {:else if currentScreen === "model-config"}
+      <!-- Model Config Screen -->
+      <main class="flex-1 overflow-hidden">
+        <ModelConfigScreen />
       </main>
     {/if}
   </div>

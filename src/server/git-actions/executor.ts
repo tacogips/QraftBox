@@ -6,6 +6,7 @@
  */
 
 import { buildPrompt } from "./system-prompt.js";
+import type { ResolvedModelProfile } from "../../types/model-config.js";
 
 /**
  * Result type for git action execution
@@ -153,26 +154,49 @@ async function runProcessWithTimeout(
 }
 
 async function runClaude(
+  modelProfile: ResolvedModelProfile | undefined,
   projectPath: string,
   prompt: string,
   actionId?: string | undefined,
 ): Promise<GitActionResult> {
+  const profile = modelProfile ?? {
+    profileId: "legacy-default",
+    name: "Legacy Default",
+    vendor: "anthropics" as const,
+    model: "sonnet",
+    arguments: [
+      "--permission-mode",
+      "bypassPermissions",
+      "--tools",
+      "Bash,Read,Grep,Glob",
+      "--no-session-persistence",
+      "--output-format",
+      "text",
+    ],
+  };
+
+  const cmd =
+    profile.vendor === "openai"
+      ? ["codex", "--model", profile.model, ...profile.arguments, prompt]
+      : [
+          "claude",
+          "-p",
+          prompt,
+          "--permission-mode",
+          "bypassPermissions",
+          "--model",
+          profile.model,
+          "--tools",
+          "Bash,Read,Grep,Glob",
+          "--no-session-persistence",
+          "--output-format",
+          "text",
+          ...profile.arguments,
+        ];
+
   try {
     const { stdout, stderr, exitCode } = await runProcessWithTimeout(
-      [
-        "claude",
-        "-p",
-        prompt,
-        "--permission-mode",
-        "bypassPermissions",
-        "--model",
-        "sonnet",
-        "--tools",
-        "Bash,Read,Grep,Glob",
-        "--no-session-persistence",
-        "--output-format",
-        "text",
-      ],
+      cmd,
       projectPath,
       5 * 60 * 1000,
       actionId,
@@ -336,13 +360,14 @@ export async function executeCommit(
   projectPath: string,
   customCtx?: string | undefined,
   actionId?: string | undefined,
+  modelProfile?: ResolvedModelProfile | undefined,
 ): Promise<GitActionResult> {
   currentOperationPhase = "committing";
   try {
     // Build prompt with commit system prompt
     const prompt = await buildPrompt("commit", customCtx);
 
-    return await runClaude(projectPath, prompt, actionId);
+    return await runClaude(modelProfile, projectPath, prompt, actionId);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     return {
@@ -540,6 +565,7 @@ export async function executeCreatePR(
   baseBranch: string,
   customCtx?: string | undefined,
   actionId?: string | undefined,
+  modelProfile?: ResolvedModelProfile | undefined,
 ): Promise<GitActionResult> {
   currentOperationPhase = "creating-pr";
   try {
@@ -553,7 +579,7 @@ export async function executeCreatePR(
 
     const prompt = await buildPrompt("create-pr", fullCustomCtx);
 
-    const initial = await runClaude(projectPath, prompt, actionId);
+    const initial = await runClaude(modelProfile, projectPath, prompt, actionId);
     if (!initial.success) {
       return initial;
     }
@@ -573,7 +599,12 @@ export async function executeCreatePR(
     }
 
     const recoveryPrompt = buildPRRecoveryPrompt(baseBranch, customCtx);
-    const recovery = await runClaude(projectPath, recoveryPrompt, actionId);
+    const recovery = await runClaude(
+      modelProfile,
+      projectPath,
+      recoveryPrompt,
+      actionId,
+    );
     if (!recovery.success) {
       return {
         success: false,
@@ -624,6 +655,7 @@ export async function executeUpdatePR(
   baseBranch: string,
   customCtx?: string | undefined,
   actionId?: string | undefined,
+  modelProfile?: ResolvedModelProfile | undefined,
 ): Promise<GitActionResult> {
   currentOperationPhase = "creating-pr";
   try {
@@ -637,7 +669,7 @@ export async function executeUpdatePR(
     }
 
     const prompt = buildPRUpdatePrompt(baseBranch, customCtx);
-    return await runClaude(projectPath, prompt, actionId);
+    return await runClaude(modelProfile, projectPath, prompt, actionId);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     return {

@@ -51,6 +51,13 @@ interface RuntimeSessionHandle {
   fullPrompt: string;
   context: AIPromptContext;
   lastAssistantMessage?: string | undefined;
+  modelOverride?:
+    | {
+        vendor: "anthropics" | "openai";
+        model: string;
+        arguments: readonly string[];
+      }
+    | undefined;
 }
 
 /**
@@ -570,6 +577,12 @@ export function createSessionManager(
         prompt: handle.fullPrompt,
         projectPath: session.projectPath,
         resumeSessionId: session.currentClaudeSessionId,
+        vendor: handle.modelOverride?.vendor,
+        model: handle.modelOverride?.model,
+        additionalArgs:
+          handle.modelOverride !== undefined
+            ? [...handle.modelOverride.arguments]
+            : undefined,
       });
       handle.execution = execution;
 
@@ -958,6 +971,14 @@ export function createSessionManager(
           },
         }),
         context: promptContext,
+        modelOverride:
+          msg.model_vendor !== undefined && msg.model_name !== undefined
+            ? {
+                vendor: msg.model_vendor,
+                model: msg.model_name,
+                arguments: msg.model_arguments ?? [],
+              }
+            : undefined,
       };
       runtimeHandles.set(sessionId, handle);
 

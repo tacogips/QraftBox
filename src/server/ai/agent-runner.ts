@@ -137,6 +137,9 @@ export interface AgentRunParams {
   readonly prompt: string;
   readonly projectPath: string;
   readonly resumeSessionId?: ClaudeSessionId | undefined;
+  readonly vendor?: "anthropics" | "openai" | undefined;
+  readonly model?: string | undefined;
+  readonly additionalArgs?: readonly string[] | undefined;
 }
 
 /**
@@ -245,8 +248,12 @@ class ClaudeAgentRunner implements AgentRunner {
             "qraftbox-tools": mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
-          model: this.config.assistantModel,
-          additionalArgs: [...this.config.assistantAdditionalArgs],
+          cliPath: params.vendor === "openai" ? "codex" : "claude",
+          model: params.model ?? this.config.assistantModel,
+          additionalArgs:
+            params.additionalArgs !== undefined
+              ? [...params.additionalArgs]
+              : [...this.config.assistantAdditionalArgs],
         });
 
         // Start or resume session

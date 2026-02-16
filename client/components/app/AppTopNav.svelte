@@ -194,6 +194,19 @@
         >
           System Info
         </button>
+        <button
+          type="button"
+          class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                 {currentScreen === 'model-config'
+            ? 'text-text-primary font-semibold'
+            : 'text-text-secondary'}"
+          onclick={() => {
+            onNavigateToScreen("model-config");
+            headerMenuOpen = false;
+          }}
+        >
+          Model Config
+        </button>
       </div>
     {/if}
   </div>

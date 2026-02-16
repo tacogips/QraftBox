@@ -2,7 +2,12 @@
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
   import type { QueueStatus, AISession } from "../../../src/types/ai";
-  import { buildRawFileUrl, type PromptQueueItem } from "../../src/lib/app-api";
+  import type { ModelProfile } from "../../../src/types/model-config";
+  import {
+    buildRawFileUrl,
+    fetchModelConfigState,
+    type PromptQueueItem,
+  } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
@@ -225,6 +230,24 @@
   } = $props();
 
   let sessionExpandTrigger = $state(0);
+  let aiModelProfiles = $state<ModelProfile[]>([]);
+  let selectedAiModelProfileId = $state<string | undefined>(undefined);
+
+  async function loadAiModelConfig(): Promise<void> {
+    try {
+      const state = await fetchModelConfigState();
+      aiModelProfiles = [...state.profiles];
+      selectedAiModelProfileId =
+        state.operationBindings.aiDefaultProfileId ?? undefined;
+    } catch {
+      aiModelProfiles = [];
+      selectedAiModelProfileId = undefined;
+    }
+  }
+
+  $effect(() => {
+    void loadAiModelConfig();
+  });
 
   function handleInlineCommentSubmit(
     startLine: number,
@@ -239,6 +262,7 @@
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
       diffSummary: undefined,
+      modelProfileId: selectedAiModelProfileId,
       // resumeSessionId omitted: inline prompts create a new session
     });
   }
@@ -300,7 +324,8 @@
       aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
       title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
     >
-      <span class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
+      <span
+        class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
         >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
       >
     </button>
@@ -567,6 +592,24 @@
       class="shrink-0 flex flex-col min-h-0"
       style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
     >
+      {#if !aiPanelCollapsed && aiModelProfiles.length > 0}
+        <div class="px-4 py-2 border-b border-border-default bg-bg-secondary">
+          <label class="text-xs text-text-tertiary uppercase tracking-wide">
+            AI Ask Model
+            <select
+              class="ml-2 rounded border border-border-default bg-bg-primary px-2 py-1 text-sm text-text-primary"
+              bind:value={selectedAiModelProfileId}
+            >
+              {#each aiModelProfiles as profile (profile.id)}
+                <option value={profile.id}
+                  >{profile.name} ({profile.vendor}/{profile.model})</option
+                >
+              {/each}
+            </select>
+          </label>
+        </div>
+      {/if}
+
       <CurrentSessionPanel
         {contextId}
         currentClientSessionId={currentQraftAiSessionId}
@@ -594,6 +637,7 @@
             primaryFile: undefined,
             references: refs,
             diffSummary: undefined,
+            modelProfileId: selectedAiModelProfileId,
             // TODO: pass resumeSessionId to continue current session
           });
         }}
