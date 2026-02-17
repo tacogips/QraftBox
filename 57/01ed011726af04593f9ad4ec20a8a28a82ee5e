@@ -114,29 +114,5 @@
     },
     "createdAt": 1771329614499,
     "replies": []
-  },
-  {
-    "id": "d4f8f509-01b0-4c2b-8166-a60dbff4defa",
-    "commitHash": "5701ed011726af04593f9ad4ec20a8a28a82ee5e",
-    "filePath": "file1.txt",
-    "lineNumber": 1,
-    "body": "Updated workflow comment",
-    "author": {
-      "name": "tacogips",
-      "email": "me@tacogips.me"
-    },
-    "createdAt": 1771329616498,
-    "replies": [
-      {
-        "id": "5919897f-0740-424d-95bf-971e37866ba1",
-        "body": "Workflow reply",
-        "author": {
-          "name": "tacogips",
-          "email": "me@tacogips.me"
-        },
-        "createdAt": 1771329616529
-      }
-    ],
-    "updatedAt": 1771329616562
   }
 ]
