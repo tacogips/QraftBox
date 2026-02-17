@@ -77,12 +77,23 @@ ${template}`;
 
 describe("loadPrompts", () => {
   let testDir: string;
+  let configDir: string;
+  let originalEnv: string | undefined;
 
   beforeEach(async () => {
     testDir = await setupTestDir();
+    configDir = join(testDir, ".config", "qraftbox");
+    await mkdir(configDir, { recursive: true });
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
+    if (originalEnv !== undefined) {
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
+    } else {
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    }
     await cleanupTestDir(testDir);
   });
 
@@ -344,12 +355,23 @@ describe("loadPrompts", () => {
 
 describe("loadPromptContent", () => {
   let testDir: string;
+  let configDir: string;
+  let originalEnv: string | undefined;
 
   beforeEach(async () => {
     testDir = await setupTestDir();
+    configDir = join(testDir, ".config", "qraftbox");
+    await mkdir(configDir, { recursive: true });
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
+    if (originalEnv !== undefined) {
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
+    } else {
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    }
     await cleanupTestDir(testDir);
   });
 
@@ -635,12 +657,23 @@ describe("setDefaultPromptId", () => {
 
 describe("YAML parsing", () => {
   let testDir: string;
+  let configDir: string;
+  let originalEnv: string | undefined;
 
   beforeEach(async () => {
     testDir = await setupTestDir();
+    configDir = join(testDir, ".config", "qraftbox");
+    await mkdir(configDir, { recursive: true });
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
+    if (originalEnv !== undefined) {
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
+    } else {
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    }
     await cleanupTestDir(testDir);
   });
 
@@ -723,12 +756,23 @@ describe("YAML parsing", () => {
 
 describe("Edge cases", () => {
   let testDir: string;
+  let configDir: string;
+  let originalEnv: string | undefined;
 
   beforeEach(async () => {
     testDir = await setupTestDir();
+    configDir = join(testDir, ".config", "qraftbox");
+    await mkdir(configDir, { recursive: true });
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = configDir;
   });
 
   afterEach(async () => {
+    if (originalEnv !== undefined) {
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
+    } else {
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    }
     await cleanupTestDir(testDir);
   });
 

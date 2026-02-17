@@ -390,8 +390,8 @@ describe("contextMiddleware", () => {
       // UUID validation might normalize case
       const response = await app.request(`/${contextId}/test`);
 
-      // Response depends on UUID validation behavior
-      expect([200, 404]).toContain(response.status);
+      // UUID validation passes (regex is case-insensitive) but Map lookup fails (case-sensitive)
+      expect(response.status).toBe(404);
     });
 
     test("handles rapid sequential requests to same context", async () => {

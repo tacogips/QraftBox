@@ -272,8 +272,8 @@ describe("GET /diff/file/:path", () => {
 
     const response = await app.request("/file/subdir/nested.txt");
 
-    // Could be 200 if file exists and has diff, or 404 if no diff
-    expect([200, 404]).toContain(response.status);
+    // Should return 200 because untracked files are included in working tree diffs
+    expect(response.status).toBe(200);
   });
 
   test("validates contextLines parameter (non-numeric)", async () => {

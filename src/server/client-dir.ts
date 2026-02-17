@@ -36,20 +36,24 @@ function containsIndexHtml(directoryPath: string): boolean {
  * the first one that contains index.html. This allows the server to
  * work in different deployment scenarios (development, bundled, binary).
  *
+ * QRAFTBOX_CLIENT_DIR environment variable is an unconditional override
+ * that skips validation - it is returned immediately if set.
+ *
  * @returns Absolute path to client build directory
  * @throws Error if no valid client directory is found
  */
 export function resolveClientDir(): string {
-  const candidates: Array<{ source: string; path: string }> = [];
-
-  // 1. QRAFTBOX_CLIENT_DIR environment variable (explicit override)
+  // 1. QRAFTBOX_CLIENT_DIR environment variable (explicit unconditional override)
   const envClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
   if (envClientDir !== undefined) {
-    candidates.push({
+    logger.info("Client directory resolved (explicit override)", {
       source: "QRAFTBOX_CLIENT_DIR environment variable",
-      path: envClientDir,
+      clientDir: envClientDir,
     });
+    return envClientDir;
   }
+
+  const candidates: Array<{ source: string; path: string }> = [];
 
   // 2. Adjacent to executable: dirname(process.execPath)/dist/client/
   // For compiled binary distribution

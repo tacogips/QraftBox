@@ -140,7 +140,8 @@ describe("Claude Sessions Routes", () => {
       const response = await app.request("/projects");
 
       // Should not throw, returns valid response
-      expect([200, 500]).toContain(response.status);
+      // On any developer machine, ~/.claude/projects exists, so returns 200
+      expect(response.status).toBe(200);
     });
   });
 
@@ -331,8 +332,8 @@ describe("Claude Sessions Routes", () => {
     test("returns 400 for missing session ID", async () => {
       const response = await app.request("/sessions/");
 
-      // Hono may handle this differently - might be 404 or 400
-      expect([400, 404]).toContain(response.status);
+      // Hono routing: /sessions/ does not match /sessions/:id pattern -> 404
+      expect(response.status).toBe(404);
     });
 
     test("returns 404 for non-existent session", async () => {
@@ -350,15 +351,12 @@ describe("Claude Sessions Routes", () => {
       // For now, just verify the endpoint structure
       const response = await app.request("/sessions/test-session-id");
 
-      // Either 404 (not found) or 200 (found in real system)
-      expect([200, 404, 500]).toContain(response.status);
+      // Session "test-session-id" does not exist, mappingStore is undefined -> 404
+      expect(response.status).toBe(404);
 
-      if (response.status === 200) {
-        const session = (await response.json()) as Record<string, unknown>;
-        expect(session).toHaveProperty("sessionId");
-        expect(session).toHaveProperty("source");
-        expect(session).toHaveProperty("projectEncoded");
-      }
+      const body = (await response.json()) as { error: string; code: number };
+      expect(body.error).toContain("Session not found");
+      expect(body.code).toBe(404);
     });
   });
 
@@ -370,7 +368,8 @@ describe("Claude Sessions Routes", () => {
         body: JSON.stringify({}),
       });
 
-      expect([400, 404]).toContain(response.status);
+      // Hono routing: /sessions//resume does not match /sessions/:id/resume -> 404
+      expect(response.status).toBe(404);
     });
 
     test("returns 404 for non-existent session", async () => {
@@ -394,8 +393,8 @@ describe("Claude Sessions Routes", () => {
         body: JSON.stringify({}),
       });
 
-      // Either 404 (session not found) or 200 (session found)
-      expect([200, 404, 500]).toContain(response.status);
+      // Session "test-session-id" does not exist -> 404
+      expect(response.status).toBe(404);
     });
 
     test("accepts request with prompt", async () => {
@@ -405,19 +404,8 @@ describe("Claude Sessions Routes", () => {
         body: JSON.stringify({ prompt: "Continue with feature X" }),
       });
 
-      // Either 404 (session not found) or 200 (session found)
-      expect([200, 404, 500]).toContain(response.status);
-
-      if (response.status === 200) {
-        const body = (await response.json()) as {
-          sessionId: string;
-          instructions: string;
-          prompt?: string;
-        };
-        expect(body).toHaveProperty("sessionId");
-        expect(body).toHaveProperty("instructions");
-        expect(body.prompt).toBe("Continue with feature X");
-      }
+      // Session "test-session-id" does not exist -> 404
+      expect(response.status).toBe(404);
     });
 
     test("returns 400 for invalid request body", async () => {
@@ -427,8 +415,9 @@ describe("Claude Sessions Routes", () => {
         body: "invalid json",
       });
 
-      // May return 400 for invalid JSON or continue with empty body
-      expect([200, 400, 404, 500]).toContain(response.status);
+      // Handler catches JSON parse error and continues with empty body (lines 607-612)
+      // Then resolveClaudeSessionId returns undefined (mappingStore not provided) -> 404
+      expect(response.status).toBe(404);
     });
 
     test("returns 400 for non-string prompt", async () => {

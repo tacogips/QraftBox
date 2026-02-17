@@ -2,7 +2,7 @@
  * Tests for HTTP Server
  */
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createServer, startServer, stopServer } from "./index";
 import type { CLIConfig } from "../types/index";
 import { createContextManager } from "./workspace/context-manager";
@@ -15,9 +15,15 @@ import { join } from "node:path";
 describe("createServer", () => {
   let config: CLIConfig;
   let testDir: string;
+  let originalClientDir: string | undefined;
 
   beforeEach(() => {
     testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+
+    // Save and clear QRAFTBOX_CLIENT_DIR to ensure tests don't pick up stale env var
+    originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    delete process.env["QRAFTBOX_CLIENT_DIR"];
+
     config = {
       port: 7144,
       host: "localhost",
@@ -31,6 +37,15 @@ describe("createServer", () => {
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       projectDirs: [],
     };
+  });
+
+  afterEach(() => {
+    // Restore original QRAFTBOX_CLIENT_DIR
+    if (originalClientDir !== undefined) {
+      process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+    } else {
+      delete process.env["QRAFTBOX_CLIENT_DIR"];
+    }
   });
 
   test("should create Hono instance", () => {
@@ -97,6 +112,10 @@ describe("createServer", () => {
   });
 
   test("should serve static files with correct MIME type", async () => {
+    // Set QRAFTBOX_CLIENT_DIR to a non-existent directory to make test deterministic
+    const nonExistentClientDir = join(testDir, "nonexistent-client");
+    process.env["QRAFTBOX_CLIENT_DIR"] = nonExistentClientDir;
+
     const contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
@@ -109,12 +128,14 @@ describe("createServer", () => {
       openTabsStore,
     });
 
-    // Request static file (will fail since dist/client doesn't exist in test)
-    // But middleware should be mounted
+    // Request static file - since QRAFTBOX_CLIENT_DIR points to non-existent dir,
+    // static file serving will always 404
     const response = await app.request("/index.html");
 
-    // Will 404 since file doesn't exist, but middleware handled it
     expect(response.status).toBe(404);
+
+    // Clean up env var (will also be cleaned up by afterEach)
+    delete process.env["QRAFTBOX_CLIENT_DIR"];
   });
 });
 
