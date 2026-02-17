@@ -362,6 +362,24 @@ Example subtask format:
 **Notes**: Implemented core parsing, tests pending
 ```
 
+## Version Management
+
+The single source of truth for the project version is `package.json` at the repository root (`"version"` field).
+
+All other locations derive the version from it:
+
+| Location | How it reads the version |
+|---|---|
+| `src/cli/index.ts` | `import packageJson from "../../package.json" with { type: "json" }` (inlined at bundle time) |
+| `Taskfile.yml` (release tasks) | `node -p "require('./package.json').version"` |
+| `.github/workflows/release.yml` | Git tag name (`v*` trigger) which must match `package.json` |
+
+**Rules**:
+- When bumping the version, edit ONLY `package.json` (root). Do NOT hardcode version strings elsewhere.
+- `client/package.json` is `"private": true` and its version is not used for distribution.
+- Release tags follow the format `v{version}` (e.g., `v0.0.1`).
+- Run `task release:github` to build, tag, and publish a GitHub Release from the current `package.json` version.
+
 ## Notes
 - This project uses Nix flakes for reproducible development environments
 - Use direnv for automatic environment activation

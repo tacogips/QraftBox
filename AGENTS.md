@@ -1,14 +1,10 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Rule of the Responses
 
 You (the LLM model) must always begin your first response in a conversation with "I will continue thinking and providing output in English."
 
 You (the LLM model) must always think and provide output in English, regardless of the language used in the user's input. Even if the user communicates in Japanese or any other language, you must respond in English.
 
-You (the LLM model) must acknowledge that you have read CLAUDE.md and will comply with its contents in your first response.
+You (the LLM model) must acknowledge that you have read AGENTS.md and will comply with its contents in your first response.
 
 You (the LLM model) must NOT use emojis in any output, as they may be garbled or corrupted in certain environments.
 
@@ -191,10 +187,10 @@ Key features:
 
 **IMPORTANT**: When writing TypeScript code, you (the LLM model) MUST use the specialized agents:
 
-1. **ts-coding agent** (`.claude/agents/ts-coding.md`): For writing, refactoring, and implementing TypeScript code
-2. **check-and-test-after-modify agent** (`.claude/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY TypeScript file modifications
+1. **ts-coding agent** (`.agents/agents/ts-coding.md`): For writing, refactoring, and implementing TypeScript code
+2. **check-and-test-after-modify agent** (`.agents/agents/check-and-test-after-modify.md`): MUST be invoked automatically after ANY TypeScript file modifications
 
-**Coding Standards**: Refer to `.claude/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
+**Coding Standards**: Refer to `.agents/skills/ts-coding-standards/` for TypeScript coding conventions, project layout, error handling, type safety, and async patterns.
 
 **TypeScript Configuration**: This project uses maximum TypeScript strictness. See `tsconfig.json` for the complete strict configuration.
 
@@ -229,13 +225,13 @@ agent-browser close
 
 **Cycle limit**: Maximum 3 verify-fix iterations. If issues persist after 3 cycles, document remaining issues and report to user.
 
-**Full TDD workflow**: See `.claude/skills/e2e-tdd/SKILL.md` for comprehensive TDD workflow with Playwright + agent-browser.
+**Full TDD workflow**: See `.agents/skills/e2e-tdd/SKILL.md` for comprehensive TDD workflow with Playwright + agent-browser.
 
 ## Design Documentation
 
 **IMPORTANT**: When creating design documents, you (the LLM model) MUST follow the design-doc skill.
 
-**Skill Reference**: Refer to `.claude/skills/design-doc/SKILL.md` for design document guidelines, templates, and naming conventions.
+**Skill Reference**: Refer to `.agents/skills/design-doc/SKILL.md` for design document guidelines, templates, and naming conventions.
 
 **Output Location**: All design documents MUST be saved to `design-docs/` directory (NOT `docs/`).
 
@@ -262,7 +258,7 @@ Use the `/impl-plan` command or `impl-plan` agent to create implementation plans
 /impl-plan design-docs/specs/architecture.md#feature-name
 ```
 
-**Skill Reference**: Refer to `.claude/skills/impl-plan/SKILL.md` for implementation plan guidelines.
+**Skill Reference**: Refer to `.agents/skills/impl-plan/SKILL.md` for implementation plan guidelines.
 
 **Output Location**: All implementation plans MUST be saved to `impl-plans/` directory.
 
@@ -365,6 +361,24 @@ Example subtask format:
 **Tasks Completed**: TASK-001 partially
 **Notes**: Implemented core parsing, tests pending
 ```
+
+## Version Management
+
+The single source of truth for the project version is `package.json` at the repository root (`"version"` field).
+
+All other locations derive the version from it:
+
+| Location | How it reads the version |
+|---|---|
+| `src/cli/index.ts` | `import packageJson from "../../package.json" with { type: "json" }` (inlined at bundle time) |
+| `Taskfile.yml` (release tasks) | `node -p "require('./package.json').version"` |
+| `.github/workflows/release.yml` | Git tag name (`v*` trigger) which must match `package.json` |
+
+**Rules**:
+- When bumping the version, edit ONLY `package.json` (root). Do NOT hardcode version strings elsewhere.
+- `client/package.json` is `"private": true` and its version is not used for distribution.
+- Release tags follow the format `v{version}` (e.g., `v0.0.1`).
+- Run `task release:github` to build, tag, and publish a GitHub Release from the current `package.json` version.
 
 ## Notes
 - This project uses Nix flakes for reproducible development environments
