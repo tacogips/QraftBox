@@ -12,7 +12,7 @@ You (the LLM model) must include a paraphrase or summary of the user's instructi
 
 ## Prohibited Actions
 
-You (the LLM model) MUST NEVER create issues or pull requests on `anthropics/claude-code` or any other Anthropic-owned repository. If you need to create issues or PRs related to Claude Code agent functionality, use `tacogips/claude-code-agent` instead.
+You (the LLM model) MUST NEVER create issues or pull requests on upstream LLM tool repositories without explicit user permission. If you need to create issues or PRs related to AI coding agent functionality in this project's context, use project-specific repositories instead of upstream tool providers.
 
 ## Role and Responsibility
 
@@ -42,10 +42,10 @@ When starting a new session, you (the LLM model) should be ready to assist the u
 
 When a user asks to commit changes, automatically proceed with staging and committing the changes without requiring user confirmation.
 
-**IMPORTANT**: Do NOT add any Claude Code attribution or co-authorship information to commit messages. All commits should appear to be made solely by the user. Specifically:
+**IMPORTANT**: Do NOT add any AI tool attribution or co-authorship information to commit messages. All commits should appear to be made solely by the user. Specifically:
 
-- Do NOT include `Generated with [Claude Code](https://claude.ai/code)`
-- Do NOT include `Co-Authored-By: Claude <noreply@anthropic.com>`
+- Do NOT include "Generated with [AI Tool Name]" or similar attribution
+- Do NOT include `Co-Authored-By:` lines for AI assistants
 - The commit should appear as if the user made it directly
 
 **Automatic Commit Process**: When the user requests a commit, automatically:
@@ -146,8 +146,8 @@ feat: implement user authentication system
 Key features:
 - Local git diff viewing with inline and side-by-side modes
 - Git worktree management for multi-branch workflows
-- AI-powered commit, push, and pull request operations via Claude Code agent
-- Claude Code session browsing and management
+- AI-powered commit, push, and pull request operations via LLM agents
+- AI coding session browsing and management
 - Multi-directory workspace support with tab-based navigation
 - Git comment annotations via git notes
 - Custom tool registration system for extending AI agent capabilities

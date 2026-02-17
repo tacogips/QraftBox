@@ -197,6 +197,12 @@ tasks:
           TARGET: bun-linux-arm64
           SUFFIX: linux-arm64
 
+  release:npm-run:
+    desc: Build npm package and run it locally
+    cmds:
+      - task: release:npm
+      - cd release/npm && bun bin/qraftbox.js {{.CLI_ARGS}}
+
   release:npm:
     desc: Build npm package (.tgz) for npm install
     cmds:
