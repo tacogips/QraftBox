@@ -6,6 +6,7 @@
  */
 
 import { Command } from "commander";
+import packageJson from "../../package.json" with { type: "json" };
 import type { CLIConfig, SyncMode } from "../types/index";
 import { loadConfig, validateConfig } from "./config";
 import { createContextManager } from "../server/workspace/context-manager";
@@ -49,7 +50,7 @@ export function parseArgs(args: string[]): CLIConfig {
     .description(
       "All You Need Is Diff - Local diff viewer with git integration",
     )
-    .version("0.1.0")
+    .version(packageJson.version)
     .argument("[projectPath]", "Path to project directory", ".")
     .option("-p, --port <number>", "Server port", "7144")
     .option("-h, --host <string>", "Server host", "localhost")

@@ -28,9 +28,7 @@ function toErrorResponse(message: string, code: number): ErrorResponse {
   return { error: message, code };
 }
 
-function sanitizeOptionalProfileId(
-  value: unknown,
-): string | null | undefined {
+function sanitizeOptionalProfileId(value: unknown): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
   if (typeof value !== "string") {
@@ -95,9 +93,7 @@ export function createModelConfigRoutes(store: ModelConfigStore): Hono {
       const nextGitCommitProfileId = sanitizeOptionalProfileId(
         body.gitCommitProfileId,
       );
-      const nextGitPrProfileId = sanitizeOptionalProfileId(
-        body.gitPrProfileId,
-      );
+      const nextGitPrProfileId = sanitizeOptionalProfileId(body.gitPrProfileId);
       const nextAiDefaultProfileId = sanitizeOptionalProfileId(
         body.aiDefaultProfileId,
       );

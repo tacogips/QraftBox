@@ -88,9 +88,7 @@ function toProfile(row: ProfileRow): ModelProfile {
 }
 
 function normalizeArguments(args: readonly string[]): string[] {
-  return args
-    .map((arg) => arg.trim())
-    .filter((arg) => arg.length > 0);
+  return args.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
 }
 
 function generateProfileId(): string {
@@ -423,7 +421,9 @@ class ModelConfigStoreImpl implements ModelConfigStore {
           })();
 
     if (profileId === null || profileId === undefined) {
-      throw new Error(`No model profile configured for operation: ${operation}`);
+      throw new Error(
+        `No model profile configured for operation: ${operation}`,
+      );
     }
 
     const profile = this.getProfileOrThrow(profileId);

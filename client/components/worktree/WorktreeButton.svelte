@@ -276,7 +276,9 @@
   <button
     type="button"
     bind:this={buttonRef}
-    class="{isPhoneViewport ? 'px-3 py-2 min-h-[40px]' : 'px-2 py-1.5'} text-sm transition-colors h-full flex items-center gap-1
+    class="{isPhoneViewport
+      ? 'px-3 py-2 min-h-[40px]'
+      : 'px-2 py-1.5'} text-sm transition-colors h-full flex items-center gap-1
            {disabled
       ? 'text-text-tertiary cursor-not-allowed opacity-50'
       : createOpen
@@ -307,7 +309,9 @@
   <button
     type="button"
     bind:this={arrowRef}
-    class="{isPhoneViewport ? 'px-2.5 py-2 min-h-[40px] min-w-[32px]' : 'px-1 py-1.5'} text-sm transition-colors h-full flex items-center justify-center
+    class="{isPhoneViewport
+      ? 'px-2.5 py-2 min-h-[40px] min-w-[32px]'
+      : 'px-1 py-1.5'} text-sm transition-colors h-full flex items-center justify-center
            {disabled
       ? 'text-text-tertiary cursor-not-allowed opacity-50'
       : listOpen

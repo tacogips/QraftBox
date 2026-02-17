@@ -1,11 +1,14 @@
 {
   "name": "qraftbox",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "All You Need Is Diff",
   "type": "module",
   "main": "dist/main.js",
   "module": "dist/main.js",
   "types": "dist/main.d.ts",
+  "bin": {
+    "qraftbox": "./bin/qraftbox.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/main.d.ts",

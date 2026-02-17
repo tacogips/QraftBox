@@ -54,6 +54,9 @@ temp/
 # Implementation progress lock file
 impl-plans/.progress.lock
 
+# Release build output
+release/
+
 # Private files
 **/.envrc.private*
 .private*/

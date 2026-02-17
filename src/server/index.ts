@@ -24,6 +24,7 @@ import type { RecentDirectoryStore } from "./workspace/recent-store";
 import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
 import { createModelConfigStore } from "./model-config/store.js";
+import { resolveClientDir } from "./client-dir";
 import type { ProjectWatcherManager } from "./watcher/manager";
 import type {
   TerminalSessionManager,
@@ -197,8 +198,8 @@ export function createServer(options: ServerOptions): Hono {
   });
 
   // Static file serving and SPA fallback
-  // Assumes client build is at ./dist/client relative to project root
-  const clientDir = join(options.config.projectPath, "dist", "client");
+  // Resolves client build directory from multiple candidate locations
+  const clientDir = resolveClientDir();
   const indexPath = join(clientDir, "index.html");
 
   app.use("*", createStaticMiddleware(clientDir));

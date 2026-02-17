@@ -579,7 +579,12 @@ export async function executeCreatePR(
 
     const prompt = await buildPrompt("create-pr", fullCustomCtx);
 
-    const initial = await runClaude(modelProfile, projectPath, prompt, actionId);
+    const initial = await runClaude(
+      modelProfile,
+      projectPath,
+      prompt,
+      actionId,
+    );
     if (!initial.success) {
       return initial;
     }

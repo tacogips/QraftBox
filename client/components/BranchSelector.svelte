@@ -322,7 +322,9 @@
   bind:this={triggerRef}
   type="button"
   class="font-mono text-accent-fg hover:text-accent-emphasis hover:underline cursor-pointer
-         {isPhoneViewport ? 'text-base px-2 py-1.5 min-h-[40px] gap-1.5' : 'text-sm'}
+         {isPhoneViewport
+    ? 'text-base px-2 py-1.5 min-h-[40px] gap-1.5'
+    : 'text-sm'}
          flex items-center transition-colors"
   onclick={toggle}
   title="Click to switch branches"
@@ -339,9 +341,9 @@
   </svg>
   <span>{currentBranch}</span>
   <svg
-    class="{isPhoneViewport ? 'w-4 h-4' : 'w-3 h-3'} shrink-0 transition-transform {isOpen
-      ? 'rotate-180'
-      : ''}"
+    class="{isPhoneViewport
+      ? 'w-4 h-4'
+      : 'w-3 h-3'} shrink-0 transition-transform {isOpen ? 'rotate-180' : ''}"
     viewBox="0 0 16 16"
     fill="currentColor"
   >

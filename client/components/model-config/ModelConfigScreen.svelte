@@ -117,7 +117,11 @@
   });
 </script>
 
-<div class="h-full flex flex-col bg-bg-primary" role="main" aria-label="Model config">
+<div
+  class="h-full flex flex-col bg-bg-primary"
+  role="main"
+  aria-label="Model config"
+>
   <div class="px-4 py-3 border-b border-border-default bg-bg-secondary">
     <h2 class="text-lg font-semibold text-text-primary">Model Config</h2>
   </div>
@@ -127,13 +131,19 @@
       <p class="text-sm text-text-secondary">Loading model config...</p>
     {:else}
       {#if error !== null}
-        <div class="rounded border border-danger-emphasis bg-danger-subtle text-danger-fg px-3 py-2 text-sm">
+        <div
+          class="rounded border border-danger-emphasis bg-danger-subtle text-danger-fg px-3 py-2 text-sm"
+        >
           {error}
         </div>
       {/if}
 
-      <section class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3">
-        <h3 class="text-sm font-semibold text-text-primary">Operation Mappings</h3>
+      <section
+        class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3"
+      >
+        <h3 class="text-sm font-semibold text-text-primary">
+          Operation Mappings
+        </h3>
 
         <label class="block text-sm">
           <span class="text-text-secondary">Git Commit</span>
@@ -181,7 +191,9 @@
         </button>
       </section>
 
-      <section class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3">
+      <section
+        class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3"
+      >
         <h3 class="text-sm font-semibold text-text-primary">Add Profile</h3>
 
         <label class="block text-sm">
@@ -199,7 +211,9 @@
             class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
             bind:value={draftVendor}
             onchange={(e) =>
-              suggestModel((e.currentTarget as HTMLSelectElement).value as ModelVendor)}
+              suggestModel(
+                (e.currentTarget as HTMLSelectElement).value as ModelVendor,
+              )}
           >
             <option value="anthropics">anthropics</option>
             <option value="openai">openai</option>
@@ -216,7 +230,8 @@
         </label>
 
         <label class="block text-sm">
-          <span class="text-text-secondary">Arguments (one token per line)</span>
+          <span class="text-text-secondary">Arguments (one token per line)</span
+          >
           <textarea
             rows="4"
             class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm font-mono"
@@ -235,16 +250,24 @@
         </button>
       </section>
 
-      <section class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-2">
-        <h3 class="text-sm font-semibold text-text-primary">Registered Profiles</h3>
+      <section
+        class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-2"
+      >
+        <h3 class="text-sm font-semibold text-text-primary">
+          Registered Profiles
+        </h3>
         {#if profiles.length === 0}
           <p class="text-sm text-text-secondary">No profiles registered.</p>
         {:else}
           {#each profiles as profile (profile.id)}
-            <div class="rounded border border-border-default bg-bg-primary px-3 py-2">
+            <div
+              class="rounded border border-border-default bg-bg-primary px-3 py-2"
+            >
               <div class="flex items-start justify-between gap-2">
                 <div>
-                  <p class="text-sm font-medium text-text-primary">{profile.name}</p>
+                  <p class="text-sm font-medium text-text-primary">
+                    {profile.name}
+                  </p>
                   <p class="text-xs text-text-secondary">
                     {profile.vendor} / {profile.model}
                   </p>
