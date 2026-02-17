@@ -26,10 +26,13 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 
 - **See what changed** -- View diffs (the differences between file versions) in a clean, readable format. Choose between inline view (changes shown in one column) or side-by-side view (old version on the left, new version on the right).
 - **Manage branches** -- Switch between git branches, view branch lists, and work with git worktrees (multiple working directories for the same repository).
-- **AI-powered git operations** -- Use Claude Code (Anthropic's AI coding tool) to write commit messages, push code, and create pull requests with AI assistance.
-- **Browse AI sessions** -- View past Claude Code sessions and their transcripts.
+- **AI-powered git operations** -- Use `claude-code-agent` (Claude Code CLI) to write commit messages, push code, and create pull requests with AI assistance.
+- **Browse AI sessions** -- View past AI sessions and their transcripts.
 - **Work with multiple projects** -- Open multiple directories in tabs, just like a browser.
 - **Real-time updates** -- QraftBox watches your files and updates the view automatically when files change.
+- **Comment on diffs** -- Add and view comments stored via git notes.
+- **Built-in tools & terminal** -- Access tool registry info and open a browser terminal per project.
+- **Model configuration** -- Manage AI model profiles and operation bindings from the UI.
 
 ## How it Works (Simple Explanation)
 
@@ -37,7 +40,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 2. You open your web browser and go to `http://localhost:7144`.
 3. You see a web page where you can browse your git repositories, view diffs, and perform git operations.
 
-That's it. Everything runs on your machine. No data is sent to external servers (except when using Claude Code AI features, which communicates with Anthropic's API).
+That's it. Everything runs on your machine. When AI features are enabled, prompts are sent to the configured AI provider via `claude-code-agent`, and tool plugins may call external services depending on their configuration.
 
 ---
 
@@ -175,12 +178,14 @@ Usage: qraftbox [options] [projectPath]
 
 Options:
   -p, --port <number>              Server port (default: 7144)
-  --host <string>                  Server host (default: "localhost")
+  -h, --host <string>              Server host (default: "localhost")
   --open                           Open browser automatically
+  --watch                          Enable file watching (default: true)
   --no-watch                       Disable file watching
   -s, --sync-mode <mode>           Git sync mode: manual, auto-push, auto-pull, auto
                                    (default: "manual")
   --no-ai                          Disable AI features
+  --assistant-additional-args <args>  Comma-separated args passed to AI assistant
   -d, --project-dir <paths...>     Project directories to open at startup
   -V, --version                    Show version number
   --help                           Show help
@@ -294,10 +299,13 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 
 - **変更内容を見る** -- diff（ファイルのバージョン間の差分）を見やすい形式で表示します。インライン表示（1列で変更を表示）とサイドバイサイド表示（左に旧バージョン、右に新バージョン）を選べます。
 - **ブランチを管理する** -- git ブランチの切り替え、ブランチ一覧の表示、git ワークツリー（同じリポジトリで複数の作業ディレクトリを持つ機能）の操作ができます。
-- **AIによるgit操作** -- Claude Code（Anthropic のAIコーディングツール）を使って、コミットメッセージの作成、コードのプッシュ、プルリクエストの作成をAIの支援のもと行えます。
-- **AIセッションを閲覧する** -- 過去の Claude Code セッションとそのやり取りの記録を見ることができます。
+- **AIによるgit操作** -- `claude-code-agent`（Claude Code CLI）を使って、コミットメッセージの作成、コードのプッシュ、プルリクエストの作成をAIの支援のもと行えます。
+- **AIセッションを閲覧する** -- 過去のAIセッションとそのやり取りの記録を見ることができます。
 - **複数プロジェクトで作業する** -- ブラウザのタブのように、複数のディレクトリをタブで開けます。
 - **リアルタイム更新** -- QraftBox はファイルを監視し、変更があると自動的に画面を更新します。
+- **差分コメント** -- git notes を使って差分にコメントを残せます。
+- **ツールとターミナル** -- ツール登録の情報確認や、プロジェクトごとのブラウザ内ターミナルが使えます。
+- **モデル設定** -- UI からAIモデルのプロファイルと操作ごとの割り当てを管理できます。
 
 ## 仕組み（かんたんな説明）
 
@@ -305,7 +313,7 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 2. ウェブブラウザを開いて `http://localhost:7144` にアクセスします。
 3. git リポジトリの閲覧、diff の表示、git操作ができるウェブページが表示されます。
 
-以上です。すべてあなたのマシン上で動きます。外部サーバーにデータは送信されません（Claude Code のAI機能を使う場合は Anthropic の API と通信します）。
+以上です。すべてあなたのマシン上で動きます。AI機能を有効にすると、`claude-code-agent` 経由で設定されたAIプロバイダにプロンプトが送信されます。また、ツールプラグインは設定に応じて外部サービスへアクセスする場合があります。
 
 ---
 
@@ -443,12 +451,14 @@ Usage: qraftbox [options] [projectPath]
 
 Options:
   -p, --port <number>              サーバーポート（デフォルト: 7144）
-  --host <string>                  サーバーホスト（デフォルト: "localhost"）
+  -h, --host <string>              サーバーホスト（デフォルト: "localhost"）
   --open                           起動時にブラウザを自動で開く
+  --watch                          ファイル監視を有効にする（デフォルト: true）
   --no-watch                       ファイル監視を無効にする
   -s, --sync-mode <mode>           Git同期モード: manual, auto-push, auto-pull, auto
                                    （デフォルト: "manual"）
   --no-ai                          AI機能を無効にする
+  --assistant-additional-args <args>  AIアシスタントに渡す追加引数（カンマ区切り）
   -d, --project-dir <paths...>     起動時に開くプロジェクトディレクトリ
   -V, --version                    バージョン番号を表示
   --help                           ヘルプを表示
