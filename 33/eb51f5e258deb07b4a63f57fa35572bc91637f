@@ -78,5 +78,18 @@
     "createdAt": 1771331598297,
     "replies": [],
     "updatedAt": 1771331598305
+  },
+  {
+    "id": "645a2862-a83a-437b-9def-e092f3b8eefd",
+    "commitHash": "33eb51f5e258deb07b4a63f57fa35572bc91637f",
+    "filePath": "file1.txt",
+    "lineNumber": 1,
+    "body": "Comment with reply",
+    "author": {
+      "name": "tacogips",
+      "email": "me@tacogips.me"
+    },
+    "createdAt": 1771331598329,
+    "replies": []
   }
 ]
