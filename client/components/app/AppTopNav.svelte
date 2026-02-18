@@ -86,7 +86,7 @@
     >
       <button
         type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 shrink-0 touch-manipulation
                {currentScreen === 'project'
           ? 'text-text-primary font-semibold border-accent-emphasis'
           : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
@@ -100,7 +100,7 @@
           <div class="flex items-center h-full shrink-0 group">
             <button
               type="button"
-              class="pl-3 pr-1 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+              class="pl-3 pr-1 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap touch-manipulation
                      {tab.id === contextId
                 ? 'text-text-primary font-semibold border-accent-emphasis'
                 : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
@@ -111,9 +111,9 @@
             </button>
             <button
               type="button"
-              class="w-4 h-4 flex items-center justify-center shrink-0 mr-1
+              class="project-tab-close w-4 h-4 flex items-center justify-center shrink-0 mr-1
                      rounded-sm text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary
-                     opacity-0 group-hover:opacity-100 transition-opacity"
+                     {tab.id === contextId ? 'project-tab-close-active' : ''}"
               onclick={(e) => void onCloseProjectTab(tab.id, e)}
               title="Close {tab.name}"
             >
@@ -464,8 +464,39 @@
   .project-tabs-nav {
     scrollbar-width: none;
     -ms-overflow-style: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
   }
   .project-tabs-nav::-webkit-scrollbar {
     display: none;
+  }
+
+  .project-tabs-nav button {
+    touch-action: manipulation;
+  }
+
+  .project-tab-close {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .group:hover .project-tab-close,
+  .group:focus-within .project-tab-close,
+  .project-tab-close-active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  @media (hover: none) {
+    .group .project-tab-close {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .group .project-tab-close.project-tab-close-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
   }
 </style>

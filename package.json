@@ -48,7 +48,7 @@
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
-    "claude-code-agent": "github:tacogips/claude-code-agent#e722e50adca72566dc85c485f7b049c39f1923f5",
+    "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

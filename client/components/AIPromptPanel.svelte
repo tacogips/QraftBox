@@ -21,6 +21,7 @@
    */
 
   import type { QueueStatus, FileReference } from "../../src/types/ai";
+  import type { ModelProfile } from "../../src/types/model-config";
   import FileAutocomplete from "./FileAutocomplete.svelte";
   import SessionSearchPopup from "./SessionSearchPopup.svelte";
 
@@ -35,7 +36,11 @@
       prompt: string,
       immediate: boolean,
       refs: readonly FileReference[],
+      modelProfileId?: string,
     ) => void;
+    modelProfiles?: readonly ModelProfile[];
+    selectedModelProfileId?: string | undefined;
+    onSelectModelProfile?: (profileId: string) => void;
     onToggle: () => void;
     onNewSession?: () => void;
     onResumeSession?: (sessionId: string) => void;
@@ -50,6 +55,9 @@
     changedFiles,
     allFiles,
     onSubmit,
+    modelProfiles = [],
+    selectedModelProfileId = undefined,
+    onSelectModelProfile = undefined,
     onToggle,
     onNewSession,
     onResumeSession,
@@ -81,6 +89,59 @@
    */
   const DRAFT_STORAGE_KEY = "qraftbox-ai-prompt-drafts";
   const DRAFT_PREVIEW_LEN = 50;
+  const MAX_ATTACHMENT_COUNT = 8;
+  const MAX_ATTACHMENT_SIZE_BYTES = 512 * 1024;
+  const UPLOAD_REF_PREFIX = "upload/";
+  const TEXT_FILE_EXTENSIONS = new Set([
+    "txt",
+    "md",
+    "markdown",
+    "json",
+    "yaml",
+    "yml",
+    "toml",
+    "xml",
+    "csv",
+    "tsv",
+    "ini",
+    "conf",
+    "log",
+    "js",
+    "jsx",
+    "ts",
+    "tsx",
+    "mjs",
+    "cjs",
+    "py",
+    "rb",
+    "go",
+    "rs",
+    "java",
+    "kt",
+    "swift",
+    "php",
+    "c",
+    "h",
+    "cc",
+    "cpp",
+    "hpp",
+    "cs",
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "sql",
+    "css",
+    "scss",
+    "less",
+    "html",
+    "htm",
+    "svelte",
+    "vue",
+    "graphql",
+    "gql",
+    "env",
+  ]);
 
   interface DraftData {
     id: string;
@@ -95,6 +156,9 @@
   let isSessionPopupOpen = $state(false);
   let sessionPopupRef: HTMLDivElement | null = $state(null);
   let isIphone = $state(false);
+  let fileInputRef: HTMLInputElement | null = $state(null);
+  let uploadError = $state<string | null>(null);
+  let isDraggingFiles = $state(false);
 
   function detectIphone(): boolean {
     const ua = navigator.userAgent;
@@ -358,6 +422,150 @@
     fileRefs = fileRefs.filter((r) => r.path !== path);
   }
 
+  function isUploadedRef(ref: FileReference): boolean {
+    return ref.path.startsWith(UPLOAD_REF_PREFIX);
+  }
+
+  function displayRefLabel(ref: FileReference): string {
+    if (isUploadedRef(ref)) {
+      return ref.path.slice(UPLOAD_REF_PREFIX.length);
+    }
+    return `@${ref.path}`;
+  }
+
+  function nextUploadPath(fileName: string): string {
+    const existingPaths = new Set(fileRefs.map((ref) => ref.path));
+    let candidate = `${UPLOAD_REF_PREFIX}${fileName}`;
+    let sequence = 2;
+    while (existingPaths.has(candidate)) {
+      candidate = `${UPLOAD_REF_PREFIX}${fileName} (${sequence})`;
+      sequence += 1;
+    }
+    return candidate;
+  }
+
+  async function appendUploadedFiles(files: readonly File[]): Promise<void> {
+    if (files.length === 0) return;
+    uploadError = null;
+
+    const uploadRefCount = fileRefs.filter(isUploadedRef).length;
+    const remainingSlots = Math.max(0, MAX_ATTACHMENT_COUNT - uploadRefCount);
+    if (remainingSlots <= 0) {
+      uploadError = `You can attach up to ${MAX_ATTACHMENT_COUNT} files.`;
+      return;
+    }
+
+    const selected = files.slice(0, remainingSlots);
+    const nextRefs: FileReference[] = [];
+    const oversizedFiles: string[] = [];
+
+    for (const file of selected) {
+      if (file.size > MAX_ATTACHMENT_SIZE_BYTES) {
+        oversizedFiles.push(file.name);
+        continue;
+      }
+      const isText =
+        isTextMimeType(file.type) ||
+        (file.type.length === 0 && isTextFile(file.name));
+      if (isText) {
+        const content = await file.text();
+        nextRefs.push({
+          path: nextUploadPath(file.name),
+          content,
+          fileName: file.name,
+          mimeType: file.type.length > 0 ? file.type : "text/plain",
+          encoding: "utf8",
+          attachmentKind: "text",
+        });
+        continue;
+      }
+
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      nextRefs.push({
+        path: nextUploadPath(file.name),
+        content: toBase64(bytes),
+        fileName: file.name,
+        mimeType:
+          file.type.length > 0
+            ? file.type
+            : inferMimeTypeFromName(file.name) ?? "application/octet-stream",
+        encoding: "base64",
+        attachmentKind: file.type.startsWith("image/") ? "image" : "binary",
+      });
+    }
+
+    if (nextRefs.length > 0) {
+      fileRefs = [...fileRefs, ...nextRefs];
+    }
+
+    if (oversizedFiles.length > 0) {
+      uploadError = `Some files were skipped (max ${Math.floor(MAX_ATTACHMENT_SIZE_BYTES / 1024)} KB each): ${oversizedFiles.join(", ")}`;
+      return;
+    }
+    if (files.length > remainingSlots) {
+      uploadError = `Only ${remainingSlots} file${remainingSlots !== 1 ? "s" : ""} attached.`;
+    }
+  }
+
+  function openFilePicker(): void {
+    uploadError = null;
+    fileInputRef?.click();
+  }
+
+  function handleFileInputChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    if (target.files !== null) {
+      void appendUploadedFiles(Array.from(target.files));
+    }
+    target.value = "";
+  }
+
+  function isTextFile(fileName: string): boolean {
+    const normalized = fileName.trim().toLowerCase();
+    const lastDot = normalized.lastIndexOf(".");
+    if (lastDot <= 0 || lastDot === normalized.length - 1) {
+      return false;
+    }
+    const extension = normalized.slice(lastDot + 1);
+    return TEXT_FILE_EXTENSIONS.has(extension);
+  }
+
+  function inferMimeTypeFromName(fileName: string): string | undefined {
+    const normalized = fileName.toLowerCase();
+    if (normalized.endsWith(".png")) return "image/png";
+    if (normalized.endsWith(".jpg") || normalized.endsWith(".jpeg")) {
+      return "image/jpeg";
+    }
+    if (normalized.endsWith(".gif")) return "image/gif";
+    if (normalized.endsWith(".webp")) return "image/webp";
+    if (normalized.endsWith(".svg")) return "image/svg+xml";
+    if (normalized.endsWith(".pdf")) return "application/pdf";
+    return undefined;
+  }
+
+  function isTextMimeType(mimeType: string): boolean {
+    if (mimeType.length === 0) return false;
+    if (mimeType.startsWith("text/")) return true;
+    return (
+      mimeType === "application/json" ||
+      mimeType === "application/xml" ||
+      mimeType === "application/javascript" ||
+      mimeType === "application/typescript" ||
+      mimeType === "application/x-sh" ||
+      mimeType === "application/x-httpd-php"
+    );
+  }
+
+  function toBase64(bytes: Uint8Array): string {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const chunk = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
+  }
+
   /**
    * Handle close autocomplete
    */
@@ -408,7 +616,7 @@
    */
   function handleSubmit(): void {
     if (prompt.trim().length === 0) return;
-    onSubmit(prompt, false, fileRefs);
+    onSubmit(prompt, false, fileRefs, selectedModelProfileId);
 
     // Clear form after submission
     prompt = "";
@@ -421,12 +629,27 @@
    */
   function handleSubmitAndRun(): void {
     if (prompt.trim().length === 0) return;
-    onSubmit(prompt, true, fileRefs);
+    onSubmit(prompt, true, fileRefs, selectedModelProfileId);
 
     // Clear form after submission
     prompt = "";
     fileRefs = [];
     showDropdown = false;
+  }
+
+  function handleSubmitAndRunWithProfile(profileId: string): void {
+    if (prompt.trim().length === 0) return;
+    onSelectModelProfile?.(profileId);
+    onSubmit(prompt, true, fileRefs, profileId);
+
+    // Clear form after submission
+    prompt = "";
+    fileRefs = [];
+    showDropdown = false;
+  }
+
+  function profileLabel(profile: ModelProfile): string {
+    return `${profile.name} (${profile.vendor}/${profile.model})`;
   }
 
   /**
@@ -485,13 +708,30 @@
    * Handle dragover to allow file path drops from the file tree
    */
   function handleFileDragOver(event: DragEvent): void {
-    if (
-      event.dataTransfer?.types.includes("application/x-qraftbox-path") === true
-    ) {
+    const hasPathDrop =
+      event.dataTransfer?.types.includes("application/x-qraftbox-path") ===
+      true;
+    const hasFileDrop = event.dataTransfer?.types.includes("Files") === true;
+
+    if (hasPathDrop || hasFileDrop) {
       event.preventDefault();
       if (event.dataTransfer !== null) {
         event.dataTransfer.dropEffect = "copy";
       }
+      isDraggingFiles = hasFileDrop;
+    }
+  }
+
+  function handleFileDragEnter(event: DragEvent): void {
+    if (event.dataTransfer?.types.includes("Files") === true) {
+      isDraggingFiles = true;
+      event.preventDefault();
+    }
+  }
+
+  function handleFileDragLeave(event: DragEvent): void {
+    if (event.currentTarget === event.target) {
+      isDraggingFiles = false;
     }
   }
 
@@ -500,6 +740,14 @@
    * Inserts @{path} at cursor position with spaces to avoid concatenation.
    */
   function handleFileDrop(event: DragEvent): void {
+    isDraggingFiles = false;
+    const droppedFiles = event.dataTransfer?.files;
+    if (droppedFiles !== undefined && droppedFiles.length > 0) {
+      event.preventDefault();
+      void appendUploadedFiles(Array.from(droppedFiles));
+      return;
+    }
+
     const filePath =
       event.dataTransfer?.getData("application/x-qraftbox-path") ?? "";
     if (filePath === "") return;
@@ -548,6 +796,15 @@
   role="region"
   aria-label="AI Prompt Panel"
 >
+  <input
+    type="file"
+    bind:this={fileInputRef}
+    onchange={handleFileInputChange}
+    class="hidden"
+    multiple
+    aria-label="Attach files to AI prompt"
+  />
+
   <!-- Collapsed single-line input bar -->
   {#if collapsed}
     <div class="h-14 px-4 flex items-center gap-2">
@@ -657,6 +914,34 @@
         {/if}
       </div>
 
+      <button
+        type="button"
+        onclick={openFilePicker}
+        class="shrink-0 h-6 w-6 flex items-center justify-center
+               hover:bg-bg-hover rounded transition-colors duration-150
+               text-text-tertiary hover:text-text-primary
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+        title="Attach files"
+        aria-label="Attach files"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path
+            d="M21.44 11.05 12.25 20.24a6 6 0 1 1-8.49-8.49l8.48-8.49a4 4 0 0 1 5.66 5.66l-8.49 8.48a2 2 0 1 1-2.83-2.83l7.78-7.78"
+          />
+        </svg>
+      </button>
+
       <!-- Single-line input -->
       <div class="flex-1 relative min-w-0">
         <input
@@ -665,6 +950,8 @@
           bind:value={prompt}
           oninput={handleInputSingleLine}
           onkeydown={handleKeydownSingleLine}
+          ondragenter={handleFileDragEnter}
+          ondragleave={handleFileDragLeave}
           ondragover={handleFileDragOver}
           ondrop={handleFileDrop}
           use:setInputRef
@@ -673,7 +960,10 @@
                  bg-bg-primary text-text-primary text-sm
                  border border-border-default rounded
                  placeholder:text-text-tertiary
-                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis"
+                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
+                 {isDraggingFiles
+            ? 'ring-2 ring-accent-emphasis border-accent-emphasis'
+            : ''}"
           aria-label="AI prompt (single-line)"
         />
 
@@ -696,6 +986,12 @@
           class="shrink-0 px-2 py-1 text-xs bg-accent-muted text-accent-fg rounded"
         >
           {fileRefs.length} ref{fileRefs.length !== 1 ? "s" : ""}
+        </span>
+      {/if}
+
+      {#if uploadError !== null}
+        <span class="shrink-0 text-xs text-danger-fg hidden md:inline">
+          {uploadError}
         </span>
       {/if}
 
@@ -817,19 +1113,43 @@
         <!-- Dropdown menu -->
         {#if showDropdown}
           <div
-            class="absolute bottom-full right-0 mb-1 w-48
+            class="absolute bottom-full right-0 mb-1 w-72
                    bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50"
           >
             <button
               type="button"
               onclick={handleSubmitAndRun}
               class="w-full px-3 py-2 text-left text-sm text-text-primary
-                     hover:bg-bg-tertiary rounded-lg
-                     transition-colors duration-150
-                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+                     hover:bg-bg-tertiary transition-colors duration-150
+                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
+                     {modelProfiles.length === 0
+                ? 'rounded-lg'
+                : 'rounded-t-lg'}"
             >
               Submit & Run Now
             </button>
+            {#if modelProfiles.length > 0}
+              <div class="border-t border-border-default">
+                {#each modelProfiles as profile (profile.id)}
+                  <button
+                    type="button"
+                    onclick={() => handleSubmitAndRunWithProfile(profile.id)}
+                    class="w-full px-3 py-2 text-left text-sm text-text-primary
+                           hover:bg-bg-tertiary transition-colors duration-150
+                           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+                  >
+                    <span class="flex items-center justify-between gap-2">
+                      <span class="truncate"
+                        >Run with {profileLabel(profile)}</span
+                      >
+                      {#if selectedModelProfileId === profile.id}
+                        <span class="text-xs text-accent-fg">Selected</span>
+                      {/if}
+                    </span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -960,6 +1280,33 @@
       </div>
 
       <div class="flex items-center gap-3">
+        <button
+          type="button"
+          onclick={openFilePicker}
+          class="h-7 w-7 flex items-center justify-center text-text-secondary border border-border-default rounded
+                 hover:bg-bg-hover transition-colors duration-150
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+          title="Attach files"
+          aria-label="Attach files"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path
+              d="M21.44 11.05 12.25 20.24a6 6 0 1 1-8.49-8.49l8.48-8.49a4 4 0 0 1 5.66 5.66l-8.49 8.48a2 2 0 1 1-2.83-2.83l7.78-7.78"
+            />
+          </svg>
+        </button>
+
         <!-- Queue status -->
         {#if queueStatusText}
           <span class="text-xs text-text-tertiary">
@@ -979,6 +1326,8 @@
             bind:value={prompt}
             oninput={handleInput}
             onkeydown={handleKeydown}
+            ondragenter={handleFileDragEnter}
+            ondragleave={handleFileDragLeave}
             ondragover={handleFileDragOver}
             ondrop={handleFileDrop}
             use:setTextareaRef
@@ -988,6 +1337,9 @@
                    border border-border-default rounded
                    placeholder:text-text-tertiary
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:border-accent-emphasis
+                   {isDraggingFiles
+              ? 'ring-2 ring-accent-emphasis border-accent-emphasis'
+              : ''}
                    resize-none"
             aria-label="AI prompt"
           ></textarea>
@@ -1004,6 +1356,12 @@
             />
           </div>
 
+          {#if isDraggingFiles}
+            <div class="mt-2 text-xs text-accent-fg">
+              Drop files to attach to this prompt
+            </div>
+          {/if}
+
           <!-- File references -->
           {#if fileRefs.length > 0}
             <div class="flex flex-wrap gap-2 mt-2">
@@ -1012,7 +1370,32 @@
                   class="inline-flex items-center gap-1 px-2 py-1
                          bg-accent-muted text-accent-fg text-xs rounded"
                 >
-                  <span class="truncate max-w-[120px]">@{ref.path}</span>
+                  <span class="truncate max-w-[140px]"
+                    >{displayRefLabel(ref)}</span
+                  >
+                  {#if isUploadedRef(ref)}
+                    <span
+                      class="inline-flex items-center justify-center text-accent-fg"
+                      title="Attached file"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M21.44 11.05 12.25 20.24a6 6 0 1 1-8.49-8.49l8.48-8.49a4 4 0 0 1 5.66 5.66l-8.49 8.48a2 2 0 1 1-2.83-2.83l7.78-7.78"
+                        />
+                      </svg>
+                    </span>
+                  {/if}
                   {#if ref.startLine !== undefined}
                     <span class="text-accent-fg">
                       :L{ref.startLine}{ref.endLine !== ref.startLine
@@ -1045,6 +1428,10 @@
                 </span>
               {/each}
             </div>
+          {/if}
+
+          {#if uploadError !== null}
+            <div class="mt-2 text-xs text-danger-fg">{uploadError}</div>
           {/if}
         </div>
 
@@ -1163,19 +1550,44 @@
             <!-- Dropdown menu -->
             {#if showDropdown}
               <div
-                class="absolute bottom-full right-0 mb-1 w-48
+                class="absolute bottom-full right-0 mb-1 w-72
                        bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50"
               >
                 <button
                   type="button"
                   onclick={handleSubmitAndRun}
                   class="w-full px-3 py-2 text-left text-sm text-text-primary
-                         hover:bg-bg-tertiary rounded-lg
-                         transition-colors duration-150
-                         focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+                         hover:bg-bg-tertiary transition-colors duration-150
+                         focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
+                         {modelProfiles.length === 0
+                    ? 'rounded-lg'
+                    : 'rounded-t-lg'}"
                 >
                   Submit & Run Now
                 </button>
+                {#if modelProfiles.length > 0}
+                  <div class="border-t border-border-default">
+                    {#each modelProfiles as profile (profile.id)}
+                      <button
+                        type="button"
+                        onclick={() =>
+                          handleSubmitAndRunWithProfile(profile.id)}
+                        class="w-full px-3 py-2 text-left text-sm text-text-primary
+                               hover:bg-bg-tertiary transition-colors duration-150
+                               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+                      >
+                        <span class="flex items-center justify-between gap-2">
+                          <span class="truncate"
+                            >Run with {profileLabel(profile)}</span
+                          >
+                          {#if selectedModelProfileId === profile.id}
+                            <span class="text-xs text-accent-fg">Selected</span>
+                          {/if}
+                        </span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
               </div>
             {/if}
           </div>

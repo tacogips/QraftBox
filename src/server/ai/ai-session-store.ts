@@ -40,6 +40,10 @@ export interface AiSessionRow {
   readonly lastAssistantMessage?: string | undefined;
   readonly error?: string | undefined;
   readonly clientSessionId?: QraftAiSessionId | undefined; // client-generated group ID
+  readonly modelProfileId?: string | undefined;
+  readonly modelVendor?: "anthropics" | "openai" | undefined;
+  readonly modelName?: string | undefined;
+  readonly modelArguments?: readonly string[] | undefined;
 }
 
 /**
@@ -110,6 +114,10 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     currentActivity: row.currentActivity,
     claudeSessionId: row.currentClaudeSessionId,
     clientSessionId: row.clientSessionId,
+    modelProfileId: row.modelProfileId,
+    modelVendor: row.modelVendor,
+    modelName: row.modelName,
+    modelArguments: row.modelArguments,
   };
 }
 
@@ -161,8 +169,9 @@ class AiSessionStoreImpl implements AiSessionStore {
         id, state, project_path,
         created_at, started_at, completed_at,
         current_activity, current_claude_session_id,
-        prompt_id, worktree_id, message, last_assistant_message, error, client_session_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        prompt_id, worktree_id, message, last_assistant_message, error, client_session_id,
+        model_profile_id, model_vendor, model_name, model_arguments_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtGet = db.prepare(`
@@ -268,6 +277,12 @@ class AiSessionStoreImpl implements AiSessionStore {
       row.lastAssistantMessage ?? null,
       row.error ?? null,
       row.clientSessionId ?? null,
+      row.modelProfileId ?? null,
+      row.modelVendor ?? null,
+      row.modelName ?? null,
+      row.modelArguments !== undefined
+        ? JSON.stringify(row.modelArguments)
+        : null,
     );
     logger.debug("Inserted session", { id: row.id, state: row.state });
   }
@@ -289,6 +304,10 @@ class AiSessionStoreImpl implements AiSessionStore {
           last_assistant_message: string | null;
           error: string | null;
           client_session_id: string | null;
+          model_profile_id: string | null;
+          model_vendor: "anthropics" | "openai" | null;
+          model_name: string | null;
+          model_arguments_json: string | null;
         }
       | undefined
       | null;
@@ -316,6 +335,10 @@ class AiSessionStoreImpl implements AiSessionStore {
       last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
+      model_profile_id: string | null;
+      model_vendor: "anthropics" | "openai" | null;
+      model_name: string | null;
+      model_arguments_json: string | null;
     }>;
 
     return rows.map((row) => this.mapRowToSession(row));
@@ -337,6 +360,10 @@ class AiSessionStoreImpl implements AiSessionStore {
       last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
+      model_profile_id: string | null;
+      model_vendor: "anthropics" | "openai" | null;
+      model_name: string | null;
+      model_arguments_json: string | null;
     }>;
 
     return rows.map((row) => this.mapRowToSession(row));
@@ -444,6 +471,10 @@ class AiSessionStoreImpl implements AiSessionStore {
           last_assistant_message: string | null;
           error: string | null;
           client_session_id: string | null;
+          model_profile_id: string | null;
+          model_vendor: "anthropics" | "openai" | null;
+          model_name: string | null;
+          model_arguments_json: string | null;
         }
       | undefined
       | null;
@@ -468,6 +499,10 @@ class AiSessionStoreImpl implements AiSessionStore {
         last_assistant_message: string | null;
         error: string | null;
         client_session_id: string | null;
+        model_profile_id: string | null;
+        model_vendor: "anthropics" | "openai" | null;
+        model_name: string | null;
+        model_arguments_json: string | null;
       }>;
       return rows.map((row) => this.mapRowToSession(row));
     }
@@ -486,6 +521,10 @@ class AiSessionStoreImpl implements AiSessionStore {
       last_assistant_message: string | null;
       error: string | null;
       client_session_id: string | null;
+      model_profile_id: string | null;
+      model_vendor: "anthropics" | "openai" | null;
+      model_name: string | null;
+      model_arguments_json: string | null;
     }>;
     return rows.map((row) => this.mapRowToSession(row));
   }
@@ -528,7 +567,26 @@ class AiSessionStoreImpl implements AiSessionStore {
     last_assistant_message: string | null;
     error: string | null;
     client_session_id: string | null;
+    model_profile_id: string | null;
+    model_vendor: "anthropics" | "openai" | null;
+    model_name: string | null;
+    model_arguments_json: string | null;
   }): AiSessionRow {
+    let modelArguments: readonly string[] | undefined;
+    if (row.model_arguments_json !== null) {
+      try {
+        const parsed = JSON.parse(row.model_arguments_json) as unknown;
+        if (
+          Array.isArray(parsed) &&
+          parsed.every((item) => typeof item === "string")
+        ) {
+          modelArguments = parsed;
+        }
+      } catch {
+        modelArguments = undefined;
+      }
+    }
+
     return {
       id: row.id,
       state: row.state,
@@ -546,6 +604,10 @@ class AiSessionStoreImpl implements AiSessionStore {
       clientSessionId: (row.client_session_id ?? undefined) as
         | QraftAiSessionId
         | undefined,
+      modelProfileId: row.model_profile_id ?? undefined,
+      modelVendor: row.model_vendor ?? undefined,
+      modelName: row.model_name ?? undefined,
+      modelArguments,
     };
   }
 }
@@ -586,7 +648,11 @@ export function createAiSessionStore(
       message TEXT,
       last_assistant_message TEXT,
       error TEXT,
-      client_session_id TEXT
+      client_session_id TEXT,
+      model_profile_id TEXT,
+      model_vendor TEXT,
+      model_name TEXT,
+      model_arguments_json TEXT
     )
   `);
 
@@ -618,6 +684,10 @@ export function createAiSessionStore(
     "last_assistant_message TEXT",
     "error TEXT",
     "client_session_id TEXT",
+    "model_profile_id TEXT",
+    "model_vendor TEXT",
+    "model_name TEXT",
+    "model_arguments_json TEXT",
   ]) {
     try {
       db.exec(`ALTER TABLE ai_sessions ADD COLUMN ${columnDef}`);
@@ -658,7 +728,11 @@ export function createInMemoryAiSessionStore(): AiSessionStore {
       message TEXT,
       last_assistant_message TEXT,
       error TEXT,
-      client_session_id TEXT
+      client_session_id TEXT,
+      model_profile_id TEXT,
+      model_vendor TEXT,
+      model_name TEXT,
+      model_arguments_json TEXT
     )
   `);
 

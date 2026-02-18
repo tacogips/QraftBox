@@ -11,6 +11,7 @@ import type {
   AIPromptRequest,
   AIConfig,
   AIProgressEvent,
+  AIAttachment,
   ClaudeSessionId,
   QraftAiSessionId,
   WorktreeId,
@@ -570,6 +571,29 @@ describe("createSessionManager", () => {
       const queue = manager.getPromptQueue();
       const prompt = queue.find((p) => p.id === promptId);
       expect(prompt).toBeUndefined();
+    });
+
+    test("logs selected model profile metadata in session records", () => {
+      const manager = createSessionManager({
+        ...DEFAULT_AI_CONFIG,
+        maxConcurrent: 0,
+      });
+
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "Use selected profile",
+        project_path: "/tmp/test",
+        model_profile_id: "profile-ai-ask",
+        model_vendor: "openai",
+        model_name: "gpt-5-codex",
+        model_arguments: ["--effort=high"],
+      });
+
+      const session = manager.listSessions()[0];
+      expect(session?.modelProfileId).toBe("profile-ai-ask");
+      expect(session?.modelVendor).toBe("openai");
+      expect(session?.modelName).toBe("gpt-5-codex");
+      expect(session?.modelArguments).toEqual(["--effort=high"]);
     });
   });
 
@@ -1152,6 +1176,7 @@ describe("createSessionManager", () => {
             prompt: string;
             projectPath: string;
             resumeSessionId?: ClaudeSessionId | undefined;
+            attachments?: readonly AIAttachment[] | undefined;
           }
         | undefined;
 
@@ -1211,6 +1236,97 @@ describe("createSessionManager", () => {
       expect(capturedParams).toBeDefined();
       expect(capturedParams?.resumeSessionId).toBe("resume-session-xyz");
       expect(capturedParams?.projectPath).toBe("/tmp/test");
+    });
+
+    test("forwards attachment refs to runner.execute attachments and excludes them from prompt context", async () => {
+      let capturedParams:
+        | {
+            prompt: string;
+            attachments?: readonly AIAttachment[] | undefined;
+          }
+        | undefined;
+
+      const mockRunner: AgentRunner = {
+        execute(params) {
+          capturedParams = {
+            prompt: params.prompt,
+            attachments: params.attachments,
+          };
+          return {
+            events(): AsyncIterable<AgentEvent> {
+              const evts: AgentEvent[] = [{ type: "completed", success: true }];
+              return {
+                [Symbol.asyncIterator]() {
+                  let i = 0;
+                  return {
+                    async next() {
+                      if (i >= evts.length) {
+                        return {
+                          value: undefined as unknown as AgentEvent,
+                          done: true,
+                        };
+                      }
+                      const value = evts[i]!;
+                      i++;
+                      return { value, done: false };
+                    },
+                  };
+                },
+              };
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      await manager.submit(
+        createTestRequest({
+          prompt: "Check attachments flow",
+          context: {
+            references: [
+              {
+                path: "src/main.ts",
+                content: "const x = 1;",
+              },
+              {
+                path: "upload/screenshot.png",
+                content: "ZmFrZS1iYXNlNjQ=",
+                fileName: "screenshot.png",
+                mimeType: "image/png",
+                encoding: "base64",
+                attachmentKind: "image",
+              },
+            ],
+            primaryFile: undefined,
+            diffSummary: undefined,
+          },
+        }),
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(capturedParams).toBeDefined();
+      expect(capturedParams?.attachments).toHaveLength(1);
+      expect(capturedParams?.attachments?.[0]).toMatchObject({
+        content: "ZmFrZS1iYXNlNjQ=",
+        fileName: "screenshot.png",
+        mimeType: "image/png",
+        encoding: "base64",
+      });
+
+      expect(capturedParams?.prompt).toContain("src/main.ts");
+      expect(capturedParams?.prompt).not.toContain("upload/screenshot.png");
+      expect(capturedParams?.prompt).not.toContain("ZmFrZS1iYXNlNjQ=");
     });
 
     test("broadcasts queue updates for prompt queue entries via mock runner", async () => {

@@ -96,6 +96,24 @@ describe("AiSessionStore", () => {
       expect(retrievedRow?.currentActivity).toBe("Processing...");
       expect(retrievedRow?.currentClaudeSessionId).toBe("claude_session_123");
     });
+
+    test("persists model profile metadata for session logs", () => {
+      const testRow = createTestRow({
+        id: "qs_test_model_metadata" as QraftAiSessionId,
+        modelProfileId: "profile-ai-ask",
+        modelVendor: "openai",
+        modelName: "gpt-5-codex",
+        modelArguments: ["--effort=high", "--json"],
+      });
+
+      sessionStore.insert(testRow);
+      const retrievedRow = sessionStore.get(testRow.id);
+
+      expect(retrievedRow?.modelProfileId).toBe("profile-ai-ask");
+      expect(retrievedRow?.modelVendor).toBe("openai");
+      expect(retrievedRow?.modelName).toBe("gpt-5-codex");
+      expect(retrievedRow?.modelArguments).toEqual(["--effort=high", "--json"]);
+    });
   });
 
   describe("list()", () => {

@@ -146,7 +146,7 @@
     e.dataTransfer?.setData("text/plain", node.path);
   }}
   aria-label="Select file {node.name}"
-  aria-selected={selected}
+  aria-current={selected ? "true" : undefined}
 >
   <!-- File Icon -->
   <svg

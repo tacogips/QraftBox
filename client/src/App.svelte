@@ -36,6 +36,13 @@
   import ModelConfigScreen from "../components/model-config/ModelConfigScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
+  function shouldDefaultToCollapsedSidebar(): boolean {
+    if (typeof window === "undefined") return false;
+    const isMobileUa = /iPhone|iPod|Android/i.test(navigator.userAgent);
+    const isPhoneViewport = window.innerWidth <= 480;
+    return isMobileUa || isPhoneViewport;
+  }
+
   /**
    * Application state
    */
@@ -44,7 +51,7 @@
   let selectedPath = $state<string | null>(null);
   let viewMode = $state<ViewMode>("full-file");
   let fileTreeMode = $state<"diff" | "all">("all");
-  let sidebarCollapsed = $state(false);
+  let sidebarCollapsed = $state(shouldDefaultToCollapsedSidebar());
 
   const SIDEBAR_MIN_WIDTH = 160;
   const SIDEBAR_MAX_WIDTH = 480;
@@ -335,6 +342,10 @@
     sidebarCollapsed = !sidebarCollapsed;
   }
 
+  function collapseSidebar(): void {
+    sidebarCollapsed = true;
+  }
+
   function narrowSidebar(): void {
     sidebarWidth = Math.max(
       SIDEBAR_MIN_WIDTH,
@@ -518,9 +529,16 @@
       fileContent = null;
     }
   });
+
+  // On mobile, entering the files screen should start with tree collapsed.
+  $effect(() => {
+    if (currentScreen === "files" && shouldDefaultToCollapsedSidebar()) {
+      sidebarCollapsed = true;
+    }
+  });
 </script>
 
-<div class="flex flex-col h-screen bg-bg-primary text-text-primary">
+<div class="flex flex-col h-[100dvh] bg-bg-primary text-text-primary">
   <AppTopNav
     {currentScreen}
     {workspaceTabs}
@@ -626,6 +644,7 @@
         }}
         onDirectoryExpand={handleDirectoryExpand}
         onLoadFullTree={handleLoadFullTree}
+        onCollapseSidebar={collapseSidebar}
         onNarrowSidebar={narrowSidebar}
         onWidenSidebar={widenSidebar}
         onSetViewMode={setViewMode}

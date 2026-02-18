@@ -13,6 +13,21 @@ export interface FileReference {
   readonly startLine?: number | undefined;
   readonly endLine?: number | undefined;
   readonly content?: string | undefined;
+  readonly fileName?: string | undefined;
+  readonly mimeType?: string | undefined;
+  readonly encoding?: "utf8" | "base64" | undefined;
+  readonly attachmentKind?: "text" | "image" | "binary" | undefined;
+}
+
+/**
+ * Attachment payload passed to Claude session runner.
+ */
+export interface AIAttachment {
+  readonly path?: string;
+  readonly fileName?: string;
+  readonly mimeType?: string;
+  readonly encoding?: "utf8" | "base64";
+  readonly content?: string;
 }
 
 /**
@@ -245,6 +260,22 @@ export interface AISessionInfo {
    * Client-generated session group ID used to chain prompts.
    */
   readonly clientSessionId?: QraftAiSessionId | undefined;
+  /**
+   * Selected model profile ID resolved at submission time.
+   */
+  readonly modelProfileId?: string | undefined;
+  /**
+   * Resolved model vendor snapshot at submission time.
+   */
+  readonly modelVendor?: "anthropics" | "openai" | undefined;
+  /**
+   * Resolved model name snapshot at submission time.
+   */
+  readonly modelName?: string | undefined;
+  /**
+   * Resolved CLI arguments snapshot at submission time.
+   */
+  readonly modelArguments?: readonly string[] | undefined;
 }
 
 /**
