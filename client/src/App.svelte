@@ -80,7 +80,6 @@
   let mergeDialogOpen = $state(false);
 
   // AI prompt state
-  let aiPanelCollapsed = $state(true);
   let queueStatus = $state<QueueStatus>({
     runningCount: 0,
     queuedCount: 0,
@@ -108,6 +107,13 @@
    * The server maps qraft_ai_session_id to Claude CLI sessions internally.
    */
   let qraftAiSessionId = $state<QraftAiSessionId>(generateQraftAiSessionId());
+
+  /**
+   * Whether a message has already been submitted for the current session.
+   * Reset to false on new session or session resume.
+   * When true, "Run Now" (immediate execution) is disabled -- prompts always queue.
+   */
+  let sessionMessageSubmitted = $state(false);
 
   let serverPromptQueue = $state<PromptQueueItem[]>([]);
 
@@ -377,9 +383,8 @@
     getServerPromptQueue: () => serverPromptQueue,
     setServerPromptQueue: (value) => (serverPromptQueue = value),
     setQueueStatus: (value) => (queueStatus = value),
-    getAIPanelCollapsed: () => aiPanelCollapsed,
-    setAIPanelCollapsed: (value) => (aiPanelCollapsed = value),
     setResumeDisplaySessionId: (value) => (resumeDisplaySessionId = value),
+    setSessionMessageSubmitted: (value) => (sessionMessageSubmitted = value),
     navigateToScreen,
   });
 
@@ -467,15 +472,6 @@
     if (event.key === "b" && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
       toggleSidebar();
-    }
-    if (
-      event.key === "a" &&
-      !event.ctrlKey &&
-      !event.metaKey &&
-      currentScreen === "files"
-    ) {
-      event.preventDefault();
-      aiPanelCollapsed = !aiPanelCollapsed;
     }
   }
 
@@ -596,7 +592,6 @@
         {navigateNext}
         canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
         canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
-        {aiPanelCollapsed}
         {queueStatus}
         {changedFilePaths}
         {projectPath}
@@ -606,6 +601,7 @@
         pendingPrompts={serverPromptQueue.filter((p) => p.status === "queued")}
         {resumeDisplaySessionId}
         currentQraftAiSessionId={qraftAiSessionId}
+        isFirstMessage={!sessionMessageSubmitted}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
         onFileTreeModeChange={(mode) => {
@@ -653,9 +649,6 @@
         onResumeCliSession={handleResumeCliSession}
         onCancelActiveSession={handleCancelActiveSession}
         onCancelQueuedPrompt={handleCancelQueuedPrompt}
-        onToggleAiPanel={() => {
-          aiPanelCollapsed = !aiPanelCollapsed;
-        }}
       />
     {:else if currentScreen === "commits"}
       <!-- Commits Screen -->

@@ -14,6 +14,10 @@ import {
   type PromptQueueItem,
 } from "./app-api";
 import { buildQueueStatus } from "./ai-runtime";
+import {
+  notifyAIPromptCompleted,
+  requestAIPromptNotificationPermission,
+} from "./browser-notifications";
 import type { ScreenType } from "./app-routing";
 
 type SetState<T> = (value: T) => void;
@@ -50,9 +54,8 @@ interface AIFeatureDeps {
   getServerPromptQueue: GetState<PromptQueueItem[]>;
   setServerPromptQueue: SetState<PromptQueueItem[]>;
   setQueueStatus: SetState<QueueStatus>;
-  getAIPanelCollapsed: GetState<boolean>;
-  setAIPanelCollapsed: SetState<boolean>;
   setResumeDisplaySessionId: SetState<string | null>;
+  setSessionMessageSubmitted: SetState<boolean>;
   navigateToScreen: (screen: ScreenType) => void;
 }
 
@@ -105,6 +108,8 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
 } {
   let stickyCompletedSession: { session: AISession; expiresAt: number } | null =
     null;
+  let completedSessionBaselineInitialized = false;
+  const notifiedCompletedSessionIds = new Set<string>();
 
   async function fetchPromptQueue(): Promise<void> {
     try {
@@ -123,6 +128,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
       const running: AISession[] = [];
       const queued: AISession[] = [];
       const recentCompleted: AISession[] = [];
+      const completedSessions: AISession[] = [];
       const now = Date.now();
       const recentWindowMs = 60_000;
 
@@ -140,8 +146,20 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
           running.push(session);
         } else if (session.state === "queued") {
           queued.push(session);
+        } else if (session.state === "completed") {
+          completedSessions.push(session);
+          const terminalAt =
+            session.completedAt ?? session.startedAt ?? session.createdAt;
+          const terminalTime = new Date(terminalAt).getTime();
+          // Keep terminal sessions visible briefly even when timestamps are missing
+          // or malformed, to avoid a jarring panel disappear right after completion.
+          if (
+            Number.isNaN(terminalTime) ||
+            now - terminalTime < recentWindowMs
+          ) {
+            recentCompleted.push(session);
+          }
         } else if (
-          session.state === "completed" ||
           session.state === "failed" ||
           session.state === "cancelled"
         ) {
@@ -157,6 +175,21 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
             recentCompleted.push(session);
           }
         }
+      }
+
+      if (completedSessionBaselineInitialized) {
+        for (const completedSession of completedSessions) {
+          if (notifiedCompletedSessionIds.has(completedSession.id)) {
+            continue;
+          }
+          notifyAIPromptCompleted(completedSession);
+          notifiedCompletedSessionIds.add(completedSession.id);
+        }
+      } else {
+        for (const completedSession of completedSessions) {
+          notifiedCompletedSessionIds.add(completedSession.id);
+        }
+        completedSessionBaselineInitialized = true;
       }
 
       if (recentCompleted.length > 0) {
@@ -195,6 +228,8 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     if (deps.getContextId() === null) return;
 
     try {
+      await requestAIPromptNotificationPermission();
+
       const payload = {
         runImmediately: immediate,
         message,
@@ -205,6 +240,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
       };
       await submitAIPrompt(payload);
 
+      deps.setSessionMessageSubmitted(true);
       void fetchPromptQueue();
       void fetchActiveSessions();
     } catch (error) {
@@ -251,6 +287,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     if (deps.getContextId() === null) return;
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
     deps.setResumeDisplaySessionId(resumeQraftId);
+    deps.setSessionMessageSubmitted(true);
     void fetchActiveSessions();
     void fetchPromptQueue();
   }
@@ -258,9 +295,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   function handleNewSession(): void {
     deps.setResumeDisplaySessionId(null);
     deps.setQraftAiSessionId(generateQraftAiSessionId());
-    if (deps.getAIPanelCollapsed()) {
-      deps.setAIPanelCollapsed(false);
-    }
+    deps.setSessionMessageSubmitted(false);
   }
 
   function handleSearchSession(): void {

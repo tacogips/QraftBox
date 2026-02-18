@@ -18,7 +18,7 @@
    * Design:
    * - Appears inline after line selection
    * - @ file reference autocomplete
-   * - Split button: Submit (queue) + dropdown "Submit & Run Now"
+   * - Submit button (always queues)
    * - Touch-friendly (bottom sheet on tablet)
    */
 
@@ -56,11 +56,6 @@
    * Current prompt text
    */
   let prompt = $state("");
-
-  /**
-   * Dropdown state for split button
-   */
-  let showDropdown = $state(false);
 
   /**
    * File references added via @
@@ -159,12 +154,9 @@
       event.preventDefault();
       handleSubmit();
     }
-    // Escape to cancel (or close dropdown first)
+    // Escape to cancel
     if (event.key === "Escape") {
-      if (showDropdown) {
-        event.preventDefault();
-        showDropdown = false;
-      } else if (!showAutocomplete) {
+      if (!showAutocomplete) {
         event.preventDefault();
         onCancel();
       }
@@ -177,35 +169,6 @@
   function handleSubmit(): void {
     if (prompt.trim().length === 0) return;
     onSubmit(prompt, false, fileRefs);
-    showDropdown = false;
-  }
-
-  /**
-   * Handle submit and run now (immediate)
-   */
-  function handleSubmitAndRun(): void {
-    if (prompt.trim().length === 0) return;
-    onSubmit(prompt, true, fileRefs);
-    showDropdown = false;
-  }
-
-  /**
-   * Toggle dropdown menu
-   */
-  function toggleDropdown(): void {
-    showDropdown = !showDropdown;
-  }
-
-  /**
-   * Handle clicks outside dropdown to close it
-   */
-  function handleWindowClick(event: MouseEvent): void {
-    if (showDropdown) {
-      const target = event.target as HTMLElement;
-      if (!target.closest(".split-button-container")) {
-        showDropdown = false;
-      }
-    }
   }
 
   /**
@@ -217,8 +180,6 @@
     }, 100);
   }
 </script>
-
-<svelte:window on:click={handleWindowClick} />
 
 <div
   class="ai-prompt-inline bg-bg-secondary border border-border-default rounded-lg
@@ -369,77 +330,21 @@
     </div>
   {/if}
 
-  <!-- Footer with split submit button -->
+  <!-- Footer with submit button -->
   <div class="flex items-center justify-end">
-    <!-- Split submit button -->
-    <div class="split-button-container relative flex">
-      <div class="flex min-h-[44px]">
-        <!-- Main Submit button -->
-        <button
-          type="button"
-          onclick={handleSubmit}
-          disabled={prompt.trim().length === 0}
-          class="px-4 py-2 min-h-[44px]
-                 bg-success-emphasis hover:brightness-110
-                 text-white text-sm font-medium rounded-l
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-all duration-150
-                 focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
-        >
-          Submit
-        </button>
-        <!-- Dropdown trigger -->
-        <button
-          type="button"
-          onclick={toggleDropdown}
-          disabled={prompt.trim().length === 0}
-          class="px-2 min-h-[44px]
-                 bg-success-emphasis hover:brightness-110
-                 text-white rounded-r
-                 border-l border-white/20
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-all duration-150
-                 focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
-          aria-label="More submit options"
-          aria-haspopup="true"
-          aria-expanded={showDropdown}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-      </div>
-
-      <!-- Dropdown menu -->
-      {#if showDropdown}
-        <div
-          class="absolute bottom-full right-0 mb-1 w-48
-                 bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50"
-        >
-          <button
-            type="button"
-            onclick={handleSubmitAndRun}
-            class="w-full px-3 py-2 text-left text-sm text-text-primary
-                   hover:bg-bg-tertiary rounded-lg
-                   transition-colors duration-150
-                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-          >
-            Submit & Run Now
-          </button>
-        </div>
-      {/if}
-    </div>
+    <button
+      type="button"
+      onclick={handleSubmit}
+      disabled={prompt.trim().length === 0}
+      class="px-4 py-2 min-h-[44px]
+             bg-success-emphasis hover:brightness-110
+             text-white text-sm font-medium rounded
+             disabled:opacity-50 disabled:cursor-not-allowed
+             transition-all duration-150
+             focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
+    >
+      Submit
+    </button>
   </div>
 
   <!-- Keyboard hint -->

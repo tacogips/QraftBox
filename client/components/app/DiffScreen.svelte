@@ -243,7 +243,6 @@
     navigateNext,
     canNarrow,
     canWiden,
-    aiPanelCollapsed,
     queueStatus,
     changedFilePaths,
     projectPath,
@@ -253,6 +252,7 @@
     pendingPrompts,
     resumeDisplaySessionId,
     currentQraftAiSessionId,
+    isFirstMessage,
     showIgnored,
     onToggleSidebar,
     onFileSelect,
@@ -271,7 +271,6 @@
     onResumeCliSession,
     onCancelActiveSession,
     onCancelQueuedPrompt,
-    onToggleAiPanel,
     onReloadFileTree,
   }: {
     activeTabIsGitRepo: boolean;
@@ -299,7 +298,6 @@
     navigateNext: (() => void) | undefined;
     canNarrow: boolean;
     canWiden: boolean;
-    aiPanelCollapsed: boolean;
     queueStatus: QueueStatus;
     changedFilePaths: string[];
     projectPath: string;
@@ -309,6 +307,7 @@
     pendingPrompts: PromptQueueItem[];
     resumeDisplaySessionId: string | null;
     currentQraftAiSessionId: string;
+    isFirstMessage: boolean;
     showIgnored: boolean;
     showAllFiles: boolean;
     onToggleSidebar: () => void;
@@ -331,7 +330,6 @@
     onResumeCliSession: (resumeQraftId: string) => void;
     onCancelActiveSession: (sessionId: string) => Promise<void>;
     onCancelQueuedPrompt: (promptId: string) => Promise<void>;
-    onToggleAiPanel: () => void;
     onReloadFileTree: () => void;
   } = $props();
 
@@ -530,7 +528,7 @@
     <div
       bind:this={mobileBottomDockRef}
       class={isPhoneViewport
-        ? "fixed left-0 right-0 bottom-0 z-40 bg-bg-secondary"
+        ? "fixed left-0 right-0 bottom-0 z-40 bg-bg-secondary flex flex-col"
         : "shrink-0 flex flex-col min-h-0"}
       style:bottom={isPhoneViewport
         ? mobileDockTop !== null
@@ -540,6 +538,7 @@
       style:top={isPhoneViewport && mobileDockTop !== null
         ? `${mobileDockTop}px`
         : undefined}
+      style:max-height={isPhoneViewport ? "70dvh" : undefined}
       style:padding-bottom={isPhoneViewport
         ? "env(safe-area-inset-bottom, 0px)"
         : undefined}
@@ -711,44 +710,26 @@
         </div>
       </div>
 
-      <!-- Drag handle to resize AI panel (only visible when expanded) -->
-      {#if !aiPanelCollapsed}
+      <!-- Drag handle to resize AI panel -->
+      <div
+        class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
+               group hover:bg-accent-muted/40 transition-colors"
+        onmousedown={handleResizeMouseDown}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize AI panel"
+      >
         <div
-          class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
-                 group hover:bg-accent-muted/40 transition-colors"
-          onmousedown={handleResizeMouseDown}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize AI panel"
-        >
-          <div
-            class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-          ></div>
-        </div>
-      {/if}
+          class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+        ></div>
+      </div>
 
       <div
-        class="shrink-0 flex flex-col min-h-0"
-        style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
+        class="{isPhoneViewport
+          ? 'flex-1'
+          : 'shrink-0'} flex flex-col min-h-0 overflow-hidden"
+        style:height={isPhoneViewport ? "auto" : `${aiPanelHeight}px`}
       >
-        {#if !aiPanelCollapsed && aiModelProfiles.length > 0}
-          <div class="px-4 py-2 border-b border-border-default bg-bg-secondary">
-            <label class="text-xs text-text-tertiary uppercase tracking-wide">
-              AI Ask Model
-              <select
-                class="ml-2 rounded border border-border-default bg-bg-primary px-2 py-1 text-sm text-text-primary"
-                bind:value={selectedAiModelProfileId}
-              >
-                {#each aiModelProfiles as profile (profile.id)}
-                  <option value={profile.id}
-                    >{profile.name} ({profile.vendor}/{profile.model})</option
-                  >
-                {/each}
-              </select>
-            </label>
-          </div>
-        {/if}
-
         <CurrentSessionPanel
           {contextId}
           currentClientSessionId={currentQraftAiSessionId}
@@ -766,8 +747,8 @@
         <AIPromptPanel
           {contextId}
           {projectPath}
-          collapsed={aiPanelCollapsed}
           {queueStatus}
+          {isFirstMessage}
           changedFiles={changedFilePaths}
           allFiles={changedFilePaths}
           modelProfiles={aiModelProfiles}
@@ -782,10 +763,8 @@
               references: refs,
               diffSummary: undefined,
               modelProfileId: modelProfileId ?? selectedAiModelProfileId,
-              // TODO: pass resumeSessionId to continue current session
             });
           }}
-          onToggle={onToggleAiPanel}
           {onNewSession}
           onResumeSession={onResumeCliSession}
         />
