@@ -44,7 +44,7 @@
     "prettier": "3.4.2",
     "prettier-plugin-svelte": "3.4.1",
     "typescript": "5.7.2",
-    "vitest": "2.1.8"
+    "vitest": "2.1.9"
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
