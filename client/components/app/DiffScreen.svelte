@@ -69,7 +69,8 @@
 
   function detectIphoneSafari(): boolean {
     const ua = navigator.userAgent;
-    const isSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+    const isSafari =
+      /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
     return detectIphone() && isSafari;
   }
 
@@ -133,7 +134,8 @@
           : Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
       mobileViewportBottomOffset = Math.round(occludedBottom);
 
-      const dockHeight = mobileBottomDockRef?.offsetHeight ?? mobileBottomDockHeight;
+      const dockHeight =
+        mobileBottomDockRef?.offsetHeight ?? mobileBottomDockHeight;
       const keyboardOpen =
         vv !== undefined && vv.height < window.innerHeight * 0.8;
 
@@ -152,8 +154,7 @@
       const isStandalone =
         window.matchMedia("(display-mode: standalone)").matches ||
         // iOS Safari standalone mode.
-        ((navigator as Navigator & { standalone?: boolean }).standalone ===
-          true);
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
 
       // Avoid forcing offset while keyboard is open.
       if (isStandalone || keyboardOpen) {

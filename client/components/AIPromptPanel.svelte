@@ -488,7 +488,7 @@
         mimeType:
           file.type.length > 0
             ? file.type
-            : inferMimeTypeFromName(file.name) ?? "application/octet-stream",
+            : (inferMimeTypeFromName(file.name) ?? "application/octet-stream"),
         encoding: "base64",
         attachmentKind: file.type.startsWith("image/") ? "image" : "binary",
       });

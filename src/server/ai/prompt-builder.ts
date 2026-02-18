@@ -236,7 +236,8 @@ function formatFileReference(ref: FileReference): string {
 
   // Content
   if (ref.content !== undefined && ref.content.length > 0) {
-    const fenceLabel = isAttachment && ref.encoding === "base64" ? "base64" : "";
+    const fenceLabel =
+      isAttachment && ref.encoding === "base64" ? "base64" : "";
     lines.push(`\`\`\`${fenceLabel}`);
     lines.push(ref.content);
     lines.push("```");
