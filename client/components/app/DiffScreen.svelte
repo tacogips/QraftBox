@@ -69,7 +69,6 @@
   let mobileBottomDockHeight = $state(0);
   let mobileViewportBottomOffset = $state(0);
   let mobileSafariFallbackOffset = $state(0);
-  let mobileDockTop = $state<number | null>(null);
   let isIphone = $state(false);
   let isPhoneViewport = $state(false);
 
@@ -146,7 +145,6 @@
     if (!isPhoneViewport) {
       mobileViewportBottomOffset = 0;
       mobileSafariFallbackOffset = 0;
-      mobileDockTop = null;
       return;
     }
 
@@ -159,17 +157,8 @@
           : Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
       mobileViewportBottomOffset = Math.round(occludedBottom);
 
-      const dockHeight =
-        mobileBottomDockRef?.offsetHeight ?? mobileBottomDockHeight;
       const keyboardOpen =
         vv !== undefined && vv.height < window.innerHeight * 0.8;
-
-      if (isIphone && vv !== undefined && !keyboardOpen) {
-        const nextTop = Math.max(0, vv.offsetTop + vv.height - dockHeight);
-        mobileDockTop = Math.round(nextTop);
-      } else {
-        mobileDockTop = null;
-      }
 
       if (!detectMobileDevice() || !detectIphoneSafari()) {
         mobileSafariFallbackOffset = 0;
@@ -585,12 +574,7 @@
         ? "fixed left-0 right-0 bottom-0 z-40 bg-bg-secondary flex flex-col"
         : "shrink-0 flex flex-col min-h-0"}
       style:bottom={isPhoneViewport
-        ? mobileDockTop !== null
-          ? "auto"
-          : `${mobileViewportBottomOffset + mobileSafariFallbackOffset}px`
-        : undefined}
-      style:top={isPhoneViewport && mobileDockTop !== null
-        ? `${mobileDockTop}px`
+        ? `${mobileViewportBottomOffset + mobileSafariFallbackOffset}px`
         : undefined}
       style:max-height={isPhoneViewport ? "70dvh" : undefined}
       style:padding-bottom={isPhoneViewport
