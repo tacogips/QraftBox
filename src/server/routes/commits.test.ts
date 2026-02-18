@@ -277,13 +277,14 @@ describe("GET /api/commits/:hash/diff", () => {
     secondCommitHash = stdout.trim();
   });
 
-  test("returns unified diff for valid commit", async () => {
+  test("returns parsed diff for valid commit", async () => {
     const response = await app.request(`/${secondCommitHash}/diff`);
 
     expect(response.status).toBe(200);
-    const text = await response.text();
-    expect(text).toContain("diff --git");
-    expect(text).toContain("file2.txt");
+    const data = (await response.json()) as { files: Array<{ path: string }> };
+    expect(data.files).toBeDefined();
+    expect(data.files.length).toBeGreaterThan(0);
+    expect(data.files.some((f) => f.path === "file2.txt")).toBe(true);
   });
 
   test("validates commit hash format for diff", async () => {

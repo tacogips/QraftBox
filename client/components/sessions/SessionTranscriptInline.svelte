@@ -15,11 +15,27 @@
     contextId: string;
     /** When set, only show the last N messages (compact mode) */
     maxMessages?: number | undefined;
+    /** Auto-refresh interval for live transcript updates (0 = disabled) */
+    autoRefreshMs?: number | undefined;
+    /** Keep the viewport anchored to the latest message while refreshing */
+    followLatest?: boolean | undefined;
+    /** Optimistic user message shown before transcript persistence */
+    optimisticUserMessage?: string | undefined;
+    /** Optimistic assistant message shown before transcript persistence */
+    optimisticAssistantMessage?: string | undefined;
   }
 
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
 
-  const { sessionId, contextId, maxMessages = undefined }: Props = $props();
+  const {
+    sessionId,
+    contextId,
+    maxMessages = undefined,
+    autoRefreshMs = 0,
+    followLatest = false,
+    optimisticUserMessage = undefined,
+    optimisticAssistantMessage = undefined,
+  }: Props = $props();
 
   /**
    * Transcript event structure (matches server response)
@@ -57,11 +73,39 @@
    */
   type ViewMode = "chat" | "carousel";
 
+  const VIEW_MODE_STORAGE_KEY = "qraftbox:session-transcript-view-mode";
+
+  function loadViewMode(): ViewMode {
+    try {
+      const stored = localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (stored === "chat" || stored === "carousel") return stored;
+    } catch {
+      // localStorage unavailable
+    }
+    return "chat";
+  }
+
   let loadingState: LoadingState = $state({ status: "idle" });
-  let viewMode: ViewMode = $state("chat");
+  let viewMode: ViewMode = $state(loadViewMode());
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
+  let copiedEventId: string | null = $state(null);
+
+  /**
+   * Copy event content to clipboard
+   */
+  async function copyToClipboard(text: string, eventId: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedEventId = eventId;
+      setTimeout(() => {
+        copiedEventId = null;
+      }, 1500);
+    } catch {
+      // Silently fail if clipboard API is unavailable
+    }
+  }
 
   /**
    * Filter events to only show user and assistant messages.
@@ -88,11 +132,65 @@
 
   const isCompact = $derived(maxMessages !== undefined);
 
+  function normalizeMessageText(rawText: string): string {
+    return stripSystemTags(rawText).replace(/\s+/g, " ").trim();
+  }
+
+  const normalizedOptimisticUser = $derived(
+    normalizeMessageText(optimisticUserMessage ?? ""),
+  );
+
+  const normalizedOptimisticAssistant = $derived(
+    normalizeMessageText(optimisticAssistantMessage ?? ""),
+  );
+
+  const normalizedChatTextSet = $derived.by(() => {
+    const textSet = new Set<string>();
+    for (const transcriptEvent of chatEvents) {
+      const normalizedText = normalizeMessageText(
+        extractTextContent(transcriptEvent),
+      );
+      if (normalizedText.length > 0) {
+        textSet.add(normalizedText);
+      }
+    }
+    return textSet;
+  });
+
+  const showOptimisticUser = $derived(
+    normalizedOptimisticUser.length > 0 &&
+      !normalizedChatTextSet.has(normalizedOptimisticUser),
+  );
+
+  const showOptimisticAssistant = $derived(
+    normalizedOptimisticAssistant.length > 0 &&
+      !normalizedChatTextSet.has(normalizedOptimisticAssistant),
+  );
+
+  const optimisticTailCount = $derived(
+    (showOptimisticUser ? 1 : 0) + (showOptimisticAssistant ? 1 : 0),
+  );
+
+  /**
+   * Whether we have optimistic messages to show as fallback when transcript
+   * is not yet available (e.g. new session where CLI session file hasn't
+   * been created yet).
+   */
+  const hasOptimisticContent = $derived(
+    (optimisticUserMessage ?? "").length > 0 ||
+      (optimisticAssistantMessage ?? "").length > 0,
+  );
+
   /**
    * Fetch transcript events from API
    */
-  async function fetchTranscript(): Promise<void> {
-    loadingState = { status: "loading" };
+  async function fetchTranscript(options?: {
+    silent?: boolean;
+  }): Promise<void> {
+    const isSilentRefresh = options?.silent === true;
+    if (!isSilentRefresh) {
+      loadingState = { status: "loading" };
+    }
 
     try {
       const response = await fetch(
@@ -101,6 +199,15 @@
 
       if (!response.ok) {
         const errorData = (await response.json()) as { error: string };
+        // Keep existing data on silent refresh (don't regress from success)
+        if (isSilentRefresh && loadingState.status === "success") {
+          return;
+        }
+        // On silent refresh from error state, stay in error silently
+        // (auto-refresh will retry and recover once session is created)
+        if (isSilentRefresh && loadingState.status === "error") {
+          return;
+        }
         loadingState = {
           status: "error",
           error: errorData.error ?? "Failed to fetch transcript",
@@ -115,6 +222,12 @@
         total: data.total,
       };
     } catch (error: unknown) {
+      if (
+        isSilentRefresh &&
+        (loadingState.status === "success" || loadingState.status === "error")
+      ) {
+        return;
+      }
       loadingState = {
         status: "error",
         error:
@@ -124,10 +237,33 @@
   }
 
   /**
+   * Persist view mode to localStorage
+   */
+  $effect(() => {
+    try {
+      localStorage.setItem(VIEW_MODE_STORAGE_KEY, viewMode);
+    } catch {
+      // localStorage unavailable
+    }
+  });
+
+  /**
    * Initial fetch on mount
    */
   $effect(() => {
-    fetchTranscript();
+    void fetchTranscript();
+  });
+
+  /**
+   * Optional polling for live transcript updates.
+   * Uses silent refresh so existing content stays visible while fetching.
+   */
+  $effect(() => {
+    if (autoRefreshMs <= 0) return;
+    const pollTimerId = setInterval(() => {
+      void fetchTranscript({ silent: true });
+    }, autoRefreshMs);
+    return () => clearInterval(pollTimerId);
   });
 
   /**
@@ -148,10 +284,13 @@
       loadingState.status === "success" &&
       chatScrollContainer !== null
     ) {
+      const _liveTail = optimisticTailCount;
       const container = chatScrollContainer;
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
+      if (followLatest) {
+        requestAnimationFrame(() => {
+          container.scrollTop = container.scrollHeight;
+        });
+      }
     }
   });
 
@@ -372,6 +511,57 @@
   }
 
   /**
+   * Swipe / drag state for carousel
+   */
+  let dragStartX: number | null = $state(null);
+  let isDragging = $state(false);
+
+  const SWIPE_THRESHOLD = 50;
+
+  function handleTouchStart(e: TouchEvent): void {
+    const touch = e.touches[0];
+    if (touch !== undefined) {
+      dragStartX = touch.clientX;
+    }
+  }
+
+  function handleTouchEnd(e: TouchEvent): void {
+    if (dragStartX === null) return;
+    const touch = e.changedTouches[0];
+    if (touch === undefined) return;
+    const diff = dragStartX - touch.clientX;
+    if (diff > SWIPE_THRESHOLD) {
+      handleNext();
+    } else if (diff < -SWIPE_THRESHOLD) {
+      handlePrevious();
+    }
+    dragStartX = null;
+  }
+
+  function handlePointerDown(e: PointerEvent): void {
+    if (e.pointerType === "touch") return;
+    dragStartX = e.clientX;
+    isDragging = true;
+  }
+
+  function handlePointerMove(e: PointerEvent): void {
+    if (!isDragging) return;
+    e.preventDefault();
+  }
+
+  function handlePointerUp(e: PointerEvent): void {
+    if (!isDragging || dragStartX === null) return;
+    const diff = dragStartX - e.clientX;
+    if (diff > SWIPE_THRESHOLD) {
+      handleNext();
+    } else if (diff < -SWIPE_THRESHOLD) {
+      handlePrevious();
+    }
+    dragStartX = null;
+    isDragging = false;
+  }
+
+  /**
    * Handle keyboard navigation in carousel mode
    */
   function handleKeyDown(e: KeyboardEvent): void {
@@ -395,89 +585,137 @@
 
 <svelte:window onkeydown={handleKeyDown} />
 
-<div class="session-transcript-inline {isCompact ? 'px-4 py-1.5' : 'px-4 py-3'}">
+<div
+  class="session-transcript-inline {isCompact ? 'px-4 py-1.5' : 'px-4 py-3'}"
+>
   <!-- View mode toggle with navigation (hidden in compact mode) -->
   {#if !isCompact}
-  <div class="flex items-center justify-center gap-2 mb-3">
-    <div class="flex bg-bg-tertiary rounded-md p-0.5">
-      <button
-        type="button"
-        class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
-        'chat'
-          ? 'bg-bg-primary text-text-primary shadow-sm'
-          : 'text-text-secondary hover:text-text-primary'}"
-        onclick={() => (viewMode = "chat")}
-        aria-pressed={viewMode === "chat"}
-      >
-        Chat
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
-        'carousel'
-          ? 'bg-bg-primary text-text-primary shadow-sm'
-          : 'text-text-secondary hover:text-text-primary'}"
-        onclick={() => (viewMode = "carousel")}
-        aria-pressed={viewMode === "carousel"}
-      >
-        Carousel
-      </button>
-    </div>
-
-    <!-- Jump to first/last buttons -->
-    {#if chatEvents.length > 0}
-      <div class="flex items-center gap-0.5">
+    <div class="flex items-center justify-center gap-2 mb-3">
+      <div class="flex bg-bg-tertiary rounded-md p-0.5">
         <button
           type="button"
-          onclick={handleGoToFirst}
-          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
-          aria-label="Jump to first message"
-          title="Jump to first message"
+          class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
+          'chat'
+            ? 'bg-bg-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
+          onclick={() => (viewMode = "chat")}
+          aria-pressed={viewMode === "chat"}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="11 17 6 12 11 7" />
-            <polyline points="18 17 13 12 18 7" />
-          </svg>
+          Chat
         </button>
         <button
           type="button"
-          onclick={handleGoToLast}
-          class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary transition-colors"
-          aria-label="Jump to last message"
-          title="Jump to last message"
+          class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
+          'carousel'
+            ? 'bg-bg-primary text-text-primary shadow-sm'
+            : 'text-text-secondary hover:text-text-primary'}"
+          onclick={() => (viewMode = "carousel")}
+          aria-pressed={viewMode === "carousel"}
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <polyline points="13 17 18 12 13 7" />
-            <polyline points="6 17 11 12 6 7" />
-          </svg>
+          Carousel
         </button>
       </div>
-    {/if}
-  </div>
+
+      <!-- Navigation buttons: previous/next + jump to first/last -->
+      {#if chatEvents.length > 0}
+        <div class="flex items-center gap-0.5">
+          <button
+            type="button"
+            onclick={handlePrevious}
+            disabled={currentIndex === 0}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Previous message"
+            title="Previous message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onclick={handleNext}
+            disabled={currentIndex >= chatEvents.length - 1}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Next message"
+            title="Next message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onclick={handleGoToFirst}
+            disabled={currentIndex === 0}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Jump to first message"
+            title="Jump to first message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="11 17 6 12 11 7" />
+              <polyline points="18 17 13 12 18 7" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onclick={handleGoToLast}
+            disabled={currentIndex >= chatEvents.length - 1}
+            class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Jump to last message"
+            title="Jump to last message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="13 17 18 12 13 7" />
+              <polyline points="6 17 11 12 6 7" />
+            </svg>
+          </button>
+        </div>
+      {/if}
+    </div>
   {/if}
 
   <!-- Content area -->
-  {#if loadingState.status === "loading"}
+  {#if loadingState.status === "loading" && !hasOptimisticContent}
     <div class="flex items-center justify-center py-12">
       <div class="flex items-center gap-2 text-text-tertiary">
         <svg
@@ -503,7 +741,7 @@
         <span class="text-sm">Loading transcript...</span>
       </div>
     </div>
-  {:else if loadingState.status === "error"}
+  {:else if loadingState.status === "error" && !hasOptimisticContent}
     <div class="flex items-center justify-center py-12">
       <div
         class="max-w-md p-4 bg-danger-muted border border-danger-emphasis rounded-lg"
@@ -516,18 +754,20 @@
         </p>
       </div>
     </div>
-  {:else if loadingState.status === "success"}
-    {#if chatEvents.length === 0}
+  {:else if loadingState.status === "success" || hasOptimisticContent}
+    {#if chatEvents.length === 0 && !hasOptimisticContent}
       <div class="flex items-center justify-center py-12">
         <p class="text-sm text-text-tertiary">
           No user or assistant messages found
         </p>
       </div>
-    {:else if viewMode === "chat"}
+    {:else if viewMode === "chat" || (chatEvents.length === 0 && hasOptimisticContent)}
       <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
       <div
         bind:this={chatScrollContainer}
-        class="{isCompact ? 'max-h-[120px]' : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
+        class="{isCompact
+          ? 'max-h-[120px]'
+          : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
       >
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
@@ -549,9 +789,60 @@
               >
                 {event.type}
               </span>
-              <span class="text-xs text-text-tertiary">
-                {formatTimestamp(event.timestamp)}
-              </span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-text-tertiary">
+                  {formatTimestamp(event.timestamp)}
+                </span>
+                <!-- Copy to clipboard button -->
+                <button
+                  type="button"
+                  onclick={(e: MouseEvent) => {
+                    e.stopPropagation();
+                    copyToClipboard(textContent, eventId);
+                  }}
+                  class="p-0.5 hover:bg-bg-hover rounded transition-colors
+                         focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                  aria-label="Copy message to clipboard"
+                  title="Copy to clipboard"
+                >
+                  {#if copiedEventId === eventId}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="text-success-fg"
+                      aria-hidden="true"
+                    >
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  {:else}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="text-text-tertiary"
+                      aria-hidden="true"
+                    >
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path
+                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                      />
+                    </svg>
+                  {/if}
+                </button>
+              </div>
             </div>
 
             <!-- Message content -->
@@ -578,6 +869,48 @@
             </div>
           </div>
         {/each}
+
+        {#if showOptimisticUser}
+          <div
+            class="border-l-4 border-accent-emphasis bg-bg-secondary rounded-r"
+          >
+            <div class="px-3 py-1.5 flex items-center justify-between">
+              <span
+                class="text-xs font-semibold px-2 py-0.5 rounded bg-accent-muted text-accent-fg"
+              >
+                user (pending)
+              </span>
+            </div>
+            <div class="px-3 py-2">
+              <div
+                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+              >
+                {stripSystemTags(optimisticUserMessage ?? "")}
+              </div>
+            </div>
+          </div>
+        {/if}
+
+        {#if showOptimisticAssistant}
+          <div
+            class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
+          >
+            <div class="px-3 py-1.5 flex items-center justify-between">
+              <span
+                class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+              >
+                assistant (live)
+              </span>
+            </div>
+            <div class="px-3 py-2">
+              <div
+                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+              >
+                {stripSystemTags(optimisticAssistantMessage ?? "")}
+              </div>
+            </div>
+          </div>
+        {/if}
       </div>
     {:else if viewMode === "carousel"}
       <!-- Carousel mode: narrower cards with neighbors visible on sides -->
@@ -635,22 +968,31 @@
           </svg>
         </button>
 
-        <!-- Horizontal card track -->
-        <div class="overflow-hidden">
+        <!-- Horizontal card track (swipe + drag enabled) -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="overflow-hidden select-none"
+          ontouchstart={handleTouchStart}
+          ontouchend={handleTouchEnd}
+          onpointerdown={handlePointerDown}
+          onpointermove={handlePointerMove}
+          onpointerup={handlePointerUp}
+          onpointerleave={handlePointerUp}
+        >
           <div
             class="flex gap-3 transition-transform duration-300 ease-in-out"
-            style="transform: translateX(calc(17.5% - {currentIndex *
-              65}% - {currentIndex * 12}px))"
+            style="transform: translateX(calc(27.5% - {currentIndex *
+              45}% - {currentIndex * 12}px))"
           >
             {#each chatEvents as event, index (getEventId(event, index))}
               {@const textContent = extractTextContent(event)}
               {@const isCurrent = index === currentIndex}
 
-              <!-- Each card: 65% width, neighbors peek from sides -->
+              <!-- Each card: 45% width, neighbors peek from sides -->
               <button
                 type="button"
                 onclick={() => handleGoToIndex(index)}
-                class="w-[65%] shrink-0 text-left transition-all duration-300
+                class="w-[45%] shrink-0 text-left transition-all duration-300
                        {isCurrent
                   ? 'opacity-100 scale-100'
                   : 'opacity-40 scale-95'}"
@@ -671,9 +1013,82 @@
                     >
                       {event.type}
                     </span>
-                    <span class="text-xs text-text-tertiary">
-                      {formatTimestamp(event.timestamp)}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-text-tertiary">
+                        {formatTimestamp(event.timestamp)}
+                      </span>
+                      <!-- Copy to clipboard (div+role to avoid nested button) -->
+                      <!-- svelte-ignore a11y_no_static_element_interactions -->
+                      <div
+                        role="button"
+                        tabindex="0"
+                        onclick={(e: MouseEvent) => {
+                          e.stopPropagation();
+                          copyToClipboard(
+                            textContent,
+                            getEventId(event, index),
+                          );
+                        }}
+                        onkeydown={(e: KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            copyToClipboard(
+                              textContent,
+                              getEventId(event, index),
+                            );
+                          }
+                        }}
+                        class="p-0.5 hover:bg-bg-hover rounded transition-colors cursor-pointer
+                               focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                        aria-label="Copy message to clipboard"
+                        title="Copy to clipboard"
+                      >
+                        {#if copiedEventId === getEventId(event, index)}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="text-success-fg"
+                            aria-hidden="true"
+                          >
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        {:else}
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            class="text-text-tertiary"
+                            aria-hidden="true"
+                          >
+                            <rect
+                              x="9"
+                              y="9"
+                              width="13"
+                              height="13"
+                              rx="2"
+                              ry="2"
+                            />
+                            <path
+                              d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                            />
+                          </svg>
+                        {/if}
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Card content -->

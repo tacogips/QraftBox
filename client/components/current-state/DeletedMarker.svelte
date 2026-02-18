@@ -1,117 +1,117 @@
 <script lang="ts">
-import type { DeletedBlock } from "../../src/types/current-state";
+  import type { DeletedBlock } from "../../src/types/current-state";
 
-/**
- * DeletedMarker Component
- *
- * Renders a thin red line indicator for collapsed deleted content.
- * Tapping expands the deleted content. Long-press shows a preview popup.
- *
- * Props:
- * - block: The DeletedBlock data
- * - onExpand: Callback to expand this block
- * - onPreview: Optional callback for long-press preview
- *
- * Design:
- * - Thin red line (2px height) when collapsed
- * - Touch-friendly tap area (44px minimum)
- * - Hover hint shows line count
- * - Long-press triggers preview popup
- */
+  /**
+   * DeletedMarker Component
+   *
+   * Renders a thin red line indicator for collapsed deleted content.
+   * Tapping expands the deleted content. Long-press shows a preview popup.
+   *
+   * Props:
+   * - block: The DeletedBlock data
+   * - onExpand: Callback to expand this block
+   * - onPreview: Optional callback for long-press preview
+   *
+   * Design:
+   * - Thin red line (2px height) when collapsed
+   * - Touch-friendly tap area (44px minimum)
+   * - Hover hint shows line count
+   * - Long-press triggers preview popup
+   */
 
-interface Props {
-  block: DeletedBlock;
-  onExpand: () => void;
-  onPreview?: () => void;
-}
-
-// Svelte 5 props syntax
-const { block, onExpand, onPreview = undefined }: Props = $props();
-
-// State for long press detection
-let longPressTimer: ReturnType<typeof setTimeout> | undefined =
-  $state(undefined);
-let isHovered = $state(false);
-let isPressed = $state(false);
-
-/**
- * Get line count description
- */
-const lineCountText = $derived(
-  block.lines.length === 1
-    ? "1 deleted line"
-    : `${block.lines.length} deleted lines`
-);
-
-/**
- * Get the original line range description
- */
-const lineRangeText = $derived(
-  block.originalStart === block.originalEnd
-    ? `line ${block.originalStart}`
-    : `lines ${block.originalStart}-${block.originalEnd}`
-);
-
-/**
- * Handle tap/click to expand
- */
-function handleClick(): void {
-  onExpand();
-}
-
-/**
- * Start long press detection on pointer down
- */
-function handlePointerDown(): void {
-  isPressed = true;
-  if (onPreview !== undefined) {
-    longPressTimer = setTimeout(() => {
-      if (onPreview !== undefined) {
-        onPreview();
-      }
-    }, 500); // 500ms for long press
+  interface Props {
+    block: DeletedBlock;
+    onExpand: () => void;
+    onPreview?: () => void;
   }
-}
 
-/**
- * Cancel long press if pointer is released
- */
-function handlePointerUp(): void {
-  isPressed = false;
-  if (longPressTimer !== undefined) {
-    clearTimeout(longPressTimer);
-    longPressTimer = undefined;
-  }
-}
+  // Svelte 5 props syntax
+  const { block, onExpand, onPreview = undefined }: Props = $props();
 
-/**
- * Cancel long press if pointer leaves the element
- */
-function handlePointerLeave(): void {
-  isPressed = false;
-  isHovered = false;
-  if (longPressTimer !== undefined) {
-    clearTimeout(longPressTimer);
-    longPressTimer = undefined;
-  }
-}
+  // State for long press detection
+  let longPressTimer: ReturnType<typeof setTimeout> | undefined =
+    $state(undefined);
+  let isHovered = $state(false);
+  let isPressed = $state(false);
 
-/**
- * Track hover state
- */
-function handlePointerEnter(): void {
-  isHovered = true;
-}
+  /**
+   * Get line count description
+   */
+  const lineCountText = $derived(
+    block.lines.length === 1
+      ? "1 deleted line"
+      : `${block.lines.length} deleted lines`,
+  );
 
-/**
- * Handle keyboard activation
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === "Enter" || event.key === " ") {
-    event.preventDefault();
+  /**
+   * Get the original line range description
+   */
+  const lineRangeText = $derived(
+    block.originalStart === block.originalEnd
+      ? `line ${block.originalStart}`
+      : `lines ${block.originalStart}-${block.originalEnd}`,
+  );
+
+  /**
+   * Handle tap/click to expand
+   */
+  function handleClick(): void {
     onExpand();
   }
-}
+
+  /**
+   * Start long press detection on pointer down
+   */
+  function handlePointerDown(): void {
+    isPressed = true;
+    if (onPreview !== undefined) {
+      longPressTimer = setTimeout(() => {
+        if (onPreview !== undefined) {
+          onPreview();
+        }
+      }, 500); // 500ms for long press
+    }
+  }
+
+  /**
+   * Cancel long press if pointer is released
+   */
+  function handlePointerUp(): void {
+    isPressed = false;
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
+  }
+
+  /**
+   * Cancel long press if pointer leaves the element
+   */
+  function handlePointerLeave(): void {
+    isPressed = false;
+    isHovered = false;
+    if (longPressTimer !== undefined) {
+      clearTimeout(longPressTimer);
+      longPressTimer = undefined;
+    }
+  }
+
+  /**
+   * Track hover state
+   */
+  function handlePointerEnter(): void {
+    isHovered = true;
+  }
+
+  /**
+   * Handle keyboard activation
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onExpand();
+    }
+  }
 </script>
 
 <div
@@ -167,12 +167,12 @@ function handleKeydown(event: KeyboardEvent): void {
 </div>
 
 <style>
-.deleted-marker:focus {
-  outline: none;
-}
+  .deleted-marker:focus {
+    outline: none;
+  }
 
-.deleted-marker:focus-visible {
-  outline: 2px solid var(--color-accent-fg);
-  outline-offset: -2px;
-}
+  .deleted-marker:focus-visible {
+    outline: 2px solid var(--color-accent-fg);
+    outline-offset: -2px;
+  }
 </style>

@@ -21,10 +21,14 @@ import {
   isClaudeSessionIndex,
   isClaudeSessionEntry,
 } from "../../types/claude-session";
-import { SessionRegistry } from "./session-registry";
+import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import { stripSystemTags } from "../../utils/strip-system-tags";
-import { SessionReader as AgentSessionReader } from "../../../../claude-code-agent/src/sdk/index";
-import { createProductionContainer } from "../../../../claude-code-agent/src/container";
+import {
+  deriveQraftAiSessionIdFromClaude,
+  type ClaudeSessionId,
+} from "../../types/ai";
+import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
+import { createProductionContainer } from "claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
@@ -60,20 +64,25 @@ export interface ListSessionsOptions {
  */
 export class ClaudeSessionReader {
   private readonly projectsDir: string;
-  private readonly sessionRegistry: SessionRegistry;
+  private readonly mappingStore: SessionMappingStore | undefined;
   private readonly agentSessionReader: AgentSessionReader;
 
-  constructor(projectsDir?: string, sessionRegistry?: SessionRegistry) {
+  constructor(
+    projectsDir?: string,
+    mappingStore?: SessionMappingStore | undefined,
+  ) {
     this.projectsDir = projectsDir ?? CLAUDE_PROJECTS_DIR;
-    this.sessionRegistry = sessionRegistry ?? new SessionRegistry();
+    this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
   }
 
   /**
    * List all Claude projects with session metadata
+   *
+   * @param pathFilter - Optional path prefix to filter projects (e.g., "/g/gits/tacogips")
    */
-  async listProjects(): Promise<ProjectInfo[]> {
+  async listProjects(pathFilter?: string): Promise<ProjectInfo[]> {
     if (!existsSync(this.projectsDir)) {
       return [];
     }
@@ -86,32 +95,55 @@ export class ClaudeSessionReader {
         continue;
       }
 
+      // Early filtering: skip directories that clearly can't match pathFilter
+      if (pathFilter !== undefined) {
+        const simpleDecoded = entry.name.replace(/-/g, "/");
+        // Only skip if it's definitely not a match (doesn't start with filter)
+        // AND the filter doesn't contain hyphens (which could cause ambiguity)
+        if (
+          !simpleDecoded.startsWith(pathFilter) &&
+          !pathFilter.includes("-")
+        ) {
+          continue;
+        }
+      }
+
       const projectDir = join(this.projectsDir, entry.name);
       const indexPath = join(projectDir, "sessions-index.json");
+
+      let projectInfo: ProjectInfo | null = null;
 
       try {
         // Try reading sessions-index.json first
         const index = await this.readSessionIndex(indexPath);
-        projects.push({
+        projectInfo = {
           path: index.originalPath,
           encoded: entry.name,
           sessionCount: index.entries.length,
           lastModified: this.getLatestModified(index.entries),
-        });
+        };
       } catch (error: unknown) {
         // If index doesn't exist, try building from JSONL files
         try {
-          const projectInfo = await this.buildProjectFromJsonl(
+          projectInfo = await this.buildProjectFromJsonl(
             projectDir,
             entry.name,
           );
-          if (projectInfo !== null) {
-            projects.push(projectInfo);
-          }
         } catch (buildError: unknown) {
           // Skip projects that can't be processed either way
           continue;
         }
+      }
+
+      // Final pathFilter check with actual decoded path from index
+      if (projectInfo !== null) {
+        if (
+          pathFilter !== undefined &&
+          !projectInfo.path.startsWith(pathFilter)
+        ) {
+          continue;
+        }
+        projects.push(projectInfo);
       }
     }
 
@@ -125,17 +157,12 @@ export class ClaudeSessionReader {
     options: ListSessionsOptions = {},
   ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
-    const projects = await this.listProjects();
 
-    // Filter projects by working directory prefix if specified
-    const filteredProjects = options.workingDirectoryPrefix
-      ? projects.filter((p) =>
-          p.path.startsWith(options.workingDirectoryPrefix!),
-        )
-      : projects;
+    // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
+    const projects = await this.listProjects(options.workingDirectoryPrefix);
 
-    // Read sessions from filtered projects
-    for (const project of filteredProjects) {
+    // Read sessions from projects (filtering already done in listProjects)
+    for (const project of projects) {
       const projectDir = join(this.projectsDir, project.encoded);
       const indexPath = join(projectDir, "sessions-index.json");
 
@@ -151,6 +178,9 @@ export class ClaudeSessionReader {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
+            qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+              entry.sessionId as ClaudeSessionId,
+            ),
           };
 
           // Apply additional filters
@@ -171,6 +201,9 @@ export class ClaudeSessionReader {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
+              qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+                entry.sessionId as ClaudeSessionId,
+              ),
             };
 
             // Apply additional filters
@@ -230,6 +263,9 @@ export class ClaudeSessionReader {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
+            qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+              entry.sessionId as ClaudeSessionId,
+            ),
           };
         }
       } catch (error: unknown) {
@@ -246,6 +282,9 @@ export class ClaudeSessionReader {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
+              qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+                entry.sessionId as ClaudeSessionId,
+              ),
             };
           }
         } catch (buildError: unknown) {
@@ -709,12 +748,18 @@ export class ClaudeSessionReader {
   private async detectSource(
     entry: ClaudeSessionEntry,
   ): Promise<SessionSource> {
-    // Primary detection: Check qraftbox session registry
-    const isQraftBox = await this.sessionRegistry.isQraftBoxSession(
-      entry.sessionId,
-    );
-    if (isQraftBox) {
-      return "qraftbox";
+    // Primary detection: Check SQLite mapping store for qraftbox-created sessions
+    if (this.mappingStore !== undefined) {
+      try {
+        const isQraftBox = this.mappingStore.isQraftBoxSession(
+          entry.sessionId as ClaudeSessionId,
+        );
+        if (isQraftBox) {
+          return "qraftbox";
+        }
+      } catch {
+        // Best-effort: continue to fallback detection
+      }
     }
 
     // Fallback detection: Pattern matching for qraftbox context markers

@@ -63,6 +63,19 @@ export function createGitignoreFilter(projectPath: string): GitignoreFilter {
   // Cache for storing results: path -> isIgnored
   const cache = new Map<string, boolean>();
 
+  // Well-known directories that are almost always gitignored.
+  // Checking these avoids spawning a git process for every path under them.
+  const KNOWN_IGNORED_PREFIXES = [
+    "node_modules/",
+    ".git/",
+    "dist/",
+    ".direnv/",
+    ".next/",
+    ".nuxt/",
+    ".svelte-kit/",
+    ".cache/",
+  ];
+
   /**
    * Check if path is .git/ directory or inside it
    */
@@ -71,11 +84,29 @@ export function createGitignoreFilter(projectPath: string): GitignoreFilter {
   }
 
   /**
+   * Check if path starts with a known ignored prefix
+   */
+  function isKnownIgnoredPrefix(filePath: string): boolean {
+    for (const prefix of KNOWN_IGNORED_PREFIXES) {
+      if (filePath.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Check if a single file is ignored
    */
   async function isIgnored(filePath: string): Promise<boolean> {
     // Always treat .git/ paths as ignored
     if (isGitDirectory(filePath)) {
+      return true;
+    }
+
+    // Fast path: well-known ignored directories (avoids spawning git process)
+    if (isKnownIgnoredPrefix(filePath)) {
+      cache.set(filePath, true);
       return true;
     }
 
@@ -126,6 +157,13 @@ export function createGitignoreFilter(projectPath: string): GitignoreFilter {
         continue;
       }
 
+      // Fast path: well-known ignored directories
+      if (isKnownIgnoredPrefix(path)) {
+        results[i] = true;
+        cache.set(path, true);
+        continue;
+      }
+
       // Check cache
       const cached = cache.get(path);
       if (cached !== undefined) {
@@ -154,16 +192,26 @@ export function createGitignoreFilter(projectPath: string): GitignoreFilter {
       stderr: "pipe",
     });
 
-    // Write input to stdin
     proc.stdin.write(input);
     proc.stdin.end();
 
-    // Wait for output
-    const [stdout, _stderr, _exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
-      proc.exited,
-    ]);
+    let stdout: string;
+    try {
+      const [stdoutResult, _stderr, _exitCode] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      stdout = stdoutResult;
+    } catch {
+      try {
+        proc.kill();
+      } catch {
+        // Process may have already exited
+      }
+      await proc.exited.catch(() => {});
+      return results;
+    }
 
     // Parse output: lines in stdout are ignored files
     const ignoredSet = new Set<string>();

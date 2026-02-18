@@ -15,6 +15,8 @@ import type {
   LocalPromptStatus,
 } from "../../types/local-prompt";
 import type { SessionManager } from "../ai/session-manager";
+import type { ClaudeSessionId, PromptId } from "../../types/ai";
+import { createLogger } from "../logger.js";
 
 /**
  * Configuration for local prompt routes
@@ -49,6 +51,7 @@ interface ErrorResponse {
  */
 export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
   const app = new Hono();
+  const logger = createLogger("LocalPromptRoutes");
 
   /**
    * POST / - Create a new local prompt
@@ -71,9 +74,10 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
 
       const prompt = await config.promptStore.create({
         prompt: body.prompt,
-        context: body.context !== undefined && body.context !== null
-          ? { ...body.context, references: body.context.references ?? [] }
-          : { references: [] },
+        context:
+          body.context !== undefined && body.context !== null
+            ? { ...body.context, references: body.context.references ?? [] }
+            : { references: [] },
         projectPath: body.projectPath ?? "",
       });
 
@@ -127,7 +131,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.get("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const prompt = await config.promptStore.get(id);
 
       if (prompt === null) {
@@ -152,7 +156,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.patch("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const updates = await c.req.json<LocalPromptUpdate>();
 
       const existing = await config.promptStore.get(id);
@@ -179,7 +183,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.delete("/:id", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const deleted = await config.promptStore.delete(id);
 
       if (!deleted) {
@@ -203,11 +207,11 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    * POST /:id/dispatch - Dispatch prompt to Claude Code agent
    *
    * Changes status to "dispatching", submits to session manager,
-   * then updates with sessionId on success or error on failure.
+   * then updates with dispatchSessionId on success or error on failure.
    */
   app.post("/:id/dispatch", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const body = await c.req
         .json<DispatchPromptOptions>()
         .catch(() => ({}) as DispatchPromptOptions);
@@ -238,9 +242,15 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
       try {
         // Submit to session manager
         const resumeId =
-          typeof body.resumeSessionId === "string" && body.resumeSessionId.length > 0
-            ? body.resumeSessionId
+          typeof body.resumeSessionId === "string" &&
+          body.resumeSessionId.length > 0
+            ? (body.resumeSessionId as ClaudeSessionId)
             : undefined;
+        logger.info("Dispatching prompt", {
+          promptId: id,
+          immediate: body.immediate ?? false,
+          resumeSessionId: resumeId ?? null,
+        });
         const result = await config.sessionManager.submit({
           prompt: prompt.prompt,
           context: prompt.context,
@@ -252,11 +262,48 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
           },
         });
 
-        // Update with session ID
+        // Update with QraftBox dispatch session ID
         const updated = await config.promptStore.update(id, {
           status: "dispatched",
-          sessionId: result.sessionId,
+          dispatchSessionId: result.sessionId,
         });
+        logger.info("Prompt dispatched", {
+          promptId: id,
+          sessionId: result.sessionId,
+          claudeSessionId: result.claudeSessionId ?? null,
+          queuePosition: result.queuePosition ?? null,
+          immediate: result.immediate,
+        });
+
+        // Subscribe to session events for prompt status sync
+        const unsubscribe = config.sessionManager.subscribe(
+          result.sessionId,
+          (event) => {
+            if (event.type === "completed") {
+              void config.promptStore
+                .update(id, { status: "completed" })
+                .catch(() => {});
+              unsubscribe();
+            } else if (event.type === "error") {
+              const errorData = event.data as { message?: string };
+              void config.promptStore
+                .update(id, {
+                  status: "failed",
+                  error:
+                    typeof errorData.message === "string"
+                      ? errorData.message
+                      : "Session failed",
+                })
+                .catch(() => {});
+              unsubscribe();
+            } else if (event.type === "cancelled") {
+              void config.promptStore
+                .update(id, { status: "cancelled" })
+                .catch(() => {});
+              unsubscribe();
+            }
+          },
+        );
 
         return c.json({ prompt: updated, session: result });
       } catch (dispatchError) {
@@ -291,7 +338,7 @@ export function createLocalPromptRoutes(config: LocalPromptRoutesConfig): Hono {
    */
   app.post("/:id/summarize", async (c) => {
     try {
-      const id = c.req.param("id");
+      const id = c.req.param("id") as PromptId;
       const prompt = await config.promptStore.get(id);
 
       if (prompt === null) {

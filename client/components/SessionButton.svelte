@@ -1,72 +1,72 @@
 <script lang="ts">
-/**
- * SessionButton Component
- *
- * Minimal indicator showing AI session queue status.
- * Displays running/queued counts with spinner when active.
- *
- * Props:
- * - status: Queue status object with counts
- * - onClick: Callback when button is clicked (navigate to queue)
- *
- * Design:
- * - Compact indicator in header/footer
- * - Shows spinner when sessions are running
- * - Hides when no sessions
- * - Touch-friendly (44px tap target)
- */
+  /**
+   * SessionButton Component
+   *
+   * Minimal indicator showing AI session queue status.
+   * Displays running/queued counts with spinner when active.
+   *
+   * Props:
+   * - status: Queue status object with counts
+   * - onClick: Callback when button is clicked (navigate to queue)
+   *
+   * Design:
+   * - Compact indicator in header/footer
+   * - Shows spinner when sessions are running
+   * - Hides when no sessions
+   * - Touch-friendly (44px tap target)
+   */
 
-import type { QueueStatus } from "../../src/types/ai";
+  import type { QueueStatus } from "../../src/types/ai";
 
-interface Props {
-  status: QueueStatus;
-  onClick: () => void;
-}
-
-// Svelte 5 props syntax
-const { status, onClick }: Props = $props();
-
-/**
- * Whether button should be visible
- */
-const isVisible = $derived(status.totalCount > 0);
-
-/**
- * Whether sessions are running
- */
-const isRunning = $derived(status.runningCount > 0);
-
-/**
- * Status text to display
- */
-const statusText = $derived.by(() => {
-  if (status.runningCount > 0 && status.queuedCount > 0) {
-    return `${status.runningCount} running, ${status.queuedCount} queued`;
+  interface Props {
+    status: QueueStatus;
+    onClick: () => void;
   }
-  if (status.runningCount > 0) {
-    return `${status.runningCount} running`;
-  }
-  if (status.queuedCount > 0) {
-    return `${status.queuedCount} queued`;
-  }
-  return "";
-});
 
-/**
- * Compact status for narrow displays
- */
-const compactStatus = $derived.by(() => {
-  if (status.runningCount > 0 && status.queuedCount > 0) {
-    return `${status.runningCount}/${status.queuedCount}`;
-  }
-  if (status.runningCount > 0) {
-    return `${status.runningCount}`;
-  }
-  if (status.queuedCount > 0) {
-    return `${status.queuedCount}`;
-  }
-  return "";
-});
+  // Svelte 5 props syntax
+  const { status, onClick }: Props = $props();
+
+  /**
+   * Whether button should be visible
+   */
+  const isVisible = $derived(status.totalCount > 0);
+
+  /**
+   * Whether sessions are running
+   */
+  const isRunning = $derived(status.runningCount > 0);
+
+  /**
+   * Status text to display
+   */
+  const statusText = $derived.by(() => {
+    if (status.runningCount > 0 && status.queuedCount > 0) {
+      return `${status.runningCount} running, ${status.queuedCount} queued`;
+    }
+    if (status.runningCount > 0) {
+      return `${status.runningCount} running`;
+    }
+    if (status.queuedCount > 0) {
+      return `${status.queuedCount} queued`;
+    }
+    return "";
+  });
+
+  /**
+   * Compact status for narrow displays
+   */
+  const compactStatus = $derived.by(() => {
+    if (status.runningCount > 0 && status.queuedCount > 0) {
+      return `${status.runningCount}/${status.queuedCount}`;
+    }
+    if (status.runningCount > 0) {
+      return `${status.runningCount}`;
+    }
+    if (status.queuedCount > 0) {
+      return `${status.queuedCount}`;
+    }
+    return "";
+  });
 </script>
 
 {#if isVisible}
@@ -122,8 +122,12 @@ const compactStatus = $derived.by(() => {
         class="opacity-70"
         aria-hidden="true"
       >
-        <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54" />
-        <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54" />
+        <path
+          d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 4.44-1.54"
+        />
+        <path
+          d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-4.44-1.54"
+        />
       </svg>
     {/if}
 

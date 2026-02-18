@@ -61,9 +61,7 @@
   /**
    * Non-main worktrees (for empty state messaging)
    */
-  const additionalWorktrees = $derived(
-    worktrees.filter((wt) => !wt.isMain),
-  );
+  const additionalWorktrees = $derived(worktrees.filter((wt) => !wt.isMain));
 
   /**
    * Fetch worktrees from API
@@ -182,8 +180,7 @@
       deletingPath = null;
       await fetchWorktrees();
     } catch (e) {
-      error =
-        e instanceof Error ? e.message : "Failed to remove worktree";
+      error = e instanceof Error ? e.message : "Failed to remove worktree";
       deletingPath = null;
     } finally {
       deleting = false;
@@ -265,7 +262,9 @@
             <p class="flex-1">{error}</p>
             <button
               type="button"
-              onclick={() => { error = null; }}
+              onclick={() => {
+                error = null;
+              }}
               class="p-1 rounded hover:bg-danger-subtle transition-colors text-sm"
               aria-label="Dismiss error"
             >
@@ -285,7 +284,9 @@
             <p class="flex-1">{successMessage}</p>
             <button
               type="button"
-              onclick={() => { successMessage = null; }}
+              onclick={() => {
+                successMessage = null;
+              }}
               class="p-1 rounded hover:bg-success-subtle transition-colors text-sm"
               aria-label="Dismiss message"
             >
@@ -297,9 +298,16 @@
 
       <!-- Main Repository Info -->
       {#if mainRepository}
-        <div class="mb-6 p-3 rounded-lg border border-border-default bg-bg-secondary">
-          <span class="text-xs text-text-tertiary uppercase tracking-wider">Main Repository</span>
-          <p class="text-sm text-text-primary mt-1 font-mono" title={mainRepository}>
+        <div
+          class="mb-6 p-3 rounded-lg border border-border-default bg-bg-secondary"
+        >
+          <span class="text-xs text-text-tertiary uppercase tracking-wider"
+            >Main Repository</span
+          >
+          <p
+            class="text-sm text-text-primary mt-1 font-mono"
+            title={mainRepository}
+          >
             {truncatePath(mainRepository, 80)}
           </p>
         </div>
@@ -307,7 +315,9 @@
 
       <!-- Worktree List -->
       <div class="mb-6">
-        <h2 class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3">
+        <h2
+          class="text-xs font-semibold text-text-tertiary uppercase tracking-wider mb-3"
+        >
           Worktrees ({worktrees.length})
         </h2>
 
@@ -373,7 +383,9 @@
                       </button>
                       <button
                         type="button"
-                        onclick={() => { deletingPath = null; }}
+                        onclick={() => {
+                          deletingPath = null;
+                        }}
                         class="px-2 py-1 rounded text-text-secondary hover:bg-bg-tertiary
                                transition-colors"
                       >
@@ -383,7 +395,9 @@
                   {:else}
                     <button
                       type="button"
-                      onclick={() => { deletingPath = wt.path; }}
+                      onclick={() => {
+                        deletingPath = wt.path;
+                      }}
                       class="px-2 py-1 rounded text-sm text-danger-fg
                              opacity-0 group-hover:opacity-100
                              hover:bg-danger-subtle transition-all"
@@ -410,7 +424,9 @@
         {#if !showCreateForm}
           <button
             type="button"
-            onclick={() => { showCreateForm = true; }}
+            onclick={() => {
+              showCreateForm = true;
+            }}
             class="px-4 py-2 rounded-lg text-sm font-medium
                    bg-bg-secondary hover:bg-bg-tertiary text-text-primary
                    border border-border-default hover:border-accent-muted
@@ -419,7 +435,9 @@
             New Worktree
           </button>
         {:else}
-          <div class="p-4 rounded-lg border border-border-default bg-bg-secondary">
+          <div
+            class="p-4 rounded-lg border border-border-default bg-bg-secondary"
+          >
             <h3 class="text-sm font-semibold text-text-primary mb-4">
               Create New Worktree
             </h3>

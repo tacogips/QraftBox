@@ -20,10 +20,16 @@
   interface Props {
     chunks: readonly DiffChunk[];
     onLineSelect?: (line: number, type: "old" | "new") => void;
-    onCommentOpen?: (line: number, type: "old" | "new", shiftKey: boolean) => void;
+    onCommentOpen?: (
+      line: number,
+      type: "old" | "new",
+      shiftKey: boolean,
+    ) => void;
     onCommentSubmit?: (prompt: string, immediate: boolean) => void;
     onCommentCancel?: () => void;
-    commentLine?: { type: "old" | "new"; startLine: number; endLine: number } | undefined;
+    commentLine?:
+      | { type: "old" | "new"; startLine: number; endLine: number }
+      | undefined;
     placeholder?: string;
     rangeLines?: readonly number[];
     oldHighlightMap?: Map<number, string>;
@@ -132,8 +138,10 @@
     newLine: number | undefined,
   ): boolean {
     if (commentLine === undefined) return false;
-    if (commentLine.type === "new" && newLine === commentLine.endLine) return true;
-    if (commentLine.type === "old" && oldLine === commentLine.endLine) return true;
+    if (commentLine.type === "new" && newLine === commentLine.endLine)
+      return true;
+    if (commentLine.type === "old" && oldLine === commentLine.endLine)
+      return true;
     return false;
   }
 
@@ -166,7 +174,14 @@
   {:else}
     <!-- Render each change as an inline diff line -->
     {#each flattenedChanges as { change, index } (index)}
-      <div class="flex diff-line-row group/inlinerow {isInRange(change.oldLine, change.newLine) ? 'bg-accent-muted' : ''}">
+      <div
+        class="flex diff-line-row group/inlinerow {isInRange(
+          change.oldLine,
+          change.newLine,
+        )
+          ? 'bg-accent-muted'
+          : ''}"
+      >
         <!-- Old line number column -->
         <div
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
@@ -178,14 +193,15 @@
                      rounded bg-accent-emphasis text-white text-xs font-bold
                      opacity-0 group-hover/inlinerow:opacity-100
                      hover:bg-accent-fg transition-opacity z-10 cursor-pointer"
-              onclick={(e) => { e.stopPropagation(); handleCommentOpen(change.oldLine, change.newLine, e.shiftKey); }}
-              aria-label="Add comment"
-            >+</button>
+              onclick={(e) => {
+                e.stopPropagation();
+                handleCommentOpen(change.oldLine, change.newLine, e.shiftKey);
+              }}
+              aria-label="Add comment">+</button
+            >
           {/if}
           {#if change.oldLine !== undefined}
-            <span class="leading-5"
-              >{change.oldLine}</span
-            >
+            <span class="leading-5">{change.oldLine}</span>
           {:else}
             <span class="leading-5 opacity-30">-</span>
           {/if}
@@ -196,9 +212,7 @@
           class="w-16 flex-shrink-0 px-2 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default"
         >
           {#if change.newLine !== undefined}
-            <span class="leading-5"
-              >{change.newLine}</span
-            >
+            <span class="leading-5">{change.newLine}</span>
           {:else}
             <span class="leading-5 opacity-30">-</span>
           {/if}
@@ -217,14 +231,20 @@
         </div>
       </div>
       {#if isCommentLine(change.oldLine, change.newLine)}
-        <div class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3">
+        <div
+          class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
+        >
           <textarea
             class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder="Ask AI about this code..."
             bind:value={commentText}
             onkeydown={(e) => {
-              if (e.key === "Enter" && e.ctrlKey && onCommentSubmit !== undefined) {
+              if (
+                e.key === "Enter" &&
+                e.ctrlKey &&
+                onCommentSubmit !== undefined
+              ) {
                 e.preventDefault();
                 onCommentSubmit(commentText, true);
                 commentText = "";
@@ -245,12 +265,27 @@
               <button
                 type="button"
                 class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-                onclick={() => { if (onCommentCancel !== undefined) { onCommentCancel(); commentText = ""; } }}
-              >Cancel</button>
+                onclick={() => {
+                  if (onCommentCancel !== undefined) {
+                    onCommentCancel();
+                    commentText = "";
+                  }
+                }}>Cancel</button
+              >
               <SplitButton
                 disabled={commentText.trim().length === 0}
-                onPrimaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, false); commentText = ""; } }}
-                onSecondaryClick={() => { if (onCommentSubmit !== undefined) { onCommentSubmit(commentText, true); commentText = ""; } }}
+                onPrimaryClick={() => {
+                  if (onCommentSubmit !== undefined) {
+                    onCommentSubmit(commentText, false);
+                    commentText = "";
+                  }
+                }}
+                onSecondaryClick={() => {
+                  if (onCommentSubmit !== undefined) {
+                    onCommentSubmit(commentText, true);
+                    commentText = "";
+                  }
+                }}
               />
             </div>
           </div>

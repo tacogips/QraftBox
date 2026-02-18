@@ -42,7 +42,8 @@
 
     if (diffMins < 1) return "just now";
     if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
-    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+    if (diffHours < 24)
+      return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
     if (diffDays === 1) return "yesterday";
     if (diffDays < 7) return `${diffDays} days ago`;
     if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
@@ -103,7 +104,7 @@
    * Handle resume button click
    */
   function handleResume(): void {
-    onResume(session.sessionId);
+    onResume(session.qraftAiSessionId);
   }
 
   /**
@@ -111,7 +112,7 @@
    */
   function handleView(): void {
     if (onView !== undefined) {
-      onView(session.sessionId);
+      onView(session.qraftAiSessionId);
     }
   }
 </script>
@@ -228,9 +229,15 @@
         stroke-linejoin="round"
         aria-hidden="true"
       >
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        <path
+          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+        />
       </svg>
-      <span>{session.messageCount} message{session.messageCount !== 1 ? "s" : ""}</span>
+      <span
+        >{session.messageCount} message{session.messageCount !== 1
+          ? "s"
+          : ""}</span
+      >
     </div>
 
     <!-- Sidechain Badge -->

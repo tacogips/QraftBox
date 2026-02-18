@@ -42,6 +42,7 @@ const mockRepoInfo: RepoInfo = {
 // Mock WorkspaceTab
 const mockTab: WorkspaceTab = {
   id: "ctx-123" as any,
+  projectSlug: "test-abc123",
   path: "/path/to/repo",
   name: "Test Repo",
   repositoryRoot: "/path/to/repo",
@@ -67,7 +68,17 @@ function createMockContextManager(hasContext: boolean = true): ContextManager {
       repositoryRoot: "/path/to/repo",
       isWorktree: false,
     })),
-    getServerContext: mock(() => ({ projectPath: mockTab.path })),
+    getServerContext: mock(() => ({
+      projectPath: mockTab.path,
+      isGitRepo: true,
+    })),
+    getProjectRegistry: mock(() => ({
+      getOrCreateSlug: async () => "test-abc123",
+      resolveSlug: async () => undefined,
+      removeSlug: async () => {},
+      getAllProjects: async () => new Map(),
+      getAllPaths: async (): Promise<ReadonlySet<string>> => new Set(),
+    })),
   };
 }
 

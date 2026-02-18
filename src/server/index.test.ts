@@ -2,15 +2,28 @@
  * Tests for HTTP Server
  */
 
-import { describe, test, expect, beforeEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createServer, startServer, stopServer } from "./index";
 import type { CLIConfig } from "../types/index";
 import { createContextManager } from "./workspace/context-manager";
+import { createRecentDirectoryStore } from "./workspace/recent-store";
+import { createInMemoryOpenTabsStore } from "./workspace/open-tabs-store";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 describe("createServer", () => {
   let config: CLIConfig;
+  let testDir: string;
+  let originalClientDir: string | undefined;
 
   beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+
+    // Save and clear QRAFTBOX_CLIENT_DIR to ensure tests don't pick up stale env var
+    originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    delete process.env["QRAFTBOX_CLIENT_DIR"];
+
     config = {
       port: 7144,
       host: "localhost",
@@ -21,12 +34,32 @@ describe("createServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
+  });
+
+  afterEach(() => {
+    // Restore original QRAFTBOX_CLIENT_DIR
+    if (originalClientDir !== undefined) {
+      process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+    } else {
+      delete process.env["QRAFTBOX_CLIENT_DIR"];
+    }
   });
 
   test("should create Hono instance", () => {
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     expect(app).toBeDefined();
     expect(typeof app.fetch).toBe("function");
@@ -34,7 +67,16 @@ describe("createServer", () => {
 
   test("should respond to health check", async () => {
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const response = await app.request("/api/health");
     expect(response.status).toBe(200);
@@ -50,7 +92,16 @@ describe("createServer", () => {
 
   test("should handle errors with error handler", async () => {
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     // Request a non-existent route (should 404)
     const response = await app.request("/api/nonexistent");
@@ -61,20 +112,36 @@ describe("createServer", () => {
   });
 
   test("should serve static files with correct MIME type", async () => {
-    const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    // Set QRAFTBOX_CLIENT_DIR to a non-existent directory to make test deterministic
+    const nonExistentClientDir = join(testDir, "nonexistent-client");
+    process.env["QRAFTBOX_CLIENT_DIR"] = nonExistentClientDir;
 
-    // Request static file (will fail since dist/client doesn't exist in test)
-    // But middleware should be mounted
+    const contextManager = createContextManager();
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
+
+    // Request static file - since QRAFTBOX_CLIENT_DIR points to non-existent dir,
+    // static file serving will always 404
     const response = await app.request("/index.html");
 
-    // Will 404 since file doesn't exist, but middleware handled it
     expect(response.status).toBe(404);
+
+    // Clean up env var (will also be cleaned up by afterEach)
+    delete process.env["QRAFTBOX_CLIENT_DIR"];
   });
 });
 
 describe("startServer and stopServer", () => {
   test("should start and stop server", () => {
+    const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
     const config: CLIConfig = {
       port: 0, // Let OS assign port
       host: "localhost",
@@ -85,10 +152,21 @@ describe("startServer and stopServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
 
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     // Start server
     const server = startServer(app, config);
@@ -103,6 +181,7 @@ describe("startServer and stopServer", () => {
   });
 
   test("should be able to make requests to running server", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
     const config: CLIConfig = {
       port: 0, // Let OS assign port
       host: "localhost",
@@ -113,10 +192,21 @@ describe("startServer and stopServer", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
 
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 
@@ -140,6 +230,7 @@ describe("startServer and stopServer", () => {
 
 describe("Server integration", () => {
   test("should handle multiple requests", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
     const config: CLIConfig = {
       port: 0,
       host: "localhost",
@@ -150,10 +241,21 @@ describe("Server integration", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
 
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 
@@ -173,6 +275,7 @@ describe("Server integration", () => {
   });
 
   test("should return 404 for non-existent API routes", async () => {
+    const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
     const config: CLIConfig = {
       port: 0,
       host: "localhost",
@@ -183,10 +286,21 @@ describe("Server integration", () => {
       projectPath: "/tmp/test-project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     };
 
     const contextManager = createContextManager();
-    const app = createServer({ config, contextManager });
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config,
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
 
     const server = startServer(app, config);
 

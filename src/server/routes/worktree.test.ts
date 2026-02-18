@@ -34,6 +34,7 @@ function createMockContextManager(): ContextManager {
     createContext: async (path: string): Promise<WorkspaceTab> => {
       const tab: WorkspaceTab = {
         id: TEST_CONTEXT_ID,
+        projectSlug: "test-abc123",
         path,
         name: "test-project",
         repositoryRoot: path,
@@ -73,8 +74,16 @@ function createMockContextManager(): ContextManager {
       }
       return {
         projectPath: context.repositoryRoot,
+        isGitRepo: true,
       };
     },
+    getProjectRegistry: () => ({
+      getOrCreateSlug: async () => "test-abc123",
+      resolveSlug: async () => undefined,
+      removeSlug: async () => {},
+      getAllProjects: async () => new Map(),
+      getAllPaths: async (): Promise<ReadonlySet<string>> => new Set(),
+    }),
   };
 }
 

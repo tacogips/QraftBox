@@ -1,117 +1,115 @@
 <script lang="ts">
-import type { Comment, Author } from "../src/stores/comments";
-import CommentDisplay from "./CommentDisplay.svelte";
-import CommentForm from "./CommentForm.svelte";
+  import type { Comment, Author } from "../src/stores/comments";
+  import CommentDisplay from "./CommentDisplay.svelte";
+  import CommentForm from "./CommentForm.svelte";
 
-/**
- * CommentThread Component
- *
- * Displays a comment with its replies in a threaded view.
- * Supports one level of nesting (replies to comments, but not replies to replies).
- *
- * Props:
- * - comment: The parent Comment with its replies
- * - currentUser: Current user's email for edit/delete permissions
- * - defaultAuthor: Default author for new replies
- * - onReply: Callback when a reply is submitted
- * - onEdit: Callback when a comment/reply is edited
- * - onDelete: Callback when a comment/reply is deleted
- *
- * Design:
- * - Parent comment shown at full width
- * - Replies indented with visual connector line
- * - Inline reply form appears below replies when toggled
- */
+  /**
+   * CommentThread Component
+   *
+   * Displays a comment with its replies in a threaded view.
+   * Supports one level of nesting (replies to comments, but not replies to replies).
+   *
+   * Props:
+   * - comment: The parent Comment with its replies
+   * - currentUser: Current user's email for edit/delete permissions
+   * - defaultAuthor: Default author for new replies
+   * - onReply: Callback when a reply is submitted
+   * - onEdit: Callback when a comment/reply is edited
+   * - onDelete: Callback when a comment/reply is deleted
+   *
+   * Design:
+   * - Parent comment shown at full width
+   * - Replies indented with visual connector line
+   * - Inline reply form appears below replies when toggled
+   */
 
-interface Props {
-  comment: Comment;
-  currentUser?: string;
-  defaultAuthor?: Author;
-  onReply?: (parentId: string, content: string, author: Author) => void;
-  onEdit?: (commentId: string, content: string, isReply: boolean) => void;
-  onDelete?: (commentId: string, isReply: boolean) => void;
-}
-
-// Svelte 5 props syntax
-const {
-  comment,
-  currentUser = undefined,
-  defaultAuthor = undefined,
-  onReply = undefined,
-  onEdit = undefined,
-  onDelete = undefined,
-}: Props = $props();
-
-// State for reply form visibility
-let showReplyForm = $state(false);
-
-/**
- * Toggle reply form visibility
- */
-function toggleReplyForm(): void {
-  showReplyForm = !showReplyForm;
-}
-
-/**
- * Handle reply submission
- */
-function handleReplySubmit(newComment: {
-  content: string;
-  author: Author;
-}): void {
-  if (onReply !== undefined) {
-    onReply(comment.id, newComment.content, newComment.author);
+  interface Props {
+    comment: Comment;
+    currentUser?: string;
+    defaultAuthor?: Author;
+    onReply?: (parentId: string, content: string, author: Author) => void;
+    onEdit?: (commentId: string, content: string, isReply: boolean) => void;
+    onDelete?: (commentId: string, isReply: boolean) => void;
   }
-  showReplyForm = false;
-}
 
-/**
- * Handle edit for parent comment
- */
-function handleParentEdit(): void {
-  if (onEdit !== undefined) {
-    onEdit(comment.id, comment.content, false);
+  // Svelte 5 props syntax
+  const {
+    comment,
+    currentUser = undefined,
+    defaultAuthor = undefined,
+    onReply = undefined,
+    onEdit = undefined,
+    onDelete = undefined,
+  }: Props = $props();
+
+  // State for reply form visibility
+  let showReplyForm = $state(false);
+
+  /**
+   * Toggle reply form visibility
+   */
+  function toggleReplyForm(): void {
+    showReplyForm = !showReplyForm;
   }
-}
 
-/**
- * Handle delete for parent comment
- */
-function handleParentDelete(): void {
-  if (onDelete !== undefined) {
-    onDelete(comment.id, false);
+  /**
+   * Handle reply submission
+   */
+  function handleReplySubmit(newComment: {
+    content: string;
+    author: Author;
+  }): void {
+    if (onReply !== undefined) {
+      onReply(comment.id, newComment.content, newComment.author);
+    }
+    showReplyForm = false;
   }
-}
 
-/**
- * Handle edit for a reply
- */
-function handleReplyEdit(replyId: string, content: string): void {
-  if (onEdit !== undefined) {
-    onEdit(replyId, content, true);
+  /**
+   * Handle edit for parent comment
+   */
+  function handleParentEdit(): void {
+    if (onEdit !== undefined) {
+      onEdit(comment.id, comment.content, false);
+    }
   }
-}
 
-/**
- * Handle delete for a reply
- */
-function handleReplyDelete(replyId: string): void {
-  if (onDelete !== undefined) {
-    onDelete(replyId, true);
+  /**
+   * Handle delete for parent comment
+   */
+  function handleParentDelete(): void {
+    if (onDelete !== undefined) {
+      onDelete(comment.id, false);
+    }
   }
-}
 
-/**
- * Check if there are replies
- */
-const hasReplies = $derived(comment.replies.length > 0);
+  /**
+   * Handle edit for a reply
+   */
+  function handleReplyEdit(replyId: string, content: string): void {
+    if (onEdit !== undefined) {
+      onEdit(replyId, content, true);
+    }
+  }
 
-/**
- * Get default author for reply form
- */
-const replyAuthor = $derived(
-  defaultAuthor ?? { name: "", email: "" }
-);
+  /**
+   * Handle delete for a reply
+   */
+  function handleReplyDelete(replyId: string): void {
+    if (onDelete !== undefined) {
+      onDelete(replyId, true);
+    }
+  }
+
+  /**
+   * Check if there are replies
+   */
+  const hasReplies = $derived(comment.replies.length > 0);
+
+  /**
+   * Get default author for reply form
+   */
+  const replyAuthor = $derived(defaultAuthor ?? { name: "", email: "" });
 </script>
 
 <div class="comment-thread" role="group" aria-label="Comment thread">
@@ -127,7 +125,9 @@ const replyAuthor = $derived(
 
   <!-- Replies Section -->
   {#if hasReplies || showReplyForm}
-    <div class="replies-container relative ml-4 pl-4 border-l-2 border-border-default">
+    <div
+      class="replies-container relative ml-4 pl-4 border-l-2 border-border-default"
+    >
       <!-- Replies -->
       {#each comment.replies as reply (reply.id)}
         <CommentDisplay
@@ -196,11 +196,12 @@ const replyAuthor = $derived(
 </div>
 
 <style>
-.comment-thread {
-  border-bottom: 1px solid var(--color-border-default, rgba(255, 255, 255, 0.1));
-}
+  .comment-thread {
+    border-bottom: 1px solid
+      var(--color-border-default, rgba(255, 255, 255, 0.1));
+  }
 
-.comment-thread:last-child {
-  border-bottom: none;
-}
+  .comment-thread:last-child {
+    border-bottom: none;
+  }
 </style>

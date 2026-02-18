@@ -81,13 +81,21 @@ async function createDefaultsConfig(
 describe("Prompt Routes", () => {
   let testConfigDir: string;
   let app: ReturnType<typeof createPromptRoutes>;
+  let originalEnv: string | undefined;
 
   beforeEach(async () => {
     testConfigDir = await createTestConfigDir();
+    originalEnv = process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    process.env["QRAFTBOX_TEST_CONFIG_DIR"] = testConfigDir;
     app = createPromptRoutes(testConfigDir);
   });
 
   afterEach(async () => {
+    if (originalEnv !== undefined) {
+      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = originalEnv;
+    } else {
+      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
+    }
     // Cleanup test directory
     try {
       await rm(testConfigDir, { recursive: true, force: true });
@@ -223,11 +231,6 @@ describe("Prompt Routes", () => {
   });
 
   describe("GET /api/prompts/default/:category", () => {
-    beforeEach(() => {
-      // Set environment variable to point to test config for all tests in this suite
-      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = testConfigDir;
-    });
-
     afterEach(async () => {
       // Clean up defaults file
       try {
@@ -235,8 +238,6 @@ describe("Prompt Routes", () => {
       } catch {
         // Ignore errors
       }
-      // Clean up environment
-      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
     });
 
     test("returns null when no default is set", async () => {
@@ -274,16 +275,6 @@ describe("Prompt Routes", () => {
   });
 
   describe("PUT /api/prompts/default/:category", () => {
-    beforeEach(() => {
-      // Set environment variable to point to test config
-      process.env["QRAFTBOX_TEST_CONFIG_DIR"] = testConfigDir;
-    });
-
-    afterEach(() => {
-      // Clean up environment
-      delete process.env["QRAFTBOX_TEST_CONFIG_DIR"];
-    });
-
     test("sets default prompt for category", async () => {
       const response = await app.request("/default/commit", {
         method: "PUT",

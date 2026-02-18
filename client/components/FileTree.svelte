@@ -43,6 +43,26 @@
     contextId?: string | null;
 
     /**
+     * Whether git-ignored files are currently shown
+     */
+    showIgnored?: boolean;
+
+    /**
+     * Whether all files (including non-git) are currently shown
+     */
+    showAllFiles?: boolean;
+
+    /**
+     * Callback when show-ignored toggle changes
+     */
+    onShowIgnoredChange?: (value: boolean) => void;
+
+    /**
+     * Callback when show-all-files toggle changes
+     */
+    onShowAllFilesChange?: (value: boolean) => void;
+
+    /**
      * Callback to narrow the sidebar width
      */
     onNarrow?: () => void;
@@ -61,6 +81,22 @@
      * Whether the sidebar can be widened further
      */
     canWiden?: boolean;
+
+    /**
+     * Callback to load children of a directory (lazy loading)
+     */
+    onDirectoryExpand?: (path: string) => Promise<void>;
+
+    /**
+     * Callback to load the full tree (for expand-all and filtering).
+     * Returns the full tree for immediate use.
+     */
+    onLoadFullTree?: () => Promise<FileNode | undefined>;
+
+    /**
+     * Callback to reload/refresh the file tree data
+     */
+    onReload?: () => void;
   }
 
   const {
@@ -71,10 +107,17 @@
     onModeChange,
     changedCount = undefined,
     contextId = null,
+    showIgnored = false,
+    showAllFiles = false,
+    onShowIgnoredChange = undefined,
+    onShowAllFilesChange = undefined,
     onNarrow = undefined,
     onWiden = undefined,
     canNarrow = true,
     canWiden = true,
+    onDirectoryExpand = undefined,
+    onLoadFullTree = undefined,
+    onReload = undefined,
   }: Props = $props();
 
   /**
@@ -96,6 +139,11 @@
    * Status dropdown open state
    */
   let statusDropdownOpen = $state(false);
+
+  /**
+   * Paths of directories currently being loaded
+   */
+  let loadingPaths = $state<Set<string>>(new Set());
 
   /**
    * Uncommitted file count from git status
@@ -127,6 +175,20 @@
     }
   }
 
+  /**
+   * Clear status filter when switching to "all" mode
+   * In "all" mode, status filters would hide most files (unchanged files have no status)
+   */
+  let prevMode: "diff" | "all" = mode;
+  $effect(() => {
+    if (mode !== prevMode) {
+      if (mode === "all") {
+        statusFilter = null;
+      }
+      prevMode = mode;
+    }
+  });
+
   $effect(() => {
     void fetchUncommittedCount();
     const intervalId = setInterval(() => {
@@ -138,16 +200,59 @@
   });
 
   /**
-   * Toggle directory expansion
+   * Toggle directory expansion, triggering lazy load if children are not yet loaded
    */
   function toggleDirectory(path: string): void {
     const newExpanded = new Set(expandedPaths);
     if (newExpanded.has(path)) {
       newExpanded.delete(path);
+      expandedPaths = newExpanded;
     } else {
       newExpanded.add(path);
+      expandedPaths = newExpanded;
+
+      // Check if this directory needs lazy loading
+      if (onDirectoryExpand !== undefined) {
+        const node = findNodeInTree(tree, path);
+        if (node !== null && node.isDirectory && node.children === undefined) {
+          const newLoading = new Set(loadingPaths);
+          newLoading.add(path);
+          loadingPaths = newLoading;
+
+          void onDirectoryExpand(path).finally(() => {
+            const updated = new Set(loadingPaths);
+            updated.delete(path);
+            loadingPaths = updated;
+          });
+        }
+      }
     }
-    expandedPaths = newExpanded;
+  }
+
+  /**
+   * Find a node in the tree by path
+   */
+  function findNodeInTree(node: FileNode, targetPath: string): FileNode | null {
+    if (node.path === targetPath) return node;
+    if (!node.isDirectory || node.children === undefined) return null;
+    for (const child of node.children) {
+      const found = findNodeInTree(child, targetPath);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+
+  /**
+   * Check if the tree has any directories with unloaded children
+   */
+  function hasUnloadedDirectories(node: FileNode): boolean {
+    if (node.isDirectory) {
+      if (node.children === undefined) return true;
+      for (const child of node.children) {
+        if (hasUnloadedDirectories(child)) return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -167,10 +272,15 @@
   }
 
   /**
-   * Expand all directories in the current tree
+   * Expand all directories in the current tree.
+   * If tree has unloaded directories, loads the full tree first.
    */
-  function expandAll(): void {
-    const source = filteredTree ?? tree;
+  async function expandAll(): Promise<void> {
+    let treeForExpand: FileNode | undefined;
+    if (onLoadFullTree !== undefined && hasUnloadedDirectories(tree)) {
+      treeForExpand = await onLoadFullTree();
+    }
+    const source = treeForExpand ?? filteredTree ?? tree;
     expandedPaths = new Set(collectDirectoryPaths(source));
   }
 
@@ -207,6 +317,14 @@
   function collectMatchPaths(node: FileNode, ancestors: string[]): Set<string> {
     const result = new Set<string>();
     if (node.isDirectory && node.children) {
+      // If directory name itself matches, mark it and all ancestors
+      if (matchesFilter(node)) {
+        for (const a of ancestors) {
+          result.add(a);
+        }
+        result.add(node.path);
+      }
+
       for (const child of node.children) {
         const childResult = collectMatchPaths(child, [...ancestors, node.path]);
         for (const p of childResult) {
@@ -235,16 +353,48 @@
   });
 
   /**
+   * When filter text is entered and tree has unloaded directories,
+   * load the full tree so filtering works across all files.
+   */
+  $effect(() => {
+    if (
+      filterText !== "" &&
+      hasUnloadedDirectories(tree) &&
+      onLoadFullTree !== undefined
+    ) {
+      void onLoadFullTree();
+    }
+  });
+
+  /**
    * Filter tree based on mode and filename filter (recursive)
    */
-  function filterTree(node: FileNode): FileNode | null {
+  function filterTree(
+    node: FileNode,
+    ancestorMatched: boolean = false,
+  ): FileNode | null {
     if (node.isDirectory) {
-      if (!node.children) {
-        return null;
+      if (node.children === undefined) {
+        // Not loaded yet (lazy loading) - keep in "all" mode with no active filters
+        if (mode === "diff" || filterText !== "" || statusFilter !== null) {
+          return null;
+        }
+        return node;
       }
 
+      if (node.children.length === 0) {
+        // Empty directory - keep visible in "all" mode with no active filters
+        if (mode === "diff" || filterText !== "" || statusFilter !== null) {
+          return null;
+        }
+        return node;
+      }
+
+      const dirNameMatches = filterText !== "" && matchesFilter(node);
+      const skipNameFilter = ancestorMatched || dirNameMatches;
+
       const filteredChildren = node.children
-        .map((child) => filterTree(child))
+        .map((child) => filterTree(child, skipNameFilter))
         .filter((child): child is FileNode => child !== null);
 
       if (filteredChildren.length === 0) {
@@ -256,16 +406,19 @@
         children: filteredChildren,
       };
     } else {
-      // Apply mode filter
-      if (mode === "diff" && node.status === undefined) {
+      // Apply mode filter: in diff mode, show only files with change status
+      if (
+        mode === "diff" &&
+        (node.status === undefined || node.status === "ignored")
+      ) {
         return null;
       }
       // Apply status filter
       if (statusFilter !== null && node.status !== statusFilter) {
         return null;
       }
-      // Apply filename filter
-      if (filterText !== "" && !matchesFilter(node)) {
+      // Apply filename filter (skip if an ancestor directory matched)
+      if (!ancestorMatched && filterText !== "" && !matchesFilter(node)) {
         return null;
       }
       return node;
@@ -273,11 +426,18 @@
   }
 
   /**
-   * Check if a directory has any changed children (recursive)
+   * Check if a directory has any changed children (recursive).
+   * For lazy-loaded directories (children undefined), checks if the directory
+   * itself was marked with a status by annotateTreeWithStatus.
    */
   function hasChangedChildren(node: FileNode): boolean {
-    if (!node.isDirectory || !node.children) {
+    if (!node.isDirectory) {
       return false;
+    }
+
+    // Lazy-loaded directory marked by annotateTreeWithStatus
+    if (node.children === undefined) {
+      return node.status !== undefined;
     }
 
     for (const child of node.children) {
@@ -333,18 +493,19 @@
    */
   const filterMatchCount = $derived.by(() => {
     if (filterText === "") return 0;
-    function countFiles(node: FileNode | null): number {
-      if (node === null) return 0;
-      if (node.isDirectory && node.children) {
-        let sum = 0;
-        for (const child of node.children) {
-          sum += countFiles(filterTree(child));
-        }
-        return sum;
+    function countMatches(node: FileNode): number {
+      let count = 0;
+      if (matchesFilter(node)) {
+        count = 1;
       }
-      return 1;
+      if (node.isDirectory && node.children) {
+        for (const child of node.children) {
+          count += countMatches(child);
+        }
+      }
+      return count;
     }
-    return countFiles(filteredTree);
+    return countMatches(tree);
   });
 
   /**
@@ -376,6 +537,39 @@
     }
     traverse(tree);
     return { added, modified, deleted };
+  });
+
+  /**
+   * Auto-expand ancestor directories when selectedPath changes
+   * so that the selected file is always visible in the tree.
+   * Only runs when selectedPath actually changes (not on expandedPaths changes).
+   * Skips the first change so the tree starts fully collapsed on load.
+   */
+  let prevSelectedPath: string | null = null;
+  let initialSelectionSkipped = false;
+  $effect(() => {
+    const current = selectedPath;
+    if (current === prevSelectedPath) return;
+    prevSelectedPath = current;
+    if (current === null) return;
+    if (!initialSelectionSkipped) {
+      initialSelectionSkipped = true;
+      return;
+    }
+    const segments = current.split("/");
+    if (segments.length <= 1) return;
+    const newExpanded = new Set(expandedPaths);
+    let changed = false;
+    for (let i = 1; i < segments.length; i++) {
+      const ancestor = segments.slice(0, i).join("/");
+      if (!newExpanded.has(ancestor)) {
+        newExpanded.add(ancestor);
+        changed = true;
+      }
+    }
+    if (changed) {
+      expandedPaths = newExpanded;
+    }
   });
 
   /**
@@ -656,26 +850,57 @@
 
   <!-- Bottom Status Panel -->
   <div
-    class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1"
+    class="shrink-0 h-6 border-t border-border-default flex items-center px-2 bg-bg-tertiary gap-1 min-w-0 overflow-hidden"
   >
+    {#if onReload}
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center rounded transition-colors text-text-tertiary hover:text-text-primary shrink-0"
+        onclick={onReload}
+        title="Reload file tree"
+        aria-label="Reload file tree"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M8 2.5a5.487 5.487 0 00-4.131 1.869l1.204 1.204A.25.25 0 014.896 6H1.25A.25.25 0 011 5.75V2.104a.25.25 0 01.427-.177l1.38 1.38A7.001 7.001 0 0114.95 7.16a.75.75 0 11-1.49.178A5.501 5.501 0 008 2.5zM1.705 8.005a.75.75 0 01.834.656 5.501 5.501 0 009.592 2.97l-1.204-1.204a.25.25 0 01.177-.427h3.646a.25.25 0 01.25.25v3.646a.25.25 0 01-.427.177l-1.38-1.38A7.001 7.001 0 011.05 8.84a.75.75 0 01.656-.834z"
+          />
+        </svg>
+      </button>
+    {/if}
     {#if uncommittedCount > 0}
-      <span class="text-[11px] text-attention-fg font-medium">
+      <span class="text-[11px] text-attention-fg font-medium truncate min-w-0">
         {uncommittedCount} uncommitted
       </span>
     {/if}
-    <div class="ml-auto flex items-center gap-0.5">
+    <div class="ml-auto flex items-center gap-0.5 shrink-0">
       <!-- Narrow sidebar -->
       {#if onNarrow}
         <button
           type="button"
-          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canNarrow ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canNarrow
+            ? 'text-text-tertiary hover:text-text-primary cursor-pointer'
+            : 'text-text-quaternary cursor-default'}"
           onclick={onNarrow}
           disabled={!canNarrow}
           title="Narrow panel"
           aria-label="Narrow file tree panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M9.78 4.22a.75.75 0 010 1.06L7.56 7.5h6.69a.75.75 0 010 1.5H7.56l2.22 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zM2.75 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5A.75.75 0 012.75 3z" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M9.78 4.22a.75.75 0 010 1.06L7.56 7.5h6.69a.75.75 0 010 1.5H7.56l2.22 2.22a.75.75 0 11-1.06 1.06l-3.5-3.5a.75.75 0 010-1.06l3.5-3.5a.75.75 0 011.06 0zM2.75 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5A.75.75 0 012.75 3z"
+            />
           </svg>
         </button>
       {/if}
@@ -683,14 +908,101 @@
       {#if onWiden}
         <button
           type="button"
-          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canWiden ? 'text-text-tertiary hover:text-text-primary cursor-pointer' : 'text-text-quaternary cursor-default'}"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {canWiden
+            ? 'text-text-tertiary hover:text-text-primary cursor-pointer'
+            : 'text-text-quaternary cursor-default'}"
           onclick={onWiden}
           disabled={!canWiden}
           title="Widen panel"
           aria-label="Widen file tree panel"
         >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-            <path d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M6.22 4.22a.75.75 0 011.06 0l3.5 3.5a.75.75 0 010 1.06l-3.5 3.5a.75.75 0 01-1.06-1.06L8.44 9H1.75a.75.75 0 010-1.5h6.69L6.22 5.28a.75.75 0 010-1.06zM13.25 3a.75.75 0 01.75.75v8.5a.75.75 0 01-1.5 0v-8.5a.75.75 0 01.75-.75z"
+            />
+          </svg>
+        </button>
+      {/if}
+      <!-- Toggle show ignored files -->
+      {#if onShowIgnoredChange}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {showIgnored
+            ? 'text-text-primary'
+            : 'text-text-tertiary hover:text-text-primary'}"
+          onclick={() => onShowIgnoredChange?.(!showIgnored)}
+          title={showIgnored ? "Hide ignored files" : "Show ignored files"}
+          aria-label={showIgnored ? "Hide ignored files" : "Show ignored files"}
+          aria-pressed={showIgnored}
+        >
+          <!-- Eye icon (open when showing, slashed when hiding) -->
+          {#if showIgnored}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 010 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.831.88 9.577.43 8.899a1.62 1.62 0 010-1.798c.45-.678 1.367-1.932 2.637-3.023C4.33 2.992 6.019 2 8 2zM1.679 7.932a.12.12 0 000 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 000-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.824.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717zM8 10a2 2 0 11-.001-3.999A2 2 0 018 10z"
+              />
+            </svg>
+          {:else}
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M.143 2.31a.75.75 0 011.047-.167l14 10a.75.75 0 11-.88 1.214l-2.248-1.606C11.346 12.076 10.259 12.5 9 12.5c-1.981 0-3.671-.992-4.933-2.078C2.797 9.331 1.88 8.077 1.43 7.399a1.62 1.62 0 010-1.798c.353-.533 1.063-1.46 2.025-2.347L.31 1.357A.75.75 0 01.143 2.31zm4.653 3.324c-.676.58-1.236 1.206-1.617 1.684a.12.12 0 000 .136c.412.621 1.242 1.75 2.366 2.717C6.676 11.258 8.027 12 9.5 12c.74 0 1.463-.214 2.145-.554L4.796 5.634zM16.57 7.399c-.45.678-1.367 1.932-2.637 3.023l-1.142-.816c1.03-.89 1.784-1.917 2.166-2.488a.12.12 0 000-.136c-.412-.621-1.242-1.75-2.366-2.717C11.46 3.242 10.11 2.5 8.636 2.5c-.96 0-1.886.28-2.748.747L4.667 2.37C5.734 1.712 6.887 1 8.636 1c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 010 1.798z"
+              />
+            </svg>
+          {/if}
+        </button>
+      {/if}
+      <!-- Toggle show all files -->
+      {#if onShowAllFilesChange}
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors {showAllFiles
+            ? 'text-text-primary'
+            : 'text-text-tertiary hover:text-text-primary'}"
+          onclick={() => onShowAllFilesChange?.(!showAllFiles)}
+          title={showAllFiles
+            ? "Show git-managed files only"
+            : "Show all files (including non-git)"}
+          aria-label={showAllFiles
+            ? "Show git-managed files only"
+            : "Show all files (including non-git)"}
+          aria-pressed={showAllFiles}
+        >
+          <!-- Folder tree icon -->
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+            />
+            {#if showAllFiles}
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            {/if}
           </svg>
         </button>
       {/if}
@@ -703,8 +1015,16 @@
         title="Expand all"
         aria-label="Expand all directories"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
+          />
         </svg>
       </button>
       <!-- Collapse All -->
@@ -715,8 +1035,16 @@
         title="Collapse all"
         aria-label="Collapse all directories"
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-          <path d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z" />
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 16 16"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path
+            d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z"
+          />
         </svg>
       </button>
     </div>
@@ -729,6 +1057,7 @@
     <!-- Directory Node -->
     <div
       class="directory-node"
+      class:opacity-50={node.status === "ignored"}
       role="treeitem"
       aria-expanded={isExpanded(node.path)}
     >
@@ -737,6 +1066,11 @@
         class="directory-button w-full text-left px-4 py-1 hover:bg-bg-tertiary focus:bg-bg-tertiary focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5"
         style="padding-left: {1 + depth * 1.5}rem"
         onclick={() => toggleDirectory(node.path)}
+        draggable="true"
+        ondragstart={(e: DragEvent) => {
+          e.dataTransfer?.setData("application/x-qraftbox-path", node.path);
+          e.dataTransfer?.setData("text/plain", node.path);
+        }}
         aria-label="Toggle directory {node.name}"
       >
         <!-- Chevron Icon -->
@@ -777,8 +1111,16 @@
           {node.name}
         </span>
 
-        <!-- Changed Indicator -->
-        {#if hasChangedChildren(node)}
+        <!-- Ignored Indicator -->
+        {#if node.status === "ignored"}
+          <span
+            class="text-[10px] font-medium text-text-quaternary shrink-0"
+            aria-label="Ignored by git"
+          >
+            [I]
+          </span>
+        {:else if hasChangedChildren(node)}
+          <!-- Changed Indicator -->
           <span
             class="changed-indicator text-xs text-accent-fg shrink-0"
             aria-label="Contains changed files"
@@ -789,10 +1131,40 @@
       </button>
 
       <!-- Children (if expanded) -->
-      {#if isExpanded(node.path) && node.children}
-        {#each node.children as child (child.path)}
-          {@render treeNode(child, depth + 1)}
-        {/each}
+      {#if isExpanded(node.path)}
+        {#if node.children !== undefined}
+          {#each node.children as child (child.path)}
+            {@render treeNode(child, depth + 1)}
+          {/each}
+        {:else if loadingPaths.has(node.path)}
+          <div
+            class="flex items-center gap-1.5 py-1 text-xs text-text-tertiary"
+            style="padding-left: {1 + (depth + 1) * 1.5}rem"
+          >
+            <svg
+              class="animate-spin w-3 h-3"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="3"
+                opacity="0.25"
+              />
+              <path
+                d="M4 12a8 8 0 018-8"
+                stroke="currentColor"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+            </svg>
+            <span>Loading...</span>
+          </div>
+        {/if}
       {/if}
     </div>
   {:else}

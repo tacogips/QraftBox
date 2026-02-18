@@ -1,74 +1,41 @@
-# Design Notes
+# Notes
 
-This document contains research findings, investigations, and miscellaneous design notes.
+This file captures as-built constraints, operational considerations, and known gaps.
 
-## Overview
+## Local-Only Security Model
 
-Notable items that do not fit into architecture or client categories.
+- The server has no authentication or authorization.
+- Intended for localhost-only usage; exposing the port publicly is unsafe.
 
----
+## Persistence Locations
 
-## Sections
+- `~/.local/QraftBox/recent.db` (recent directories, SQLite)
+- `~/.local/QraftBox/open-tabs.db` (open tabs, SQLite)
+- `~/.local/QraftBox/ai-sessions.db` (AI sessions, SQLite)
+- `~/.local/QraftBox/session-mappings.db` (AI session mapping, SQLite)
+- `~/.local/QraftBox/model-config.db` (model profiles/bindings, SQLite)
+- `~/.local/QraftBox/prompts/` (prompt queue, JSON files)
+- `~/.config/qraftbox/tools/` (plugin tools, JSON definitions)
 
-### Commit Log Viewer (Phase 5)
+## Terminal Behavior
 
-A new feature to browse git commit history and view diffs for individual commits.
+- Terminal sessions spawn a local interactive shell (`$SHELL` or `bash`).
+- Output is buffered when the WebSocket is disconnected and flushed on reconnect.
 
-**Design Document**: See `design-commit-log-viewer.md` for full specification.
+## AI Integration
 
-**Key Features**:
-- Commit log list displayed below file tree
-- Click commit to view changed files and diff
-- Search commits by message/author
-- Pagination for large repositories
-- Integration with existing file tree and diff view components
+- AI execution is delegated to `claude-code-agent` via `AgentRunner`.
+- Prompt queue and session mapping are persisted to allow recovery after restarts.
 
-**Status**: Implemented (plan 16 completed, code merged).
+## Known Gaps (As-Built)
 
-### Multi-Directory Workspace (Phase 6)
+- GitHub/PR routes are implemented but not mounted in `mountAllRoutes`. The context routes currently use stub Hono apps.
+- The CLI uses `-h` for host, so help is only available as `--help`.
 
-A feature to work on multiple git repositories simultaneously with tab-based UI.
+## Document Coverage Notes
 
-**Design Document**: See `design-multi-directory-workspace.md` for full specification.
+- Terminal API includes `/connect`, `/status`, and `/disconnect` under `/api/ctx/:contextId/terminal`.
 
-**Key Features**:
-- Tab-based interface for multiple directories
-- Dynamic directory switching (not fixed at startup)
-- iPad-friendly directory picker with touch gestures
-- Recent directories and bookmarks
-- Isolated state per tab (file tree, diff, commits)
-- Context-scoped API routes
+## Testing/Dev Overrides
 
-**Status**: Implemented (plan 17 completed, code merged).
-
-### AI-Powered Git Operations (Phase 7-11)
-
-Execute git operations (Commit, Push, PR) using Claude Code agent with customizable prompts.
-
-**Design Document**: See `design-ai-commit.md` for full specification.
-
-**Key Features**:
-
-**Commit**:
-- Commit button in UI toolbar
-- Customizable commit prompts (standard, conventional, detailed, minimal)
-
-**Push**:
-- Push button showing unpushed commit count
-- Remote/branch selection
-- Force push with confirmation
-
-**Pull Request**:
-- Create PR via GitHub CLI (gh)
-- Show existing PR status (number, state, base branch)
-- Update existing PR
-- GitHub authentication via GITHUB_TOKEN or `gh auth`
-
-**Prompt Location**: `~/.config/qraftbox/default-prompts/`
-- `commit.md`, `commit-*.md` - Commit prompts
-- `push.md`, `push-*.md` - Push prompts
-- `pr.md`, `pr-*.md` - PR prompts
-
-**Status**: Implemented (plans 18-23 completed, code merged).
-
----
+- `QRAFTBOX_TEST_CONFIG_DIR` and `QRAFTBOX_TEST_TOOLS_DIR` are used in tests to isolate filesystem state.

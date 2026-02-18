@@ -130,6 +130,17 @@
   });
 
   /**
+   * Handle card click - only navigate if user is not selecting text
+   */
+  function handleCardClick(): void {
+    const selection = window.getSelection();
+    if (selection !== null && selection.toString().length > 0) {
+      return;
+    }
+    onSelect();
+  }
+
+  /**
    * Handle action button clicks (stop propagation)
    */
   function handleActionClick(
@@ -154,11 +165,10 @@
   aria-label={`Session: ${truncatePrompt(session.prompt, 50)}`}
 >
   <!-- Main clickable area -->
-  <button
-    type="button"
-    onclick={onSelect}
-    class="w-full p-4 min-h-[80px] text-left
-           focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    onclick={handleCardClick}
+    class="w-full p-4 min-h-[80px] text-left cursor-pointer select-text"
   >
     <!-- Header row -->
     <div class="flex items-start justify-between gap-3 mb-2">
@@ -235,7 +245,7 @@
         </span>
       </div>
     {/if}
-  </button>
+  </div>
 
   <!-- Action buttons (appear on hover/focus) -->
   <div

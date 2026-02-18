@@ -189,11 +189,7 @@
       <div
         class="px-4 py-3 text-sm bg-success-subtle text-success-fg border-b border-border-default flex items-center gap-2"
       >
-        <svg
-          class="w-4 h-4 shrink-0"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-        >
+        <svg class="w-4 h-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
           <path
             fill-rule="evenodd"
             d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 011.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z"

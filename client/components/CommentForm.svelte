@@ -1,123 +1,123 @@
 <script lang="ts">
-import type { Author, NewComment } from "../src/stores/comments";
+  import type { Author, NewComment } from "../src/stores/comments";
 
-/**
- * CommentForm Component
- *
- * Form for adding or editing comments on lines.
- *
- * Props:
- * - filePath: Path of the file being commented on
- * - lineStart: Starting line number for the comment
- * - lineEnd: Optional ending line number for multi-line comments
- * - defaultAuthor: Pre-filled author information
- * - initialContent: Initial content for editing existing comments
- * - onSubmit: Callback when form is submitted
- * - onCancel: Callback when form is cancelled
- *
- * Design:
- * - Large touch-friendly textarea
- * - Author name/email fields (pre-filled, editable)
- * - Keyboard shortcuts (Ctrl+Enter to submit, Escape to cancel)
- * - Slides up as bottom sheet on tablet
- */
+  /**
+   * CommentForm Component
+   *
+   * Form for adding or editing comments on lines.
+   *
+   * Props:
+   * - filePath: Path of the file being commented on
+   * - lineStart: Starting line number for the comment
+   * - lineEnd: Optional ending line number for multi-line comments
+   * - defaultAuthor: Pre-filled author information
+   * - initialContent: Initial content for editing existing comments
+   * - onSubmit: Callback when form is submitted
+   * - onCancel: Callback when form is cancelled
+   *
+   * Design:
+   * - Large touch-friendly textarea
+   * - Author name/email fields (pre-filled, editable)
+   * - Keyboard shortcuts (Ctrl+Enter to submit, Escape to cancel)
+   * - Slides up as bottom sheet on tablet
+   */
 
-interface Props {
-  filePath: string;
-  lineStart: number;
-  lineEnd?: number | undefined;
-  defaultAuthor: Author;
-  initialContent?: string;
-  onSubmit: (comment: NewComment) => void;
-  onCancel: () => void;
-}
-
-// Svelte 5 props syntax
-const {
-  filePath,
-  lineStart,
-  lineEnd = undefined,
-  defaultAuthor,
-  initialContent = "",
-  onSubmit,
-  onCancel,
-}: Props = $props();
-
-// Form state
-let content = $state(initialContent);
-let authorName = $state(defaultAuthor.name);
-let authorEmail = $state(defaultAuthor.email);
-let isSubmitting = $state(false);
-
-// Derived state
-const lineRangeText = $derived(
-  lineEnd !== undefined && lineEnd !== lineStart
-    ? `Lines ${lineStart}-${lineEnd}`
-    : `Line ${lineStart}`
-);
-
-const canSubmit = $derived(
-  content.trim().length > 0 &&
-    authorName.trim().length > 0 &&
-    authorEmail.trim().length > 0 &&
-    !isSubmitting
-);
-
-/**
- * Handle form submission
- */
-async function handleSubmit(event?: Event): Promise<void> {
-  event?.preventDefault();
-
-  if (!canSubmit) {
-    return;
+  interface Props {
+    filePath: string;
+    lineStart: number;
+    lineEnd?: number | undefined;
+    defaultAuthor: Author;
+    initialContent?: string;
+    onSubmit: (comment: NewComment) => void;
+    onCancel: () => void;
   }
 
-  isSubmitting = true;
+  // Svelte 5 props syntax
+  const {
+    filePath,
+    lineStart,
+    lineEnd = undefined,
+    defaultAuthor,
+    initialContent = "",
+    onSubmit,
+    onCancel,
+  }: Props = $props();
 
-  try {
-    const comment: NewComment = {
-      filePath,
-      lineStart,
-      lineEnd,
-      author: {
-        name: authorName.trim(),
-        email: authorEmail.trim(),
-      },
-      content: content.trim(),
-    };
+  // Form state
+  let content = $state(initialContent);
+  let authorName = $state(defaultAuthor.name);
+  let authorEmail = $state(defaultAuthor.email);
+  let isSubmitting = $state(false);
 
-    onSubmit(comment);
-  } finally {
-    isSubmitting = false;
+  // Derived state
+  const lineRangeText = $derived(
+    lineEnd !== undefined && lineEnd !== lineStart
+      ? `Lines ${lineStart}-${lineEnd}`
+      : `Line ${lineStart}`,
+  );
+
+  const canSubmit = $derived(
+    content.trim().length > 0 &&
+      authorName.trim().length > 0 &&
+      authorEmail.trim().length > 0 &&
+      !isSubmitting,
+  );
+
+  /**
+   * Handle form submission
+   */
+  async function handleSubmit(event?: Event): Promise<void> {
+    event?.preventDefault();
+
+    if (!canSubmit) {
+      return;
+    }
+
+    isSubmitting = true;
+
+    try {
+      const comment: NewComment = {
+        filePath,
+        lineStart,
+        lineEnd,
+        author: {
+          name: authorName.trim(),
+          email: authorEmail.trim(),
+        },
+        content: content.trim(),
+      };
+
+      onSubmit(comment);
+    } finally {
+      isSubmitting = false;
+    }
   }
-}
 
-/**
- * Handle keyboard shortcuts
- */
-function handleKeydown(event: KeyboardEvent): void {
-  // Ctrl+Enter or Cmd+Enter to submit
-  if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-    event.preventDefault();
-    handleSubmit();
+  /**
+   * Handle keyboard shortcuts
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    // Ctrl+Enter or Cmd+Enter to submit
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      handleSubmit();
+    }
+    // Escape to cancel
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      onCancel();
+    }
   }
-  // Escape to cancel
-  else if (event.key === "Escape") {
-    event.preventDefault();
-    onCancel();
-  }
-}
 
-/**
- * Focus the textarea on mount
- */
-function handleTextareaMount(element: HTMLTextAreaElement): void {
-  // Focus after a short delay to ensure animations complete
-  setTimeout(() => {
-    element.focus();
-  }, 100);
-}
+  /**
+   * Focus the textarea on mount
+   */
+  function handleTextareaMount(element: HTMLTextAreaElement): void {
+    // Focus after a short delay to ensure animations complete
+    setTimeout(() => {
+      element.focus();
+    }, 100);
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -129,9 +129,7 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
 >
   <!-- Header -->
   <div class="flex items-center justify-between">
-    <h3 class="text-sm font-medium text-text-primary">
-      Add Comment
-    </h3>
+    <h3 class="text-sm font-medium text-text-primary">Add Comment</h3>
     <span class="text-xs text-text-secondary">
       {lineRangeText}
     </span>
@@ -227,16 +225,16 @@ function handleTextareaMount(element: HTMLTextAreaElement): void {
 </form>
 
 <style>
-.comment-form {
-  /* Ensure form doesn't exceed viewport on mobile */
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-/* Tablet bottom sheet behavior would be added via parent component positioning */
-@media (max-width: 768px) {
   .comment-form {
-    border-radius: 1rem 1rem 0 0;
+    /* Ensure form doesn't exceed viewport on mobile */
+    max-height: 80vh;
+    overflow-y: auto;
   }
-}
+
+  /* Tablet bottom sheet behavior would be added via parent component positioning */
+  @media (max-width: 768px) {
+    .comment-form {
+      border-radius: 1rem 1rem 0 0;
+    }
+  }
 </style>

@@ -4,7 +4,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ClaudeSessionReader } from "./session-reader";
-import { SessionRegistry } from "./session-registry";
+import {
+  createInMemorySessionMappingStore,
+  type SessionMappingStore,
+} from "../ai/session-mapping-store";
 import { mkdir, writeFile, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -12,24 +15,23 @@ import type {
   ClaudeSessionIndex,
   ClaudeSessionEntry,
 } from "../../types/claude-session";
+import type { ClaudeSessionId, WorktreeId } from "../../types/ai";
 
 describe("ClaudeSessionReader", () => {
   let tempDir: string;
   let projectsDir: string;
-  let registryPath: string;
   let reader: ClaudeSessionReader;
-  let registry: SessionRegistry;
+  let mappingStore: SessionMappingStore;
 
   beforeEach(async () => {
     // Create temporary test directory
     tempDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
     projectsDir = join(tempDir, ".claude", "projects");
-    registryPath = join(tempDir, "session-registry.json");
 
     await mkdir(projectsDir, { recursive: true });
 
-    registry = new SessionRegistry(registryPath);
-    reader = new ClaudeSessionReader(projectsDir, registry);
+    mappingStore = createInMemorySessionMappingStore();
+    reader = new ClaudeSessionReader(projectsDir, mappingStore);
   });
 
   afterEach(async () => {
@@ -176,6 +178,110 @@ describe("ClaudeSessionReader", () => {
       expect(projects).toHaveLength(1);
       expect(projects[0]?.path).toBe("/g/gits/tacogips/qraftbox");
     });
+
+    it("should filter projects by pathFilter prefix", async () => {
+      // Create three projects with different paths
+      const project1Dir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      const project2Dir = join(projectsDir, "-g-gits-tacogips-other");
+      const project3Dir = join(projectsDir, "-home-user-project");
+
+      await mkdir(project1Dir, { recursive: true });
+      await mkdir(project2Dir, { recursive: true });
+      await mkdir(project3Dir, { recursive: true });
+
+      const index1: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [createMockSessionEntry("session-1", "2026-02-05T10:00:00Z")],
+      };
+
+      const index2: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/other",
+        entries: [createMockSessionEntry("session-2", "2026-02-05T10:00:00Z")],
+      };
+
+      const index3: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/home/user/project",
+        entries: [createMockSessionEntry("session-3", "2026-02-05T10:00:00Z")],
+      };
+
+      await writeFile(
+        join(project1Dir, "sessions-index.json"),
+        JSON.stringify(index1, null, 2),
+      );
+      await writeFile(
+        join(project2Dir, "sessions-index.json"),
+        JSON.stringify(index2, null, 2),
+      );
+      await writeFile(
+        join(project3Dir, "sessions-index.json"),
+        JSON.stringify(index3, null, 2),
+      );
+
+      // Filter by "/g/gits/tacogips" prefix
+      const projects = await reader.listProjects("/g/gits/tacogips");
+
+      expect(projects).toHaveLength(2);
+      expect(projects.map((p) => p.path).sort()).toEqual([
+        "/g/gits/tacogips/other",
+        "/g/gits/tacogips/qraftbox",
+      ]);
+    });
+
+    it("should return all projects when pathFilter is not provided", async () => {
+      const project1Dir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      const project2Dir = join(projectsDir, "-home-user-project");
+
+      await mkdir(project1Dir, { recursive: true });
+      await mkdir(project2Dir, { recursive: true });
+
+      const index1: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [createMockSessionEntry("session-1", "2026-02-05T10:00:00Z")],
+      };
+
+      const index2: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/home/user/project",
+        entries: [createMockSessionEntry("session-2", "2026-02-05T10:00:00Z")],
+      };
+
+      await writeFile(
+        join(project1Dir, "sessions-index.json"),
+        JSON.stringify(index1, null, 2),
+      );
+      await writeFile(
+        join(project2Dir, "sessions-index.json"),
+        JSON.stringify(index2, null, 2),
+      );
+
+      const projects = await reader.listProjects();
+
+      expect(projects).toHaveLength(2);
+    });
+
+    it("should handle pathFilter that matches no projects", async () => {
+      const projectDir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      await mkdir(projectDir, { recursive: true });
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [createMockSessionEntry("session-1", "2026-02-05T10:00:00Z")],
+      };
+
+      await writeFile(
+        join(projectDir, "sessions-index.json"),
+        JSON.stringify(index, null, 2),
+      );
+
+      const projects = await reader.listProjects("/non/existent/path");
+
+      expect(projects).toHaveLength(0);
+    });
   });
 
   describe("listSessions", () => {
@@ -232,7 +338,12 @@ describe("ClaudeSessionReader", () => {
       );
 
       // Register session-1 as qraftbox session
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
     });
 
     it("should list all sessions by default", async () => {
@@ -271,6 +382,50 @@ describe("ClaudeSessionReader", () => {
       expect(result.sessions).toHaveLength(2);
       expect(result.sessions[0]?.projectPath).toBe("/g/gits/tacogips/qraftbox");
       expect(result.sessions[1]?.projectPath).toBe("/g/gits/tacogips/qraftbox");
+    });
+
+    it("should only process matching projects when workingDirectoryPrefix is provided", async () => {
+      // Create an additional unrelated project
+      const project3Dir = join(projectsDir, "-var-lib-data");
+      await mkdir(project3Dir, { recursive: true });
+
+      const index3: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/var/lib/data",
+        entries: [
+          createMockSessionEntry(
+            "session-4",
+            "2026-02-06T10:00:00Z",
+            "2026-02-06T11:00:00Z",
+            "main",
+            "Some other project",
+          ),
+        ],
+      };
+
+      await writeFile(
+        join(project3Dir, "sessions-index.json"),
+        JSON.stringify(index3, null, 2),
+      );
+
+      // Filter by /g/gits/tacogips - should only process project1, not project2 or project3
+      const result = await reader.listSessions({
+        workingDirectoryPrefix: "/g/gits/tacogips",
+      });
+
+      // Should only get sessions from /g/gits/tacogips/qraftbox (session-1, session-2)
+      expect(result.sessions).toHaveLength(2);
+      expect(
+        result.sessions.every((s) =>
+          s.projectPath.startsWith("/g/gits/tacogips"),
+        ),
+      ).toBe(true);
+      expect(
+        result.sessions.find((s) => s.sessionId === "session-3"),
+      ).toBeUndefined();
+      expect(
+        result.sessions.find((s) => s.sessionId === "session-4"),
+      ).toBeUndefined();
     });
 
     it("should filter sessions by source (qraftbox)", async () => {
@@ -434,7 +589,12 @@ describe("ClaudeSessionReader", () => {
     });
 
     it("should include source in returned session", async () => {
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
 
       const session = await reader.getSession("session-1");
 
@@ -457,7 +617,12 @@ describe("ClaudeSessionReader", () => {
         join(projectDir, "sessions-index.json"),
         JSON.stringify(index, null, 2),
       );
-      await registry.register("session-1", "/g/gits/tacogips/qraftbox");
+      mappingStore.upsert(
+        "session-1" as ClaudeSessionId,
+        "/g/gits/tacogips/qraftbox",
+        "test_worktree" as WorktreeId,
+        "qraftbox",
+      );
 
       const result = await reader.listSessions();
 

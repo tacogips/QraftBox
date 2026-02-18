@@ -1,64 +1,64 @@
 <script lang="ts">
-import type { DeletedBlock } from "../../src/types/current-state";
+  import type { DeletedBlock } from "../../src/types/current-state";
 
-/**
- * ExpandedDeletedBlock Component
- *
- * Renders expanded deleted content with red background and collapse controls.
- *
- * Props:
- * - block: The DeletedBlock data
- * - onCollapse: Callback to collapse this block
- * - highlightedLines: Optional array of HTML strings from Shiki for syntax highlighting
- *
- * Design:
- * - Red background to clearly indicate deleted content
- * - Shows original line numbers
- * - Collapse button in header
- * - Smooth expand/collapse animation
- */
+  /**
+   * ExpandedDeletedBlock Component
+   *
+   * Renders expanded deleted content with red background and collapse controls.
+   *
+   * Props:
+   * - block: The DeletedBlock data
+   * - onCollapse: Callback to collapse this block
+   * - highlightedLines: Optional array of HTML strings from Shiki for syntax highlighting
+   *
+   * Design:
+   * - Red background to clearly indicate deleted content
+   * - Shows original line numbers
+   * - Collapse button in header
+   * - Smooth expand/collapse animation
+   */
 
-interface Props {
-  block: DeletedBlock;
-  onCollapse: () => void;
-  highlightedLines?: readonly string[] | undefined;
-}
+  interface Props {
+    block: DeletedBlock;
+    onCollapse: () => void;
+    highlightedLines?: readonly string[] | undefined;
+  }
 
-// Svelte 5 props syntax
-const { block, onCollapse, highlightedLines = undefined }: Props = $props();
+  // Svelte 5 props syntax
+  const { block, onCollapse, highlightedLines = undefined }: Props = $props();
 
-/**
- * Get the line count text
- */
-const lineCountText = $derived(
-  block.lines.length === 1
-    ? "1 deleted line"
-    : `${block.lines.length} deleted lines`
-);
+  /**
+   * Get the line count text
+   */
+  const lineCountText = $derived(
+    block.lines.length === 1
+      ? "1 deleted line"
+      : `${block.lines.length} deleted lines`,
+  );
 
-/**
- * Get line number for a specific line in the block
- */
-function getLineNumber(index: number): number {
-  return block.originalStart + index;
-}
+  /**
+   * Get line number for a specific line in the block
+   */
+  function getLineNumber(index: number): number {
+    return block.originalStart + index;
+  }
 
-/**
- * Handle collapse button click
- */
-function handleCollapse(): void {
-  onCollapse();
-}
-
-/**
- * Handle keyboard activation for collapse
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (event.key === "Escape") {
-    event.preventDefault();
+  /**
+   * Handle collapse button click
+   */
+  function handleCollapse(): void {
     onCollapse();
   }
-}
+
+  /**
+   * Handle keyboard activation for collapse
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onCollapse();
+    }
+  }
 </script>
 
 <div
@@ -136,7 +136,8 @@ function handleKeydown(event: KeyboardEvent): void {
         <div class="flex-1 px-2 text-danger-fg overflow-x-auto">
           {#if highlightedLines !== undefined && highlightedLines[index] !== undefined}
             <!-- Render syntax-highlighted HTML from Shiki -->
-            <span class="highlighted-line">{@html highlightedLines[index]}</span>
+            <span class="highlighted-line">{@html highlightedLines[index]}</span
+            >
           {:else}
             <!-- Plain text fallback -->
             <pre class="m-0 p-0">{lineContent}</pre>
@@ -148,33 +149,33 @@ function handleKeydown(event: KeyboardEvent): void {
 </div>
 
 <style>
-/* Ensure pre tags don't add extra spacing */
-pre {
-  font-family: inherit;
-  font-size: inherit;
-  line-height: inherit;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.highlighted-line {
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-/* Animation for expand/collapse */
-.expanded-deleted-block {
-  animation: expand-block 200ms ease-out;
-}
-
-@keyframes expand-block {
-  from {
-    opacity: 0;
-    max-height: 0;
+  /* Ensure pre tags don't add extra spacing */
+  pre {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    white-space: pre-wrap;
+    word-break: break-word;
   }
-  to {
-    opacity: 1;
-    max-height: 2000px;
+
+  .highlighted-line {
+    white-space: pre-wrap;
+    word-break: break-word;
   }
-}
+
+  /* Animation for expand/collapse */
+  .expanded-deleted-block {
+    animation: expand-block 200ms ease-out;
+  }
+
+  @keyframes expand-block {
+    from {
+      opacity: 0;
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      max-height: 2000px;
+    }
+  }
 </style>

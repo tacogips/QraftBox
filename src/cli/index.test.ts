@@ -22,6 +22,8 @@ describe("parseArgs", () => {
       projectPath: ".",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     });
   });
 
@@ -142,6 +144,8 @@ describe("parseArgs", () => {
       projectPath: "/path/to/project",
       promptModel: "claude-opus-4-6",
       assistantModel: "claude-opus-4-6",
+      assistantAdditionalArgs: ["--dangerously-skip-permissions"],
+      projectDirs: [],
     });
   });
 

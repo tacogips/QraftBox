@@ -5,6 +5,8 @@
  * Sessions are stored in ~/.claude/projects/ with indices and JSONL content.
  */
 
+import type { QraftAiSessionId } from "./ai";
+
 /**
  * Claude session index structure
  * Read from ~/.claude/projects/{encoded-path}/sessions-index.json
@@ -64,6 +66,8 @@ export interface ExtendedSessionEntry extends ClaudeSessionEntry {
   source: SessionSource;
   /** Encoded project directory name (path with / replaced by -) */
   projectEncoded: string;
+  /** QraftBox AI session group ID - primary identifier for client-facing use */
+  qraftAiSessionId: QraftAiSessionId;
 }
 
 /**

@@ -42,8 +42,15 @@ function createMockContextManager(
       if (tab === undefined) {
         throw new Error(`Context not found: ${id}`);
       }
-      return { projectPath: tab.path };
+      return { projectPath: tab.path, isGitRepo: tab.isGitRepo };
     }),
+    getProjectRegistry: mock(() => ({
+      getOrCreateSlug: async () => "test-abc123",
+      resolveSlug: async () => undefined,
+      removeSlug: async () => {},
+      getAllProjects: async () => new Map(),
+      getAllPaths: async (): Promise<ReadonlySet<string>> => new Set(),
+    })),
   };
 }
 
@@ -53,6 +60,7 @@ function createMockContextManager(
 function createTestTab(id: string, path: string): WorkspaceTab {
   return {
     id: id as ContextId,
+    projectSlug: "test-abc123",
     path,
     name: "test-repo",
     repositoryRoot: path,
@@ -382,8 +390,8 @@ describe("contextMiddleware", () => {
       // UUID validation might normalize case
       const response = await app.request(`/${contextId}/test`);
 
-      // Response depends on UUID validation behavior
-      expect([200, 404]).toContain(response.status);
+      // UUID validation passes (regex is case-insensitive) but Map lookup fails (case-sensitive)
+      expect(response.status).toBe(404);
     });
 
     test("handles rapid sequential requests to same context", async () => {

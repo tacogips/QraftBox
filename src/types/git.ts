@@ -14,7 +14,8 @@ export type FileStatusCode =
   | "deleted"
   | "renamed"
   | "copied"
-  | "untracked";
+  | "untracked"
+  | "ignored";
 
 /**
  * File status information for a single file
@@ -100,7 +101,8 @@ export function isFileStatusCode(value: string): value is FileStatusCode {
     value === "deleted" ||
     value === "renamed" ||
     value === "copied" ||
-    value === "untracked"
+    value === "untracked" ||
+    value === "ignored"
   );
 }
 
@@ -181,109 +183,18 @@ export function isWorkingTreeClean(status: WorkingTreeStatus): boolean {
 }
 
 /**
- * Check if a FileNode is a directory
- *
- * @param node - FileNode to check
- * @returns True if node is a directory
- */
-export function isDirectory(node: FileNode): boolean {
-  return node.type === "directory";
-}
-
-/**
- * Check if a FileNode is a file
- *
- * @param node - FileNode to check
- * @returns True if node is a file
- */
-export function isFile(node: FileNode): boolean {
-  return node.type === "file";
-}
-
-/**
- * Count total changes in a DiffFile
- *
- * @param diffFile - DiffFile to count changes for
- * @returns Total number of additions plus deletions
- */
-export function getTotalChanges(diffFile: DiffFile): number {
-  return diffFile.additions + diffFile.deletions;
-}
-
-/**
- * Count total chunks across all DiffFiles
- *
- * @param diffFiles - Array of DiffFile objects
- * @returns Total number of chunks
- */
-export function getTotalChunks(diffFiles: readonly DiffFile[]): number {
-  return diffFiles.reduce((total, file) => total + file.chunks.length, 0);
-}
-
-/**
- * Filter DiffFiles to only binary files
- *
- * @param diffFiles - Array of DiffFile objects
- * @returns Array of DiffFiles that are binary
- */
-export function filterBinaryFiles(
-  diffFiles: readonly DiffFile[],
-): readonly DiffFile[] {
-  return diffFiles.filter((file) => file.isBinary);
-}
-
-/**
- * Filter DiffFiles to only text files
- *
- * @param diffFiles - Array of DiffFile objects
- * @returns Array of DiffFiles that are not binary
- */
-export function filterTextFiles(
-  diffFiles: readonly DiffFile[],
-): readonly DiffFile[] {
-  return diffFiles.filter((file) => !file.isBinary);
-}
-
-/**
- * Group DiffFiles by status
- *
- * @param diffFiles - Array of DiffFile objects
- * @returns Map of status to array of DiffFiles
- */
-export function groupByStatus(
-  diffFiles: readonly DiffFile[],
-): Map<FileStatusCode, readonly DiffFile[]> {
-  const grouped = new Map<FileStatusCode, DiffFile[]>();
-
-  for (const file of diffFiles) {
-    const existing = grouped.get(file.status);
-    if (existing !== undefined) {
-      existing.push(file);
-    } else {
-      grouped.set(file.status, [file]);
-    }
-  }
-
-  // Convert to readonly arrays
-  const result = new Map<FileStatusCode, readonly DiffFile[]>();
-  for (const [status, files] of grouped.entries()) {
-    result.set(status, files);
-  }
-
-  return result;
-}
-
-/**
  * File badge types for display in file tree
  *
  * - M: Modified file
  * - +: Added file
  * - -: Deleted file
  * - R: Renamed file
+ * - ?: Untracked file
+ * - I: Ignored file
  * - IMG: Image file (binary)
  * - BIN: Binary file (non-image)
  */
-export type FileBadge = "M" | "+" | "-" | "R" | "IMG" | "BIN";
+export type FileBadge = "M" | "+" | "-" | "R" | "?" | "I" | "IMG" | "BIN";
 
 /**
  * Image file extensions that can be previewed
@@ -334,6 +245,12 @@ export function getFileBadge(node: FileNode): FileBadge | undefined {
   }
   if (node.status === "modified") {
     return "M";
+  }
+  if (node.status === "untracked") {
+    return "?";
+  }
+  if (node.status === "ignored") {
+    return "I";
   }
 
   return undefined;

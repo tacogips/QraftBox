@@ -8,6 +8,7 @@
 import type { FileChangeEvent } from "../../types/watcher.js";
 import type { FileWatcher } from "./index.js";
 import type { WebSocketManager } from "../websocket/index.js";
+import { createLogger } from "../logger.js";
 
 /**
  * Watcher broadcaster interface
@@ -73,6 +74,7 @@ export function createWatcherBroadcaster(
   watcher: FileWatcher,
   wsManager: WebSocketManager,
 ): WatcherBroadcaster {
+  const logger = createLogger("WatcherBroadcaster");
   let isActive = false;
 
   /**
@@ -99,8 +101,9 @@ export function createWatcherBroadcaster(
     try {
       wsManager.broadcast("file-change", broadcast);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`[WatcherBroadcaster] Failed to broadcast: ${message}`);
+      logger.error("Failed to broadcast file changes", error, {
+        eventCount: events.length,
+      });
     }
   }
 
@@ -110,11 +113,11 @@ export function createWatcherBroadcaster(
   return {
     start(): void {
       if (isActive) {
-        console.warn("[WatcherBroadcaster] Already started");
+        logger.debug("Start called while already active");
         return;
       }
       isActive = true;
-      console.log("[WatcherBroadcaster] Started broadcasting");
+      logger.debug("Started broadcasting file changes");
     },
 
     stop(): void {
@@ -122,7 +125,7 @@ export function createWatcherBroadcaster(
         return;
       }
       isActive = false;
-      console.log("[WatcherBroadcaster] Stopped broadcasting");
+      logger.debug("Stopped broadcasting file changes");
     },
   };
 }

@@ -101,7 +101,10 @@ export function transformToCurrentState(
       if (change.type === "delete") {
         // Accumulate deleted lines
         pendingDeleted.push(change);
-        if (pendingDeletedStartLine === undefined && change.oldLine !== undefined) {
+        if (
+          pendingDeletedStartLine === undefined &&
+          change.oldLine !== undefined
+        ) {
           pendingDeletedStartLine = change.oldLine;
         }
       } else {
@@ -147,7 +150,8 @@ export function transformToCurrentState(
       // Add a synthetic line to attach the deleted block
       // This represents "end of file" marker
       const lastLine = lines[lines.length - 1];
-      const nextLineNumber = lastLine !== undefined ? lastLine.lineNumber + 1 : 1;
+      const nextLineNumber =
+        lastLine !== undefined ? lastLine.lineNumber + 1 : 1;
 
       lines.push({
         lineNumber: nextLineNumber,

@@ -160,21 +160,12 @@ export const initialCommitLogState: CommitLogStoreState = createInitialState();
  */
 export function createCommitLogStore(): CommitLogStore {
   let state: CommitLogStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<CommitLogStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -391,7 +382,6 @@ export function createCommitLogStore(): CommitLogStore {
 
     reset(): void {
       state = createInitialState();
-      notifyListeners();
     },
   };
 }

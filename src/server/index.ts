@@ -19,6 +19,17 @@ import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
 import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
+import { createLogger } from "./logger";
+import type { RecentDirectoryStore } from "./workspace/recent-store";
+import type { OpenTabsStore } from "./workspace/open-tabs-store";
+import { createSessionMappingStore } from "./ai/session-mapping-store";
+import { createModelConfigStore } from "./model-config/store.js";
+import { resolveClientDir } from "./client-dir";
+import type { ProjectWatcherManager } from "./watcher/manager";
+import type {
+  TerminalSessionManager,
+  TerminalSocketData,
+} from "./terminal/session-manager";
 
 /**
  * Server options for creating the Hono instance
@@ -26,6 +37,18 @@ import { DEFAULT_AI_CONFIG } from "../types/ai";
 export interface ServerOptions {
   readonly config: CLIConfig;
   readonly contextManager: ContextManager;
+  readonly recentStore: RecentDirectoryStore;
+  readonly openTabsStore: OpenTabsStore;
+  readonly activeTabPath?: string | undefined;
+  readonly initialTabs?:
+    | readonly import("../types/workspace").WorkspaceTab[]
+    | undefined;
+  /** Optional broadcast callback for WebSocket-based AI queue updates */
+  readonly broadcast?: ((event: string, data: unknown) => void) | undefined;
+  /** Optional project watcher manager for multi-project file watching */
+  readonly watcherManager?: ProjectWatcherManager | undefined;
+  /** Optional terminal session manager for browser terminal feature */
+  readonly terminalSessionManager?: TerminalSessionManager | undefined;
 }
 
 /**
@@ -71,7 +94,28 @@ interface HealthCheckResponse {
  * @returns Hono app instance
  */
 export function createServer(options: ServerOptions): Hono {
+  const logger = createLogger("Server");
   const app = new Hono();
+
+  app.use("*", async (c, next) => {
+    const startedAt = Date.now();
+    try {
+      await next();
+      logger.debug("Request completed", {
+        method: c.req.method,
+        path: c.req.path,
+        status: c.res.status,
+        durationMs: Date.now() - startedAt,
+      });
+    } catch (error) {
+      logger.error("Request failed", error, {
+        method: c.req.method,
+        path: c.req.path,
+        durationMs: Date.now() - startedAt,
+      });
+      throw error;
+    }
+  });
 
   // Mount error handler
   app.onError(createErrorHandler());
@@ -92,19 +136,54 @@ export function createServer(options: ServerOptions): Hono {
 
   // Initialize tool registry (fire and forget)
   void toolRegistry.initialize().catch((e) => {
-    console.error("Failed to initialize tool registry:", e);
+    logger.error("Failed to initialize tool registry", e);
   });
 
-  const sessionManager = createSessionManager(DEFAULT_AI_CONFIG, toolRegistry);
+  const mappingStore = createSessionMappingStore();
+  const modelConfigStore = createModelConfigStore({
+    seedFromCliConfig: {
+      assistantModel: options.config.assistantModel,
+      assistantAdditionalArgs: options.config.assistantAdditionalArgs,
+    },
+  });
+
+  const sessionManager = createSessionManager(
+    {
+      ...DEFAULT_AI_CONFIG,
+      enabled: options.config.ai,
+      assistantModel: options.config.assistantModel,
+      assistantAdditionalArgs: [...options.config.assistantAdditionalArgs],
+    },
+    toolRegistry,
+    options.broadcast,
+    mappingStore,
+  );
   const promptStore = createPromptStore();
+
+  // Recover prompts interrupted by previous server shutdown
+  void promptStore
+    .recoverInterrupted()
+    .then((count) => {
+      if (count > 0) {
+        logger.info(
+          `Recovered ${count} interrupted prompt(s) to pending state`,
+        );
+      }
+    })
+    .catch((e: unknown) => {
+      logger.error("Failed to recover interrupted prompts", e);
+    });
 
   // Initialize system prompt files (fire and forget)
   void ensureSystemPromptFiles().catch((e) => {
-    console.error("Failed to initialize system prompt files:", e);
+    logger.error("Failed to initialize system prompt files", e);
   });
 
   mountAllRoutes(app, {
     contextManager: options.contextManager,
+    recentStore: options.recentStore,
+    openTabsStore: options.openTabsStore,
+    activeTabPath: options.activeTabPath,
     sessionManager,
     promptStore,
     toolRegistry,
@@ -112,11 +191,15 @@ export function createServer(options: ServerOptions): Hono {
       promptModel: options.config.promptModel,
       assistantModel: options.config.assistantModel,
     },
+    modelConfigStore,
+    initialTabs: options.initialTabs,
+    watcherManager: options.watcherManager,
+    terminalSessionManager: options.terminalSessionManager,
   });
 
   // Static file serving and SPA fallback
-  // Assumes client build is at ./dist/client relative to project root
-  const clientDir = join(options.config.projectPath, "dist", "client");
+  // Resolves client build directory from multiple candidate locations
+  const clientDir = resolveClientDir();
   const indexPath = join(clientDir, "index.html");
 
   app.use("*", createStaticMiddleware(clientDir));
@@ -144,8 +227,20 @@ export function startServer(
   app: Hono,
   config: CLIConfig,
   wsManager?: WebSocketManager | undefined,
+  terminalSessionManager?: TerminalSessionManager | undefined,
 ): Server {
+  const logger = createLogger("Server");
   if (wsManager !== undefined) {
+    type SocketData =
+      | {
+          readonly channel: "realtime";
+        }
+      | TerminalSocketData;
+    const isTerminalSocket = (
+      socket: ServerWebSocket<SocketData>,
+    ): socket is ServerWebSocket<TerminalSocketData> =>
+      socket.data.channel === "terminal";
+
     // Capture wsManager in a const for use inside handlers
     const manager = wsManager;
 
@@ -155,33 +250,98 @@ export function startServer(
         server: import("bun").Server,
       ): Response | Promise<Response> | undefined {
         const url = new URL(req.url);
-        if (url.pathname === "/ws") {
-          if (server.upgrade(req)) {
+        const terminalPathMatch = url.pathname.match(
+          /^\/ws\/terminal\/([^/]+)$/,
+        );
+        if (terminalPathMatch !== null) {
+          const terminalSessionId = terminalPathMatch[1];
+          if (
+            terminalSessionManager === undefined ||
+            terminalSessionId === undefined ||
+            !terminalSessionManager.hasSession(terminalSessionId)
+          ) {
+            return new Response("Unknown terminal session", { status: 404 });
+          }
+
+          if (
+            server.upgrade(req, {
+              data: {
+                channel: "terminal",
+                sessionId: terminalSessionId,
+              },
+            })
+          ) {
+            logger.debug("Terminal WebSocket upgrade accepted", {
+              sessionId: terminalSessionId,
+            });
             return undefined;
           }
+          logger.error("Terminal WebSocket upgrade failed", {
+            sessionId: terminalSessionId,
+          });
+          return new Response("WebSocket upgrade failed", { status: 400 });
+        }
+
+        if (url.pathname === "/ws") {
+          if (
+            server.upgrade(req, {
+              data: {
+                channel: "realtime",
+              },
+            })
+          ) {
+            logger.debug("WebSocket upgrade accepted");
+            return undefined;
+          }
+          logger.error("WebSocket upgrade failed");
           return new Response("WebSocket upgrade failed", { status: 400 });
         }
         return app.fetch(req, server);
       },
       websocket: {
-        open(ws: ServerWebSocket<unknown>): void {
-          manager.handleOpen(ws);
+        open(ws: ServerWebSocket<SocketData>): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleOpen(ws.data.sessionId, ws);
+            } else {
+              ws.close();
+            }
+            return;
+          }
+          manager.handleOpen(ws as ServerWebSocket<unknown>);
         },
-        close(ws: ServerWebSocket<unknown>): void {
-          manager.handleClose(ws);
+        close(ws: ServerWebSocket<SocketData>): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleClose(ws);
+            }
+            return;
+          }
+          manager.handleClose(ws as ServerWebSocket<unknown>);
         },
-        message(ws: ServerWebSocket<unknown>, message: string | Buffer): void {
-          manager.handleMessage(ws, message);
+        message(
+          ws: ServerWebSocket<SocketData>,
+          message: string | Buffer,
+        ): void {
+          if (isTerminalSocket(ws)) {
+            if (terminalSessionManager !== undefined) {
+              terminalSessionManager.handleMessage(ws, message);
+            }
+            return;
+          }
+          manager.handleMessage(ws as ServerWebSocket<unknown>, message);
         },
       },
       port: config.port,
       hostname: config.host,
+      idleTimeout: 120,
     });
 
     return {
       port: server.port,
       hostname: server.hostname,
       stop(): void {
+        logger.debug("Stopping server with WebSocket support");
         server.stop();
       },
     };
@@ -192,12 +352,14 @@ export function startServer(
     fetch: app.fetch,
     port: config.port,
     hostname: config.host,
+    idleTimeout: 120,
   });
 
   return {
     port: server.port,
     hostname: server.hostname,
     stop(): void {
+      logger.debug("Stopping HTTP-only server");
       server.stop();
     },
   };

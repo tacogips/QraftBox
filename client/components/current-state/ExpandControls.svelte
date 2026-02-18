@@ -1,81 +1,81 @@
 <script lang="ts">
-/**
- * ExpandControls Component
- *
- * Provides expand/collapse all controls for deleted blocks in the Current State View.
- *
- * Props:
- * - hasDeletedBlocks: Whether there are any deleted blocks in the view
- * - allExpanded: Whether all deleted blocks are currently expanded
- * - allCollapsed: Whether all deleted blocks are currently collapsed
- * - onExpandAll: Callback to expand all deleted blocks
- * - onCollapseAll: Callback to collapse all deleted blocks
- *
- * Design:
- * - Touch-friendly button sizing (44px minimum tap targets)
- * - Clear visual state indication
- * - Keyboard shortcuts: zR (expand all), zM (collapse all)
- */
+  /**
+   * ExpandControls Component
+   *
+   * Provides expand/collapse all controls for deleted blocks in the Current State View.
+   *
+   * Props:
+   * - hasDeletedBlocks: Whether there are any deleted blocks in the view
+   * - allExpanded: Whether all deleted blocks are currently expanded
+   * - allCollapsed: Whether all deleted blocks are currently collapsed
+   * - onExpandAll: Callback to expand all deleted blocks
+   * - onCollapseAll: Callback to collapse all deleted blocks
+   *
+   * Design:
+   * - Touch-friendly button sizing (44px minimum tap targets)
+   * - Clear visual state indication
+   * - Keyboard shortcuts: zR (expand all), zM (collapse all)
+   */
 
-interface Props {
-  hasDeletedBlocks: boolean;
-  allExpanded: boolean;
-  allCollapsed: boolean;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
-}
+  interface Props {
+    hasDeletedBlocks: boolean;
+    allExpanded: boolean;
+    allCollapsed: boolean;
+    onExpandAll: () => void;
+    onCollapseAll: () => void;
+  }
 
-// Svelte 5 props syntax
-const {
-  hasDeletedBlocks,
-  allExpanded,
-  allCollapsed,
-  onExpandAll,
-  onCollapseAll,
-}: Props = $props();
+  // Svelte 5 props syntax
+  const {
+    hasDeletedBlocks,
+    allExpanded,
+    allCollapsed,
+    onExpandAll,
+    onCollapseAll,
+  }: Props = $props();
 
-/**
- * Get the state description for screen readers
- */
-function getStateDescription(): string {
-  if (!hasDeletedBlocks) {
-    return "No deleted blocks";
+  /**
+   * Get the state description for screen readers
+   */
+  function getStateDescription(): string {
+    if (!hasDeletedBlocks) {
+      return "No deleted blocks";
+    }
+    if (allExpanded) {
+      return "All expanded";
+    }
+    if (allCollapsed) {
+      return "All collapsed";
+    }
+    return "Mixed state";
   }
-  if (allExpanded) {
-    return "All expanded";
-  }
-  if (allCollapsed) {
-    return "All collapsed";
-  }
-  return "Mixed state";
-}
 
-/**
- * Handle keyboard shortcuts
- */
-function handleKeydown(event: KeyboardEvent): void {
-  // zR = expand all (vim-style)
-  if (event.key === "R" && event.shiftKey === false) {
-    // Track last key for z prefix
-    return;
+  /**
+   * Handle keyboard shortcuts
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    // zR = expand all (vim-style)
+    if (event.key === "R" && event.shiftKey === false) {
+      // Track last key for z prefix
+      return;
+    }
+    // zM = collapse all (vim-style)
+    if (event.key === "M" && event.shiftKey === false) {
+      return;
+    }
   }
-  // zM = collapse all (vim-style)
-  if (event.key === "M" && event.shiftKey === false) {
-    return;
-  }
-}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 <div
-  class="flex items-center gap-2 px-2"
+  class="flex items-center gap-1 px-1"
   role="group"
   aria-label="Deleted block expansion controls"
 >
   {#if hasDeletedBlocks}
     <!-- State indicator -->
-    <span class="text-xs text-text-tertiary mr-2" aria-live="polite">
+    <span class="text-[10px] text-text-tertiary mr-1" aria-live="polite">
       {getStateDescription()}
     </span>
 
@@ -84,7 +84,7 @@ function handleKeydown(event: KeyboardEvent): void {
       type="button"
       onclick={onExpandAll}
       disabled={allExpanded}
-      class="px-3 py-2 min-h-[44px] min-w-[44px] text-sm font-medium rounded
+      class="px-1.5 py-0.5 min-h-[24px] min-w-[24px] text-xs font-medium rounded
              {allExpanded
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
@@ -93,11 +93,11 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-label="Expand all deleted blocks (keyboard: zR)"
       aria-disabled={allExpanded}
     >
-      <span class="flex items-center gap-1.5">
+      <span class="flex items-center gap-1">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -118,7 +118,7 @@ function handleKeydown(event: KeyboardEvent): void {
       type="button"
       onclick={onCollapseAll}
       disabled={allCollapsed}
-      class="px-3 py-2 min-h-[44px] min-w-[44px] text-sm font-medium rounded
+      class="px-1.5 py-0.5 min-h-[24px] min-w-[24px] text-xs font-medium rounded
              {allCollapsed
         ? 'bg-bg-disabled text-text-disabled cursor-not-allowed'
         : 'bg-bg-secondary text-text-primary hover:bg-bg-hover active:bg-bg-pressed border border-border-default'}
@@ -127,11 +127,11 @@ function handleKeydown(event: KeyboardEvent): void {
       aria-label="Collapse all deleted blocks (keyboard: zM)"
       aria-disabled={allCollapsed}
     >
-      <span class="flex items-center gap-1.5">
+      <span class="flex items-center gap-1">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="16"
-          height="16"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -148,8 +148,6 @@ function handleKeydown(event: KeyboardEvent): void {
     </button>
   {:else}
     <!-- No deleted blocks state -->
-    <span class="text-xs text-text-tertiary italic">
-      No deleted content
-    </span>
+    <span class="text-xs text-text-tertiary italic"> No deleted content </span>
   {/if}
 </div>

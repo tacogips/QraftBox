@@ -381,5 +381,90 @@ export function createBrowseRoutes(): Hono {
     }
   });
 
+  /**
+   * POST /api/browse/pick-directory
+   *
+   * Open a native OS directory picker dialog using zenity/kdialog/yad.
+   * Returns the absolute path of the selected directory.
+   *
+   * Request body (optional):
+   * - startPath: Directory to start browsing from
+   *
+   * Returns:
+   * - path: Absolute path of selected directory (null if cancelled)
+   */
+  app.post("/pick-directory", async (c) => {
+    let startPath: string | undefined;
+    try {
+      const body = (await c.req.json()) as { startPath?: string };
+      if (typeof body.startPath === "string" && body.startPath.length > 0) {
+        startPath = body.startPath;
+      }
+    } catch {
+      // No body or invalid JSON - use default
+    }
+
+    // Try native directory picker commands in order of preference
+    const commands: Array<{ cmd: string; args: string[] }> = [];
+
+    // zenity (GTK)
+    const zenityArgs = [
+      "--file-selection",
+      "--directory",
+      "--title=Select Project Directory",
+    ];
+    if (startPath !== undefined) {
+      zenityArgs.push(`--filename=${startPath}/`);
+    }
+    commands.push({ cmd: "zenity", args: zenityArgs });
+
+    // kdialog (KDE)
+    const kdialogArgs = ["--getexistingdirectory", startPath ?? os.homedir()];
+    commands.push({ cmd: "kdialog", args: kdialogArgs });
+
+    // yad (GTK alternative)
+    const yadArgs = [
+      "--file",
+      "--directory",
+      "--title=Select Project Directory",
+    ];
+    if (startPath !== undefined) {
+      yadArgs.push(`--filename=${startPath}/`);
+    }
+    commands.push({ cmd: "yad", args: yadArgs });
+
+    for (const { cmd, args } of commands) {
+      try {
+        const proc = Bun.spawn([cmd, ...args], {
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        const exitCode = await proc.exited;
+        if (exitCode === 0) {
+          const stdout = await new Response(proc.stdout).text();
+          const selectedPath = stdout.trim();
+          if (selectedPath.length > 0) {
+            return c.json({ path: selectedPath });
+          }
+        }
+        // Exit code 1 = user cancelled in zenity/kdialog
+        if (exitCode === 1) {
+          return c.json({ path: null });
+        }
+      } catch {
+        // Command not found or failed - try next
+        continue;
+      }
+    }
+
+    // No native picker available
+    const errorResponse: ErrorResponse = {
+      error:
+        "No native directory picker available (install zenity, kdialog, or yad)",
+      code: 501,
+    };
+    return c.json(errorResponse, 501);
+  });
+
   return app;
 }

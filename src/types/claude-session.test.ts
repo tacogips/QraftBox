@@ -8,6 +8,7 @@ import {
   type ClaudeSessionEntry,
   type ExtendedSessionEntry,
 } from "./claude-session";
+import { deriveQraftAiSessionIdFromClaude, type ClaudeSessionId } from "./ai";
 
 describe("Type Guards", () => {
   describe("isSessionSource", () => {
@@ -170,8 +171,9 @@ describe("Type Guards", () => {
   });
 
   describe("isExtendedSessionEntry", () => {
+    const sessionId = "123e4567-e89b-12d3-a456-426614174000";
     const validExtendedEntry: ExtendedSessionEntry = {
-      sessionId: "123e4567-e89b-12d3-a456-426614174000",
+      sessionId,
       fullPath:
         "/home/user/.claude/projects/-g-gits-tacogips-qraftbox/session.jsonl",
       fileMtime: 1704067200000,
@@ -185,6 +187,9 @@ describe("Type Guards", () => {
       isSidechain: false,
       source: "qraftbox",
       projectEncoded: "-g-gits-tacogips-qraftbox",
+      qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
+        sessionId as ClaudeSessionId,
+      ),
     };
 
     test("returns true for valid extended session entry", () => {

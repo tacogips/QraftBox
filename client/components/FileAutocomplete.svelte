@@ -1,241 +1,240 @@
 <script lang="ts">
-/**
- * FileAutocomplete Component
- *
- * Provides autocomplete dropdown for file references in AI prompts.
- * Supports @ file mentions with optional line ranges.
- *
- * Props:
- * - query: Current search query (text after @)
- * - changedFiles: Array of changed file paths (prioritized)
- * - allFiles: Array of all file paths in the project
- * - visible: Whether dropdown is visible
- * - onSelect: Callback when a file is selected
- * - onClose: Callback when autocomplete should close
- *
- * Design:
- * - Fuzzy search on file paths
- * - Prioritize changed files
- * - Support @file.ts:L10-L20 syntax
- * - Touch-friendly with 48px items
- */
+  /**
+   * FileAutocomplete Component
+   *
+   * Provides autocomplete dropdown for file references in AI prompts.
+   * Supports @ file mentions with optional line ranges.
+   *
+   * Props:
+   * - query: Current search query (text after @)
+   * - changedFiles: Array of changed file paths (prioritized)
+   * - allFiles: Array of all file paths in the project
+   * - visible: Whether dropdown is visible
+   * - onSelect: Callback when a file is selected
+   * - onClose: Callback when autocomplete should close
+   *
+   * Design:
+   * - Fuzzy search on file paths
+   * - Prioritize changed files
+   * - Support @file.ts:L10-L20 syntax
+   * - Touch-friendly with 48px items
+   */
 
-interface LineRange {
-  readonly start: number;
-  readonly end: number;
-}
-
-interface Props {
-  query: string;
-  changedFiles: readonly string[];
-  allFiles: readonly string[];
-  visible: boolean;
-  onSelect: (path: string, lineRange?: LineRange | undefined) => void;
-  onClose: () => void;
-}
-
-// Svelte 5 props syntax
-const {
-  query,
-  changedFiles,
-  allFiles,
-  visible,
-  onSelect,
-  onClose,
-}: Props = $props();
-
-/**
- * Selected index in results
- */
-let selectedIndex = $state(0);
-
-/**
- * Parse line range from query
- * Matches: :L10, :L10-L20, :L10-20
- */
-function parseLineRange(q: string): {
-  path: string;
-  lineRange?: LineRange | undefined;
-} {
-  const lineMatch = q.match(/:L(\d+)(?:-L?(\d+))?$/);
-  if (lineMatch !== null) {
-    const start = parseInt(lineMatch[1] ?? "1", 10);
-    const end = lineMatch[2] !== undefined ? parseInt(lineMatch[2], 10) : start;
-    return {
-      path: q.slice(0, lineMatch.index),
-      lineRange: { start, end },
-    };
-  }
-  return { path: q };
-}
-
-/**
- * Fuzzy match score (higher is better)
- */
-function fuzzyScore(path: string, searchTerm: string): number {
-  if (searchTerm.length === 0) return 1;
-
-  const lowerPath = path.toLowerCase();
-  const lowerSearch = searchTerm.toLowerCase();
-
-  // Exact match
-  if (lowerPath === lowerSearch) return 100;
-
-  // Contains exact match
-  if (lowerPath.includes(lowerSearch)) {
-    // Prefer matches at end (filename)
-    const index = lowerPath.lastIndexOf(lowerSearch);
-    return 50 + (index / lowerPath.length) * 40;
+  interface LineRange {
+    readonly start: number;
+    readonly end: number;
   }
 
-  // Fuzzy character match
-  let score = 0;
-  let searchIndex = 0;
-  let lastMatchIndex = -1;
+  interface Props {
+    query: string;
+    changedFiles: readonly string[];
+    allFiles: readonly string[];
+    visible: boolean;
+    onSelect: (path: string, lineRange?: LineRange | undefined) => void;
+    onClose: () => void;
+  }
 
-  for (let i = 0; i < lowerPath.length && searchIndex < lowerSearch.length; i++) {
-    if (lowerPath[i] === lowerSearch[searchIndex]) {
-      score += 1;
-      // Bonus for consecutive matches
-      if (lastMatchIndex === i - 1) {
-        score += 2;
-      }
-      // Bonus for matches after / or .
-      if (i === 0 || lowerPath[i - 1] === "/" || lowerPath[i - 1] === ".") {
-        score += 3;
-      }
-      lastMatchIndex = i;
-      searchIndex++;
+  // Svelte 5 props syntax
+  const { query, changedFiles, allFiles, visible, onSelect, onClose }: Props =
+    $props();
+
+  /**
+   * Selected index in results
+   */
+  let selectedIndex = $state(0);
+
+  /**
+   * Parse line range from query
+   * Matches: :L10, :L10-L20, :L10-20
+   */
+  function parseLineRange(q: string): {
+    path: string;
+    lineRange?: LineRange | undefined;
+  } {
+    const lineMatch = q.match(/:L(\d+)(?:-L?(\d+))?$/);
+    if (lineMatch !== null) {
+      const start = parseInt(lineMatch[1] ?? "1", 10);
+      const end =
+        lineMatch[2] !== undefined ? parseInt(lineMatch[2], 10) : start;
+      return {
+        path: q.slice(0, lineMatch.index),
+        lineRange: { start, end },
+      };
     }
+    return { path: q };
   }
 
-  // Only count if all search chars matched
-  if (searchIndex < lowerSearch.length) {
-    return 0;
-  }
+  /**
+   * Fuzzy match score (higher is better)
+   */
+  function fuzzyScore(path: string, searchTerm: string): number {
+    if (searchTerm.length === 0) return 1;
 
-  return score;
-}
+    const lowerPath = path.toLowerCase();
+    const lowerSearch = searchTerm.toLowerCase();
 
-/**
- * Get file name from path
- */
-function getFileName(path: string): string {
-  const parts = path.split("/");
-  return parts[parts.length - 1] ?? path;
-}
+    // Exact match
+    if (lowerPath === lowerSearch) return 100;
 
-/**
- * Get directory from path
- */
-function getDirectory(path: string): string {
-  const parts = path.split("/");
-  if (parts.length <= 1) return "";
-  return parts.slice(0, -1).join("/");
-}
-
-/**
- * Filter and sort files based on query
- */
-const filteredFiles = $derived.by(() => {
-  const { path: searchPath } = parseLineRange(query);
-
-  // Score all files
-  const changedSet = new Set(changedFiles);
-  const scored: { path: string; score: number; isChanged: boolean }[] = [];
-
-  // Add changed files first
-  for (const path of changedFiles) {
-    const score = fuzzyScore(path, searchPath);
-    if (score > 0 || searchPath.length === 0) {
-      scored.push({ path, score, isChanged: true });
+    // Contains exact match
+    if (lowerPath.includes(lowerSearch)) {
+      // Prefer matches at end (filename)
+      const index = lowerPath.lastIndexOf(lowerSearch);
+      return 50 + (index / lowerPath.length) * 40;
     }
+
+    // Fuzzy character match
+    let score = 0;
+    let searchIndex = 0;
+    let lastMatchIndex = -1;
+
+    for (
+      let i = 0;
+      i < lowerPath.length && searchIndex < lowerSearch.length;
+      i++
+    ) {
+      if (lowerPath[i] === lowerSearch[searchIndex]) {
+        score += 1;
+        // Bonus for consecutive matches
+        if (lastMatchIndex === i - 1) {
+          score += 2;
+        }
+        // Bonus for matches after / or .
+        if (i === 0 || lowerPath[i - 1] === "/" || lowerPath[i - 1] === ".") {
+          score += 3;
+        }
+        lastMatchIndex = i;
+        searchIndex++;
+      }
+    }
+
+    // Only count if all search chars matched
+    if (searchIndex < lowerSearch.length) {
+      return 0;
+    }
+
+    return score;
   }
 
-  // Add other files
-  for (const path of allFiles) {
-    if (!changedSet.has(path)) {
+  /**
+   * Get file name from path
+   */
+  function getFileName(path: string): string {
+    const parts = path.split("/");
+    return parts[parts.length - 1] ?? path;
+  }
+
+  /**
+   * Get directory from path
+   */
+  function getDirectory(path: string): string {
+    const parts = path.split("/");
+    if (parts.length <= 1) return "";
+    return parts.slice(0, -1).join("/");
+  }
+
+  /**
+   * Filter and sort files based on query
+   */
+  const filteredFiles = $derived.by(() => {
+    const { path: searchPath } = parseLineRange(query);
+
+    // Score all files
+    const changedSet = new Set(changedFiles);
+    const scored: { path: string; score: number; isChanged: boolean }[] = [];
+
+    // Add changed files first
+    for (const path of changedFiles) {
       const score = fuzzyScore(path, searchPath);
       if (score > 0 || searchPath.length === 0) {
-        scored.push({ path, score, isChanged: false });
+        scored.push({ path, score, isChanged: true });
       }
     }
-  }
 
-  // Sort by changed status, then score
-  scored.sort((a, b) => {
-    // Changed files first when no query
-    if (searchPath.length === 0) {
-      if (a.isChanged !== b.isChanged) {
-        return a.isChanged ? -1 : 1;
+    // Add other files
+    for (const path of allFiles) {
+      if (!changedSet.has(path)) {
+        const score = fuzzyScore(path, searchPath);
+        if (score > 0 || searchPath.length === 0) {
+          scored.push({ path, score, isChanged: false });
+        }
       }
     }
-    // Then by score
-    return b.score - a.score;
+
+    // Sort by changed status, then score
+    scored.sort((a, b) => {
+      // Changed files first when no query
+      if (searchPath.length === 0) {
+        if (a.isChanged !== b.isChanged) {
+          return a.isChanged ? -1 : 1;
+        }
+      }
+      // Then by score
+      return b.score - a.score;
+    });
+
+    // Limit to top 10
+    return scored.slice(0, 10);
   });
 
-  // Limit to top 10
-  return scored.slice(0, 10);
-});
+  /**
+   * Reset selection when results change
+   */
+  $effect(() => {
+    // Access filteredFiles to trigger on change
+    if (filteredFiles.length > 0) {
+      selectedIndex = 0;
+    }
+  });
 
-/**
- * Reset selection when results change
- */
-$effect(() => {
-  // Access filteredFiles to trigger on change
-  if (filteredFiles.length > 0) {
-    selectedIndex = 0;
+  /**
+   * Handle keyboard navigation
+   */
+  function handleKeydown(event: KeyboardEvent): void {
+    if (!visible || filteredFiles.length === 0) return;
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        selectedIndex = (selectedIndex + 1) % filteredFiles.length;
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        selectedIndex =
+          selectedIndex === 0 ? filteredFiles.length - 1 : selectedIndex - 1;
+        break;
+      case "Enter":
+        event.preventDefault();
+        handleSelect(selectedIndex);
+        break;
+      case "Escape":
+        event.preventDefault();
+        onClose();
+        break;
+      case "Tab":
+        event.preventDefault();
+        handleSelect(selectedIndex);
+        break;
+    }
   }
-});
 
-/**
- * Handle keyboard navigation
- */
-function handleKeydown(event: KeyboardEvent): void {
-  if (!visible || filteredFiles.length === 0) return;
+  /**
+   * Handle file selection
+   */
+  function handleSelect(index: number): void {
+    const file = filteredFiles[index];
+    if (file === undefined) return;
 
-  switch (event.key) {
-    case "ArrowDown":
-      event.preventDefault();
-      selectedIndex = (selectedIndex + 1) % filteredFiles.length;
-      break;
-    case "ArrowUp":
-      event.preventDefault();
-      selectedIndex =
-        selectedIndex === 0 ? filteredFiles.length - 1 : selectedIndex - 1;
-      break;
-    case "Enter":
-      event.preventDefault();
-      handleSelect(selectedIndex);
-      break;
-    case "Escape":
-      event.preventDefault();
-      onClose();
-      break;
-    case "Tab":
-      event.preventDefault();
-      handleSelect(selectedIndex);
-      break;
+    const { lineRange } = parseLineRange(query);
+    onSelect(file.path, lineRange);
   }
-}
 
-/**
- * Handle file selection
- */
-function handleSelect(index: number): void {
-  const file = filteredFiles[index];
-  if (file === undefined) return;
-
-  const { lineRange } = parseLineRange(query);
-  onSelect(file.path, lineRange);
-}
-
-/**
- * Handle item click
- */
-function handleItemClick(index: number): void {
-  handleSelect(index);
-}
+  /**
+   * Handle item click
+   */
+  function handleItemClick(index: number): void {
+    handleSelect(index);
+  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />
@@ -277,7 +276,9 @@ function handleItemClick(index: number): void {
             : 'text-text-tertiary'}"
           aria-hidden="true"
         >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <path
+            d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+          />
           <polyline points="14 2 14 8 20 8" />
         </svg>
 

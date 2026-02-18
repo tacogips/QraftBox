@@ -1,87 +1,101 @@
 <script lang="ts">
-/**
- * StatusBadge component properties
- */
-interface Props {
+  type FileStatus =
+    | "added"
+    | "modified"
+    | "deleted"
+    | "untracked"
+    | "ignored"
+    | undefined;
+
   /**
-   * File status (undefined means no badge)
+   * StatusBadge component properties
    */
-  status: "added" | "modified" | "deleted" | undefined;
-}
-
-const { status }: Props = $props();
-
-/**
- * Get badge text for status
- */
-function getBadgeText(
-  status: "added" | "modified" | "deleted" | undefined,
-): string {
-  if (status === undefined) {
-    return "";
+  interface Props {
+    /**
+     * File status (undefined means no badge)
+     */
+    status: FileStatus;
   }
 
-  switch (status) {
-    case "added":
-      return "+";
-    case "modified":
-      return "M";
-    case "deleted":
-      return "-";
-    default: {
-      const _exhaustive: never = status;
-      throw new Error(`Unhandled status: ${_exhaustive}`);
+  const { status }: Props = $props();
+
+  /**
+   * Get badge text for status
+   */
+  function getBadgeText(status: FileStatus): string {
+    if (status === undefined) {
+      return "";
+    }
+
+    switch (status) {
+      case "added":
+        return "+";
+      case "modified":
+        return "M";
+      case "deleted":
+        return "-";
+      case "untracked":
+        return "?";
+      case "ignored":
+        return "I";
+      default: {
+        const _exhaustive: never = status;
+        throw new Error(`Unhandled status: ${_exhaustive}`);
+      }
     }
   }
-}
 
-/**
- * Get badge background color class for status
- */
-function getBadgeBackgroundClass(
-  status: "added" | "modified" | "deleted" | undefined,
-): string {
-  if (status === undefined) {
-    return "";
-  }
+  /**
+   * Get badge background color class for status
+   */
+  function getBadgeBackgroundClass(status: FileStatus): string {
+    if (status === undefined) {
+      return "";
+    }
 
-  switch (status) {
-    case "added":
-      return "bg-success-subtle";
-    case "modified":
-      return "bg-attention-muted";
-    case "deleted":
-      return "bg-danger-subtle";
-    default: {
-      const _exhaustive: never = status;
-      throw new Error(`Unhandled status: ${_exhaustive}`);
+    switch (status) {
+      case "added":
+        return "bg-success-subtle";
+      case "modified":
+        return "bg-attention-muted";
+      case "deleted":
+        return "bg-danger-subtle";
+      case "untracked":
+        return "bg-success-subtle";
+      case "ignored":
+        return "bg-bg-tertiary";
+      default: {
+        const _exhaustive: never = status;
+        throw new Error(`Unhandled status: ${_exhaustive}`);
+      }
     }
   }
-}
 
-/**
- * Get badge text color class for status
- */
-function getBadgeTextClass(
-  status: "added" | "modified" | "deleted" | undefined,
-): string {
-  if (status === undefined) {
-    return "";
-  }
+  /**
+   * Get badge text color class for status
+   */
+  function getBadgeTextClass(status: FileStatus): string {
+    if (status === undefined) {
+      return "";
+    }
 
-  switch (status) {
-    case "added":
-      return "text-success-fg";
-    case "modified":
-      return "text-attention-fg";
-    case "deleted":
-      return "text-danger-fg";
-    default: {
-      const _exhaustive: never = status;
-      throw new Error(`Unhandled status: ${_exhaustive}`);
+    switch (status) {
+      case "added":
+        return "text-success-fg";
+      case "modified":
+        return "text-attention-fg";
+      case "deleted":
+        return "text-danger-fg";
+      case "untracked":
+        return "text-success-fg";
+      case "ignored":
+        return "text-text-quaternary";
+      default: {
+        const _exhaustive: never = status;
+        throw new Error(`Unhandled status: ${_exhaustive}`);
+      }
     }
   }
-}
 </script>
 
 <!-- Render badge only if status is defined -->

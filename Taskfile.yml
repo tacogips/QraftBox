@@ -128,3 +128,172 @@ tasks:
       - task: typecheck
       - task: test
       - task: build
+
+  # ──────────────────────────────────────────────
+  # Release build tasks
+  # ──────────────────────────────────────────────
+
+  release:clean:
+    desc: Clean release directory
+    cmds:
+      - rm -rf release
+
+  build:client:
+    desc: Build client assets (Svelte SPA)
+    cmds:
+      - cd client && bun install && bun run build
+
+  build:server:
+    desc: Bundle server code
+    cmds:
+      - bun build src/main.ts --outdir dist --target bun
+
+  release:prepare:
+    desc: Typecheck, build client and server for release
+    cmds:
+      - task: typecheck
+      - task: build:client
+      - task: build:server
+
+  release:binary:
+    desc: Build a single compiled binary for a specific target (internal)
+    internal: true
+    requires:
+      vars: [TARGET, SUFFIX]
+    vars:
+      VERSION:
+        sh: node -p "require('./package.json').version"
+      RELEASE_DIR: 'release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}'
+    cmds:
+      - mkdir -p {{.RELEASE_DIR}}/dist
+      - bun build src/main.ts --compile --target {{.TARGET}} --outfile {{.RELEASE_DIR}}/{{.PROJECT_NAME}}
+      - cp -r dist/client {{.RELEASE_DIR}}/dist/client
+      - cd release && tar -czf {{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}.tar.gz $(basename {{.RELEASE_DIR}})
+      - echo "Built {{.RELEASE_DIR}}.tar.gz"
+
+  release:mac:
+    desc: Build Mac binaries (arm64 + x64)
+    cmds:
+      - task: release:prepare
+      - task: release:binary
+        vars:
+          TARGET: bun-darwin-arm64
+          SUFFIX: darwin-arm64
+      - task: release:binary
+        vars:
+          TARGET: bun-darwin-x64
+          SUFFIX: darwin-x64
+
+  release:linux:
+    desc: Build Linux binaries (arm64 + x64)
+    cmds:
+      - task: release:prepare
+      - task: release:binary
+        vars:
+          TARGET: bun-linux-x64
+          SUFFIX: linux-x64
+      - task: release:binary
+        vars:
+          TARGET: bun-linux-arm64
+          SUFFIX: linux-arm64
+
+  release:npm-run:
+    desc: Build npm package and run it locally
+    cmds:
+      - task: release:npm
+      - cd release/npm && bun bin/qraftbox.js {{.CLI_ARGS}}
+
+  release:npm:
+    desc: Build npm package (.tgz) for npm install
+    cmds:
+      - task: release:prepare
+      - mkdir -p release/npm/dist release/npm/bin
+      # Copy bundled server and client assets
+      - cp dist/main.js release/npm/dist/
+      - cp -r dist/client release/npm/dist/client
+      # Copy bin entry script
+      - cp bin/qraftbox.js release/npm/bin/qraftbox.js
+      - chmod +x release/npm/bin/qraftbox.js
+      # Generate package.json for npm distribution
+      - |
+        node -e "
+          const pkg = require('./package.json');
+          const npmPkg = {
+            name: pkg.name,
+            version: pkg.version,
+            description: pkg.description,
+            license: pkg.license,
+            type: 'module',
+            main: 'dist/main.js',
+            bin: { qraftbox: './bin/qraftbox.js' },
+            files: ['dist/**/*', 'bin/**/*'],
+            engines: { bun: '>=1.0.0' },
+            homepage: pkg.homepage,
+            repository: pkg.repository,
+          };
+          require('fs').writeFileSync(
+            'release/npm/package.json',
+            JSON.stringify(npmPkg, null, 2) + '\n'
+          );
+        "
+      # Pack the npm tarball
+      - cd release/npm && npm pack --pack-destination ..
+      - |
+        VERSION=$(node -p "require('./package.json').version")
+        echo "Built release/qraftbox-${VERSION}.tgz"
+
+  release:all:
+    desc: Build all release targets (Mac, Linux, npm)
+    cmds:
+      - task: release:clean
+      - task: release:prepare
+      - task: release:binary
+        vars:
+          TARGET: bun-darwin-arm64
+          SUFFIX: darwin-arm64
+      - task: release:binary
+        vars:
+          TARGET: bun-darwin-x64
+          SUFFIX: darwin-x64
+      - task: release:binary
+        vars:
+          TARGET: bun-linux-x64
+          SUFFIX: linux-x64
+      - task: release:binary
+        vars:
+          TARGET: bun-linux-arm64
+          SUFFIX: linux-arm64
+      - task: release:npm
+      - echo "All release artifacts are in release/"
+
+  release:github:
+    desc: Build all binaries and publish to GitHub Release (requires gh CLI)
+    vars:
+      VERSION:
+        sh: node -p "require('./package.json').version"
+      TAG: 'v{{.VERSION}}'
+    cmds:
+      # Verify gh CLI is available and authenticated
+      - gh auth status
+      # Build all release artifacts
+      - task: release:all
+      # Create git tag if it doesn't exist
+      - |
+        if git rev-parse "{{.TAG}}" >/dev/null 2>&1; then
+          echo "Tag {{.TAG}} already exists"
+        else
+          git tag -a "{{.TAG}}" -m "Release {{.TAG}}"
+          git push origin "{{.TAG}}"
+          echo "Created and pushed tag {{.TAG}}"
+        fi
+      # Create GitHub release and upload all artifacts
+      - |
+        gh release create "{{.TAG}}" \
+          --title "{{.PROJECT_NAME}} {{.TAG}}" \
+          --generate-notes \
+          release/{{.PROJECT_NAME}}-v{{.VERSION}}-darwin-arm64.tar.gz \
+          release/{{.PROJECT_NAME}}-v{{.VERSION}}-darwin-x64.tar.gz \
+          release/{{.PROJECT_NAME}}-v{{.VERSION}}-linux-x64.tar.gz \
+          release/{{.PROJECT_NAME}}-v{{.VERSION}}-linux-arm64.tar.gz \
+          release/{{.PROJECT_NAME}}-{{.VERSION}}.tgz
+      - echo "Published release {{.TAG}} to GitHub"

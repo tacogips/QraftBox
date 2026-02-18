@@ -92,7 +92,11 @@
 </script>
 
 <!-- Search Input Container -->
-<div class="search-input relative ml-auto {isFocused ? 'w-56' : 'w-36'} transition-all duration-200">
+<div
+  class="search-input relative ml-auto {isFocused
+    ? 'w-56'
+    : 'w-36'} transition-all duration-200"
+>
   <!-- Search Icon -->
   <div
     class="absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none

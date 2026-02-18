@@ -8,14 +8,16 @@
  * to users or included in search indices.
  */
 
-const SYSTEM_TAG_PATTERN =
-  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder|qraftbox-system-prompt)[^>]*>[\s\S]*?<\/\1>/g;
+const REMOVE_WITH_CONTENT_PATTERN =
+  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder)[^>]*>[\s\S]*?<\/\1>/g;
+const UNWRAP_ONLY_PATTERN = /<\/?qraftbox-system-prompt[^>]*>/g;
 
 /**
  * Remove system command XML tags and their content from text.
  * Cleans up excess whitespace left after tag removal.
  */
 export function stripSystemTags(text: string): string {
-  const stripped = text.replace(SYSTEM_TAG_PATTERN, "");
-  return stripped.replace(/\n{3,}/g, "\n\n").trim();
+  const withoutSystemBlocks = text.replace(REMOVE_WITH_CONTENT_PATTERN, "");
+  const unwrapped = withoutSystemBlocks.replace(UNWRAP_ONLY_PATTERN, "");
+  return unwrapped.replace(/\n{3,}/g, "\n\n").trim();
 }

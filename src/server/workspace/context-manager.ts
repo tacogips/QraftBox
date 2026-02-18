@@ -18,12 +18,15 @@ import {
   validateContextId,
 } from "../../types/workspace";
 import { detectRepositoryType } from "../git/worktree";
+import type { ProjectRegistry } from "./project-registry";
+import { createProjectRegistry } from "./project-registry";
 
 /**
  * Server context for existing route handlers
  */
 export interface ServerContext {
   readonly projectPath: string;
+  readonly isGitRepo: boolean;
 }
 
 /**
@@ -90,6 +93,13 @@ export interface ContextManager {
    * @throws Error if context not found
    */
   getServerContext(id: ContextId): ServerContext;
+
+  /**
+   * Get the project registry for slug management
+   *
+   * @returns Project registry instance
+   */
+  getProjectRegistry(): ProjectRegistry;
 }
 
 /**
@@ -154,9 +164,15 @@ async function findRepositoryRoot(
  */
 class ContextManagerImpl implements ContextManager {
   private readonly contexts: Map<ContextId, WorkspaceTab>;
+  private readonly registry: ProjectRegistry;
 
   constructor() {
     this.contexts = new Map();
+    this.registry = createProjectRegistry();
+  }
+
+  getProjectRegistry(): ProjectRegistry {
+    return this.registry;
   }
 
   async createContext(path: string): Promise<WorkspaceTab> {
@@ -210,6 +226,9 @@ class ContextManagerImpl implements ContextManager {
     // Extract directory name for display
     const name = basename(absolutePath);
 
+    // Get or create a persistent URL-safe slug for this project
+    const projectSlug = await this.registry.getOrCreateSlug(absolutePath);
+
     // Create workspace tab with worktree information
     const tab = createWorkspaceTab(
       absolutePath,
@@ -219,6 +238,7 @@ class ContextManagerImpl implements ContextManager {
       isWorktree,
       mainRepoPath,
       worktreeName,
+      projectSlug,
     );
 
     // Store in contexts map
@@ -328,6 +348,7 @@ class ContextManagerImpl implements ContextManager {
 
     return {
       projectPath: tab.path,
+      isGitRepo: tab.isGitRepo,
     };
   }
 }

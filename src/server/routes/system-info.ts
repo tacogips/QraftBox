@@ -7,10 +7,15 @@
 
 import { Hono } from "hono";
 import { $ } from "bun";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type {
   SystemInfo,
   VersionInfo,
   ModelConfig,
+  ClaudeCodeUsage,
+  ModelUsageStats,
+  DailyActivity,
 } from "../../types/system-info.js";
 
 /**
@@ -98,6 +103,160 @@ async function getClaudeCodeVersion(): Promise<VersionInfo> {
 }
 
 /**
+ * Stats cache JSON structure from ~/.claude/stats-cache.json
+ */
+interface StatsCacheJson {
+  version?: number;
+  lastComputedDate?: string;
+  dailyActivity?: Array<{
+    date?: string;
+    messageCount?: number;
+    sessionCount?: number;
+    toolCallCount?: number;
+    tokensByModel?: Record<string, number>;
+  }>;
+  dailyModelTokens?: Array<{
+    date?: string;
+    tokensByModel?: Record<string, number>;
+  }>;
+  modelUsage?: Record<
+    string,
+    {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
+    }
+  >;
+  totalSessions?: number;
+  totalMessages?: number;
+  firstSessionDate?: string;
+}
+
+/**
+ * Get Claude Code usage statistics from ~/.claude/stats-cache.json
+ *
+ * Reads and parses the stats-cache.json file to extract usage data including:
+ * - Total sessions and messages
+ * - Per-model token usage statistics
+ * - Recent daily activity (last 14 days)
+ *
+ * @returns Claude Code usage statistics or null if file doesn't exist or can't be parsed
+ */
+async function getClaudeCodeUsage(): Promise<ClaudeCodeUsage | null> {
+  try {
+    const statsPath = join(homedir(), ".claude", "stats-cache.json");
+    const file = Bun.file(statsPath);
+
+    // Check if file exists
+    const exists = await file.exists();
+    if (!exists) {
+      return null;
+    }
+
+    // Parse JSON
+    const data = (await file.json()) as unknown;
+
+    // Type guard for stats cache structure
+    if (typeof data !== "object" || data === null) {
+      return null;
+    }
+
+    const stats = data as StatsCacheJson;
+
+    // Extract model usage with defaults
+    const modelUsage: Record<string, ModelUsageStats> = {};
+    if (
+      stats.modelUsage !== undefined &&
+      typeof stats.modelUsage === "object"
+    ) {
+      for (const [modelName, usage] of Object.entries(stats.modelUsage)) {
+        if (usage !== undefined) {
+          modelUsage[modelName] = {
+            inputTokens: usage.inputTokens ?? 0,
+            outputTokens: usage.outputTokens ?? 0,
+            cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
+            cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
+          };
+        }
+      }
+    }
+
+    // Extract daily activity (last 14 days)
+    const allActivity: DailyActivity[] = [];
+    if (Array.isArray(stats.dailyActivity)) {
+      for (const entry of stats.dailyActivity) {
+        if (entry.date !== undefined) {
+          // Build activity object with spread to respect exactOptionalPropertyTypes
+          const activity: DailyActivity = {
+            date: entry.date,
+            ...(entry.messageCount !== undefined && {
+              messageCount: entry.messageCount,
+            }),
+            ...(entry.sessionCount !== undefined && {
+              sessionCount: entry.sessionCount,
+            }),
+            ...(entry.toolCallCount !== undefined && {
+              toolCallCount: entry.toolCallCount,
+            }),
+            ...(entry.tokensByModel !== undefined && {
+              tokensByModel: entry.tokensByModel,
+            }),
+          };
+          allActivity.push(activity);
+        }
+      }
+    }
+
+    // Build a map of token data by date from dailyModelTokens
+    const tokensByDate = new Map<string, Record<string, number>>();
+    if (Array.isArray(stats.dailyModelTokens)) {
+      for (const entry of stats.dailyModelTokens) {
+        if (entry.date !== undefined && entry.tokensByModel !== undefined) {
+          tokensByDate.set(entry.date, entry.tokensByModel);
+        }
+      }
+    }
+
+    // Merge token data into activity entries
+    for (const activity of allActivity) {
+      const tokens = tokensByDate.get(activity.date);
+      if (tokens !== undefined && activity.tokensByModel === undefined) {
+        // Use type assertion to add the property - safe because we're building the object
+        (activity as { tokensByModel?: Record<string, number> }).tokensByModel =
+          tokens;
+      }
+      // Remove from map after merging
+      tokensByDate.delete(activity.date);
+    }
+
+    // Add remaining dates from dailyModelTokens that weren't in dailyActivity
+    for (const [date, tokens] of tokensByDate) {
+      const activity: DailyActivity = {
+        date,
+        tokensByModel: tokens,
+      };
+      allActivity.push(activity);
+    }
+
+    // Take last 14 days
+    const recentDailyActivity = allActivity.slice(-14);
+
+    return {
+      totalSessions: stats.totalSessions ?? 0,
+      totalMessages: stats.totalMessages ?? 0,
+      firstSessionDate: stats.firstSessionDate ?? null,
+      lastComputedDate: stats.lastComputedDate ?? null,
+      modelUsage,
+      recentDailyActivity,
+    };
+  } catch (e) {
+    // If file can't be read or parsed, return null
+    return null;
+  }
+}
+
+/**
  * Create system info routes
  *
  * Routes:
@@ -118,19 +277,22 @@ export function createSystemInfoRoutes(modelConfig: ModelConfig): Hono {
    * - git: Git version information (version string or error)
    * - claudeCode: Claude Code version information (version string or error)
    * - models: Model configuration (promptModel and assistantModel)
+   * - claudeCodeUsage: Claude Code usage statistics (or null if unavailable)
    */
   app.get("/", async (c) => {
     try {
-      // Fetch versions in parallel
-      const [git, claudeCode] = await Promise.all([
+      // Fetch versions and usage data in parallel
+      const [git, claudeCode, claudeCodeUsage] = await Promise.all([
         getGitVersion(),
         getClaudeCodeVersion(),
+        getClaudeCodeUsage(),
       ]);
 
       const response: SystemInfo = {
         git,
         claudeCode,
         models: modelConfig,
+        claudeCodeUsage,
       };
 
       return c.json(response);

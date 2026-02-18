@@ -1,11 +1,14 @@
 {
   "name": "qraftbox",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "All You Need Is Diff",
   "type": "module",
   "main": "dist/main.js",
   "module": "dist/main.js",
   "types": "dist/main.d.ts",
+  "bin": {
+    "qraftbox": "./bin/qraftbox.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/main.d.ts",
@@ -22,8 +25,8 @@
     "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit",
     "lint": "bun run typecheck",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"client/**/*.svelte\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"client/**/*.svelte\"",
     "clean": "rm -rf dist"
   },
   "homepage": "https://github.com/user/repo",
@@ -36,6 +39,7 @@
   "devDependencies": {
     "@playwright/test": "1.58.1",
     "@types/bun": "1.1.14",
+    "@types/mustache": "4.2.6",
     "@vitest/ui": "2.1.8",
     "prettier": "3.4.2",
     "prettier-plugin-svelte": "3.4.1",
@@ -44,7 +48,7 @@
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
-    "claude-code-agent": "file:../claude-code-agent",
+    "claude-code-agent": "github:tacogips/claude-code-agent",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

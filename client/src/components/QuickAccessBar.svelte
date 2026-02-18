@@ -209,7 +209,9 @@
                   stroke-width="2"
                   stroke-linecap="round"
                   stroke-linejoin="round"
-                  class={recent.isGitRepo ? "text-accent-fg" : "text-attention-fg"}
+                  class={recent.isGitRepo
+                    ? "text-accent-fg"
+                    : "text-attention-fg"}
                   aria-hidden="true"
                 >
                   <path

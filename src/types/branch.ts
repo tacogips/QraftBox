@@ -184,6 +184,15 @@ export interface BranchCreateResponse {
 }
 
 /**
+ * Response from branch fetch operation
+ */
+export interface BranchFetchResponse {
+  readonly success: boolean;
+  readonly branch: string;
+  readonly error?: string | undefined;
+}
+
+/**
  * Check if a branch name is valid according to git naming rules
  *
  * Invalid characters include: space, .., ~, ^, :, ?, *, [, \, @{

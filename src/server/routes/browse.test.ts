@@ -237,8 +237,14 @@ describe("Browse Routes", () => {
         `/?path=${encodeURIComponent(rootPath)}`,
       );
 
-      // May succeed or fail depending on permissions, but should handle gracefully
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
+
+      const body = (await response.json()) as {
+        path: string;
+        entries: unknown[];
+      };
+      expect(body.path).toBe(rootPath);
+      expect(Array.isArray(body.entries)).toBe(true);
     });
   });
 
@@ -439,8 +445,7 @@ describe("Browse Routes", () => {
     test("handles relative paths by resolving to absolute", async () => {
       const response = await app.request("/?path=.");
 
-      // Should succeed by resolving to absolute path
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
 
     test("handles path with trailing slash", async () => {
@@ -461,8 +466,7 @@ describe("Browse Routes", () => {
         `/?path=${encodeURIComponent(pathWithSlashes)}`,
       );
 
-      // path.resolve should normalize this
-      expect([200, 500]).toContain(response.status);
+      expect(response.status).toBe(200);
     });
   });
 });

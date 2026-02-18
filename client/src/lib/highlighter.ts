@@ -22,10 +22,7 @@ async function getHighlighter(): Promise<Highlighter> {
   return highlighterInstance;
 }
 
-async function ensureLanguage(
-  hl: Highlighter,
-  lang: string,
-): Promise<boolean> {
+async function ensureLanguage(hl: Highlighter, lang: string): Promise<boolean> {
   if (loadedLanguages.has(lang)) return true;
   try {
     await hl.loadLanguage(lang as Parameters<Highlighter["loadLanguage"]>[0]);
@@ -131,7 +128,7 @@ export function detectLanguage(filename: string): string {
   if (filenameMatch !== undefined) return filenameMatch;
 
   // Check extension
-  const ext = basename.includes(".") ? basename.split(".").pop() ?? "" : "";
+  const ext = basename.includes(".") ? (basename.split(".").pop() ?? "") : "";
   return EXTENSION_MAP[ext] ?? "text";
 }
 

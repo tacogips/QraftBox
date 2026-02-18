@@ -81,7 +81,7 @@ export interface AIPromptOptions {
   /**
    * CLI session ID to resume (when sessionMode is "continue")
    */
-  readonly resumeSessionId?: string | undefined;
+  readonly resumeSessionId?: ClaudeSessionId | undefined;
 }
 
 /**
@@ -111,7 +111,7 @@ export interface AISessionSubmitResult {
   /**
    * Unique session identifier
    */
-  readonly sessionId: string;
+  readonly sessionId: QraftAiSessionId;
 
   /**
    * Position in queue if not immediate (1-based, undefined if running)
@@ -122,6 +122,10 @@ export interface AISessionSubmitResult {
    * Whether the session started immediately
    */
   readonly immediate: boolean;
+  /**
+   * Claude CLI session ID if already known at submit time
+   */
+  readonly claudeSessionId?: ClaudeSessionId | undefined;
 }
 
 /**
@@ -141,7 +145,7 @@ export interface QueueStatus {
   /**
    * IDs of currently running sessions
    */
-  readonly runningSessionIds: readonly string[];
+  readonly runningSessionIds: readonly QraftAiSessionId[];
 
   /**
    * Total sessions (running + queued)
@@ -210,7 +214,7 @@ export interface ErrorData {
  */
 export interface AIProgressEvent {
   readonly type: AIProgressEventType;
-  readonly sessionId: string;
+  readonly sessionId: QraftAiSessionId;
   readonly timestamp: string;
   readonly data:
     | ToolUseData
@@ -224,7 +228,7 @@ export interface AIProgressEvent {
  * Session info for display
  */
 export interface AISessionInfo {
-  readonly id: string;
+  readonly id: QraftAiSessionId;
   readonly state: SessionState;
   readonly prompt: string;
   readonly createdAt: string;
@@ -232,6 +236,15 @@ export interface AISessionInfo {
   readonly completedAt?: string | undefined;
   readonly context: AIPromptContext;
   readonly lastAssistantMessage?: string | undefined;
+  readonly currentActivity?: string | undefined;
+  /**
+   * Claude CLI session ID currently bound to this execution
+   */
+  readonly claudeSessionId?: ClaudeSessionId | undefined;
+  /**
+   * Client-generated session group ID used to chain prompts.
+   */
+  readonly clientSessionId?: QraftAiSessionId | undefined;
 }
 
 /**
@@ -307,6 +320,182 @@ export interface AIConfig {
    * Whether AI features are enabled
    */
   readonly enabled: boolean;
+
+  /**
+   * Model to use for the AI assistant
+   */
+  readonly assistantModel: string;
+
+  /**
+   * Additional CLI arguments for the AI assistant (e.g., ['--dangerously-skip-permissions'])
+   */
+  readonly assistantAdditionalArgs: readonly string[];
+}
+
+/**
+ * AI prompt message format (simplified submission)
+ *
+ * This is the new unified format for submitting AI prompts.
+ * The client only needs to pass the current session_id and the message.
+ * The server manages the queue, session continuity, and execution.
+ */
+export interface AIPromptMessage {
+  /** Whether to execute immediately (true) or queue (false) */
+  readonly run_immediately: boolean;
+  /** The prompt text */
+  readonly message: string;
+  /** Optional file context */
+  readonly context?: AIPromptContext | undefined;
+  /** Project path / working directory (defaults to server config) */
+  readonly project_path?: string | undefined;
+  /** Worktree identifier for queue partitioning (auto-generated from project_path if omitted) */
+  readonly worktree_id?: string | undefined;
+  /**
+   * Client-generated session group ID.
+   * Prompts sharing the same qraft_ai_session_id are treated as part of the same
+   * conversation: the server inherits the resolved Claude session ID from the
+   * most recently completed prompt in the same group.
+   * Generate a new ID on the frontend when starting a "new session" flow,
+   * and reuse it for subsequent prompts in that session.
+   */
+  readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+  /** Optional model profile ID to override default AI Ask profile */
+  readonly model_profile_id?: string | undefined;
+  /** Resolved model vendor snapshot at submission time */
+  readonly model_vendor?: "anthropics" | "openai" | undefined;
+  /** Resolved model name snapshot at submission time */
+  readonly model_name?: string | undefined;
+  /** Resolved CLI arguments snapshot at submission time */
+  readonly model_arguments?: readonly string[] | undefined;
+}
+
+/**
+ * Queued prompt info for WebSocket broadcast
+ */
+export interface QueuedPromptInfo {
+  readonly id: PromptId;
+  /** Truncated message for display */
+  readonly message: string;
+  readonly status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  /** Claude CLI session ID (resolved after execution) */
+  readonly claude_session_id?: ClaudeSessionId | undefined;
+  /** Current activity description (e.g., "Using tool...") */
+  readonly current_activity?: string | undefined;
+  /** Error message if failed */
+  readonly error?: string | undefined;
+  readonly created_at: string;
+  /** Worktree identifier for queue partitioning */
+  readonly worktree_id: WorktreeId;
+  /** Client-generated session group ID for prompt continuity */
+  readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+}
+
+/**
+ * AI queue update event payload for WebSocket broadcast
+ */
+export interface AIQueueUpdate {
+  readonly prompts: readonly QueuedPromptInfo[];
+}
+
+/**
+ * QraftAiSessionId - Branded type for session group identifiers.
+ *
+ * This is a one-way hash-based identifier used to group related prompts
+ * into a single logical session. Two derivation paths exist:
+ *
+ * 1. **Claude-originated**: When a session is initiated via Claude CLI,
+ *    the seed is `{claudeSessionId} + "claude"`. This allows grouping
+ *    prompts that share the same underlying Claude CLI session.
+ *
+ * 2. **Qraft-originated**: When a session is initiated from QraftBox UI,
+ *    the seed is `{datetime_microseconds} + "Qraft"`. This produces a
+ *    unique ID for each new session started from the frontend.
+ *
+ * The hash is one-way (FNV-1a): you cannot recover the original seed.
+ * To find the associated Claude session ID, look up stored prompt records.
+ */
+export type QraftAiSessionId = string & {
+  readonly __brand: "QraftAiSessionId";
+};
+
+/**
+ * ClaudeSessionId - Branded type for Claude CLI session identifiers (UUIDs).
+ *
+ * Represents the unique session ID assigned by Claude CLI/SDK.
+ * Using a branded type prevents accidental confusion with other string IDs
+ * (e.g., QraftBox internal session IDs, prompt IDs, worktree IDs).
+ */
+export type ClaudeSessionId = string & {
+  readonly __brand: "ClaudeSessionId";
+};
+
+/**
+ * PromptId - Branded type for prompt identifiers.
+ *
+ * Generated by the prompt queue (format: "prompt_{base36_timestamp}_{random}").
+ * Used to track individual prompts through queueing, dispatch, and completion.
+ */
+export type PromptId = string & {
+  readonly __brand: "PromptId";
+};
+
+/**
+ * WorktreeId - Branded type for worktree identifiers.
+ *
+ * A deterministic, URL-safe identifier derived from a project path
+ * (format: "{basename_sanitized}_{6_char_hash}").
+ * Used for queue partitioning and session continuity scoping.
+ */
+export type WorktreeId = string & {
+  readonly __brand: "WorktreeId";
+};
+
+/**
+ * Derive a QraftAiSessionId from a Claude CLI session ID.
+ *
+ * Derivation path: Claude-originated.
+ * Seed: {claudeSessionId} + "claude"
+ * Hash: FNV-1a 32-bit, output as "qs_{base36}"
+ *
+ * @param claudeSessionId - Claude CLI session UUID
+ * @returns Deterministic QraftAiSessionId
+ */
+export function deriveQraftAiSessionIdFromClaude(
+  claudeSessionId: ClaudeSessionId,
+): QraftAiSessionId {
+  const seed = claudeSessionId + "claude";
+  let hash = 0x811c9dc5; // FNV-1a offset basis (32-bit)
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193); // FNV-1a prime
+  }
+  return `qs_${(hash >>> 0).toString(36)}` as QraftAiSessionId;
+}
+
+/**
+ * Generate a QraftAiSessionId for a QraftBox-originated session.
+ *
+ * Derivation path: Qraft-originated.
+ * Seed: {datetime_microseconds} + "Qraft"
+ * Hash: FNV-1a 32-bit, output as "qs_{base36}"
+ *
+ * Uses performance.now() for microsecond precision when available,
+ * falls back to Date.now() * 1000.
+ *
+ * @returns Unique QraftAiSessionId
+ */
+export function generateQraftAiSessionId(): QraftAiSessionId {
+  const microSeconds =
+    typeof performance !== "undefined"
+      ? Math.floor(performance.now() * 1000 + performance.timeOrigin * 1000)
+      : Date.now() * 1000;
+  const seed = String(microSeconds) + "Qraft";
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `qs_${(hash >>> 0).toString(36)}` as QraftAiSessionId;
 }
 
 /**
@@ -317,6 +506,8 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   maxQueueSize: 10,
   sessionTimeoutMs: 5 * 60 * 1000, // 5 minutes
   enabled: true,
+  assistantModel: "claude-opus-4-6",
+  assistantAdditionalArgs: ["--dangerously-skip-permissions"],
 };
 
 /**
@@ -340,106 +531,4 @@ export function createEmptyQueueStatus(): QueueStatus {
     runningSessionIds: [],
     totalCount: 0,
   };
-}
-
-/**
- * Validate AI prompt request
- */
-export interface ValidationResult {
-  readonly valid: boolean;
-  readonly error?: string | undefined;
-}
-
-/**
- * Validate an AI prompt request
- */
-export function validateAIPromptRequest(
-  request: AIPromptRequest,
-): ValidationResult {
-  // Validate prompt
-  if (!request.prompt || request.prompt.trim().length === 0) {
-    return {
-      valid: false,
-      error: "Prompt cannot be empty",
-    };
-  }
-
-  // Validate prompt length (reasonable limit)
-  if (request.prompt.length > 100000) {
-    return {
-      valid: false,
-      error: "Prompt exceeds maximum length of 100000 characters",
-    };
-  }
-
-  // Validate project path
-  if (
-    !request.options.projectPath ||
-    request.options.projectPath.trim().length === 0
-  ) {
-    return {
-      valid: false,
-      error: "Project path is required",
-    };
-  }
-
-  // Validate session mode
-  const validModes: readonly SessionMode[] = ["continue", "new"];
-  if (!validModes.includes(request.options.sessionMode)) {
-    return {
-      valid: false,
-      error: `Invalid session mode: ${request.options.sessionMode}`,
-    };
-  }
-
-  // Validate file references
-  for (const ref of request.context.references) {
-    if (!ref.path || ref.path.trim().length === 0) {
-      return {
-        valid: false,
-        error: "File reference path cannot be empty",
-      };
-    }
-
-    // Validate line range if provided
-    if (ref.startLine !== undefined && ref.endLine !== undefined) {
-      if (ref.startLine < 1) {
-        return {
-          valid: false,
-          error: `Invalid start line for ${ref.path}: must be >= 1`,
-        };
-      }
-      if (ref.endLine < ref.startLine) {
-        return {
-          valid: false,
-          error: `Invalid line range for ${ref.path}: end must be >= start`,
-        };
-      }
-    }
-  }
-
-  // Validate primary file if provided
-  if (request.context.primaryFile !== undefined) {
-    const pf = request.context.primaryFile;
-    if (!pf.path || pf.path.trim().length === 0) {
-      return {
-        valid: false,
-        error: "Primary file path cannot be empty",
-      };
-    }
-    if (pf.startLine < 1) {
-      return {
-        valid: false,
-        error: "Primary file start line must be >= 1",
-      };
-    }
-    if (pf.endLine < pf.startLine) {
-      return {
-        valid: false,
-        error: "Primary file end line must be >= start line",
-      };
-    }
-  }
-
-  return { valid: true };
 }

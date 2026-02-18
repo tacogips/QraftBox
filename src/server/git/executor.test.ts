@@ -12,6 +12,7 @@ import {
   isGitRepository,
   getRepoRoot,
   GitExecutorError,
+  unquoteGitPath,
   type GitExecResult,
 } from "./executor";
 
@@ -246,6 +247,59 @@ describe("getRepoRoot", () => {
     } catch (e) {
       expect(e).toBeInstanceOf(GitExecutorError);
     }
+  });
+});
+
+describe("unquoteGitPath", () => {
+  test("returns unquoted paths as-is", () => {
+    expect(unquoteGitPath("src/main.ts")).toBe("src/main.ts");
+    expect(unquoteGitPath("simple.txt")).toBe("simple.txt");
+    expect(unquoteGitPath("")).toBe("");
+  });
+
+  test("strips surrounding quotes from quoted paths", () => {
+    expect(unquoteGitPath('"simple.txt"')).toBe("simple.txt");
+    expect(unquoteGitPath('"src/main.ts"')).toBe("src/main.ts");
+  });
+
+  test("decodes octal escape sequences (UTF-8 bytes)", () => {
+    // Japanese character あ = UTF-8 bytes 0xE3 0x81 0x82 = octal \343\201\202
+    expect(unquoteGitPath('"\\343\\201\\202.txt"')).toBe("あ.txt");
+  });
+
+  test("decodes directory paths with octal escapes", () => {
+    // all_receipts/ファイル -> each katakana char is 3 UTF-8 bytes
+    // フ = \343\203\225, ァ = \343\202\241, イ = \343\202\244, ル = \343\203\253
+    const quoted =
+      '"all_receipts/\\343\\203\\225\\343\\202\\241\\343\\202\\244\\343\\203\\253"';
+    expect(unquoteGitPath(quoted)).toBe("all_receipts/ファイル");
+  });
+
+  test("handles escaped backslash", () => {
+    expect(unquoteGitPath('"path\\\\with\\\\backslash"')).toBe(
+      "path\\with\\backslash",
+    );
+  });
+
+  test("handles escaped double quote", () => {
+    expect(unquoteGitPath('"has\\"quote\\".txt"')).toBe('has"quote".txt');
+  });
+
+  test("handles escaped tab and newline", () => {
+    expect(unquoteGitPath('"has\\ttab"')).toBe("has\ttab");
+    expect(unquoteGitPath('"has\\nnewline"')).toBe("has\nnewline");
+  });
+
+  test("does not treat single quote at start only as quoted", () => {
+    expect(unquoteGitPath('"not-closed')).toBe('"not-closed');
+    expect(unquoteGitPath('not-opened"')).toBe('not-opened"');
+  });
+
+  test("handles mixed ASCII and octal escapes", () => {
+    // dir/あ/file.txt
+    expect(unquoteGitPath('"dir/\\343\\201\\202/file.txt"')).toBe(
+      "dir/あ/file.txt",
+    );
   });
 });
 

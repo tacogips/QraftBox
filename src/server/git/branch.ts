@@ -486,6 +486,39 @@ export async function mergeBranch(
 }
 
 /**
+ * Fetch a branch from the remote
+ *
+ * Runs `git fetch origin <branch>` to update the local tracking reference.
+ *
+ * @param projectPath - Path to git repository
+ * @param branch - Branch name to fetch (if undefined, fetches all)
+ * @returns Promise resolving to fetch result
+ */
+export async function fetchBranch(
+  projectPath: string,
+  branch?: string | undefined,
+): Promise<{ success: boolean; error?: string }> {
+  const fetchArgs = ["fetch", "origin"];
+  if (branch !== undefined && branch.trim().length > 0) {
+    fetchArgs.push(branch);
+  }
+
+  const result = await execGit(fetchArgs, {
+    cwd: projectPath,
+    timeout: 60000,
+  });
+
+  if (result.exitCode !== 0) {
+    return {
+      success: false,
+      error: `Fetch failed: ${result.stderr}`,
+    };
+  }
+
+  return { success: true };
+}
+
+/**
  * Get ahead/behind counts for a branch relative to its upstream
  *
  * Uses `git rev-list --count --left-right` to count commits ahead and behind.

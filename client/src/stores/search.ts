@@ -165,21 +165,12 @@ export const initialSearchState: SearchStoreState = createInitialState();
  */
 export function createSearchStore(): SearchStore {
   let state: SearchStoreState = createInitialState();
-  const listeners: Set<() => void> = new Set();
-
-  /**
-   * Notify all listeners of state change
-   */
-  function notifyListeners(): void {
-    listeners.forEach((listener) => listener());
-  }
 
   /**
    * Update state immutably
    */
   function updateState(updates: Partial<SearchStoreState>): void {
     state = { ...state, ...updates };
-    notifyListeners();
   }
 
   /**
@@ -299,8 +290,7 @@ export function createSearchStore(): SearchStore {
           loading: false,
         });
       } catch (e) {
-        const errorMessage =
-          e instanceof Error ? e.message : "Search failed";
+        const errorMessage = e instanceof Error ? e.message : "Search failed";
         updateState({
           error: errorMessage,
           results: [],
@@ -364,7 +354,6 @@ export function createSearchStore(): SearchStore {
         clearTimeout(searchDebounceTimer);
       }
       state = createInitialState();
-      notifyListeners();
     },
   };
 }

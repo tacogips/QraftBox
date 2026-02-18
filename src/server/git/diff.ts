@@ -12,7 +12,7 @@ import type {
   FileStatus,
   FileStatusCode,
 } from "../../types/git.js";
-import { execGit } from "./executor.js";
+import { execGit, unquoteGitPath } from "./executor.js";
 import { parseDiff, detectBinary } from "./parser.js";
 
 /**
@@ -135,6 +135,7 @@ async function getUntrackedDiffFiles(
   const untrackedPaths = lsResult.stdout
     .trim()
     .split("\n")
+    .map((p) => unquoteGitPath(p))
     .filter((p) => p.length > 0);
 
   const results: DiffFile[] = [];
@@ -502,9 +503,9 @@ function parseNameStatus(
       const newPath = parts[2];
       if (oldPath !== undefined && newPath !== undefined) {
         files.push({
-          path: newPath,
+          path: unquoteGitPath(newPath),
           status: "renamed",
-          oldPath,
+          oldPath: unquoteGitPath(oldPath),
           staged,
         });
       }
@@ -514,15 +515,15 @@ function parseNameStatus(
       const newPath = parts[2];
       if (oldPath !== undefined && newPath !== undefined) {
         files.push({
-          path: newPath,
+          path: unquoteGitPath(newPath),
           status: "copied",
-          oldPath,
+          oldPath: unquoteGitPath(oldPath),
           staged,
         });
       }
     } else {
       // Other statuses: STATUS\tfilepath
-      const path = parts[1] ?? "";
+      const path = unquoteGitPath(parts[1] ?? "");
       files.push({
         path,
         status,
@@ -554,7 +555,7 @@ function parsePorcelainStatus(rawStatus: string): readonly FileStatus[] {
 
     // Porcelain v1 format: "XY path"
     const statusPart = line.substring(0, 2);
-    const path = line.substring(3);
+    const path = unquoteGitPath(line.substring(3));
 
     const stagedCode = statusPart[0] ?? " ";
     const unstagedCode = statusPart[1] ?? " ";

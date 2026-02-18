@@ -120,9 +120,7 @@
   }
 
   async function fetchPushStatus(): Promise<void> {
-    const resp = await fetch(
-      `/api/ctx/${contextId}/push/${contextId}/status`,
-    );
+    const resp = await fetch(`/api/ctx/${contextId}/push/${contextId}/status`);
     if (!resp.ok) {
       throw new Error(`Push status API error: ${resp.status}`);
     }
@@ -281,9 +279,7 @@
       <div class="max-w-3xl mx-auto p-6 space-y-8">
         <!-- Section 1: Git Status -->
         <section>
-          <h3 class="text-base font-semibold mb-4 text-text-primary">
-            Status
-          </h3>
+          <h3 class="text-base font-semibold mb-4 text-text-primary">Status</h3>
 
           <!-- Branch name -->
           <div
@@ -307,7 +303,10 @@
               <!-- Staged -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-success-emphasis transition-colors {statusData.staged.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-success-emphasis transition-colors {statusData
+                  .staged.length > 0
+                  ? 'cursor-pointer'
+                  : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.staged.length > 0)
                     toggleSection("staged");
@@ -323,7 +322,10 @@
               <!-- Modified -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-attention-fg transition-colors {statusData.modified.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-attention-fg transition-colors {statusData
+                  .modified.length > 0
+                  ? 'cursor-pointer'
+                  : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.modified.length > 0)
                     toggleSection("modified");
@@ -339,7 +341,10 @@
               <!-- Untracked -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-accent-emphasis transition-colors {statusData.untracked.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-accent-emphasis transition-colors {statusData
+                  .untracked.length > 0
+                  ? 'cursor-pointer'
+                  : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.untracked.length > 0)
                     toggleSection("untracked");
@@ -355,7 +360,10 @@
               <!-- Conflicts -->
               <button
                 type="button"
-                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-danger-emphasis transition-colors {statusData.conflicts.length > 0 ? 'cursor-pointer' : 'cursor-default opacity-60'}"
+                class="p-3 bg-bg-secondary border border-border-default rounded-lg text-left hover:border-danger-emphasis transition-colors {statusData
+                  .conflicts.length > 0
+                  ? 'cursor-pointer'
+                  : 'cursor-default opacity-60'}"
                 onclick={() => {
                   if (statusData !== null && statusData.conflicts.length > 0)
                     toggleSection("conflicts");
@@ -449,7 +457,9 @@
 
             {#if commitResult !== null}
               <div
-                class="mb-4 px-4 py-3 rounded-lg text-sm {commitResult.success ? 'bg-success-muted border border-success-emphasis text-success-fg' : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
+                class="mb-4 px-4 py-3 rounded-lg text-sm {commitResult.success
+                  ? 'bg-success-muted border border-success-emphasis text-success-fg'
+                  : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
               >
                 {commitResult.message}
               </div>
@@ -506,9 +516,7 @@
         <!-- Section 3: Push -->
         {#if pushStatusData !== null}
           <section>
-            <h3 class="text-base font-semibold mb-4 text-text-primary">
-              Push
-            </h3>
+            <h3 class="text-base font-semibold mb-4 text-text-primary">Push</h3>
 
             <div
               class="p-4 bg-bg-secondary border border-border-default rounded-lg space-y-3"
@@ -532,7 +540,10 @@
                 <div class="flex items-center gap-1">
                   <span class="text-text-secondary">Ahead:</span>
                   <span
-                    class="font-mono font-semibold {pushStatusData.aheadCount > 0 ? 'text-success-fg' : 'text-text-secondary'}"
+                    class="font-mono font-semibold {pushStatusData.aheadCount >
+                    0
+                      ? 'text-success-fg'
+                      : 'text-text-secondary'}"
                   >
                     {pushStatusData.aheadCount}
                   </span>
@@ -540,7 +551,10 @@
                 <div class="flex items-center gap-1">
                   <span class="text-text-secondary">Behind:</span>
                   <span
-                    class="font-mono font-semibold {pushStatusData.behindCount > 0 ? 'text-attention-fg' : 'text-text-secondary'}"
+                    class="font-mono font-semibold {pushStatusData.behindCount >
+                    0
+                      ? 'text-attention-fg'
+                      : 'text-text-secondary'}"
                   >
                     {pushStatusData.behindCount}
                   </span>
@@ -555,7 +569,9 @@
 
               {#if pushResult !== null}
                 <div
-                  class="px-4 py-3 rounded-lg text-sm {pushResult.success ? 'bg-success-muted border border-success-emphasis text-success-fg' : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
+                  class="px-4 py-3 rounded-lg text-sm {pushResult.success
+                    ? 'bg-success-muted border border-success-emphasis text-success-fg'
+                    : 'bg-danger-muted border border-danger-emphasis text-danger-fg'}"
                 >
                   {pushResult.message}
                 </div>

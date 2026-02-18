@@ -33,6 +33,13 @@ import { createGitActionsRoutes } from "./git-actions.js";
 import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
+import type { RecentDirectoryStore } from "../workspace/recent-store.js";
+import type { OpenTabsStore } from "../workspace/open-tabs-store.js";
+import type { ProjectWatcherManager } from "../watcher/manager.js";
+import type { TerminalSessionManager } from "../terminal/session-manager.js";
+import { createTerminalRoutes } from "./terminal.js";
+import type { ModelConfigStore } from "../model-config/store.js";
+import { createModelConfigRoutes } from "./model-config.js";
 
 /**
  * Route group definition
@@ -51,11 +58,20 @@ export interface RouteGroup {
  */
 export interface MountRoutesConfig {
   readonly contextManager: ContextManager;
+  readonly recentStore: RecentDirectoryStore;
+  readonly openTabsStore?: OpenTabsStore | undefined;
+  readonly activeTabPath?: string | undefined;
   readonly sessionManager: SessionManager;
   readonly promptStore?: PromptStore | undefined;
   readonly toolRegistry?: QraftBoxToolRegistry | undefined;
   readonly configDir?: string | undefined;
   readonly modelConfig?: ModelConfig | undefined;
+  readonly initialTabs?:
+    | readonly import("../../types/workspace").WorkspaceTab[]
+    | undefined;
+  readonly watcherManager?: ProjectWatcherManager | undefined;
+  readonly terminalSessionManager?: TerminalSessionManager | undefined;
+  readonly modelConfigStore?: ModelConfigStore | undefined;
 }
 
 /**
@@ -141,7 +157,10 @@ export function getContextScopedRouteGroups(
     // These routes don't need context
     {
       prefix: "/claude-sessions",
-      routes: createClaudeSessionsRoutes(),
+      routes: createClaudeSessionsRoutes(
+        config.sessionManager.getMappingStore(),
+        config.sessionManager,
+      ),
     },
     // Prompt routes - GET /api/ctx/:contextId/prompts
     // These routes don't need context
@@ -155,6 +174,18 @@ export function getContextScopedRouteGroups(
       prefix: "/branches",
       routes: createBranchRoutesWithMiddleware(),
     },
+    // Terminal routes - POST /api/ctx/:contextId/terminal/connect
+    // Wrapped to extract context from middleware
+    ...(config.terminalSessionManager !== undefined
+      ? [
+          {
+            prefix: "/terminal",
+            routes: createTerminalRoutesWithMiddleware(
+              config.terminalSessionManager,
+            ),
+          },
+        ]
+      : []),
   ];
 }
 
@@ -174,19 +205,27 @@ export function getNonContextRouteGroups(
     // Workspace management routes - GET /api/workspace
     {
       prefix: "/workspace",
-      routes: createWorkspaceRoutes(config.contextManager),
+      routes: createWorkspaceRoutes(
+        config.contextManager,
+        config.recentStore,
+        config.initialTabs,
+        config.openTabsStore,
+        config.activeTabPath,
+        config.watcherManager,
+      ),
     },
     // Directory browsing routes - GET /api/browse
     {
       prefix: "/browse",
       routes: createBrowseRoutes(),
     },
-    // AI routes - POST /api/ai/prompt
+    // AI routes
     {
       prefix: "/ai",
       routes: createAIRoutes({
         projectPath: "", // Will be set by request
         sessionManager: config.sessionManager,
+        modelConfigStore: config.modelConfigStore,
       }),
     },
     // Local prompt management routes - /api/prompts
@@ -213,8 +252,17 @@ export function getNonContextRouteGroups(
     // Git actions routes - POST /api/git-actions
     {
       prefix: "/git-actions",
-      routes: createGitActionsRoutes(),
+      routes: createGitActionsRoutes(config.modelConfigStore),
     },
+    // Model config routes - GET/POST/PATCH /api/model-config
+    ...(config.modelConfigStore !== undefined
+      ? [
+          {
+            prefix: "/model-config",
+            routes: createModelConfigRoutes(config.modelConfigStore),
+          },
+        ]
+      : []),
     // System info routes - GET /api/system-info
     {
       prefix: "/system-info",
@@ -272,10 +320,39 @@ export function mountAllRoutes(app: Hono, config: MountRoutesConfig): void {
   // This extracts contextId from the route and attaches ServerContext to c.set("serverContext")
   contextApp.use("/:contextId/*", contextMiddleware(config.contextManager));
 
+  // Routes that require a git repository.
+  // Non-git routes (claude-sessions, prompts) are excluded so they work for any directory.
+  const GIT_REQUIRED_PREFIXES: ReadonlySet<string> = new Set([
+    "/diff",
+    "/status",
+    "/commits",
+    "/search",
+    "/commit",
+    "/push",
+    "/worktree",
+    "/github",
+    "/pr",
+    "/branches",
+  ]);
+
   // Mount context-scoped routes under /:contextId/
+  // Git-requiring routes get a guard middleware that returns 400 for non-git directories.
   const contextGroups = getContextScopedRouteGroups(config);
   for (const group of contextGroups) {
-    contextApp.route(`/:contextId${group.prefix}`, group.routes);
+    if (GIT_REQUIRED_PREFIXES.has(group.prefix)) {
+      const guarded = new Hono<{ Variables: ContextVariables }>();
+      guarded.use("*", async (c, next): Promise<Response | void> => {
+        const serverContext = c.get("serverContext");
+        if (serverContext !== undefined && !serverContext.isGitRepo) {
+          return c.json(NOT_GIT_REPO_RESPONSE, 400);
+        }
+        await next();
+      });
+      guarded.route("/", group.routes);
+      contextApp.route(`/:contextId${group.prefix}`, guarded);
+    } else {
+      contextApp.route(`/:contextId${group.prefix}`, group.routes);
+    }
   }
 
   // Mount the entire context sub-app under /api/ctx
@@ -296,6 +373,17 @@ export function mountAllRoutes(app: Hono, config: MountRoutesConfig): void {
 type ContextVariables = {
   serverContext: ServerContext;
 };
+
+/**
+ * Standard error response for non-git-repo requests to git-only routes.
+ *
+ * Returns 400 with a clear message, preventing 500 errors from failed git commands.
+ */
+const NOT_GIT_REPO_RESPONSE = {
+  error:
+    "Not a git repository. Git operations are not available for this directory.",
+  code: 400,
+} as const;
 
 /**
  * Create a new Request with the URL path rewritten to be relative to the route mount point.
@@ -470,6 +558,35 @@ function createBranchRoutesWithMiddleware(): Hono<{
     const branchRoutes = createBranchRoutes(serverContext);
     return branchRoutes.fetch(
       createRelativeRequest(c.req.raw, "/branches"),
+      c.env,
+    );
+  });
+
+  return app;
+}
+
+/**
+ * Create terminal routes that get ServerContext from middleware.
+ */
+function createTerminalRoutesWithMiddleware(
+  terminalSessionManager: TerminalSessionManager,
+): Hono<{
+  Variables: ContextVariables;
+}> {
+  const app = new Hono<{ Variables: ContextVariables }>();
+
+  app.use("*", async (c) => {
+    const serverContext = c.get("serverContext");
+    if (serverContext === undefined) {
+      return c.json({ error: "Server context not available", code: 500 }, 500);
+    }
+
+    const terminalRoutes = createTerminalRoutes(
+      serverContext,
+      terminalSessionManager,
+    );
+    return terminalRoutes.fetch(
+      createRelativeRequest(c.req.raw, "/terminal"),
       c.env,
     );
   });

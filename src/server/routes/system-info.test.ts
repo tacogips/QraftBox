@@ -28,6 +28,7 @@ describe("System Info Routes", () => {
       expect(body).toHaveProperty("git");
       expect(body).toHaveProperty("claudeCode");
       expect(body).toHaveProperty("models");
+      expect(body).toHaveProperty("claudeCodeUsage");
 
       // Verify git version info structure
       expect(body.git).toHaveProperty("version");
@@ -86,6 +87,64 @@ describe("System Info Routes", () => {
       // Ensure JSON is parseable
       const body = await response.json();
       expect(body).toBeDefined();
+    });
+
+    test("claudeCodeUsage has correct structure when available", async () => {
+      const response = await app.request("/");
+      const body = (await response.json()) as SystemInfo;
+
+      // claudeCodeUsage might be null if stats-cache.json doesn't exist
+      if (body.claudeCodeUsage !== null) {
+        // Verify structure
+        expect(body.claudeCodeUsage).toHaveProperty("totalSessions");
+        expect(body.claudeCodeUsage).toHaveProperty("totalMessages");
+        expect(body.claudeCodeUsage).toHaveProperty("firstSessionDate");
+        expect(body.claudeCodeUsage).toHaveProperty("lastComputedDate");
+        expect(body.claudeCodeUsage).toHaveProperty("modelUsage");
+        expect(body.claudeCodeUsage).toHaveProperty("recentDailyActivity");
+
+        // Verify types
+        expect(typeof body.claudeCodeUsage.totalSessions).toBe("number");
+        expect(typeof body.claudeCodeUsage.totalMessages).toBe("number");
+        expect(
+          body.claudeCodeUsage.firstSessionDate === null ||
+            typeof body.claudeCodeUsage.firstSessionDate === "string",
+        ).toBe(true);
+        expect(
+          body.claudeCodeUsage.lastComputedDate === null ||
+            typeof body.claudeCodeUsage.lastComputedDate === "string",
+        ).toBe(true);
+        expect(typeof body.claudeCodeUsage.modelUsage).toBe("object");
+        expect(Array.isArray(body.claudeCodeUsage.recentDailyActivity)).toBe(
+          true,
+        );
+
+        // Verify recentDailyActivity length (should be <= 14)
+        expect(
+          body.claudeCodeUsage.recentDailyActivity.length,
+        ).toBeLessThanOrEqual(14);
+
+        // If there are model usage entries, verify structure
+        const modelNames = Object.keys(body.claudeCodeUsage.modelUsage);
+        if (modelNames.length > 0) {
+          const firstModel = body.claudeCodeUsage.modelUsage[modelNames[0]!];
+          if (firstModel !== undefined) {
+            expect(firstModel).toHaveProperty("inputTokens");
+            expect(firstModel).toHaveProperty("outputTokens");
+            expect(firstModel).toHaveProperty("cacheReadInputTokens");
+            expect(firstModel).toHaveProperty("cacheCreationInputTokens");
+          }
+        }
+
+        // If there are daily activity entries, verify structure
+        if (body.claudeCodeUsage.recentDailyActivity.length > 0) {
+          const firstEntry = body.claudeCodeUsage.recentDailyActivity[0];
+          if (firstEntry !== undefined) {
+            expect(firstEntry).toHaveProperty("date");
+            expect(typeof firstEntry.date).toBe("string");
+          }
+        }
+      }
     });
   });
 });

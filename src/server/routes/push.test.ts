@@ -135,6 +135,7 @@ function createMockDependencies(): PushRoutesDependencies & {
 function createMockContextManager(): ContextManager {
   const mockTab: WorkspaceTab = {
     id: "ctx-123",
+    projectSlug: "test-abc123",
     path: "/test/repo",
     name: "test-repo",
     repositoryRoot: "/test/repo",
@@ -160,6 +161,14 @@ function createMockContextManager(): ContextManager {
     })),
     getServerContext: mock(() => ({
       projectPath: "/test/repo",
+      isGitRepo: true,
+    })),
+    getProjectRegistry: mock(() => ({
+      getOrCreateSlug: async () => "test-abc123",
+      resolveSlug: async () => undefined,
+      removeSlug: async () => {},
+      getAllProjects: async () => new Map(),
+      getAllPaths: async (): Promise<ReadonlySet<string>> => new Set(),
     })),
   };
 }

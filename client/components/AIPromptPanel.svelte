@@ -22,8 +22,11 @@
 
   import type { QueueStatus, FileReference } from "../../src/types/ai";
   import FileAutocomplete from "./FileAutocomplete.svelte";
+  import SessionSearchPopup from "./SessionSearchPopup.svelte";
 
   interface Props {
+    contextId: string | null;
+    projectPath: string;
     collapsed: boolean;
     queueStatus: QueueStatus;
     changedFiles: readonly string[];
@@ -35,11 +38,13 @@
     ) => void;
     onToggle: () => void;
     onNewSession?: () => void;
-    onSearchSession?: () => void;
+    onResumeSession?: (sessionId: string) => void;
   }
 
   // Svelte 5 props syntax
   const {
+    contextId,
+    projectPath,
     collapsed,
     queueStatus,
     changedFiles,
@@ -47,7 +52,7 @@
     onSubmit,
     onToggle,
     onNewSession,
-    onSearchSession,
+    onResumeSession,
   }: Props = $props();
 
   /**
@@ -86,6 +91,55 @@
 
   let showDraftDropdown = $state(false);
   let drafts = $state<DraftData[]>([]);
+
+  let isSessionPopupOpen = $state(false);
+  let sessionPopupRef: HTMLDivElement | null = $state(null);
+  let isIphone = $state(false);
+
+  function detectIphone(): boolean {
+    const ua = navigator.userAgent;
+    const isIphoneUa =
+      /iPhone|iPod/i.test(ua) ||
+      (/Macintosh/i.test(ua) &&
+        "maxTouchPoints" in navigator &&
+        navigator.maxTouchPoints > 1);
+    return isIphoneUa && window.innerWidth <= 430;
+  }
+
+  $effect(() => {
+    const update = (): void => {
+      isIphone = detectIphone();
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  });
+
+  const collapsedDraftButtonClass = $derived(
+    isIphone ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm",
+  );
+  const collapsedSubmitButtonClass = $derived(
+    isIphone ? "h-8 px-2 text-xs" : "h-9 px-3 text-sm",
+  );
+  const collapsedSubmitMoreButtonClass = $derived(
+    isIphone ? "h-8 px-1.5" : "h-9 px-2",
+  );
+  const expandedControlColumnClass = $derived(
+    isIphone ? "flex flex-col gap-2 w-24" : "flex flex-col gap-3 w-32",
+  );
+  const expandedDraftButtonClass = $derived(
+    isIphone ? "w-full min-h-[32px] text-xs" : "w-full min-h-[36px] text-sm",
+  );
+  const expandedSubmitButtonClass = $derived(
+    isIphone ? "flex-1 min-h-[36px] text-xs" : "flex-1 min-h-[44px] text-sm",
+  );
+  const expandedSubmitMoreButtonClass = $derived(
+    isIphone ? "px-1.5 min-h-[36px]" : "px-2 min-h-[44px]",
+  );
 
   function loadDraftsFromStorage(): void {
     try {
@@ -151,6 +205,11 @@
       showDraftDropdown = false;
       return;
     }
+    if (event.key === "Escape" && isSessionPopupOpen) {
+      event.preventDefault();
+      closeSessionPopup();
+      return;
+    }
 
     // Skip shortcuts while typing in any text box
     if (isInTextBox) {
@@ -186,6 +245,36 @@
     if (showDraftDropdown && !target.closest(".draft-button-container")) {
       showDraftDropdown = false;
     }
+    if (
+      isSessionPopupOpen &&
+      sessionPopupRef !== null &&
+      !sessionPopupRef.contains(target) &&
+      target.closest("[data-ai-search-button]") === null
+    ) {
+      closeSessionPopup();
+    }
+  }
+
+  function toggleSessionPopup(): void {
+    isSessionPopupOpen = !isSessionPopupOpen;
+  }
+
+  function closeSessionPopup(): void {
+    isSessionPopupOpen = false;
+  }
+
+  function handleCollapsePanel(): void {
+    closeSessionPopup();
+    showDropdown = false;
+    showDraftDropdown = false;
+    showAutocomplete = false;
+    onToggle();
+  }
+
+  function handleResumeFromSearch(qraftAiSessionId: string): void {
+    if (onResumeSession === undefined) return;
+    onResumeSession(qraftAiSessionId);
+    closeSessionPopup();
   }
 
   /**
@@ -289,7 +378,7 @@
     // Escape to collapse
     if (event.key === "Escape" && !showAutocomplete) {
       event.preventDefault();
-      onToggle();
+      handleCollapsePanel();
     }
   }
 
@@ -393,6 +482,50 @@
   }
 
   /**
+   * Handle dragover to allow file path drops from the file tree
+   */
+  function handleFileDragOver(event: DragEvent): void {
+    if (
+      event.dataTransfer?.types.includes("application/x-qraftbox-path") === true
+    ) {
+      event.preventDefault();
+      if (event.dataTransfer !== null) {
+        event.dataTransfer.dropEffect = "copy";
+      }
+    }
+  }
+
+  /**
+   * Handle drop of file paths from the file tree.
+   * Inserts @{path} at cursor position with spaces to avoid concatenation.
+   */
+  function handleFileDrop(event: DragEvent): void {
+    const filePath =
+      event.dataTransfer?.getData("application/x-qraftbox-path") ?? "";
+    if (filePath === "") return;
+    event.preventDefault();
+
+    const insertion = `@${filePath}`;
+    const target = event.target as HTMLInputElement | HTMLTextAreaElement;
+    const cursorPos = target.selectionStart ?? prompt.length;
+
+    const before = prompt.slice(0, cursorPos);
+    const after = prompt.slice(cursorPos);
+
+    let prefix = "";
+    let suffix = "";
+
+    if (before.length > 0 && !before.endsWith(" ") && !before.endsWith("\n")) {
+      prefix = " ";
+    }
+    if (after.length > 0 && !after.startsWith(" ") && !after.startsWith("\n")) {
+      suffix = " ";
+    }
+
+    prompt = before + prefix + insertion + suffix + after;
+  }
+
+  /**
    * Store textarea reference
    */
   function setTextareaRef(element: HTMLTextAreaElement): void {
@@ -410,17 +543,15 @@
 <svelte:window on:keydown={handleGlobalKeydown} on:click={handleWindowClick} />
 
 <div
-  class="ai-prompt-panel shrink-0
-         bg-bg-secondary border-t border-border-default
-         transition-all duration-300 ease-in-out
-         {collapsed ? 'h-14' : 'h-64'}"
+  class="ai-prompt-panel bg-bg-secondary border-t border-border-default
+         {collapsed ? 'shrink-0 h-14' : 'flex-1 min-h-0 flex flex-col'}"
   role="region"
   aria-label="AI Prompt Panel"
 >
   <!-- Collapsed single-line input bar -->
   {#if collapsed}
     <div class="h-14 px-4 flex items-center gap-2">
-      <!-- Expand button (replaces AI icon position) -->
+      <!-- Expand button -->
       <button
         type="button"
         onclick={onToggle}
@@ -447,7 +578,6 @@
         </svg>
       </button>
 
-      <!-- Session management icons -->
       {#if onNewSession !== undefined}
         <button
           type="button"
@@ -477,16 +607,19 @@
         </button>
       {/if}
 
-      {#if onSearchSession !== undefined}
+      <div class="relative shrink-0">
         <button
           type="button"
-          onclick={onSearchSession}
-          class="shrink-0 h-6 w-6 flex items-center justify-center
+          data-ai-search-button
+          onclick={toggleSessionPopup}
+          class="h-6 w-6 flex items-center justify-center
                  hover:bg-bg-hover rounded transition-colors duration-150
                  text-text-tertiary hover:text-text-primary
-                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
+                 {isSessionPopupOpen ? 'bg-bg-hover text-text-primary' : ''}"
           title="Search Sessions"
           aria-label="Search and browse sessions"
+          aria-expanded={isSessionPopupOpen}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -504,7 +637,25 @@
             <path d="m21 21-4.35-4.35" />
           </svg>
         </button>
-      {/if}
+
+        {#if isSessionPopupOpen}
+          <div
+            bind:this={sessionPopupRef}
+            class="absolute left-0 bottom-full z-50 mb-2 w-[420px]
+                   bg-bg-primary border border-border-default rounded-lg shadow-lg
+                   max-h-[400px] flex flex-col"
+            role="dialog"
+            aria-label="Session search"
+          >
+            <SessionSearchPopup
+              {contextId}
+              {projectPath}
+              onResumeSession={handleResumeFromSearch}
+              onClose={closeSessionPopup}
+            />
+          </div>
+        {/if}
+      </div>
 
       <!-- Single-line input -->
       <div class="flex-1 relative min-w-0">
@@ -514,6 +665,8 @@
           bind:value={prompt}
           oninput={handleInputSingleLine}
           onkeydown={handleKeydownSingleLine}
+          ondragover={handleFileDragOver}
+          ondrop={handleFileDrop}
           use:setInputRef
           placeholder="Ask AI about your code... (Use @ to reference files)"
           class="w-full h-9 px-3 py-1.5
@@ -558,9 +711,9 @@
         <button
           type="button"
           onclick={toggleDraftDropdown}
-          class="h-9 px-3
+          class="{collapsedDraftButtonClass}
                  bg-bg-tertiary hover:bg-bg-hover
-                 text-text-secondary text-sm font-medium rounded
+                 text-text-secondary font-medium rounded
                  border border-border-default
                  transition-all duration-150
                  focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
@@ -620,9 +773,9 @@
           type="button"
           onclick={handleSubmit}
           disabled={prompt.trim().length === 0}
-          class="h-9 px-3
+          class="{collapsedSubmitButtonClass}
                  bg-success-emphasis hover:brightness-110
-                 text-white text-sm font-medium rounded-l
+                 text-white font-medium rounded-l
                  disabled:opacity-50 disabled:cursor-not-allowed
                  transition-all duration-150
                  focus:outline-none focus:ring-2 focus:ring-success-emphasis"
@@ -634,7 +787,7 @@
           type="button"
           onclick={toggleDropdown}
           disabled={prompt.trim().length === 0}
-          class="h-9 px-2
+          class="{collapsedSubmitMoreButtonClass}
                  bg-success-emphasis hover:brightness-110
                  text-white rounded-r
                  border-l border-white/20
@@ -691,11 +844,119 @@
     >
       <div class="flex items-center gap-3">
         <span class="text-sm font-medium text-text-primary"> AI Prompt </span>
-        <kbd
-          class="hidden sm:inline px-1.5 py-0.5 text-[10px] bg-bg-tertiary text-text-tertiary rounded"
+
+        <button
+          type="button"
+          onclick={handleCollapsePanel}
+          class="h-6 w-6 flex items-center justify-center
+                 hover:bg-bg-hover rounded transition-colors duration-150
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+          aria-expanded={!collapsed}
+          aria-label="Collapse to single-line mode"
         >
-          A
-        </kbd>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="text-text-tertiary transition-transform duration-300 rotate-180"
+            aria-hidden="true"
+          >
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
+
+        {#if onNewSession !== undefined}
+          <button
+            type="button"
+            onclick={onNewSession}
+            class="h-6 w-6 flex items-center justify-center
+                   hover:bg-bg-hover rounded transition-colors duration-150
+                   text-text-tertiary hover:text-text-primary
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+            title="New Session"
+            aria-label="Create new session"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </button>
+        {/if}
+
+        <div class="relative">
+          <button
+            type="button"
+            data-ai-search-button
+            onclick={toggleSessionPopup}
+            class="h-6 w-6 flex items-center justify-center
+                   hover:bg-bg-hover rounded transition-colors duration-150
+                   text-text-tertiary hover:text-text-primary
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
+                   {isSessionPopupOpen ? 'bg-bg-hover text-text-primary' : ''}"
+            title="Search Sessions"
+            aria-label="Search and browse sessions"
+            aria-expanded={isSessionPopupOpen}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <path d="m21 21-4.35-4.35" />
+            </svg>
+          </button>
+
+          {#if isSessionPopupOpen}
+            <div
+              bind:this={sessionPopupRef}
+              class="absolute left-0 bottom-full z-50 mb-2 w-[420px]
+                     bg-bg-primary border border-border-default rounded-lg shadow-lg
+                     max-h-[400px] flex flex-col"
+              role="dialog"
+              aria-label="Session search"
+            >
+              <SessionSearchPopup
+                {contextId}
+                {projectPath}
+                onResumeSession={handleResumeFromSearch}
+                onClose={closeSessionPopup}
+              />
+            </div>
+          {/if}
+        </div>
+
+        {#if projectPath}
+          <span
+            class="text-xs text-text-tertiary overflow-hidden text-ellipsis whitespace-nowrap max-w-xs"
+            style="direction: rtl; text-align: left;"
+            title={projectPath}>&lrm;{projectPath}</span
+          >
+        {/if}
       </div>
 
       <div class="flex items-center gap-3">
@@ -708,97 +969,9 @@
       </div>
     </div>
 
-    <div class="h-52 p-4 flex flex-col">
+    <div class="flex-1 min-h-0 p-4 flex flex-col overflow-hidden">
       <!-- Input area -->
-      <div class="flex-1 flex gap-4 min-h-0">
-        <!-- Left icon column: collapse + session icons -->
-        <div class="shrink-0 flex flex-col items-center gap-1 self-start mt-0.5">
-          <!-- Collapse button -->
-          <button
-            type="button"
-            onclick={onToggle}
-            class="h-6 w-6 flex items-center justify-center
-                   hover:bg-bg-hover rounded transition-colors duration-150
-                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-            aria-expanded={!collapsed}
-            aria-label="Collapse to single-line mode"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              class="text-text-tertiary transition-transform duration-300 rotate-180"
-              aria-hidden="true"
-            >
-              <polyline points="18 15 12 9 6 15" />
-            </svg>
-          </button>
-
-          {#if onNewSession !== undefined}
-            <button
-              type="button"
-              onclick={onNewSession}
-              class="h-6 w-6 flex items-center justify-center
-                     hover:bg-bg-hover rounded transition-colors duration-150
-                     text-text-tertiary hover:text-text-primary
-                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-              title="New Session"
-              aria-label="Create new session"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-            </button>
-          {/if}
-
-          {#if onSearchSession !== undefined}
-            <button
-              type="button"
-              onclick={onSearchSession}
-              class="h-6 w-6 flex items-center justify-center
-                     hover:bg-bg-hover rounded transition-colors duration-150
-                     text-text-tertiary hover:text-text-primary
-                     focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
-              title="Search Sessions"
-              aria-label="Search and browse sessions"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.35-4.35" />
-              </svg>
-            </button>
-          {/if}
-        </div>
-
+      <div class="flex-1 flex gap-3 min-h-0">
         <!-- Prompt input -->
         <div class="flex-1 relative flex flex-col min-w-0">
           <textarea
@@ -806,6 +979,8 @@
             bind:value={prompt}
             oninput={handleInput}
             onkeydown={handleKeydown}
+            ondragover={handleFileDragOver}
+            ondrop={handleFileDrop}
             use:setTextareaRef
             placeholder="Ask AI about your code... (Use @ to reference files)"
             class="flex-1 w-full px-3 py-2
@@ -874,15 +1049,15 @@
         </div>
 
         <!-- Controls: Draft + Split button -->
-        <div class="flex flex-col gap-3 w-32">
+        <div class={expandedControlColumnClass}>
           <!-- Draft button -->
           <div class="draft-button-container relative">
             <button
               type="button"
               onclick={toggleDraftDropdown}
-              class="w-full min-h-[36px]
+              class="{expandedDraftButtonClass}
                      bg-bg-tertiary hover:bg-bg-hover
-                     text-text-secondary text-sm font-medium rounded
+                     text-text-secondary font-medium rounded
                      border border-border-default
                      transition-all duration-150
                      focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
@@ -926,7 +1101,8 @@
                                transition-colors duration-150
                                {i === drafts.length - 1 ? 'rounded-b-lg' : ''}"
                       >
-                        <span class="block truncate">{draftPreview(draft)}</span>
+                        <span class="block truncate">{draftPreview(draft)}</span
+                        >
                       </button>
                     {/each}
                   </div>
@@ -936,15 +1112,15 @@
           </div>
 
           <div class="split-button-container relative flex-1 flex flex-col">
-            <div class="flex min-h-[44px]">
+            <div class={isIphone ? "flex min-h-[36px]" : "flex min-h-[44px]"}>
               <!-- Main Submit button -->
               <button
                 type="button"
                 onclick={handleSubmit}
                 disabled={prompt.trim().length === 0}
-                class="flex-1 min-h-[44px]
+                class="{expandedSubmitButtonClass}
                        bg-success-emphasis hover:brightness-110
-                       text-white text-sm font-medium rounded-l
+                       text-white font-medium rounded-l
                        disabled:opacity-50 disabled:cursor-not-allowed
                        transition-all duration-150
                        focus:outline-none focus:ring-2 focus:ring-success-emphasis"
@@ -956,7 +1132,7 @@
                 type="button"
                 onclick={toggleDropdown}
                 disabled={prompt.trim().length === 0}
-                class="px-2 min-h-[44px]
+                class="{expandedSubmitMoreButtonClass}
                        bg-success-emphasis hover:brightness-110
                        text-white rounded-r
                        border-l border-white/20

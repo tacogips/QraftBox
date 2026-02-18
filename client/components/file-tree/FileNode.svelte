@@ -28,12 +28,29 @@
 
   const { node, depth, selected, onSelect }: Props = $props();
 
+  let buttonEl = $state<HTMLButtonElement | null>(null);
+
+  /**
+   * Scroll the selected file node into view when selection changes
+   */
+  $effect(() => {
+    if (selected && buttonEl !== null) {
+      buttonEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+
+  type FileStatus =
+    | "added"
+    | "modified"
+    | "deleted"
+    | "untracked"
+    | "ignored"
+    | undefined;
+
   /**
    * Get status badge text based on file status
    */
-  function getStatusBadge(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBadge(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -43,6 +60,10 @@
         return "[M]";
       case "deleted":
         return "[-]";
+      case "untracked":
+        return "[?]";
+      case "ignored":
+        return "[I]";
       default:
         return "";
     }
@@ -51,9 +72,7 @@
   /**
    * Get status badge color class based on file status
    */
-  function getStatusBadgeColor(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBadgeColor(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -63,6 +82,10 @@
         return "text-attention-fg";
       case "deleted":
         return "text-danger-fg";
+      case "untracked":
+        return "text-success-fg";
+      case "ignored":
+        return "text-text-quaternary";
       default:
         return "";
     }
@@ -71,9 +94,7 @@
   /**
    * Get background class for the entire file-node row based on diff status
    */
-  function getStatusBackgroundClass(
-    status: "added" | "modified" | "deleted" | undefined,
-  ): string {
+  function getStatusBackgroundClass(status: FileStatus): string {
     if (status === undefined) return "";
 
     switch (status) {
@@ -83,6 +104,10 @@
         return "status-modified";
       case "deleted":
         return "status-deleted";
+      case "untracked":
+        return "status-untracked";
+      case "ignored":
+        return "status-ignored";
       default:
         return "";
     }
@@ -105,13 +130,21 @@
 
 <!-- File Node Button -->
 <button
+  bind:this={buttonEl}
   type="button"
-  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(node.status)}"
+  class="file-node group/filenode w-full text-left px-4 py-1 focus:outline-none transition-colors min-h-[28px] flex items-center gap-1.5 {getStatusBackgroundClass(
+    node.status,
+  )}"
   class:bg-accent-subtle={selected && !node.status}
   class:border-l-4={selected}
   class:border-accent-emphasis={selected}
   style="padding-left: {leftPadding}rem"
   onclick={onSelect}
+  draggable="true"
+  ondragstart={(e: DragEvent) => {
+    e.dataTransfer?.setData("application/x-qraftbox-path", node.path);
+    e.dataTransfer?.setData("text/plain", node.path);
+  }}
   aria-label="Select file {node.name}"
   aria-selected={selected}
 >
@@ -135,6 +168,16 @@
   <span class="file-name text-text-primary text-xs truncate flex-1">
     {node.name}
   </span>
+
+  <!-- Binary Badge -->
+  {#if node.isBinary === true}
+    <span
+      class="text-[10px] font-medium text-text-tertiary bg-bg-tertiary px-1 rounded shrink-0"
+      aria-label="Binary file"
+    >
+      BIN
+    </span>
+  {/if}
 
   <!-- Status Badge -->
   {#if node.status !== undefined}
@@ -161,11 +204,15 @@
     -webkit-tap-highlight-color: transparent;
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):hover {
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):not(
+      .status-untracked
+    ):not(.status-ignored):hover {
     background-color: var(--color-bg-tertiary);
   }
 
-  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):active {
+  .file-node:not(.status-added):not(.status-modified):not(.status-deleted):not(
+      .status-untracked
+    ):not(.status-ignored):active {
     background-color: var(--color-bg-tertiary);
   }
 
@@ -195,5 +242,24 @@
   .file-node.status-deleted:hover,
   .file-node.status-deleted:active {
     background-color: var(--color-diff-del-word);
+  }
+
+  .file-node.status-untracked {
+    background-color: var(--color-diff-add-bg);
+  }
+
+  .file-node.status-untracked:hover,
+  .file-node.status-untracked:active {
+    background-color: var(--color-diff-add-word);
+  }
+
+  .file-node.status-ignored {
+    opacity: 0.5;
+  }
+
+  .file-node.status-ignored:hover,
+  .file-node.status-ignored:active {
+    background-color: var(--color-bg-tertiary);
+    opacity: 0.7;
   }
 </style>

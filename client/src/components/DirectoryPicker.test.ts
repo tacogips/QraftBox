@@ -2,13 +2,20 @@
  * Tests for DirectoryPicker component
  */
 
-import { describe, test, expect, beforeEach, mock } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import type {
   DirectoryListingResponse,
   RecentDirectory,
 } from "../../../src/types/workspace";
 
 describe("DirectoryPicker Component", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    // Restore original fetch to avoid polluting other test files
+    global.fetch = originalFetch;
+  });
+
   describe("API Integration", () => {
     beforeEach(() => {
       // Reset fetch mock

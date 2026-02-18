@@ -20,10 +20,13 @@ import {
   validateDirectoryPath,
   findTabById,
   findTabByPath,
+  findTabBySlug,
   isWorkspaceFull,
   updateTabAccessTime,
-  sortRecentDirectories,
 } from "../../types/workspace";
+import type { RecentDirectoryStore } from "../workspace/recent-store";
+import type { OpenTabsStore, OpenTabEntry } from "../workspace/open-tabs-store";
+import type { ProjectWatcherManager } from "../watcher/manager";
 
 /**
  * Error response format
@@ -62,64 +65,62 @@ interface RecentDirectoriesResponse {
 let currentWorkspace: Workspace = createEmptyWorkspace(10);
 
 /**
- * In-memory recent directories
- * In a production app, this would be persisted and per-user
- */
-const recentDirectories: RecentDirectory[] = [];
-
-/**
- * Maximum number of recent directories to track
- */
-const MAX_RECENT_DIRECTORIES = 20;
-
-/**
  * Reset workspace state (for testing)
  *
  * @internal
  */
 export function resetWorkspaceState(): void {
   currentWorkspace = createEmptyWorkspace(10);
-  recentDirectories.length = 0;
 }
 
 /**
  * Add directory to recent list
  *
  * @param tab - Workspace tab to add to recent list
+ * @param recentStore - Recent directory store
+ * @returns Promise that resolves when operation completes
  */
-function addToRecentDirectories(tab: WorkspaceTab): void {
-  const existingIndex = recentDirectories.findIndex(
-    (dir) => dir.path === tab.path,
-  );
+async function addToRecentDirectories(
+  tab: WorkspaceTab,
+  recentStore: RecentDirectoryStore,
+): Promise<void> {
+  await recentStore.add({
+    path: tab.path,
+    name: tab.name,
+    lastOpened: Date.now(),
+    isGitRepo: tab.isGitRepo,
+  });
+}
 
-  // Update existing entry
-  if (existingIndex !== -1) {
-    const existing = recentDirectories[existingIndex];
-    if (existing !== undefined) {
-      recentDirectories[existingIndex] = {
-        ...existing,
-        lastOpened: Date.now(),
-      };
-    }
-  } else {
-    // Add new entry
-    const newEntry: RecentDirectory = {
+/**
+ * Persist workspace state to open tabs store
+ *
+ * Converts current workspace tabs into OpenTabEntry format and saves to store.
+ * Only persists if openTabsStore is provided.
+ *
+ * @param workspace - Current workspace state
+ * @param openTabsStore - Open tabs store instance
+ * @returns Promise that resolves when save is complete
+ */
+async function persistWorkspaceState(
+  workspace: Workspace,
+  openTabsStore: OpenTabsStore | undefined,
+): Promise<void> {
+  if (openTabsStore === undefined) {
+    return;
+  }
+
+  const openTabEntries: OpenTabEntry[] = workspace.tabs.map(
+    (tab, tabIndex): OpenTabEntry => ({
       path: tab.path,
       name: tab.name,
-      lastOpened: Date.now(),
+      tabOrder: tabIndex,
+      isActive: workspace.activeTabId === tab.id,
       isGitRepo: tab.isGitRepo,
-    };
+    }),
+  );
 
-    recentDirectories.push(newEntry);
-
-    // Trim to max size
-    if (recentDirectories.length > MAX_RECENT_DIRECTORIES) {
-      // Remove oldest entries
-      const sorted = sortRecentDirectories(recentDirectories);
-      recentDirectories.length = 0;
-      recentDirectories.push(...sorted.slice(0, MAX_RECENT_DIRECTORIES));
-    }
-  }
+  await openTabsStore.save(openTabEntries);
 }
 
 /**
@@ -133,9 +134,42 @@ function addToRecentDirectories(tab: WorkspaceTab): void {
  * - GET /api/workspace/recent - Get recent directories
  *
  * @param contextManager - Context manager instance
+ * @param recentStore - Recent directory store
+ * @param initialTabs - Optional initial tabs to populate workspace at startup
+ * @param openTabsStore - Optional open tabs store for persistence
+ * @param activeTabPath - Optional path to the active tab from restored state
+ * @param watcherManager - Optional project watcher manager for file watching
  * @returns Hono app with workspace routes mounted
  */
-export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
+export function createWorkspaceRoutes(
+  contextManager: ContextManager,
+  recentStore: RecentDirectoryStore,
+  initialTabs?: readonly WorkspaceTab[] | undefined,
+  openTabsStore?: OpenTabsStore | undefined,
+  activeTabPath?: string | undefined,
+  watcherManager?: ProjectWatcherManager | undefined,
+): Hono {
+  // Initialize workspace with initial tabs if provided
+  if (initialTabs !== undefined && initialTabs.length > 0) {
+    // Find active tab: prefer activeTabPath, fall back to first tab
+    let activeTab: WorkspaceTab | undefined;
+    if (activeTabPath !== undefined) {
+      activeTab = initialTabs.find((tab) => tab.path === activeTabPath);
+    }
+    if (activeTab === undefined) {
+      activeTab = initialTabs[0];
+    }
+
+    currentWorkspace = {
+      tabs: [...initialTabs],
+      activeTabId: activeTab !== undefined ? activeTab.id : null,
+      maxTabs: 10,
+    };
+
+    // Persist initial workspace state
+    void persistWorkspaceState(currentWorkspace, openTabsStore);
+  }
+
   const app = new Hono();
 
   /**
@@ -235,7 +269,10 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       };
 
       // Update recent directories (reopening counts as recent access)
-      addToRecentDirectories(updatedTab);
+      await addToRecentDirectories(updatedTab, recentStore);
+
+      // Persist workspace state
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
 
       const response: OpenTabResponse = {
         tab: updatedTab,
@@ -256,7 +293,15 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       };
 
       // Add to recent directories
-      addToRecentDirectories(tab);
+      await addToRecentDirectories(tab, recentStore);
+
+      // Persist workspace state
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
+
+      // Add watcher for this project path
+      if (watcherManager !== undefined) {
+        await watcherManager.addProject(tab.path);
+      }
 
       const response: OpenTabResponse = {
         tab,
@@ -289,7 +334,7 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
    * - 400: Invalid context ID format
    * - 404: Tab not found
    */
-  app.delete("/tabs/:id", (c) => {
+  app.delete("/tabs/:id", async (c) => {
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -332,6 +377,19 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       activeTabId: newActiveTabId,
     };
 
+    // Persist workspace state
+    await persistWorkspaceState(currentWorkspace, openTabsStore);
+
+    // Remove watcher if no other tabs share the same path
+    if (watcherManager !== undefined) {
+      const otherTabsWithSamePath = remainingTabs.some(
+        (remainingTab) => remainingTab.path === tab.path,
+      );
+      if (!otherTabsWithSamePath) {
+        await watcherManager.removeProject(tab.path);
+      }
+    }
+
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
     };
@@ -353,7 +411,7 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
    * - 400: Invalid context ID format
    * - 404: Tab not found
    */
-  app.post("/tabs/:id/activate", (c) => {
+  app.post("/tabs/:id/activate", async (c) => {
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -388,6 +446,9 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
       activeTabId: updatedTab.id,
     };
 
+    // Persist workspace state
+    await persistWorkspaceState(currentWorkspace, openTabsStore);
+
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
     };
@@ -401,12 +462,75 @@ export function createWorkspaceRoutes(contextManager: ContextManager): Hono {
    *
    * Returns up to 20 most recently opened directories.
    */
-  app.get("/recent", (c) => {
-    const sorted = sortRecentDirectories(recentDirectories);
+  app.get("/recent", async (c) => {
+    const recent = await recentStore.getAll();
     const response: RecentDirectoriesResponse = {
-      recent: sorted.slice(0, MAX_RECENT_DIRECTORIES),
+      recent,
     };
     return c.json(response);
+  });
+
+  /**
+   * DELETE /api/workspace/recent
+   *
+   * Remove a directory from the recent list by path.
+   *
+   * Request body:
+   * - path (required): Absolute path to remove
+   */
+  app.delete("/recent", async (c) => {
+    let requestBody: unknown;
+    try {
+      requestBody = await c.req.json();
+    } catch {
+      const errorResponse: ErrorResponse = {
+        error: "Invalid JSON in request body",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    if (
+      typeof requestBody !== "object" ||
+      requestBody === null ||
+      !("path" in requestBody)
+    ) {
+      const errorResponse: ErrorResponse = {
+        error: "Missing required field: path",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const pathParam = (requestBody as { path: unknown }).path;
+    if (typeof pathParam !== "string" || pathParam.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "path must be a non-empty string",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    await recentStore.remove(pathParam);
+    return c.json({ ok: true });
+  });
+
+  /**
+   * GET /api/workspace/by-slug/:slug
+   *
+   * Find a workspace tab by its project slug.
+   * Used by the client to resolve URL hash slugs to context IDs.
+   *
+   * Returns:
+   * - tab: The matching workspace tab (or null if not found)
+   */
+  app.get("/by-slug/:slug", (c) => {
+    const slug = c.req.param("slug");
+    const tab = findTabBySlug(currentWorkspace, slug);
+    if (tab === undefined) {
+      return c.json({ tab: null });
+    }
+    return c.json({ tab });
   });
 
   return app;

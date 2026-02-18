@@ -104,6 +104,13 @@ export async function execGit(
     };
   } catch (e) {
     clearTimeout(timeoutId);
+    // Ensure the process is killed and reaped to prevent zombie processes
+    try {
+      proc.kill();
+    } catch {
+      // Process may have already exited
+    }
+    await proc.exited.catch(() => {});
     const errorMessage = e instanceof Error ? e.message : String(e);
     throw new GitExecutorError(
       `Git command execution failed: ${errorMessage}`,
@@ -147,7 +154,7 @@ export function execGitStream(
     proc = Bun.spawn(["git", ...args], {
       cwd: options.cwd,
       stdout: "pipe",
-      stderr: "pipe",
+      stderr: "ignore",
     });
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -159,7 +166,94 @@ export function execGitStream(
     );
   }
 
+  // Ensure the process is always reaped even if the caller doesn't await exited
+  void proc.exited.catch(() => {});
+
   return proc.stdout;
+}
+
+/**
+ * Unquote a git-quoted file path
+ *
+ * Git quotes filenames containing special characters (non-ASCII, spaces, etc.)
+ * by wrapping them in double quotes and using octal escape sequences for
+ * non-ASCII bytes (UTF-8). For example:
+ * - "dir/\343\201\202.txt" -> dir/あ.txt
+ * - "spaces in name.txt" is returned as-is (not quoted)
+ * - "\"quoted\".txt" -> "quoted".txt
+ *
+ * @param line - A line from git output that may be a quoted path
+ * @returns Unquoted, decoded path string
+ */
+export function unquoteGitPath(line: string): string {
+  if (!line.startsWith('"') || !line.endsWith('"')) {
+    return line;
+  }
+
+  const inner = line.slice(1, -1);
+  const bytes: number[] = [];
+  let i = 0;
+
+  while (i < inner.length) {
+    if (inner[i] === "\\" && i + 1 < inner.length) {
+      const next = inner[i + 1]!;
+      if (next === "\\") {
+        bytes.push(0x5c);
+        i += 2;
+      } else if (next === '"') {
+        bytes.push(0x22);
+        i += 2;
+      } else if (next === "n") {
+        bytes.push(0x0a);
+        i += 2;
+      } else if (next === "t") {
+        bytes.push(0x09);
+        i += 2;
+      } else if (next === "a") {
+        bytes.push(0x07);
+        i += 2;
+      } else if (next === "b") {
+        bytes.push(0x08);
+        i += 2;
+      } else if (next === "r") {
+        bytes.push(0x0d);
+        i += 2;
+      } else if (next >= "0" && next <= "7") {
+        // Octal escape: \NNN (up to 3 digits)
+        let octal = next;
+        let j = i + 2;
+        while (
+          j < inner.length &&
+          j < i + 4 &&
+          inner[j]! >= "0" &&
+          inner[j]! <= "7"
+        ) {
+          octal += inner[j]!;
+          j++;
+        }
+        bytes.push(parseInt(octal, 8));
+        i = j;
+      } else {
+        // Unknown escape - keep as-is
+        bytes.push(inner.charCodeAt(i));
+        i++;
+      }
+    } else {
+      const ch = inner[i]!;
+      const code = ch.charCodeAt(0);
+      if (code < 0x80) {
+        bytes.push(code);
+      } else {
+        const encoded = new TextEncoder().encode(ch);
+        for (const b of encoded) {
+          bytes.push(b);
+        }
+      }
+      i++;
+    }
+  }
+
+  return new TextDecoder().decode(new Uint8Array(bytes));
 }
 
 /**

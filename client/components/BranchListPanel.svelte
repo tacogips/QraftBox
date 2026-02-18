@@ -44,6 +44,8 @@
     filterPlaceholder?: string;
     /** Warning message shown when action is disabled */
     warningMessage?: string | undefined;
+    /** If true, all selection and creation is disabled */
+    disabled?: boolean;
     /** Called when a branch is selected */
     onSelect: (branch: BranchInfo) => void;
     /** If true, the current branch cannot be selected */
@@ -52,6 +54,10 @@
     selectedBranch?: string | undefined;
     /** Called when a new branch is created; if undefined, create button is hidden */
     onCreateBranch?: ((branchName: string) => void) | undefined;
+    /** Called when fetch is requested on the current branch; if undefined, fetch icon is hidden */
+    onFetchBranch?: (() => void) | undefined;
+    /** Called when merge is requested on a non-current branch; if undefined, merge icon is hidden */
+    onMergeBranch?: ((branch: BranchInfo) => void) | undefined;
   }
 
   const {
@@ -60,10 +66,13 @@
     headerText,
     filterPlaceholder = "Filter branches...",
     warningMessage = undefined,
+    disabled = false,
     onSelect,
     disableCurrentBranch = false,
     selectedBranch = undefined,
     onCreateBranch = undefined,
+    onFetchBranch = undefined,
+    onMergeBranch = undefined,
   }: Props = $props();
 
   const PAGE_SIZE = 30;
@@ -133,7 +142,7 @@
    * Handle create branch form submission
    */
   function handleCreateBranch(): void {
-    if (onCreateBranch === undefined) return;
+    if (onCreateBranch === undefined || disabled) return;
     const name = newBranchName.trim();
     if (name.length === 0) {
       createErrorMessage = "Branch name is required";
@@ -265,7 +274,7 @@
     if (event.key === "Enter" && focusedIndex >= 0) {
       event.preventDefault();
       const branch = filteredBranches[focusedIndex];
-      if (branch !== undefined) {
+      if (branch !== undefined && !disabled) {
         const isDisabled =
           disableCurrentBranch && branch.name === currentBranch;
         if (!isDisabled) {
@@ -310,9 +319,11 @@
         <button
           type="button"
           class="w-5 h-5 flex items-center justify-center rounded text-text-secondary
-                 hover:text-accent-fg hover:bg-bg-tertiary transition-colors cursor-pointer"
+                 hover:text-accent-fg hover:bg-bg-tertiary transition-colors cursor-pointer
+                 {disabled ? 'opacity-50 cursor-default' : ''}"
           onclick={toggleCreateForm}
           title="Create new branch"
+          {disabled}
         >
           <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
             <path
@@ -369,13 +380,15 @@
           class="px-2 py-1 text-xs font-medium rounded transition-colors
                  {newBranchName.trim().length === 0 ||
           isDuplicateBranch ||
-          creating
+          creating ||
+          disabled
             ? 'bg-bg-tertiary text-text-placeholder cursor-default'
             : 'bg-accent-emphasis text-white hover:bg-accent-fg cursor-pointer'}"
           onclick={handleCreateBranch}
           disabled={newBranchName.trim().length === 0 ||
             isDuplicateBranch ||
-            creating}
+            creating ||
+            disabled}
         >
           {creating ? "Creating..." : "Create"}
         </button>
@@ -398,11 +411,7 @@
     <div
       class="px-3 py-1.5 text-xs bg-attention-subtle text-attention-fg border-b border-border-default flex items-center gap-1.5"
     >
-      <svg
-        class="w-3.5 h-3.5 shrink-0"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-      >
+      <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 16 16" fill="currentColor">
         <path
           fill-rule="evenodd"
           d="M8.22 1.754a.25.25 0 00-.44 0L1.698 13.132a.25.25 0 00.22.368h12.164a.25.25 0 00.22-.368L8.22 1.754zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0114.082 15H1.918a1.75 1.75 0 01-1.543-2.575L6.457 1.047zM9 11a1 1 0 11-2 0 1 1 0 012 0zm-.25-5.25a.75.75 0 00-1.5 0v2.5a.75.75 0 001.5 0v-2.5z"
@@ -440,25 +449,29 @@
     {:else}
       {#each filteredBranches as branch, index}
         {@const isCurrent = branch.name === currentBranch}
-        {@const isSelected = selectedBranch !== undefined
-          ? branch.name === selectedBranch
-          : false}
-        {@const isDisabled = disableCurrentBranch && isCurrent}
+        {@const isSelected =
+          selectedBranch !== undefined ? branch.name === selectedBranch : false}
+        {@const isItemDisabled =
+          disabled || (disableCurrentBranch && isCurrent)}
         <button
           type="button"
           class="w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 transition-colors
-                 {focusedIndex === index ? 'bg-bg-tertiary' : 'hover:bg-bg-secondary'}
+                 {focusedIndex === index
+            ? 'bg-bg-tertiary'
+            : 'hover:bg-bg-secondary'}
                  {isSelected ? 'font-semibold' : ''}
-                 {isDisabled ? 'cursor-default opacity-50' : 'cursor-pointer'}"
+                 {isItemDisabled
+            ? 'cursor-default opacity-50'
+            : 'cursor-pointer'}"
           onclick={() => {
-            if (!isDisabled) {
+            if (!isItemDisabled) {
               onSelect(branch);
             }
           }}
           onmouseenter={() => {
             focusedIndex = index;
           }}
-          disabled={isDisabled}
+          disabled={isItemDisabled}
           role="option"
           aria-selected={isSelected}
         >
@@ -522,11 +535,74 @@
                 >
               {/if}
               {#if branch.aheadBehind.behind > 0}
-                <span title="Behind upstream"
-                  >{branch.aheadBehind.behind}v</span
+                <span title="Behind upstream">{branch.aheadBehind.behind}v</span
                 >
               {/if}
             </div>
+          {/if}
+
+          <!-- Fetch icon for current branch -->
+          {#if isCurrent && onFetchBranch !== undefined}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span
+              class="w-6 h-6 flex items-center justify-center rounded shrink-0
+                     text-text-tertiary hover:text-accent-fg hover:bg-bg-tertiary
+                     transition-colors cursor-pointer"
+              role="button"
+              tabindex="-1"
+              onclick={(e) => {
+                e.stopPropagation();
+                onFetchBranch?.();
+              }}
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  onFetchBranch?.();
+                }
+              }}
+              title="Fetch from remote"
+            >
+              <!-- Download/fetch arrow icon -->
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <path
+                  d="M8 2a.75.75 0 01.75.75v7.19l2.72-2.72a.75.75 0 111.06 1.06l-4 4a.75.75 0 01-1.06 0l-4-4a.75.75 0 111.06-1.06l2.72 2.72V2.75A.75.75 0 018 2z"
+                />
+                <path
+                  d="M2.75 13.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H2.75z"
+                />
+              </svg>
+            </span>
+          {/if}
+
+          <!-- Merge icon for non-current branches -->
+          {#if !isCurrent && onMergeBranch !== undefined}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <span
+              class="w-6 h-6 flex items-center justify-center rounded shrink-0
+                     text-text-tertiary hover:text-success-fg hover:bg-bg-tertiary
+                     transition-colors cursor-pointer"
+              role="button"
+              tabindex="-1"
+              onclick={(e) => {
+                e.stopPropagation();
+                onMergeBranch?.(branch);
+              }}
+              onkeydown={(e) => {
+                if (e.key === "Enter") {
+                  e.stopPropagation();
+                  onMergeBranch?.(branch);
+                }
+              }}
+              title="Merge into {currentBranch}"
+            >
+              <!-- Git merge icon -->
+              <svg class="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+                <path
+                  fill-rule="evenodd"
+                  d="M5 3.254V3.25v.005a.75.75 0 110-.005v.004zm.45 1.9a2.25 2.25 0 10-1.95.218v5.256a2.25 2.25 0 101.5 0V7.123A5.735 5.735 0 009.25 9h1.378a2.251 2.251 0 100-1.5H9.25a4.25 4.25 0 01-3.8-2.346zM12.75 9a.75.75 0 100-1.5.75.75 0 000 1.5zm-8.5 4.5a.75.75 0 100-1.5.75.75 0 000 1.5z"
+                />
+              </svg>
+            </span>
           {/if}
         </button>
       {/each}

@@ -99,7 +99,7 @@ describe("GET /files", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createFileRoutes(context);
   });
 
@@ -146,7 +146,10 @@ describe("GET /files", () => {
   });
 
   test("handles git errors gracefully", async () => {
-    const invalidContext: ServerContext = { projectPath: "/nonexistent/path" };
+    const invalidContext: ServerContext = {
+      projectPath: "/nonexistent/path",
+      isGitRepo: true,
+    };
     const invalidApp = createFileRoutes(invalidContext);
     const response = await invalidApp.request("/");
 
@@ -162,7 +165,7 @@ describe("GET /file/*path", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createFileRoutes(context);
   });
 
@@ -274,7 +277,7 @@ describe("GET /file/*path", () => {
     };
     expect(data.isBinary).toBe(true);
     expect(data.isImage).toBeUndefined();
-    expect(data.badge).toBe("BIN");
+    expect(data.badge).toBe("PDF");
     expect(data.content).toBe("");
     expect(data.mimeType).toBe("application/pdf");
   });
@@ -397,7 +400,7 @@ describe("GET /files/autocomplete", () => {
   let context: ServerContext;
 
   beforeEach(() => {
-    context = { projectPath: testRepoPath };
+    context = { projectPath: testRepoPath, isGitRepo: true };
     app = createFileRoutes(context);
   });
 
