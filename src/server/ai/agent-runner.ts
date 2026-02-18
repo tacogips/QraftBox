@@ -11,8 +11,8 @@ import type { ClaudeSessionId, AIConfig } from "../../types/ai.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import { createLogger } from "../logger.js";
 import {
-  ClaudeCodeToolAgent,
-  type ToolAgentSession,
+  SessionRunner,
+  type RunningSession,
 } from "claude-code-agent/src/sdk/index.js";
 
 const logger = createLogger("AgentRunner");
@@ -219,7 +219,7 @@ class EventChannel<T> {
 }
 
 /**
- * ClaudeAgentRunner - Real implementation using ClaudeCodeToolAgent
+ * ClaudeAgentRunner - Real implementation using SessionRunner
  */
 class ClaudeAgentRunner implements AgentRunner {
   constructor(
@@ -229,8 +229,8 @@ class ClaudeAgentRunner implements AgentRunner {
 
   execute(params: AgentRunParams): AgentExecution {
     const channel = new EventChannel<AgentEvent>();
-    let toolAgentSession: ToolAgentSession | undefined;
-    let agent: ClaudeCodeToolAgent | undefined;
+    let runningSession: RunningSession | undefined;
+    let agent: SessionRunner | undefined;
     let cancelled = false;
 
     /**
@@ -238,11 +238,11 @@ class ClaudeAgentRunner implements AgentRunner {
      */
     const startExecution = async (): Promise<void> => {
       try {
-        // Create ClaudeCodeToolAgent with MCP config
+        // Create SessionRunner with MCP config
         const allowedToolNames = [...this.toolRegistry.getAllowedToolNames()];
         const mcpServerConfig = this.toolRegistry.toMcpServerConfig();
 
-        agent = new ClaudeCodeToolAgent({
+        agent = new SessionRunner({
           cwd: params.projectPath,
           mcpServers: {
             "qraftbox-tools": mcpServerConfig as any,
@@ -257,7 +257,7 @@ class ClaudeAgentRunner implements AgentRunner {
         });
 
         // Start or resume session
-        toolAgentSession =
+        runningSession =
           params.resumeSessionId !== undefined
             ? await agent.startSession({
                 prompt: params.prompt,
@@ -278,7 +278,7 @@ class ClaudeAgentRunner implements AgentRunner {
         let streamedAssistantContent = "";
 
         // Set up event listeners
-        toolAgentSession.on("message", (msg: unknown) => {
+        runningSession.on("message", (msg: unknown) => {
           // Detect Claude session ID once from stream (only for new sessions)
           if (!claudeSessionDetected) {
             const detectedSessionId = extractClaudeSessionIdFromMessage(msg);
@@ -361,7 +361,7 @@ class ClaudeAgentRunner implements AgentRunner {
           }
         });
 
-        toolAgentSession.on("toolCall", (call: unknown) => {
+        runningSession.on("toolCall", (call: unknown) => {
           // Extract tool name and input
           if (typeof call === "object" && call !== null) {
             const toolCall = call as {
@@ -382,7 +382,7 @@ class ClaudeAgentRunner implements AgentRunner {
           }
         });
 
-        toolAgentSession.on("toolResult", (result: unknown) => {
+        runningSession.on("toolResult", (result: unknown) => {
           // Extract tool result data
           if (typeof result === "object" && result !== null) {
             const toolResult = result as {
@@ -409,13 +409,13 @@ class ClaudeAgentRunner implements AgentRunner {
           }
         });
 
-        toolAgentSession.on("error", (err: unknown) => {
+        runningSession.on("error", (err: unknown) => {
           const errorMessage = err instanceof Error ? err.message : String(err);
           channel.push({ type: "error", message: errorMessage });
         });
 
         // Iterate messages until completion or cancellation
-        for await (const _msg of toolAgentSession.messages()) {
+        for await (const _msg of runningSession.messages()) {
           // Check cancellation flag
           if (cancelled) {
             break;
@@ -423,8 +423,8 @@ class ClaudeAgentRunner implements AgentRunner {
         }
 
         // Wait for completion
-        const sessionResult = await toolAgentSession.waitForCompletion();
-        const finalAgentState = toolAgentSession.getState().state;
+        const sessionResult = await runningSession.waitForCompletion();
+        const finalAgentState = runningSession.getState().state;
 
         // Check if cancelled during completion wait
         if (cancelled || finalAgentState === "cancelled") {
@@ -494,15 +494,15 @@ class ClaudeAgentRunner implements AgentRunner {
 
       async cancel(): Promise<void> {
         cancelled = true;
-        if (toolAgentSession !== undefined) {
-          await toolAgentSession.cancel();
+        if (runningSession !== undefined) {
+          await runningSession.cancel();
         }
       },
 
       async abort(): Promise<void> {
         cancelled = true;
-        if (toolAgentSession !== undefined) {
-          await toolAgentSession.abort();
+        if (runningSession !== undefined) {
+          await runningSession.abort();
         }
       },
     };

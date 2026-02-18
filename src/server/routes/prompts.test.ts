@@ -4,7 +4,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
 import { createPromptRoutes } from "./prompts";
-import { mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -12,8 +12,7 @@ import { tmpdir } from "node:os";
  * Create a test config directory with sample templates
  */
 async function createTestConfigDir(): Promise<string> {
-  const testDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
-  await mkdir(testDir, { recursive: true });
+  const testDir = await mkdtemp(join(tmpdir(), "qraftbox-test-"));
 
   // Create a sample user template
   const commitTemplate = `---
@@ -158,8 +157,7 @@ describe("Prompt Routes", () => {
     });
 
     test("handles empty user template directory gracefully", async () => {
-      const emptyDir = join(tmpdir(), `qraftbox-empty-${Date.now()}`);
-      await mkdir(emptyDir, { recursive: true });
+      const emptyDir = await mkdtemp(join(tmpdir(), "qraftbox-empty-"));
 
       const emptyApp = createPromptRoutes(emptyDir);
       const response = await emptyApp.request("/");
