@@ -48,7 +48,6 @@
     onCancelSession: (id: string) => void;
     onCancelQueuedPrompt?: (id: string) => Promise<void>;
     onResumeSession: (sessionId: string) => void;
-    expandTrigger?: number;
   }
 
   const {
@@ -62,7 +61,6 @@
     onCancelSession,
     onCancelQueuedPrompt,
     onResumeSession,
-    expandTrigger = 0,
   }: Props = $props();
 
   /**
@@ -75,19 +73,7 @@
    */
   let cliSessionLoading = $state(false);
 
-  /**
-   * Expansion states
-   */
-  let sessionExpanded = $state(false);
   let queueExpanded = $state(false);
-  let lastExpandTrigger = 0;
-
-  $effect(() => {
-    if (expandTrigger > lastExpandTrigger) {
-      sessionExpanded = true;
-      lastExpandTrigger = expandTrigger;
-    }
-  });
 
   /**
    * Session summary data (loaded on expand for CLI sessions)
@@ -351,12 +337,16 @@
     }
   }
 
-  function toggleSession(): void {
-    sessionExpanded = !sessionExpanded;
-    if (sessionExpanded && displayMode === "cli" && recentCliSession !== null) {
+  // Auto-load session summary when a CLI session is available
+  $effect(() => {
+    if (
+      displayMode === "cli" &&
+      recentCliSession !== null &&
+      contextId !== null
+    ) {
       void fetchSessionSummary(recentCliSession.qraftAiSessionId);
     }
-  }
+  });
 
   $effect(() => {
     if (contextId === null) return;
@@ -376,7 +366,7 @@
 {#if hasContent}
   <div
     class="current-session-panel border-t border-border-default bg-bg-secondary overflow-y-auto
-           {sessionExpanded ? 'flex-1 min-h-0' : 'shrink-0'}
+           flex-1 min-h-0
            {isRunning ? 'session-running-glow' : ''}"
     role="region"
     aria-label="Current session status"
@@ -459,33 +449,11 @@
 
     <!-- Current session card -->
     {#if displayMode !== "none"}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        onclick={toggleSession}
-        onkeydown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleSession();
-          }
-        }}
-        role="button"
-        tabindex={0}
         class="w-full flex items-center gap-2 px-4 py-2
-               hover:bg-bg-hover transition-colors text-left cursor-pointer select-none
+               text-left select-none
                sticky top-0 z-10 bg-bg-secondary"
       >
-        <!-- Chevron -->
-        <svg
-          class="w-3.5 h-3.5 text-text-tertiary transition-transform shrink-0
-                 {sessionExpanded ? 'rotate-90' : ''}"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-        >
-          <path
-            d="M6.22 3.22a.75.75 0 011.06 0l4.25 4.25a.75.75 0 010 1.06l-4.25 4.25a.75.75 0 01-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 010-1.06z"
-          />
-        </svg>
-
         {#if displayMode === "running"}
           <!-- Running spinner -->
           <svg
@@ -669,230 +637,224 @@
         {/if}
       </div>
 
-      <!-- Expanded content -->
-      {#if sessionExpanded}
-        <div class="border-t border-border-default/50 bg-bg-primary">
-          <!-- Mode-specific controls -->
-          {#if isRunning && runningSession !== null && runningSession !== undefined && runningSession.context.primaryFile !== undefined}
-            <div
-              class="px-4 py-1.5 flex items-center gap-1.5 text-[10px] text-text-tertiary border-b border-border-default/50"
+      <!-- Session detail content (always expanded) -->
+      <div class="border-t border-border-default/50 bg-bg-primary">
+        <!-- Mode-specific controls -->
+        {#if isRunning && runningSession !== null && runningSession !== undefined && runningSession.context.primaryFile !== undefined}
+          <div
+            class="px-4 py-1.5 flex items-center gap-1.5 text-[10px] text-text-tertiary border-b border-border-default/50"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-              >
-                <path
-                  d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
-                />
-                <polyline points="14 2 14 8 20 8" />
-              </svg>
-              <span class="truncate"
-                >{runningSession.context.primaryFile.path}</span
-              >
-            </div>
-          {/if}
+              <path
+                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"
+              />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span class="truncate"
+              >{runningSession.context.primaryFile.path}</span
+            >
+          </div>
+        {/if}
 
-          {#if recentCliSession !== null && contextId !== null && !isRunning}
-            <div
-              class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
-            >
-              <div class="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    onResumeSession(recentCliSession.qraftAiSessionId);
-                  }}
-                  class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded
+        {#if recentCliSession !== null && contextId !== null && !isRunning}
+          <div
+            class="px-4 py-2 bg-bg-tertiary/30 border-b border-border-default"
+          >
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  onResumeSession(recentCliSession.qraftAiSessionId);
+                }}
+                class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded
                          bg-bg-tertiary hover:bg-bg-hover text-text-primary
                          border border-border-default"
-                >
-                  Resume
-                </button>
+              >
+                Resume
+              </button>
 
-                {#if summaryLoading}
+              {#if summaryLoading}
+                <span class="text-text-tertiary text-xs">|</span>
+                <svg
+                  class="animate-spin h-3 w-3 text-text-tertiary"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    class="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    stroke-width="4"
+                  />
+                  <path
+                    class="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
+                </svg>
+                <span class="text-xs text-text-tertiary"
+                  >Loading summary...</span
+                >
+              {:else if sessionSummary !== null}
+                {#if sessionSummary.toolUsage.length > 0 || sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
                   <span class="text-text-tertiary text-xs">|</span>
-                  <svg
-                    class="animate-spin h-3 w-3 text-text-tertiary"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
+                {/if}
+                {#each sessionSummary.toolUsage.slice(0, 6) as tool}
+                  <span
+                    class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary"
                   >
-                    <circle
-                      class="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      stroke-width="4"
-                    />
-                    <path
-                      class="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    />
-                  </svg>
-                  <span class="text-xs text-text-tertiary"
-                    >Loading summary...</span
+                    {tool.name}<span class="text-text-tertiary"
+                      >:{tool.count}</span
+                    >
+                  </span>
+                {/each}
+                {#if sessionSummary.toolUsage.length > 6}
+                  <span class="text-[10px] text-text-tertiary"
+                    >+{sessionSummary.toolUsage.length - 6} more</span
                   >
-                {:else if sessionSummary !== null}
-                  {#if sessionSummary.toolUsage.length > 0 || sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
+                {/if}
+                {#if sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
+                  <span class="text-text-tertiary text-xs mx-1">|</span>
+                {/if}
+                {#if sessionSummary.filesModified.length > 0}
+                  <button
+                    type="button"
+                    onclick={() => (filesExpanded = !filesExpanded)}
+                    class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
+                  >
+                    {sessionSummary.filesModified.length} file{sessionSummary
+                      .filesModified.length !== 1
+                      ? "s"
+                      : ""}
+                  </button>
+                {/if}
+                {#if sessionSummary.tasks.length > 0}
+                  {#if sessionSummary.filesModified.length > 0}
                     <span class="text-text-tertiary text-xs">|</span>
                   {/if}
-                  {#each sessionSummary.toolUsage.slice(0, 6) as tool}
-                    <span
-                      class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-bg-tertiary text-text-secondary"
-                    >
-                      {tool.name}<span class="text-text-tertiary"
-                        >:{tool.count}</span
-                      >
-                    </span>
-                  {/each}
-                  {#if sessionSummary.toolUsage.length > 6}
-                    <span class="text-[10px] text-text-tertiary"
-                      >+{sessionSummary.toolUsage.length - 6} more</span
-                    >
-                  {/if}
-                  {#if sessionSummary.filesModified.length > 0 || sessionSummary.tasks.length > 0}
-                    <span class="text-text-tertiary text-xs mx-1">|</span>
-                  {/if}
-                  {#if sessionSummary.filesModified.length > 0}
-                    <button
-                      type="button"
-                      onclick={() => (filesExpanded = !filesExpanded)}
-                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
-                    >
-                      {sessionSummary.filesModified.length} file{sessionSummary
-                        .filesModified.length !== 1
-                        ? "s"
-                        : ""}
-                    </button>
-                  {/if}
-                  {#if sessionSummary.tasks.length > 0}
-                    {#if sessionSummary.filesModified.length > 0}
-                      <span class="text-text-tertiary text-xs">|</span>
-                    {/if}
-                    <button
-                      type="button"
-                      onclick={() => (tasksExpanded = !tasksExpanded)}
-                      class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
-                    >
-                      {sessionSummary.tasks.length} task{sessionSummary.tasks
-                        .length !== 1
-                        ? "s"
-                        : ""}
-                    </button>
-                  {/if}
+                  <button
+                    type="button"
+                    onclick={() => (tasksExpanded = !tasksExpanded)}
+                    class="text-[11px] text-text-secondary hover:text-accent-fg transition-colors"
+                  >
+                    {sessionSummary.tasks.length} task{sessionSummary.tasks
+                      .length !== 1
+                      ? "s"
+                      : ""}
+                  </button>
                 {/if}
-              </div>
-
-              {#if sessionSummary?.usage !== undefined && (sessionSummary.usage.inputTokens > 0 || sessionSummary.usage.outputTokens > 0)}
-                <div
-                  class="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-text-tertiary"
-                >
-                  <span
-                    >in:{formatTokenCount(
-                      sessionSummary.usage.inputTokens,
-                    )}</span
-                  >
-                  <span
-                    >out:{formatTokenCount(
-                      sessionSummary.usage.outputTokens,
-                    )}</span
-                  >
-                  {#if sessionSummary.usage.cacheCreationTokens > 0}
-                    <span
-                      >cache-w:{formatTokenCount(
-                        sessionSummary.usage.cacheCreationTokens,
-                      )}</span
-                    >
-                  {/if}
-                  {#if sessionSummary.usage.cacheReadTokens > 0}
-                    <span
-                      >cache-r:{formatTokenCount(
-                        sessionSummary.usage.cacheReadTokens,
-                      )}</span
-                    >
-                  {/if}
-                </div>
-              {/if}
-
-              {#if filesExpanded && sessionSummary !== null && sessionSummary.filesModified.length > 0}
-                <div class="mt-2 space-y-0.5">
-                  {#each sessionSummary.filesModified as file}
-                    <div class="flex items-center gap-2 py-0.5 text-[11px]">
-                      <span
-                        class="shrink-0 px-1 rounded text-[9px] font-bold {file.tool ===
-                        'Edit'
-                          ? 'bg-attention-muted text-attention-fg'
-                          : 'bg-success-muted text-success-fg'}"
-                      >
-                        {file.tool === "Edit" ? "M" : "A"}
-                      </span>
-                      <span
-                        class="text-text-secondary font-mono truncate"
-                        title={file.path}>{shortPath(file.path)}</span
-                      >
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-
-              {#if tasksExpanded && sessionSummary !== null && sessionSummary.tasks.length > 0}
-                <div class="mt-2 space-y-0.5">
-                  {#each sessionSummary.tasks as task}
-                    <div class="flex items-center gap-2 py-0.5 text-[11px]">
-                      <span
-                        class="shrink-0 w-2 h-2 rounded-full {getTaskStatusColor(
-                          task.status,
-                        )}"
-                      ></span>
-                      <span class="text-text-primary truncate"
-                        >{task.subject}</span
-                      >
-                      <span class="text-text-tertiary shrink-0"
-                        >{task.status}</span
-                      >
-                    </div>
-                  {/each}
-                </div>
               {/if}
             </div>
-          {/if}
 
-          <!-- Unified transcript view for all display modes -->
-          {#if contextId !== null && targetCliSessionId.length > 0}
-            <SessionTranscriptInline
-              sessionId={targetCliSessionId}
-              {contextId}
-              autoRefreshMs={isRunning || isRunningCurrentConversation
-                ? 1500
-                : 0}
-              followLatest={isRunning || isRunningCurrentConversation}
-              optimisticUserMessage={isRunning || isRunningCurrentConversation
-                ? (nextQueuedPromptInCurrentConversation ??
-                  (runningSession !== null && runningSession !== undefined
-                    ? runningSession.prompt
-                    : undefined))
-                : undefined}
-              optimisticAssistantMessage={(isRunning ||
-                isRunningCurrentConversation) &&
-              runningSession !== null &&
-              runningSession !== undefined
-                ? runningSession.lastAssistantMessage
-                : undefined}
-            />
-          {/if}
-        </div>
-      {/if}
+            {#if sessionSummary?.usage !== undefined && (sessionSummary.usage.inputTokens > 0 || sessionSummary.usage.outputTokens > 0)}
+              <div
+                class="flex items-center gap-3 mt-1.5 text-[10px] font-mono text-text-tertiary"
+              >
+                <span
+                  >in:{formatTokenCount(sessionSummary.usage.inputTokens)}</span
+                >
+                <span
+                  >out:{formatTokenCount(
+                    sessionSummary.usage.outputTokens,
+                  )}</span
+                >
+                {#if sessionSummary.usage.cacheCreationTokens > 0}
+                  <span
+                    >cache-w:{formatTokenCount(
+                      sessionSummary.usage.cacheCreationTokens,
+                    )}</span
+                  >
+                {/if}
+                {#if sessionSummary.usage.cacheReadTokens > 0}
+                  <span
+                    >cache-r:{formatTokenCount(
+                      sessionSummary.usage.cacheReadTokens,
+                    )}</span
+                  >
+                {/if}
+              </div>
+            {/if}
+
+            {#if filesExpanded && sessionSummary !== null && sessionSummary.filesModified.length > 0}
+              <div class="mt-2 space-y-0.5">
+                {#each sessionSummary.filesModified as file}
+                  <div class="flex items-center gap-2 py-0.5 text-[11px]">
+                    <span
+                      class="shrink-0 px-1 rounded text-[9px] font-bold {file.tool ===
+                      'Edit'
+                        ? 'bg-attention-muted text-attention-fg'
+                        : 'bg-success-muted text-success-fg'}"
+                    >
+                      {file.tool === "Edit" ? "M" : "A"}
+                    </span>
+                    <span
+                      class="text-text-secondary font-mono truncate"
+                      title={file.path}>{shortPath(file.path)}</span
+                    >
+                  </div>
+                {/each}
+              </div>
+            {/if}
+
+            {#if tasksExpanded && sessionSummary !== null && sessionSummary.tasks.length > 0}
+              <div class="mt-2 space-y-0.5">
+                {#each sessionSummary.tasks as task}
+                  <div class="flex items-center gap-2 py-0.5 text-[11px]">
+                    <span
+                      class="shrink-0 w-2 h-2 rounded-full {getTaskStatusColor(
+                        task.status,
+                      )}"
+                    ></span>
+                    <span class="text-text-primary truncate"
+                      >{task.subject}</span
+                    >
+                    <span class="text-text-tertiary shrink-0"
+                      >{task.status}</span
+                    >
+                  </div>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Unified transcript view for all display modes -->
+        {#if contextId !== null && targetCliSessionId.length > 0}
+          <SessionTranscriptInline
+            sessionId={targetCliSessionId}
+            {contextId}
+            autoRefreshMs={isRunning || isRunningCurrentConversation ? 1500 : 0}
+            followLatest={isRunning || isRunningCurrentConversation}
+            optimisticUserMessage={isRunning || isRunningCurrentConversation
+              ? (nextQueuedPromptInCurrentConversation ??
+                (runningSession !== null && runningSession !== undefined
+                  ? runningSession.prompt
+                  : undefined))
+              : undefined}
+            optimisticAssistantMessage={(isRunning ||
+              isRunningCurrentConversation) &&
+            runningSession !== null &&
+            runningSession !== undefined
+              ? runningSession.lastAssistantMessage
+              : undefined}
+          />
+        {/if}
+      </div>
     {/if}
   </div>
 {/if}

@@ -82,7 +82,7 @@
   const DRAFT_STORAGE_KEY = "qraftbox-ai-prompt-drafts";
   const DRAFT_PREVIEW_LEN = 50;
   const MAX_ATTACHMENT_COUNT = 8;
-  const MAX_ATTACHMENT_SIZE_BYTES = 512 * 1024;
+  const MAX_ATTACHMENT_SIZE_BYTES = 100 * 1024 * 1024;
   const UPLOAD_REF_PREFIX = "upload/";
   const TEXT_FILE_EXTENSIONS = new Set([
     "txt",
@@ -153,6 +153,8 @@
   let fileInputRef: HTMLInputElement | null = $state(null);
   let uploadError = $state<string | null>(null);
   let isDraggingFiles = $state(false);
+  let draftBtnRef: HTMLButtonElement | null = $state(null);
+  let draftDropdownStyle = $state("");
 
   function detectIphone(): boolean {
     const ua = navigator.userAgent;
@@ -304,6 +306,22 @@
     const top = Math.max(8, rect.top - popupMaxHeight - 8);
     const left = Math.min(rect.left, window.innerWidth - popupWidth - 8);
     sessionPopupStyle = `position:fixed;top:${top}px;left:${Math.max(8, left)}px;width:${popupWidth}px;max-height:${popupMaxHeight}px;`;
+  }
+
+  function computeDraftDropdownPosition(): void {
+    if (draftBtnRef === null) {
+      draftDropdownStyle = "";
+      return;
+    }
+    const rect = draftBtnRef.getBoundingClientRect();
+    const popupWidth = 256;
+    const popupMaxHeight = 288;
+    const bottom = window.innerHeight - rect.top + 4;
+    const left = Math.min(
+      rect.right - popupWidth,
+      window.innerWidth - popupWidth - 8,
+    );
+    draftDropdownStyle = `position:fixed;bottom:${bottom}px;left:${Math.max(8, left)}px;width:${popupWidth}px;max-height:${popupMaxHeight}px;`;
   }
 
   function toggleSessionPopup(): void {
@@ -473,7 +491,7 @@
     }
 
     if (oversizedFiles.length > 0) {
-      uploadError = `Some files were skipped (max ${Math.floor(MAX_ATTACHMENT_SIZE_BYTES / 1024)} KB each): ${oversizedFiles.join(", ")}`;
+      uploadError = `Some files were skipped (max ${Math.floor(MAX_ATTACHMENT_SIZE_BYTES / (1024 * 1024))} MB each): ${oversizedFiles.join(", ")}`;
       return;
     }
     if (files.length > remainingSlots) {
@@ -636,6 +654,9 @@
    */
   function toggleDraftDropdown(): void {
     showDraftDropdown = !showDraftDropdown;
+    if (showDraftDropdown) {
+      computeDraftDropdownPosition();
+    }
   }
 
   /**
@@ -728,7 +749,7 @@
 
 <div
   class="ai-prompt-panel bg-bg-secondary border-t border-border-default
-         flex-1 min-h-0 flex flex-col"
+         {isIphone ? 'shrink-0' : 'flex-1 min-h-0'} flex flex-col"
   role="region"
   aria-label="AI Prompt Panel"
 >
@@ -922,11 +943,15 @@
     </div>
   </div>
 
-  <div class="flex-1 min-h-0 p-4 flex flex-col overflow-hidden">
+  <div
+    class="{isIphone
+      ? 'shrink-0'
+      : 'flex-1 min-h-0'} p-4 flex flex-col overflow-hidden"
+  >
     <!-- Input area -->
-    <div class="flex-1 flex gap-3 min-h-0">
+    <div class="{isIphone ? 'shrink-0' : 'flex-1 min-h-0'} flex gap-3">
       <!-- Prompt input -->
-      <div class="flex-1 relative flex flex-col min-w-0">
+      <div class="flex-1 relative flex flex-col min-w-0 min-h-0">
         <textarea
           bind:this={textareaRef}
           bind:value={prompt}
@@ -938,7 +963,7 @@
           ondrop={handleFileDrop}
           use:setTextareaRef
           placeholder="Ask AI about your code... (Use @ to reference files)"
-          class="flex-1 w-full px-3 py-2
+          class="{isIphone ? 'h-20' : 'flex-1'} w-full px-3 py-2
                    bg-bg-primary text-text-primary text-sm
                    border border-border-default rounded
                    placeholder:text-text-tertiary
@@ -1046,6 +1071,7 @@
         <!-- Draft button -->
         <div class="draft-button-container relative">
           <button
+            bind:this={draftBtnRef}
             type="button"
             onclick={toggleDraftDropdown}
             class="{expandedDraftButtonClass}
@@ -1063,9 +1089,9 @@
 
           {#if showDraftDropdown}
             <div
-              class="absolute bottom-full right-0 mb-1 w-64
-                       bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50
-                       max-h-72 flex flex-col"
+              class="bg-bg-secondary border border-border-default rounded-lg shadow-lg z-50
+                       flex flex-col"
+              style={draftDropdownStyle}
             >
               <!-- Save Draft -->
               <button

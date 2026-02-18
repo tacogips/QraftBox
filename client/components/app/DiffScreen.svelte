@@ -23,6 +23,13 @@
   // Minimum space reserved for file viewer + stats bar + drag handle
   const FILE_VIEWER_MIN_HEIGHT = 48;
 
+  // AI prompt panel resize constants
+  const AI_PROMPT_HEIGHT_KEY = "qraftbox-ai-prompt-height";
+  const AI_PROMPT_MIN_HEIGHT = 100;
+  const AI_PROMPT_DEFAULT_HEIGHT = 200;
+  // Minimum space reserved for CurrentSessionPanel within bottom section
+  const CURRENT_SESSION_MIN_HEIGHT = 60;
+
   function loadAiPanelHeight(): number {
     try {
       const stored = localStorage.getItem(AI_PANEL_HEIGHT_KEY);
@@ -38,7 +45,25 @@
     return AI_PANEL_DEFAULT_HEIGHT;
   }
 
+  function loadAiPromptHeight(): number {
+    try {
+      const stored = localStorage.getItem(AI_PROMPT_HEIGHT_KEY);
+      if (stored !== null) {
+        const val = parseInt(stored, 10);
+        if (!isNaN(val) && val >= AI_PROMPT_MIN_HEIGHT) {
+          return val;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return AI_PROMPT_DEFAULT_HEIGHT;
+  }
+
   let aiPanelHeight = $state(loadAiPanelHeight());
+  let aiPromptHeight = $state(loadAiPromptHeight());
+  let aiPromptCollapsed = $state(false);
+  let aiSessionCollapsed = $state(false);
   let contentColumnRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockHeight = $state(0);
@@ -212,6 +237,37 @@
     window.addEventListener("mouseup", onMouseUp);
   }
 
+  function handlePromptResizeMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    const startY = event.clientY;
+    const startPromptHeight = aiPromptHeight;
+    // Max prompt height: leave minimum space for CurrentSessionPanel
+    const maxPromptHeight = aiPanelHeight - CURRENT_SESSION_MIN_HEIGHT;
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    function onMouseMove(mouseEvent: MouseEvent): void {
+      // Dragging up (startY > mouseEvent.clientY) increases prompt height
+      const deltaY = startY - mouseEvent.clientY;
+      aiPromptHeight = Math.min(
+        maxPromptHeight,
+        Math.max(AI_PROMPT_MIN_HEIGHT, startPromptHeight + deltaY),
+      );
+    }
+
+    function onMouseUp(): void {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      localStorage.setItem(AI_PROMPT_HEIGHT_KEY, String(aiPromptHeight));
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    }
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }
+
   type FileContent = {
     path: string;
     content: string;
@@ -333,7 +389,6 @@
     onReloadFileTree: () => void;
   } = $props();
 
-  let sessionExpandTrigger = $state(0);
   let aiModelProfiles = $state<ModelProfile[]>([]);
   let selectedAiModelProfileId = $state<string | undefined>(undefined);
 
@@ -361,7 +416,6 @@
     prompt: string,
     immediate: boolean,
   ): void {
-    sessionExpandTrigger++;
     void onSubmitPrompt(prompt, immediate, {
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
@@ -710,64 +764,167 @@
         </div>
       </div>
 
-      <!-- Drag handle to resize AI panel -->
+      <!-- Toggle button + drag handle to resize AI panel (current session) -->
       <div
-        class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
-               group hover:bg-accent-muted/40 transition-colors"
-        onmousedown={handleResizeMouseDown}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize AI panel"
+        class="shrink-0 flex items-center border-t border-border-default bg-bg-secondary"
       >
+        <button
+          type="button"
+          class="shrink-0 w-7 h-5 flex items-center justify-center
+                 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary active:bg-bg-tertiary
+                 transition-colors cursor-pointer"
+          onclick={() => {
+            aiSessionCollapsed = !aiSessionCollapsed;
+          }}
+          aria-label={aiSessionCollapsed
+            ? "Expand session panel"
+            : "Collapse session panel"}
+          title={aiSessionCollapsed
+            ? "Expand session panel"
+            : "Collapse session panel"}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            class="transition-transform duration-150"
+            style:transform={aiSessionCollapsed
+              ? "rotate(180deg)"
+              : "rotate(0deg)"}
+          >
+            <path
+              d="M4 6l4 4 4-4"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </button>
         <div
-          class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-        ></div>
+          class="flex-1 h-5 cursor-row-resize flex items-center justify-center
+                 group hover:bg-accent-muted/40 transition-colors"
+          onmousedown={handleResizeMouseDown}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize AI panel"
+        >
+          <div
+            class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+          ></div>
+        </div>
       </div>
 
       <div
-        class="{isPhoneViewport
-          ? 'flex-1'
-          : 'shrink-0'} flex flex-col min-h-0 overflow-hidden"
-        style:height={isPhoneViewport ? "auto" : `${aiPanelHeight}px`}
+        class="shrink-0 flex flex-col min-h-0 overflow-hidden"
+        style:height={isPhoneViewport || aiSessionCollapsed
+          ? "auto"
+          : `${aiPanelHeight}px`}
       >
-        <CurrentSessionPanel
-          {contextId}
-          currentClientSessionId={currentQraftAiSessionId}
-          running={runningSessions}
-          queued={queuedSessions}
-          recentlyCompleted={recentlyCompletedSessions}
-          {pendingPrompts}
-          resumeSessionId={resumeDisplaySessionId}
-          onCancelSession={onCancelActiveSession}
-          {onCancelQueuedPrompt}
-          onResumeSession={onResumeCliSession}
-          expandTrigger={sessionExpandTrigger}
-        />
+        <div
+          class={aiSessionCollapsed
+            ? "shrink-0 h-0 overflow-hidden"
+            : "flex-1 min-h-0 overflow-auto"}
+        >
+          <CurrentSessionPanel
+            {contextId}
+            currentClientSessionId={currentQraftAiSessionId}
+            running={runningSessions}
+            queued={queuedSessions}
+            recentlyCompleted={recentlyCompletedSessions}
+            {pendingPrompts}
+            resumeSessionId={resumeDisplaySessionId}
+            onCancelSession={onCancelActiveSession}
+            {onCancelQueuedPrompt}
+            onResumeSession={onResumeCliSession}
+          />
+        </div>
 
-        <AIPromptPanel
-          {contextId}
-          {projectPath}
-          {queueStatus}
-          {isFirstMessage}
-          changedFiles={changedFilePaths}
-          allFiles={changedFilePaths}
-          modelProfiles={aiModelProfiles}
-          selectedModelProfileId={selectedAiModelProfileId}
-          onSelectModelProfile={(profileId) => {
-            selectedAiModelProfileId = profileId;
-          }}
-          onSubmit={(prompt, immediate, refs, modelProfileId) => {
-            sessionExpandTrigger++;
-            void onSubmitPrompt(prompt, immediate, {
-              primaryFile: undefined,
-              references: refs,
-              diffSummary: undefined,
-              modelProfileId: modelProfileId ?? selectedAiModelProfileId,
-            });
-          }}
-          {onNewSession}
-          onResumeSession={onResumeCliSession}
-        />
+        <!-- Toggle button + drag handle to resize AI prompt panel -->
+        <div
+          class="shrink-0 flex items-center border-t border-border-default bg-bg-secondary"
+        >
+          <button
+            type="button"
+            class="shrink-0 w-7 h-5 flex items-center justify-center
+                   text-text-secondary hover:text-text-primary hover:bg-bg-tertiary active:bg-bg-tertiary
+                   transition-colors cursor-pointer"
+            onclick={() => {
+              aiPromptCollapsed = !aiPromptCollapsed;
+            }}
+            aria-label={aiPromptCollapsed
+              ? "Expand AI prompt"
+              : "Collapse AI prompt"}
+            title={aiPromptCollapsed
+              ? "Expand AI prompt"
+              : "Collapse AI prompt"}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="none"
+              class="transition-transform duration-150"
+              style:transform={aiPromptCollapsed
+                ? "rotate(180deg)"
+                : "rotate(0deg)"}
+            >
+              <path
+                d="M4 6l4 4 4-4"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+          <div
+            class="flex-1 h-5 cursor-row-resize flex items-center justify-center
+                   group hover:bg-accent-muted/40 transition-colors"
+            onmousedown={handlePromptResizeMouseDown}
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize AI prompt panel"
+          >
+            <div
+              class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+            ></div>
+          </div>
+        </div>
+
+        <div
+          class="shrink-0 overflow-hidden min-h-0 flex flex-col"
+          style:height={aiPromptCollapsed
+            ? "0px"
+            : isPhoneViewport
+              ? "auto"
+              : `${aiPromptHeight}px`}
+        >
+          <AIPromptPanel
+            {contextId}
+            {projectPath}
+            {queueStatus}
+            {isFirstMessage}
+            changedFiles={changedFilePaths}
+            allFiles={changedFilePaths}
+            modelProfiles={aiModelProfiles}
+            selectedModelProfileId={selectedAiModelProfileId}
+            onSelectModelProfile={(profileId) => {
+              selectedAiModelProfileId = profileId;
+            }}
+            onSubmit={(prompt, immediate, refs, modelProfileId) => {
+              void onSubmitPrompt(prompt, immediate, {
+                primaryFile: undefined,
+                references: refs,
+                diffSummary: undefined,
+                modelProfileId: modelProfileId ?? selectedAiModelProfileId,
+              });
+            }}
+            {onNewSession}
+            onResumeSession={onResumeCliSession}
+          />
+        </div>
       </div>
     </div>
   </div>
