@@ -138,6 +138,16 @@
       longPressTimer = undefined;
     }
   }
+
+  /**
+   * Keyboard activation for accessibility parity with click
+   */
+  function handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleClick(event);
+    }
+  }
 </script>
 
 <div
@@ -145,10 +155,11 @@
     ? 'ring-2 ring-accent-emphasis ring-inset'
     : ''}"
   onclick={handleClick}
+  onkeydown={handleKeyDown}
   onpointerdown={handlePointerDown}
   onpointerup={handlePointerUp}
   onpointerleave={handlePointerLeave}
-  role="button"
+  role="option"
   tabindex="0"
   aria-label="Line {line.lineNumber}: {line.content}"
   aria-selected={selected}

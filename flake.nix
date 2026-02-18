@@ -42,6 +42,7 @@
           gnused
           gh
           go-task
+          nodePackages.pm2
 
           # LLM agents
           llm-agents.packages.${system}.agent-browser

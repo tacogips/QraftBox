@@ -95,6 +95,7 @@
    * Session IDs with expanded file lists
    */
   let expandedSummaryFiles = $state<Set<string>>(new Set());
+  let copiedSessionId = $state<string | null>(null);
 
   /**
    * Reactive snapshots of store state.
@@ -336,6 +337,31 @@
       return `${(count / 1_000).toFixed(1)}k`;
     }
     return count.toString();
+  }
+
+  /**
+   * Compact session ID for inline display
+   */
+  function compactSessionId(sessionId: string): string {
+    if (sessionId.length <= 16) return sessionId;
+    return `${sessionId.slice(0, 8)}...${sessionId.slice(-4)}`;
+  }
+
+  /**
+   * Copy session ID to clipboard
+   */
+  async function copySessionId(sessionId: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(sessionId);
+      copiedSessionId = sessionId;
+      setTimeout(() => {
+        if (copiedSessionId === sessionId) {
+          copiedSessionId = null;
+        }
+      }, 1500);
+    } catch {
+      // Clipboard API may be unavailable
+    }
   }
 
   /**
@@ -641,6 +667,21 @@
                     <span class="text-xs text-text-tertiary"
                       >Loading summary...</span
                     >
+                    <span class="text-text-tertiary text-xs">|</span>
+                    <span
+                      class="text-[10px] font-mono text-text-tertiary"
+                      title={itemId}
+                    >
+                      sid:{compactSessionId(itemId)}
+                    </span>
+                    <button
+                      type="button"
+                      onclick={() => copySessionId(itemId)}
+                      class="px-1.5 py-0.5 text-[10px] rounded border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                      title="Copy session ID"
+                    >
+                      {copiedSessionId === itemId ? "Copied" : "Copy"}
+                    </button>
                   </div>
                 {:else if summary !== undefined}
                   <div
@@ -740,6 +781,20 @@
                       </div>
                     {/if}
 
+                    <div
+                      class="flex items-center gap-2 mt-1 text-[10px] font-mono text-text-tertiary"
+                    >
+                      <span title={itemId}>sid:{compactSessionId(itemId)}</span>
+                      <button
+                        type="button"
+                        onclick={() => copySessionId(itemId)}
+                        class="px-1.5 py-0.5 text-[10px] rounded border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                        title="Copy session ID"
+                      >
+                        {copiedSessionId === itemId ? "Copied" : "Copy"}
+                      </button>
+                    </div>
+
                     <!-- Expandable file list -->
                     {#if expandedSummaryFiles.has(itemId) && summary.filesModified.length > 0}
                       <div class="mt-2 space-y-0.5">
@@ -800,6 +855,20 @@
                       class="shrink-0 px-2.5 py-0.5 text-xs font-medium rounded bg-bg-tertiary hover:bg-bg-hover text-text-primary border border-border-default"
                     >
                       Resume
+                    </button>
+                    <span
+                      class="text-[10px] font-mono text-text-tertiary"
+                      title={itemId}
+                    >
+                      sid:{compactSessionId(itemId)}
+                    </span>
+                    <button
+                      type="button"
+                      onclick={() => copySessionId(itemId)}
+                      class="px-1.5 py-0.5 text-[10px] rounded border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors"
+                      title="Copy session ID"
+                    >
+                      {copiedSessionId === itemId ? "Copied" : "Copy"}
                     </button>
                   </div>
                 {/if}

@@ -40,6 +40,11 @@
 
   let aiPanelHeight = $state(loadAiPanelHeight());
   let contentColumnRef: HTMLDivElement | null = $state(null);
+  let mobileBottomDockRef: HTMLDivElement | null = $state(null);
+  let mobileBottomDockHeight = $state(0);
+  let mobileViewportBottomOffset = $state(0);
+  let mobileSafariFallbackOffset = $state(0);
+  let mobileDockTop = $state<number | null>(null);
   let isIphone = $state(false);
   let isPhoneViewport = $state(false);
 
@@ -55,6 +60,18 @@
 
   function detectPhoneViewport(): boolean {
     return window.innerWidth <= 480;
+  }
+
+  function detectMobileDevice(): boolean {
+    const ua = navigator.userAgent;
+    return /iPhone|iPod|Android/i.test(ua);
+  }
+
+  function detectIphoneSafari(): boolean {
+    const ua = navigator.userAgent;
+    const isSafari =
+      /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+    return detectIphone() && isSafari;
   }
 
   $effect(() => {
@@ -75,6 +92,93 @@
     if (isIphone && selectedHasDiff && effectiveViewMode === "side-by-side") {
       onSetViewMode("inline");
     }
+  });
+
+  $effect(() => {
+    if (!isPhoneViewport || mobileBottomDockRef === null) {
+      mobileBottomDockHeight = 0;
+      return;
+    }
+
+    const updateHeight = (): void => {
+      mobileBottomDockHeight = mobileBottomDockRef?.offsetHeight ?? 0;
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(mobileBottomDockRef);
+    window.addEventListener("resize", updateHeight);
+    window.addEventListener("orientationchange", updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateHeight);
+      window.removeEventListener("orientationchange", updateHeight);
+    };
+  });
+
+  $effect(() => {
+    if (!isPhoneViewport) {
+      mobileViewportBottomOffset = 0;
+      mobileSafariFallbackOffset = 0;
+      mobileDockTop = null;
+      return;
+    }
+
+    const vv = window.visualViewport;
+
+    const computeBottomOffset = (): void => {
+      const occludedBottom =
+        vv === undefined
+          ? 0
+          : Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
+      mobileViewportBottomOffset = Math.round(occludedBottom);
+
+      const dockHeight =
+        mobileBottomDockRef?.offsetHeight ?? mobileBottomDockHeight;
+      const keyboardOpen =
+        vv !== undefined && vv.height < window.innerHeight * 0.8;
+
+      if (isIphone && vv !== undefined && !keyboardOpen) {
+        const nextTop = Math.max(0, vv.offsetTop + vv.height - dockHeight);
+        mobileDockTop = Math.round(nextTop);
+      } else {
+        mobileDockTop = null;
+      }
+
+      if (!detectMobileDevice() || !detectIphoneSafari()) {
+        mobileSafariFallbackOffset = 0;
+        return;
+      }
+
+      const isStandalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        // iOS Safari standalone mode.
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+
+      // Avoid forcing offset while keyboard is open.
+      if (isStandalone || keyboardOpen) {
+        mobileSafariFallbackOffset = 0;
+        return;
+      }
+
+      // Safari can still overlay bottom toolbar without reporting viewport occlusion.
+      // Keep the dock above that UI with a fixed fallback.
+      mobileSafariFallbackOffset = occludedBottom > 0 ? 0 : 52;
+    };
+
+    computeBottomOffset();
+    window.addEventListener("resize", computeBottomOffset);
+    window.addEventListener("orientationchange", computeBottomOffset);
+    vv?.addEventListener("resize", computeBottomOffset);
+    vv?.addEventListener("scroll", computeBottomOffset);
+
+    return () => {
+      window.removeEventListener("resize", computeBottomOffset);
+      window.removeEventListener("orientationchange", computeBottomOffset);
+      vv?.removeEventListener("resize", computeBottomOffset);
+      vv?.removeEventListener("scroll", computeBottomOffset);
+    };
   });
 
   function handleResizeMouseDown(event: MouseEvent): void {
@@ -158,6 +262,7 @@
     onShowAllFilesChange,
     onDirectoryExpand,
     onLoadFullTree,
+    onCollapseSidebar,
     onNarrowSidebar,
     onWidenSidebar,
     onSetViewMode,
@@ -213,6 +318,7 @@
     onShowAllFilesChange: (value: boolean) => void;
     onDirectoryExpand: (dirPath: string) => Promise<void>;
     onLoadFullTree: () => Promise<FileNode | undefined>;
+    onCollapseSidebar: () => void;
     onNarrowSidebar: () => void;
     onWidenSidebar: () => void;
     onSetViewMode: (mode: ViewMode) => void;
@@ -266,6 +372,13 @@
       // resumeSessionId omitted: inline prompts create a new session
     });
   }
+
+  function handleTreeFileSelect(path: string): void {
+    onFileSelect(path);
+    if ((detectPhoneViewport() || detectMobileDevice()) && !sidebarCollapsed) {
+      onCollapseSidebar();
+    }
+  }
 </script>
 
 <div class="relative flex flex-1 min-h-0 overflow-hidden">
@@ -292,7 +405,7 @@
             tree={fileTree}
             mode={fileTreeMode}
             {selectedPath}
-            {onFileSelect}
+            onFileSelect={handleTreeFileSelect}
             changedCount={diffFiles.length}
             {contextId}
             {showIgnored}
@@ -336,9 +449,14 @@
     class="flex flex-col flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
     style:transform={isPhoneViewport && !sidebarCollapsed
       ? `translateX(${sidebarWidth}px)`
-      : "translateX(0px)"}
+      : undefined}
   >
-    <main class="flex-1 min-h-0 overflow-auto bg-bg-primary">
+    <main
+      class="flex-1 min-h-0 overflow-auto bg-bg-primary"
+      style:padding-bottom={isPhoneViewport
+        ? `${mobileBottomDockHeight}px`
+        : undefined}
+    >
       {#if loading}
         <div class="p-8 text-center text-text-secondary">Loading diff...</div>
       {:else if error !== null}
@@ -379,6 +497,8 @@
           rawFileUrl={fileContent.ctxId !== undefined
             ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
             : undefined}
+          onNavigatePrev={navigatePrev}
+          onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else if fileContentLoading}
@@ -396,6 +516,8 @@
           rawFileUrl={fileContent.ctxId !== undefined
             ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
             : undefined}
+          onNavigatePrev={navigatePrev}
+          onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}
         />
       {:else}
@@ -406,245 +528,268 @@
     </main>
 
     <div
-      class="shrink-0 h-8 border-t border-border-default flex items-center px-4 bg-bg-secondary text-xs text-text-secondary gap-4"
+      bind:this={mobileBottomDockRef}
+      class={isPhoneViewport
+        ? "fixed left-0 right-0 bottom-0 z-40 bg-bg-secondary"
+        : "shrink-0 flex flex-col min-h-0"}
+      style:bottom={isPhoneViewport
+        ? mobileDockTop !== null
+          ? "auto"
+          : `${mobileViewportBottomOffset + mobileSafariFallbackOffset}px`
+        : undefined}
+      style:top={isPhoneViewport && mobileDockTop !== null
+        ? `${mobileDockTop}px`
+        : undefined}
+      style:padding-bottom={isPhoneViewport
+        ? "env(safe-area-inset-bottom, 0px)"
+        : undefined}
     >
-      <span>
-        {stats.totalFiles} file{stats.totalFiles !== 1 ? "s" : ""} changed
-      </span>
-      <span class="text-success-fg">+{stats.additions}</span>
-      <span class="text-danger-fg">-{stats.deletions}</span>
       <div
-        class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
+        class="shrink-0 h-8 border-t border-border-default flex items-center px-4 bg-bg-secondary text-xs text-text-secondary gap-4"
       >
-        <button
-          type="button"
-          class="p-1 transition-colors
-                 {effectiveViewMode === 'full-file'
-            ? 'bg-bg-emphasis text-text-on-emphasis'
-            : 'text-text-secondary hover:bg-bg-hover'}"
-          onclick={() => onSetViewMode("full-file")}
-          title="Full File"
+        <span>
+          {stats.totalFiles} file{stats.totalFiles !== 1 ? "s" : ""} changed
+        </span>
+        <span class="text-success-fg">+{stats.additions}</span>
+        <span class="text-danger-fg">-{stats.deletions}</span>
+        <div
+          class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-            <line
-              x1="5.5"
-              y1="6"
-              x2="11"
-              y2="6"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-            <line
-              x1="5.5"
-              y1="8.5"
-              x2="11"
-              y2="8.5"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-            <line
-              x1="5.5"
-              y1="11"
-              x2="9"
-              y2="11"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-          </svg>
-        </button>
+          <button
+            type="button"
+            class="p-1 transition-colors
+                   {effectiveViewMode === 'full-file'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => onSetViewMode("full-file")}
+            title="Full File"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <line
+                x1="5.5"
+                y1="6"
+                x2="11"
+                y2="6"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+              <line
+                x1="5.5"
+                y1="8.5"
+                x2="11"
+                y2="8.5"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+              <line
+                x1="5.5"
+                y1="11"
+                x2="9"
+                y2="11"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+            </svg>
+          </button>
 
-        {#if !isIphone}
+          {#if !isIphone}
+            <button
+              type="button"
+              class="p-1 border-l border-border-default transition-colors
+                     {!selectedHasDiff
+                ? 'text-text-disabled cursor-not-allowed opacity-40'
+                : effectiveViewMode === 'side-by-side'
+                  ? 'bg-bg-emphasis text-text-on-emphasis'
+                  : 'text-text-secondary hover:bg-bg-hover'}"
+              onclick={() => {
+                if (selectedHasDiff) onSetViewMode("side-by-side");
+              }}
+              disabled={!selectedHasDiff}
+              title="Side by Side"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <rect
+                  x="1"
+                  y="2"
+                  width="6"
+                  height="12"
+                  rx="1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+                <rect
+                  x="9"
+                  y="2"
+                  width="6"
+                  height="12"
+                  rx="1"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                />
+              </svg>
+            </button>
+          {/if}
+
           <button
             type="button"
             class="p-1 border-l border-border-default transition-colors
                    {!selectedHasDiff
               ? 'text-text-disabled cursor-not-allowed opacity-40'
-              : effectiveViewMode === 'side-by-side'
+              : effectiveViewMode === 'inline'
                 ? 'bg-bg-emphasis text-text-on-emphasis'
                 : 'text-text-secondary hover:bg-bg-hover'}"
             onclick={() => {
-              if (selectedHasDiff) onSetViewMode("side-by-side");
+              if (selectedHasDiff) onSetViewMode("inline");
             }}
             disabled={!selectedHasDiff}
-            title="Side by Side"
+            title={isIphone ? "Stack" : "Inline"}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <rect
                 x="1"
                 y="2"
-                width="6"
+                width="14"
                 height="12"
                 rx="1"
                 stroke="currentColor"
                 stroke-width="1.5"
               />
-              <rect
-                x="9"
-                y="2"
-                width="6"
-                height="12"
-                rx="1"
+              <line
+                x1="4"
+                y1="5.5"
+                x2="12"
+                y2="5.5"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+              <line
+                x1="4"
+                y1="8"
+                x2="12"
+                y2="8"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+              <line
+                x1="4"
+                y1="10.5"
+                x2="10"
+                y2="10.5"
+                stroke="currentColor"
+                stroke-width="1.2"
+              />
+            </svg>
+          </button>
+
+          <button
+            type="button"
+            class="p-1 border-l border-border-default transition-colors
+                   {!selectedHasDiff
+              ? 'text-text-disabled cursor-not-allowed opacity-40'
+              : effectiveViewMode === 'current-state'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => {
+              if (selectedHasDiff) onSetViewMode("current-state");
+            }}
+            disabled={!selectedHasDiff}
+            title="Current"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
                 stroke="currentColor"
                 stroke-width="1.5"
               />
             </svg>
           </button>
-        {/if}
-
-        <button
-          type="button"
-          class="p-1 border-l border-border-default transition-colors
-                 {!selectedHasDiff
-            ? 'text-text-disabled cursor-not-allowed opacity-40'
-            : effectiveViewMode === 'inline'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-          onclick={() => {
-            if (selectedHasDiff) onSetViewMode("inline");
-          }}
-          disabled={!selectedHasDiff}
-          title={isIphone ? "Stack" : "Inline"}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <rect
-              x="1"
-              y="2"
-              width="14"
-              height="12"
-              rx="1"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-            <line
-              x1="4"
-              y1="5.5"
-              x2="12"
-              y2="5.5"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-            <line
-              x1="4"
-              y1="8"
-              x2="12"
-              y2="8"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-            <line
-              x1="4"
-              y1="10.5"
-              x2="10"
-              y2="10.5"
-              stroke="currentColor"
-              stroke-width="1.2"
-            />
-          </svg>
-        </button>
-
-        <button
-          type="button"
-          class="p-1 border-l border-border-default transition-colors
-                 {!selectedHasDiff
-            ? 'text-text-disabled cursor-not-allowed opacity-40'
-            : effectiveViewMode === 'current-state'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-          onclick={() => {
-            if (selectedHasDiff) onSetViewMode("current-state");
-          }}
-          disabled={!selectedHasDiff}
-          title="Current"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
-              stroke="currentColor"
-              stroke-width="1.5"
-            />
-          </svg>
-        </button>
+        </div>
       </div>
-    </div>
 
-    <!-- Drag handle to resize AI panel (only visible when expanded) -->
-    {#if !aiPanelCollapsed}
-      <div
-        class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
-               group hover:bg-accent-muted/40 transition-colors"
-        onmousedown={handleResizeMouseDown}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label="Resize AI panel"
-      >
+      <!-- Drag handle to resize AI panel (only visible when expanded) -->
+      {#if !aiPanelCollapsed}
         <div
-          class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-        ></div>
-      </div>
-    {/if}
-
-    <div
-      class="shrink-0 flex flex-col min-h-0"
-      style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
-    >
-      {#if !aiPanelCollapsed && aiModelProfiles.length > 0}
-        <div class="px-4 py-2 border-b border-border-default bg-bg-secondary">
-          <label class="text-xs text-text-tertiary uppercase tracking-wide">
-            AI Ask Model
-            <select
-              class="ml-2 rounded border border-border-default bg-bg-primary px-2 py-1 text-sm text-text-primary"
-              bind:value={selectedAiModelProfileId}
-            >
-              {#each aiModelProfiles as profile (profile.id)}
-                <option value={profile.id}
-                  >{profile.name} ({profile.vendor}/{profile.model})</option
-                >
-              {/each}
-            </select>
-          </label>
+          class="shrink-0 h-1.5 cursor-row-resize flex items-center justify-center
+                 group hover:bg-accent-muted/40 transition-colors"
+          onmousedown={handleResizeMouseDown}
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize AI panel"
+        >
+          <div
+            class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+          ></div>
         </div>
       {/if}
 
-      <CurrentSessionPanel
-        {contextId}
-        currentClientSessionId={currentQraftAiSessionId}
-        running={runningSessions}
-        queued={queuedSessions}
-        recentlyCompleted={recentlyCompletedSessions}
-        {pendingPrompts}
-        resumeSessionId={resumeDisplaySessionId}
-        onCancelSession={onCancelActiveSession}
-        {onCancelQueuedPrompt}
-        onResumeSession={onResumeCliSession}
-        expandTrigger={sessionExpandTrigger}
-      />
+      <div
+        class="shrink-0 flex flex-col min-h-0"
+        style:height={aiPanelCollapsed ? "auto" : `${aiPanelHeight}px`}
+      >
+        {#if !aiPanelCollapsed && aiModelProfiles.length > 0}
+          <div class="px-4 py-2 border-b border-border-default bg-bg-secondary">
+            <label class="text-xs text-text-tertiary uppercase tracking-wide">
+              AI Ask Model
+              <select
+                class="ml-2 rounded border border-border-default bg-bg-primary px-2 py-1 text-sm text-text-primary"
+                bind:value={selectedAiModelProfileId}
+              >
+                {#each aiModelProfiles as profile (profile.id)}
+                  <option value={profile.id}
+                    >{profile.name} ({profile.vendor}/{profile.model})</option
+                  >
+                {/each}
+              </select>
+            </label>
+          </div>
+        {/if}
 
-      <AIPromptPanel
-        {contextId}
-        {projectPath}
-        collapsed={aiPanelCollapsed}
-        {queueStatus}
-        changedFiles={changedFilePaths}
-        allFiles={changedFilePaths}
-        onSubmit={(prompt, immediate, refs) => {
-          sessionExpandTrigger++;
-          void onSubmitPrompt(prompt, immediate, {
-            primaryFile: undefined,
-            references: refs,
-            diffSummary: undefined,
-            modelProfileId: selectedAiModelProfileId,
-            // TODO: pass resumeSessionId to continue current session
-          });
-        }}
-        onToggle={onToggleAiPanel}
-        {onNewSession}
-        onResumeSession={onResumeCliSession}
-      />
+        <CurrentSessionPanel
+          {contextId}
+          currentClientSessionId={currentQraftAiSessionId}
+          running={runningSessions}
+          queued={queuedSessions}
+          recentlyCompleted={recentlyCompletedSessions}
+          {pendingPrompts}
+          resumeSessionId={resumeDisplaySessionId}
+          onCancelSession={onCancelActiveSession}
+          {onCancelQueuedPrompt}
+          onResumeSession={onResumeCliSession}
+          expandTrigger={sessionExpandTrigger}
+        />
+
+        <AIPromptPanel
+          {contextId}
+          {projectPath}
+          collapsed={aiPanelCollapsed}
+          {queueStatus}
+          changedFiles={changedFilePaths}
+          allFiles={changedFilePaths}
+          modelProfiles={aiModelProfiles}
+          selectedModelProfileId={selectedAiModelProfileId}
+          onSelectModelProfile={(profileId) => {
+            selectedAiModelProfileId = profileId;
+          }}
+          onSubmit={(prompt, immediate, refs, modelProfileId) => {
+            sessionExpandTrigger++;
+            void onSubmitPrompt(prompt, immediate, {
+              primaryFile: undefined,
+              references: refs,
+              diffSummary: undefined,
+              modelProfileId: modelProfileId ?? selectedAiModelProfileId,
+              // TODO: pass resumeSessionId to continue current session
+            });
+          }}
+          onToggle={onToggleAiPanel}
+          {onNewSession}
+          onResumeSession={onResumeCliSession}
+        />
+      </div>
     </div>
   </div>
 </div>

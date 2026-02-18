@@ -22,14 +22,20 @@ tasks:
 
   dev:server:
     desc: Run backend server with watch
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
-      - bun run --watch src/main.ts
+      - bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
 
   dev:client:
     desc: Run Vite dev server with HMR
     dir: client
+    vars:
+      PORT: '{{.PORT | default "5173"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
-      - bun run dev
+      - bun run dev -- --host {{.HOST}} --port {{.PORT}}
 
   build:
     desc: Build the project
@@ -40,6 +46,39 @@ tasks:
     desc: Run the application
     cmds:
       - bun run start
+
+  pm2:start:
+    desc: Run QraftBox as a PM2 daemon (Bun interpreter)
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+    cmds:
+      - pm2 start src/main.ts --name qraftbox --interpreter "$(command -v bun)" -- --port {{.PORT}} --host {{.HOST}}
+
+  pm2:restart:
+    desc: Restart PM2-managed QraftBox process
+    cmds:
+      - pm2 restart qraftbox
+
+  pm2:stop:
+    desc: Stop PM2-managed QraftBox process
+    cmds:
+      - pm2 stop qraftbox
+
+  pm2:delete:
+    desc: Remove PM2-managed QraftBox process
+    cmds:
+      - pm2 delete qraftbox
+
+  pm2:logs:
+    desc: Show PM2 logs for QraftBox
+    cmds:
+      - pm2 logs qraftbox
+
+  pm2:status:
+    desc: Show PM2 status for QraftBox
+    cmds:
+      - pm2 status qraftbox
 
   test:
     desc: Run tests with Vitest
@@ -113,13 +152,14 @@ tasks:
     desc: Restart dev server on port 7155 (kill existing, start fresh)
     vars:
       PORT: '{{.PORT | default "7155"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
       - |
         for pid in $(ss -tlnp 2>/dev/null | grep ':{{.PORT}} ' | grep -oP 'pid=\K[0-9]+'); do
           kill "$pid" 2>/dev/null && echo "Killed PID $pid"
         done
         sleep 1
-      - bun run src/main.ts --port {{.PORT}}
+      - bun run src/main.ts --port {{.PORT}} --host {{.HOST}}
 
   ci:
     desc: Run all CI checks

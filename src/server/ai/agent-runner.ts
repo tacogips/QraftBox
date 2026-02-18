@@ -13,6 +13,7 @@ import { createLogger } from "../logger.js";
 import {
   SessionRunner,
   type RunningSession,
+  type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
 
 const logger = createLogger("AgentRunner");
@@ -137,6 +138,7 @@ export interface AgentRunParams {
   readonly prompt: string;
   readonly projectPath: string;
   readonly resumeSessionId?: ClaudeSessionId | undefined;
+  readonly attachments?: readonly AgentSessionAttachment[] | undefined;
   readonly vendor?: "anthropics" | "openai" | undefined;
   readonly model?: string | undefined;
   readonly additionalArgs?: readonly string[] | undefined;
@@ -257,15 +259,22 @@ class ClaudeAgentRunner implements AgentRunner {
         });
 
         // Start or resume session
-        runningSession =
+        const startConfig =
           params.resumeSessionId !== undefined
-            ? await agent.startSession({
+            ? {
                 prompt: params.prompt,
                 resumeSessionId: params.resumeSessionId,
-              })
-            : await agent.startSession({
+              }
+            : {
                 prompt: params.prompt,
-              });
+              };
+
+        runningSession = await agent.startSession({
+          ...startConfig,
+          ...(params.attachments !== undefined && params.attachments.length > 0
+            ? { attachments: [...params.attachments] }
+            : {}),
+        });
 
         if (params.resumeSessionId !== undefined) {
           logger.info("Resuming Claude session", {

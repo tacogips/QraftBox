@@ -20,6 +20,8 @@ import type {
   ClaudeSessionId,
   PromptId,
   WorktreeId,
+  AIAttachment,
+  FileReference,
 } from "../../types/ai";
 import { DEFAULT_AI_CONFIG } from "../../types/ai";
 import { buildPromptWithContext } from "./prompt-builder";
@@ -50,6 +52,7 @@ interface RuntimeSessionHandle {
   prompt: string;
   fullPrompt: string;
   context: AIPromptContext;
+  attachments: readonly AIAttachment[];
   lastAssistantMessage?: string | undefined;
   modelOverride?:
     | {
@@ -66,6 +69,7 @@ interface RuntimeSessionHandle {
 export type BroadcastFn = (event: string, data: unknown) => void;
 
 const SESSION_CANCEL_TIMEOUT_MS = 3000;
+const UPLOAD_REF_PREFIX = "upload/";
 
 /**
  * Generate a deterministic, URL-safe worktree identifier from a project path.
@@ -212,6 +216,73 @@ export function createSessionManager(
   const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
   const pendingClientSessions = new Set<QraftAiSessionId>();
   const runner = agentRunner ?? createAgentRunner(config, toolRegistry);
+
+  function isAttachmentReference(ref: FileReference): boolean {
+    return (
+      ref.attachmentKind !== undefined || ref.path.startsWith(UPLOAD_REF_PREFIX)
+    );
+  }
+
+  function normalizeAttachmentEncoding(
+    encoding: FileReference["encoding"],
+  ): "utf8" | "base64" {
+    return encoding === "base64" ? "base64" : "utf8";
+  }
+
+  function deriveAttachmentFileName(ref: FileReference): string | undefined {
+    if (ref.fileName !== undefined && ref.fileName.length > 0) {
+      return ref.fileName;
+    }
+    if (ref.path.startsWith(UPLOAD_REF_PREFIX)) {
+      const fileName = ref.path.slice(UPLOAD_REF_PREFIX.length).trim();
+      return fileName.length > 0 ? fileName : undefined;
+    }
+    const segments = ref.path.split("/");
+    const fallback = segments[segments.length - 1];
+    return fallback !== undefined && fallback.length > 0 ? fallback : undefined;
+  }
+
+  function splitContextReferences(context: AIPromptContext): {
+    promptContext: AIPromptContext;
+    attachments: readonly AIAttachment[];
+  } {
+    const references: FileReference[] = [];
+    const attachments: AIAttachment[] = [];
+
+    for (const ref of context.references) {
+      if (!isAttachmentReference(ref)) {
+        references.push(ref);
+        continue;
+      }
+
+      if (ref.content !== undefined) {
+        const fileName = deriveAttachmentFileName(ref);
+        attachments.push({
+          content: ref.content,
+          encoding: normalizeAttachmentEncoding(ref.encoding),
+          ...(fileName !== undefined ? { fileName } : {}),
+          ...(ref.mimeType !== undefined ? { mimeType: ref.mimeType } : {}),
+        });
+        continue;
+      }
+
+      if (ref.path.length > 0 && !ref.path.startsWith(UPLOAD_REF_PREFIX)) {
+        attachments.push({
+          path: ref.path,
+          ...(ref.mimeType !== undefined ? { mimeType: ref.mimeType } : {}),
+        });
+        continue;
+      }
+    }
+
+    return {
+      promptContext: {
+        ...context,
+        references,
+      },
+      attachments,
+    };
+  }
 
   function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -577,6 +648,7 @@ export function createSessionManager(
         prompt: handle.fullPrompt,
         projectPath: session.projectPath,
         resumeSessionId: session.currentClaudeSessionId,
+        attachments: handle.attachments,
         vendor: handle.modelOverride?.vendor,
         model: handle.modelOverride?.model,
         additionalArgs:
@@ -696,7 +768,13 @@ export function createSessionManager(
       }
 
       const sessionId = generateSessionId();
-      const fullPrompt = buildPromptWithContext(request);
+      const { promptContext, attachments } = splitContextReferences(
+        request.context,
+      );
+      const fullPrompt = buildPromptWithContext({
+        ...request,
+        context: promptContext,
+      });
 
       // Immediate execution or queue
       if (
@@ -722,6 +800,7 @@ export function createSessionManager(
           prompt: request.prompt,
           fullPrompt,
           context: request.context,
+          attachments,
         };
         runtimeHandles.set(sessionId, handle);
 
@@ -762,6 +841,7 @@ export function createSessionManager(
           prompt: request.prompt,
           fullPrompt,
           context: request.context,
+          attachments,
         };
         runtimeHandles.set(sessionId, handle);
 
@@ -941,6 +1021,8 @@ export function createSessionManager(
           : msg.message;
 
       const promptContext: AIPromptContext = msg.context ?? { references: [] };
+      const { promptContext: normalizedPromptContext, attachments } =
+        splitContextReferences(promptContext);
 
       // Create session row in store with prompt queue fields
       const sessionRow: AiSessionRow = {
@@ -952,6 +1034,10 @@ export function createSessionManager(
         worktreeId,
         message: messageForDisplay,
         clientSessionId,
+        modelProfileId: msg.model_profile_id,
+        modelVendor: msg.model_vendor,
+        modelName: msg.model_name,
+        modelArguments: msg.model_arguments,
       };
 
       store.insert(sessionRow);
@@ -963,7 +1049,7 @@ export function createSessionManager(
         prompt: msg.message,
         fullPrompt: buildPromptWithContext({
           prompt: msg.message,
-          context: promptContext,
+          context: normalizedPromptContext,
           options: {
             projectPath,
             sessionMode: "new",
@@ -971,6 +1057,7 @@ export function createSessionManager(
           },
         }),
         context: promptContext,
+        attachments,
         modelOverride:
           msg.model_vendor !== undefined && msg.model_name !== undefined
             ? {

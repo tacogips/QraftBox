@@ -171,6 +171,27 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 qraftbox --open
 ```
 
+### Run as a Daemon with PM2 (Bun)
+
+Based on Bun's PM2 guide: https://bun.com/docs/guides/ecosystem/pm2
+
+```bash
+# Start QraftBox in daemon mode via PM2
+task pm2:start
+
+# Start on a custom port/host
+task pm2:start PORT=7155 HOST=127.0.0.1
+
+# Check status and logs
+task pm2:status
+task pm2:logs
+
+# Stop / restart / remove the process
+task pm2:stop
+task pm2:restart
+task pm2:delete
+```
+
 ### All Options
 
 ```
@@ -442,6 +463,27 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 
 # 起動時にブラウザを自動で開く
 qraftbox --open
+```
+
+### PM2でデーモン化して実行する（Bun）
+
+Bun公式のPM2ガイドに準拠: https://bun.com/docs/guides/ecosystem/pm2
+
+```bash
+# PM2でQraftBoxをデーモン起動
+task pm2:start
+
+# ポート/ホストを指定して起動
+task pm2:start PORT=7155 HOST=127.0.0.1
+
+# 状態確認とログ確認
+task pm2:status
+task pm2:logs
+
+# 停止 / 再起動 / 登録削除
+task pm2:stop
+task pm2:restart
+task pm2:delete
 ```
 
 ### 全オプション一覧

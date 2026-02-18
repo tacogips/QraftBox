@@ -202,9 +202,13 @@ export async function resolveFileReferences(
  */
 function formatFileReference(ref: FileReference): string {
   const lines: string[] = [];
+  const isAttachment = ref.attachmentKind !== undefined;
+  const attachmentKind = ref.attachmentKind ?? "text";
 
   // Header with path and optional line range
-  if (ref.startLine !== undefined && ref.endLine !== undefined) {
+  if (isAttachment) {
+    lines.push(`### Attachment: ${ref.path}`);
+  } else if (ref.startLine !== undefined && ref.endLine !== undefined) {
     if (ref.startLine === ref.endLine) {
       lines.push(`### File: ${ref.path} (Line ${ref.startLine})`);
     } else {
@@ -216,9 +220,25 @@ function formatFileReference(ref: FileReference): string {
     lines.push(`### File: ${ref.path}`);
   }
 
+  if (isAttachment) {
+    lines.push(`- Kind: ${attachmentKind}`);
+    if (ref.fileName !== undefined && ref.fileName.length > 0) {
+      lines.push(`- File Name: ${ref.fileName}`);
+    }
+    if (ref.mimeType !== undefined && ref.mimeType.length > 0) {
+      lines.push(`- MIME Type: ${ref.mimeType}`);
+    }
+    if (ref.encoding !== undefined) {
+      lines.push(`- Encoding: ${ref.encoding}`);
+    }
+    lines.push("");
+  }
+
   // Content
   if (ref.content !== undefined && ref.content.length > 0) {
-    lines.push("```");
+    const fenceLabel =
+      isAttachment && ref.encoding === "base64" ? "base64" : "";
+    lines.push(`\`\`\`${fenceLabel}`);
     lines.push(ref.content);
     lines.push("```");
   }
