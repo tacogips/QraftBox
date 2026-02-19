@@ -1,8 +1,8 @@
 # QraftBox
 
-**All You Need Is Diff.**
+**Craft from Anywhere.**
 
-QraftBox is a local tool for viewing code changes (diffs), managing git branches, and performing AI-powered git operations -- all from your web browser.
+QraftBox is a local tool for viewing code changes (diffs), managing git branches, performing AI-powered git operations, and running AI agent coding workflows -- all from your web browser.
 
 > [Japanese / 日本語はこちら](#日本語-japanese)
 
@@ -441,9 +441,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## 日本語 (Japanese)
 
-**All You Need Is Diff.**
+**Craft from Anywhere.**
 
-QraftBox は、コードの変更（diff）を見たり、gitブランチを管理したり、AIを使ったgit操作を行うためのローカルツールです。すべてウェブブラウザから操作できます。
+QraftBox は、コードの変更（diff）を見たり、gitブランチを管理したり、AIを使ったgit操作やAIエージェントコーディングを実行できるローカルツールです。すべてウェブブラウザから操作できます。
 
 > [English / 英語版はこちら](#qraftbox)
 
