@@ -231,6 +231,25 @@ Open `http://localhost:7144` in your browser.
 
 ---
 
+### Install via Claude Code Slash Command
+
+If you are using [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) inside the QraftBox repository, you can install QraftBox with:
+
+```
+/install-qraftbox
+```
+
+This slash command wraps the install script and accepts the same options:
+
+```
+/install-qraftbox --npm                        # Install via npm
+/install-qraftbox --version 0.0.1              # Specific version
+/install-qraftbox --install-dir /usr/local/bin  # Custom directory
+/install-qraftbox --uninstall                   # Remove QraftBox
+```
+
+---
+
 ## Usage
 
 ### Basic Usage
@@ -643,6 +662,25 @@ bun run start
 ```
 
 ブラウザで `http://localhost:7144` を開いてください。
+
+---
+
+### Claude Code スラッシュコマンドでインストール
+
+QraftBox リポジトリ内で [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) を使用している場合、以下のコマンドでインストールできます:
+
+```
+/install-qraftbox
+```
+
+このスラッシュコマンドはインストールスクリプトのラッパーで、同じオプションが使えます:
+
+```
+/install-qraftbox --npm                        # npm 経由でインストール
+/install-qraftbox --version 0.0.1              # バージョン指定
+/install-qraftbox --install-dir /usr/local/bin  # インストール先を指定
+/install-qraftbox --uninstall                   # QraftBox を削除
+```
 
 ---
 
