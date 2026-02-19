@@ -6,6 +6,13 @@ QraftBox is a local tool for viewing code changes (diffs), managing git branches
 
 > [Japanese / 日本語はこちら](#日本語-japanese)
 
+## Quick Visual Preview
+
+<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+
+![Diff side-by-side view](usage/resource/diff_side_by_side.png)
+![File tree diff status](usage/resource/file_tree_diff.png)
+
 ## SECURITY WARNING
 
 > **QraftBox is under active development. It is NOT production-ready.**
