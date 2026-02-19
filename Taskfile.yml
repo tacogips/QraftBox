@@ -202,7 +202,7 @@ tasks:
       vars: [TARGET, SUFFIX]
     vars:
       VERSION:
-        sh: node -p "require('./package.json').version"
+        sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
       RELEASE_DIR: 'release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}'
     cmds:
       - mkdir -p {{.RELEASE_DIR}}/dist
@@ -322,7 +322,7 @@ tasks:
     desc: Build all binaries and publish to GitHub Release (requires gh CLI)
     vars:
       VERSION:
-        sh: node -p "require('./package.json').version"
+        sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
       TAG: 'v{{.VERSION}}'
     cmds:
       # Verify gh CLI is available and authenticated
