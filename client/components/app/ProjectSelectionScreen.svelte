@@ -10,6 +10,7 @@
     newProjectLoading,
     newProjectPath,
     newProjectError,
+    chooseDirectoryLabel,
     availableRecentProjects,
     onPickDirectory,
     onNewProjectPathChange,
@@ -21,6 +22,7 @@
     newProjectLoading: boolean;
     newProjectPath: string;
     newProjectError: string | null;
+    chooseDirectoryLabel: string;
     availableRecentProjects: RecentProject[];
     onPickDirectory: () => Promise<void>;
     onNewProjectPathChange: (value: string) => void;
@@ -81,14 +83,14 @@
             d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
           />
         </svg>
-        Opening file picker...
+        Opening picker...
       {:else}
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
           <path
             d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
           />
         </svg>
-        Choose Directory...
+        {chooseDirectoryLabel}
       {/if}
     </button>
 

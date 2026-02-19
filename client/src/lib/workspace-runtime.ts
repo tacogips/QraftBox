@@ -32,6 +32,8 @@ interface WorkspaceControllerDeps {
   setNewProjectError: SetState<string | null>;
   setNewProjectLoading: SetState<boolean>;
   setPickingDirectory: SetState<boolean>;
+  setDirectoryPickerOpen: SetState<boolean>;
+  isMobileDirectoryPickerClient: GetState<boolean>;
   setLoading: SetState<boolean>;
   getFileTreeMode: GetState<"diff" | "all">;
   setFileTreeMode: SetState<"diff" | "all">;
@@ -331,8 +333,14 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function pickDirectory(): Promise<void> {
-    deps.setPickingDirectory(true);
     deps.setNewProjectError(null);
+
+    if (deps.isMobileDirectoryPickerClient()) {
+      deps.setDirectoryPickerOpen(true);
+      return;
+    }
+
+    deps.setPickingDirectory(true);
 
     try {
       const currentPath = deps.getProjectPath();

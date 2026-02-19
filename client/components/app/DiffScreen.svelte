@@ -155,10 +155,14 @@
         vv === undefined
           ? 0
           : Math.max(0, window.innerHeight - (vv.height + vv.offsetTop));
-      mobileViewportBottomOffset = Math.round(occludedBottom);
-
       const keyboardOpen =
         vv !== undefined && vv.height < window.innerHeight * 0.8;
+
+      // Keep the dock anchored to the screen bottom during normal browsing.
+      // Only lift it when the software keyboard actually occludes the viewport.
+      mobileViewportBottomOffset = keyboardOpen
+        ? Math.round(occludedBottom)
+        : 0;
 
       if (!detectMobileDevice() || !detectIphoneSafari()) {
         mobileSafariFallbackOffset = 0;
@@ -574,11 +578,11 @@
         ? "fixed left-0 right-0 bottom-0 z-40 bg-bg-secondary flex flex-col"
         : "shrink-0 flex flex-col min-h-0"}
       style:bottom={isPhoneViewport
-        ? `${mobileViewportBottomOffset + mobileSafariFallbackOffset}px`
+        ? `${mobileViewportBottomOffset}px`
         : undefined}
       style:max-height={isPhoneViewport ? "70dvh" : undefined}
       style:padding-bottom={isPhoneViewport
-        ? "env(safe-area-inset-bottom, 0px)"
+        ? `calc(env(safe-area-inset-bottom, 0px) + ${mobileSafariFallbackOffset}px)`
         : undefined}
     >
       <div
@@ -822,6 +826,7 @@
             onCancelSession={onCancelActiveSession}
             {onCancelQueuedPrompt}
             onResumeSession={onResumeCliSession}
+            {projectPath}
           />
         </div>
 

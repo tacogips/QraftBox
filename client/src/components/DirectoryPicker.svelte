@@ -218,7 +218,7 @@
   <!-- Modal Overlay -->
   <div
     class="directory-picker-overlay fixed inset-0 z-50 bg-black/50
-           flex items-center justify-center p-4
+           flex items-center justify-center p-2 sm:p-4
            backdrop-blur-sm"
     onclick={handleOverlayClick}
     onkeydown={handleKeydown}
@@ -228,7 +228,9 @@
   >
     <!-- Modal Content -->
     <div
-      class="directory-picker-modal w-full max-w-3xl h-[90vh]
+      class="directory-picker-modal w-full max-w-3xl
+             h-[calc(100dvh-1rem)] max-h-[calc(100dvh-1rem)]
+             sm:h-[90vh] sm:max-h-[90vh]
              bg-bg-primary rounded-lg shadow-2xl
              flex flex-col
              border border-border-default"
@@ -421,6 +423,9 @@
       <!-- Footer Buttons -->
       <div
         class="picker-footer px-6 py-4 border-t border-border-default
+               pb-[calc(1rem+env(safe-area-inset-bottom,0px))]
+               pr-[calc(1.5rem+env(safe-area-inset-right,0px))]
+               pl-[calc(1.5rem+env(safe-area-inset-left,0px))]
                bg-bg-secondary flex items-center justify-end gap-3"
       >
         <button

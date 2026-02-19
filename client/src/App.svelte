@@ -24,8 +24,10 @@
     saveSidebarWidth,
     type FileContent,
   } from "./lib/file-view-runtime";
+  import type { RecentDirectory } from "../../src/types/workspace";
   // LocalPrompt type no longer needed - server manages prompt queue
   import AppTopNav from "../components/app/AppTopNav.svelte";
+  import DirectoryPicker from "./components/DirectoryPicker.svelte";
   import DiffScreen from "../components/app/DiffScreen.svelte";
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
@@ -41,6 +43,15 @@
     const isMobileUa = /iPhone|iPod|Android/i.test(navigator.userAgent);
     const isPhoneViewport = window.innerWidth <= 480;
     return isMobileUa || isPhoneViewport;
+  }
+
+  function shouldUseBrowserDirectoryPicker(): boolean {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent;
+    const isIOS = /iPhone|iPad|iPod/i.test(ua);
+    const isAndroid = /Android/i.test(ua);
+    const isPhoneViewport = window.innerWidth <= 768;
+    return (isIOS || isAndroid) && isPhoneViewport;
   }
 
   /**
@@ -77,6 +88,7 @@
   let newProjectError = $state<string | null>(null);
   let newProjectLoading = $state(false);
   let pickingDirectory = $state(false);
+  let directoryPickerOpen = $state(false);
   let mergeDialogOpen = $state(false);
 
   // AI prompt state
@@ -122,6 +134,23 @@
    */
   const availableRecentProjects = $derived(
     recentProjects.filter((r) => !workspaceTabs.some((t) => t.path === r.path)),
+  );
+
+  const chooseDirectoryLabel = $derived(
+    shouldUseBrowserDirectoryPicker()
+      ? "Browse Host Directories..."
+      : "Choose on Host...",
+  );
+
+  const recentDirectoriesForPicker = $derived(
+    recentProjects.map(
+      (project): RecentDirectory => ({
+        path: project.path,
+        name: project.name,
+        isGitRepo: project.isGitRepo,
+        lastOpened: Date.now(),
+      }),
+    ),
   );
 
   /**
@@ -291,6 +320,8 @@
     setNewProjectError: (value) => (newProjectError = value),
     setNewProjectLoading: (value) => (newProjectLoading = value),
     setPickingDirectory: (value) => (pickingDirectory = value),
+    setDirectoryPickerOpen: (value) => (directoryPickerOpen = value),
+    isMobileDirectoryPickerClient: () => shouldUseBrowserDirectoryPicker(),
     setLoading: (value) => (loading = value),
     getFileTreeMode: () => fileTreeMode,
     setFileTreeMode: (value) => (fileTreeMode = value),
@@ -683,6 +714,7 @@
           {newProjectLoading}
           {newProjectPath}
           {newProjectError}
+          {chooseDirectoryLabel}
           {availableRecentProjects}
           onPickDirectory={pickDirectory}
           onNewProjectPathChange={(value) => {
@@ -720,4 +752,16 @@
       }}
     />
   {/if}
+
+  <DirectoryPicker
+    isOpen={directoryPickerOpen}
+    recentDirectories={recentDirectoriesForPicker}
+    onClose={() => {
+      directoryPickerOpen = false;
+    }}
+    onSelect={(path) => {
+      directoryPickerOpen = false;
+      void openProjectByPath(path);
+    }}
+  />
 </div>

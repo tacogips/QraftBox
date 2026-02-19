@@ -16,6 +16,7 @@
   import type { ExtendedSessionEntry } from "../../src/types/claude-session";
   import { stripSystemTags } from "../../src/utils/strip-system-tags";
   import SessionTranscriptInline from "./sessions/SessionTranscriptInline.svelte";
+  import SessionSearchPopup from "./SessionSearchPopup.svelte";
 
   interface SessionSummaryData {
     readonly sessionId: string;
@@ -48,6 +49,7 @@
     onCancelSession: (id: string) => void;
     onCancelQueuedPrompt?: (id: string) => Promise<void>;
     onResumeSession: (sessionId: string) => void;
+    projectPath: string;
   }
 
   const {
@@ -61,6 +63,7 @@
     onCancelSession,
     onCancelQueuedPrompt,
     onResumeSession,
+    projectPath,
   }: Props = $props();
 
   /**
@@ -83,6 +86,14 @@
   let tasksExpanded = $state(false);
   let filesExpanded = $state(false);
   let latestCliFetchToken = 0;
+
+  /**
+   * Session search popup state
+   */
+  let isSessionPopupOpen = $state(false);
+  let sessionPopupRef: HTMLDivElement | null = $state(null);
+  let sessionSearchBtnRef: HTMLButtonElement | null = $state(null);
+  let sessionPopupStyle = $state("");
 
   /**
    * Session to resolve from Claude session browser.
@@ -337,6 +348,35 @@
     }
   }
 
+  function computeSessionPopupPosition(): void {
+    if (sessionSearchBtnRef === null) {
+      sessionPopupStyle = "";
+      return;
+    }
+    const rect = sessionSearchBtnRef.getBoundingClientRect();
+    const popupWidth = 420;
+    const popupMaxHeight = 400;
+    const top = Math.max(8, rect.top - popupMaxHeight - 8);
+    const left = Math.min(rect.left, window.innerWidth - popupWidth - 8);
+    sessionPopupStyle = `position:fixed;top:${top}px;left:${Math.max(8, left)}px;width:${popupWidth}px;max-height:${popupMaxHeight}px;`;
+  }
+
+  function toggleSessionPopup(): void {
+    isSessionPopupOpen = !isSessionPopupOpen;
+    if (isSessionPopupOpen) {
+      computeSessionPopupPosition();
+    }
+  }
+
+  function closeSessionPopup(): void {
+    isSessionPopupOpen = false;
+  }
+
+  function handleResumeFromSearch(qraftAiSessionId: string): void {
+    onResumeSession(qraftAiSessionId);
+    closeSessionPopup();
+  }
+
   // Auto-load session summary when a CLI session is available
   $effect(() => {
     if (
@@ -363,14 +403,14 @@
   });
 </script>
 
-{#if hasContent}
-  <div
-    class="current-session-panel border-t border-border-default bg-bg-secondary overflow-y-auto
-           flex-1 min-h-0
-           {isRunning ? 'session-running-glow' : ''}"
-    role="region"
-    aria-label="Current session status"
-  >
+<div
+  class="current-session-panel border-t border-border-default bg-bg-secondary overflow-y-auto
+         flex-1 min-h-0
+         {isRunning ? 'session-running-glow' : ''}"
+  role="region"
+  aria-label="Current session status"
+>
+  {#if hasContent}
     <!-- Queue count row (above session card) -->
     {#if queueCount > 0}
       <button
@@ -856,8 +896,64 @@
         {/if}
       </div>
     {/if}
-  </div>
-{/if}
+  {:else}
+    <!-- No session state: single line with search icon -->
+    <div
+      class="w-full flex items-center gap-2 px-4 py-1.5 text-left select-none relative"
+    >
+      <span class="text-xs text-text-tertiary">No current session</span>
+      <div class="ml-auto relative">
+        <button
+          bind:this={sessionSearchBtnRef}
+          type="button"
+          data-ai-search-button
+          onclick={toggleSessionPopup}
+          class="h-6 w-6 flex items-center justify-center
+                 hover:bg-bg-hover rounded transition-colors duration-150
+                 text-text-tertiary hover:text-text-primary
+                 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis
+                 {isSessionPopupOpen ? 'bg-bg-hover text-text-primary' : ''}"
+          title="Search Sessions"
+          aria-label="Search and browse sessions"
+          aria-expanded={isSessionPopupOpen}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
+        </button>
+
+        {#if isSessionPopupOpen}
+          <div
+            bind:this={sessionPopupRef}
+            class="z-50 bg-bg-primary border border-border-default rounded-lg shadow-lg flex flex-col"
+            style={sessionPopupStyle}
+            role="dialog"
+            aria-label="Session search"
+          >
+            <SessionSearchPopup
+              {contextId}
+              {projectPath}
+              onResumeSession={handleResumeFromSearch}
+              onClose={closeSessionPopup}
+            />
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
+</div>
 
 <style>
   @keyframes glow-pulse {
