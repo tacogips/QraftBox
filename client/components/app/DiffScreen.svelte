@@ -413,8 +413,8 @@
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
       diffSummary: undefined,
+      resumeSessionId: currentQraftAiSessionId,
       modelProfileId: selectedAiModelProfileId,
-      // resumeSessionId omitted: inline prompts create a new session
     });
   }
 
@@ -931,6 +931,7 @@
                 primaryFile: undefined,
                 references: refs,
                 diffSummary: undefined,
+                resumeSessionId: currentQraftAiSessionId,
                 modelProfileId: modelProfileId ?? selectedAiModelProfileId,
               });
             }}

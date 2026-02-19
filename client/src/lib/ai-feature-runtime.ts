@@ -68,8 +68,6 @@ interface AIFeatureDeps {
  * - Inline comment prompt: passes `resumeSessionId: undefined` to start
  *   a new independent session (does not affect the current panel session).
  *
- * TODO: `submitPrompt` does not yet branch on `resumeSessionId`.
- *       Currently all submits use `deps.getQraftAiSessionId()`.
  */
 export interface AIPromptContext {
   primaryFile:
@@ -230,12 +228,15 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     try {
       await requestAIPromptNotificationPermission();
 
+      const targetSessionId =
+        context.resumeSessionId ?? deps.getQraftAiSessionId();
+
       const payload = {
         runImmediately: immediate,
         message,
         context,
         projectPath: deps.getProjectPath(),
-        qraftAiSessionId: deps.getQraftAiSessionId(),
+        qraftAiSessionId: targetSessionId,
         modelProfileId: context.modelProfileId,
       };
       await submitAIPrompt(payload);

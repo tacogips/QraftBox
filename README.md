@@ -34,6 +34,27 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 - **Built-in tools & terminal** -- Access tool registry info and open a browser terminal per project.
 - **Model configuration** -- Manage AI model profiles and operation bindings from the UI.
 
+## Feature Status
+
+### Implemented
+
+- Diff viewer (inline / side-by-side)
+- Git branch and worktree management
+- AI-assisted git operations (commit / push / pull request)
+- AI session browsing
+- Multi-directory tabs
+- Real-time file watching updates
+- Built-in tool registry and browser terminal
+- AI model profile and operation binding management
+
+### Planned
+
+- Orchestration
+- Workflow
+- Codex integration
+- Scheduling
+- Git notes comments on diffs
+
 ## How it Works (Simple Explanation)
 
 1. You run QraftBox on your computer. It starts a small web server.
@@ -42,13 +63,73 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 
 That's it. Everything runs on your machine. When AI features are enabled, prompts are sent to the configured AI provider via `claude-code-agent`, and tool plugins may call external services depending on their configuration.
 
+### Architecture Overview
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Server as QraftBox Server<br/>(Bun + Hono)
+    participant Claude as Claude Code CLI<br/>(child process)
+    participant API as Anthropic API
+
+    Browser->>Server: HTTP REST (submit prompt, get diff, etc.)
+    Browser<<->>Server: WebSocket (real-time file change updates)
+
+    Note over Server,Claude: claude-code-agent library spawns<br/>Claude Code as a subprocess,<br/>NOT a direct API call
+
+    Server->>Claude: spawn process via SessionRunner
+    Claude->>API: LLM requests (model inference)
+    API-->>Claude: LLM responses
+    Claude-->>Server: stream events (stdout/messages)
+
+    Server-->>Browser: SSE stream (AI progress events)
+    Server-->>Browser: WebSocket (queue updates)
+
+    Note over Browser,Server: Git operations (diff, commit, branches)<br/>are handled directly by the server<br/>without Claude Code
+```
+
 ---
 
 ## Installation
 
-There are 3 ways to install QraftBox. Pick whichever is easiest for you.
+### Quick Install (One Command)
 
-### Prerequisites
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash
+```
+
+This downloads a pre-built binary for your platform (macOS / Linux, x64 / arm64) and installs it to `~/.local/bin`.
+
+**Options:**
+
+```bash
+# Install via npm instead (installs Bun automatically if needed)
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --npm
+
+# Install a specific version
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version 0.0.1
+
+# Install to a custom directory
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --install-dir /usr/local/bin
+```
+
+**Uninstall:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --uninstall
+```
+
+This removes the binary, client assets, and PATH entries added by the installer.
+
+**Prerequisites:** Git is required. For AI features, you also need [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
+
+---
+
+### Other Installation Methods
+
+There are 3 additional ways to install QraftBox. Pick whichever is easiest for you.
+
+#### Prerequisites
 
 Before installing QraftBox, you need:
 
@@ -73,7 +154,7 @@ For AI features, you also need **Claude Code**: [https://docs.anthropic.com/en/d
 
 ---
 
-### Method 1: Download a Binary (Recommended -- Easiest)
+#### Method 1: Download a Binary (Recommended -- Easiest)
 
 Pre-built binaries include everything needed. No Bun installation required.
 
@@ -107,7 +188,7 @@ Click the Apple menu > "About This Mac". If it says "Apple M1" (or M2, M3, M4), 
 
 ---
 
-### Method 2: Install via npm (Requires Bun)
+#### Method 2: Install via npm (Requires Bun)
 
 ```bash
 # Install globally
@@ -129,7 +210,7 @@ Open `http://localhost:7144` in your browser.
 
 ---
 
-### Method 3: Build from Source (For developers)
+#### Method 3: Build from Source (For developers)
 
 ```bash
 # Clone the repository
@@ -328,6 +409,27 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 - **ツールとターミナル** -- ツール登録の情報確認や、プロジェクトごとのブラウザ内ターミナルが使えます。
 - **モデル設定** -- UI からAIモデルのプロファイルと操作ごとの割り当てを管理できます。
 
+## 機能ステータス
+
+### 実装済み
+
+- Diffビューア（インライン / サイドバイサイド）
+- Gitブランチ / ワークツリー管理
+- AI支援のGit操作（コミット / プッシュ / プルリクエスト）
+- AIセッション閲覧
+- 複数ディレクトリのタブ管理
+- ファイル監視によるリアルタイム更新
+- ツールレジストリとブラウザ内ターミナル
+- AIモデルプロファイルと操作バインディング管理
+
+### 実装予定
+
+- オーケストレーション
+- ワークフロー
+- Codex連携
+- スケジュール実装
+- 差分へのGit notesコメント
+
 ## 仕組み（かんたんな説明）
 
 1. あなたのコンピュータで QraftBox を起動します。小さなウェブサーバーが立ち上がります。
@@ -336,13 +438,73 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 
 以上です。すべてあなたのマシン上で動きます。AI機能を有効にすると、`claude-code-agent` 経由で設定されたAIプロバイダにプロンプトが送信されます。また、ツールプラグインは設定に応じて外部サービスへアクセスする場合があります。
 
+### アーキテクチャ概要
+
+```mermaid
+sequenceDiagram
+    participant Browser as ブラウザ
+    participant Server as QraftBox サーバー<br/>(Bun + Hono)
+    participant Claude as Claude Code CLI<br/>(子プロセス)
+    participant API as Anthropic API
+
+    Browser->>Server: HTTP REST (プロンプト送信、diff取得など)
+    Browser<<->>Server: WebSocket (ファイル変更のリアルタイム通知)
+
+    Note over Server,Claude: claude-code-agentライブラリが<br/>Claude CodeをAPIではなく<br/>サブプロセスとして起動
+
+    Server->>Claude: SessionRunnerでプロセス起動
+    Claude->>API: LLMリクエスト (モデル推論)
+    API-->>Claude: LLMレスポンス
+    Claude-->>Server: イベントストリーム (stdout/メッセージ)
+
+    Server-->>Browser: SSEストリーム (AI進捗イベント)
+    Server-->>Browser: WebSocket (キュー更新)
+
+    Note over Browser,Server: Git操作 (diff、コミット、ブランチ) は<br/>Claude Codeを介さず<br/>サーバーが直接処理
+```
+
 ---
 
 ## インストール
 
-QraftBox のインストール方法は3つあります。お好きな方法を選んでください。
+### クイックインストール（1コマンド）
 
-### 前提条件
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash
+```
+
+お使いのプラットフォーム（macOS / Linux、x64 / arm64）に合ったビルド済みバイナリをダウンロードし、`~/.local/bin` にインストールします。
+
+**オプション:**
+
+```bash
+# npm 経由でインストール（Bun が未インストールの場合は自動でインストール）
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --npm
+
+# バージョンを指定してインストール
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version 0.0.1
+
+# インストール先を指定
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --install-dir /usr/local/bin
+```
+
+**アンインストール:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --uninstall
+```
+
+バイナリ、クライアントアセット、インストーラが追加した PATH 設定を削除します。
+
+**前提条件:** Git が必要です。AI機能を使う場合は [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) も必要です。
+
+---
+
+### その他のインストール方法
+
+他にも3つの方法があります。お好きな方法を選んでください。
+
+#### 前提条件
 
 QraftBox をインストールする前に、以下が必要です:
 
@@ -367,7 +529,7 @@ AI機能を使う場合は **Claude Code** も必要です: [https://docs.anthro
 
 ---
 
-### 方法1: バイナリをダウンロード（おすすめ -- 一番かんたん）
+#### 方法1: バイナリをダウンロード（おすすめ -- 一番かんたん）
 
 ビルド済みバイナリには必要なものがすべて含まれています。Bunのインストールは不要です。
 
@@ -401,7 +563,7 @@ Appleメニュー > 「このMacについて」をクリック。「Apple M1」�
 
 ---
 
-### 方法2: npm でインストール（Bunが必要）
+#### 方法2: npm でインストール（Bunが必要）
 
 ```bash
 # グローバルインストール
@@ -423,7 +585,7 @@ bunx qraftbox
 
 ---
 
-### 方法3: ソースからビルド（開発者向け）
+#### 方法3: ソースからビルド（開発者向け）
 
 ```bash
 # リポジトリをクローン

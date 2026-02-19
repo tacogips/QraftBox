@@ -487,6 +487,7 @@ describe("ContextManager", () => {
       expect(tab.isWorktree).toBe(true);
       expect(tab.mainRepositoryPath).toBe("/path/to/main/repo");
       expect(tab.worktreeName).toBe("feature-branch");
+      expect(tab.name).toBe("repo:feature-branch");
     });
 
     test("validateDirectory detects worktree", async () => {

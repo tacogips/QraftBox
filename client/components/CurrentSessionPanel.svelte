@@ -94,6 +94,7 @@
   let sessionPopupRef: HTMLDivElement | null = $state(null);
   let sessionSearchBtnRef: HTMLButtonElement | null = $state(null);
   let sessionPopupStyle = $state("");
+  let latestSessionLoading = $state(false);
 
   /**
    * Session to resolve from Claude session browser.
@@ -375,6 +376,41 @@
   function handleResumeFromSearch(qraftAiSessionId: string): void {
     onResumeSession(qraftAiSessionId);
     closeSessionPopup();
+  }
+
+  async function loadLatestSession(): Promise<void> {
+    if (contextId === null || latestSessionLoading) return;
+    latestSessionLoading = true;
+    try {
+      const params = new URLSearchParams({
+        offset: "0",
+        limit: "1",
+        sortBy: "modified",
+        sortOrder: "desc",
+      });
+      if (projectPath.length > 0) {
+        params.set("workingDirectoryPrefix", projectPath);
+      }
+
+      const response = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions?${params.toString()}`,
+      );
+      if (!response.ok) {
+        return;
+      }
+
+      const data = (await response.json()) as {
+        sessions: Array<{ qraftAiSessionId: string }>;
+      };
+      const latestSessionId = data.sessions[0]?.qraftAiSessionId;
+      if (latestSessionId !== undefined) {
+        onResumeSession(latestSessionId);
+      }
+    } catch {
+      // Ignore and keep no-session state
+    } finally {
+      latestSessionLoading = false;
+    }
   }
 
   // Auto-load session summary when a CLI session is available
@@ -897,12 +933,60 @@
       </div>
     {/if}
   {:else}
-    <!-- No session state: single line with search icon -->
+    <!-- No session state: single line with actions -->
     <div
       class="w-full flex items-center gap-2 px-4 py-1.5 text-left select-none relative"
     >
       <span class="text-xs text-text-tertiary">No current session</span>
-      <div class="ml-auto relative">
+      <button
+        type="button"
+        onclick={() => void loadLatestSession()}
+        disabled={latestSessionLoading}
+        class="h-6 w-6 flex items-center justify-center
+               hover:bg-bg-hover rounded transition-colors duration-150
+               text-text-tertiary hover:text-text-primary
+               disabled:opacity-60 disabled:cursor-not-allowed
+               focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
+        title="Load latest session"
+        aria-label="Load latest session"
+      >
+        {#if latestSessionLoading}
+          <svg
+            class="animate-spin"
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="10" class="opacity-25" />
+            <path class="opacity-75" d="M22 12a10 10 0 0 1-10 10" />
+          </svg>
+        {:else}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14" />
+            <path d="m19 12-7 7-7-7" />
+          </svg>
+        {/if}
+      </button>
+
+      <div class="relative">
         <button
           bind:this={sessionSearchBtnRef}
           type="button"

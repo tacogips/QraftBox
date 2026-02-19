@@ -223,8 +223,16 @@ class ContextManagerImpl implements ContextManager {
       }
     }
 
-    // Extract directory name for display
-    const name = basename(absolutePath);
+    // Extract directory name for display.
+    // For worktrees, show "{mainRepoName}:{worktreeName}" for clearer identity.
+    const defaultName = basename(absolutePath);
+    const name =
+      isWorktree &&
+      mainRepoPath !== null &&
+      worktreeName !== null &&
+      worktreeName.length > 0
+        ? `${basename(mainRepoPath)}:${worktreeName}`
+        : defaultName;
 
     // Get or create a persistent URL-safe slug for this project
     const projectSlug = await this.registry.getOrCreateSlug(absolutePath);
