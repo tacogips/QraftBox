@@ -252,6 +252,46 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 qraftbox --open
 ```
 
+### Feature Preview (Video / Images)
+
+#### Overview Video
+
+<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+
+#### UI Screenshots
+
+- Diff viewer (side-by-side)
+
+  ![Diff side-by-side view](usage/resource/diff_side_by_side.png)
+
+- Current file diff
+
+  ![Current file diff view](usage/resource/diff_current.png)
+
+- Stacked diff view
+
+  ![Stacked diff view](usage/resource/diff_stack.png)
+
+- File tree (normal view)
+
+  ![File tree view](usage/resource/file_tree_view.png)
+
+- File tree (diff status)
+
+  ![File tree diff status](usage/resource/file_tree_diff.png)
+
+- Commit history
+
+  ![Commit history](usage/resource/commit_history.png)
+
+- AI session history
+
+  ![AI session history](usage/resource/session_history.png)
+
+- Browser terminal
+
+  ![Browser terminal](usage/resource/terminal.png)
+
 ### Run as a Daemon with PM2 (Bun)
 
 Based on Bun's PM2 guide: https://bun.com/docs/guides/ecosystem/pm2
@@ -626,6 +666,46 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 # 起動時にブラウザを自動で開く
 qraftbox --open
 ```
+
+### 機能プレビュー（動画 / 画像）
+
+#### 概要動画
+
+<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+
+#### UIスクリーンショット
+
+- 差分ビュー（左右比較）
+
+  ![差分ビュー（左右比較）](usage/resource/diff_side_by_side.png)
+
+- 現在ファイルの差分表示
+
+  ![現在ファイルの差分表示](usage/resource/diff_current.png)
+
+- スタック表示の差分ビュー
+
+  ![スタック表示の差分ビュー](usage/resource/diff_stack.png)
+
+- ファイルツリー（通常表示）
+
+  ![ファイルツリー（通常表示）](usage/resource/file_tree_view.png)
+
+- ファイルツリー（差分ステータス）
+
+  ![ファイルツリー（差分ステータス）](usage/resource/file_tree_diff.png)
+
+- コミット履歴
+
+  ![コミット履歴](usage/resource/commit_history.png)
+
+- AIセッション履歴
+
+  ![AIセッション履歴](usage/resource/session_history.png)
+
+- ブラウザターミナル
+
+  ![ブラウザターミナル](usage/resource/terminal.png)
 
 ### PM2でデーモン化して実行する（Bun）
 
