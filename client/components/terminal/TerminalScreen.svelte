@@ -49,8 +49,14 @@
   let lastContextId = $state(contextId);
   let checkingExistingSession = $state(false);
   let terminalContainer = $state<HTMLDivElement | undefined>(undefined);
+  let terminalControls = $state<HTMLDivElement | undefined>(undefined);
+  let terminalResizeHandle = $state<HTMLDivElement | undefined>(undefined);
+  let terminalSessionMeta = $state<HTMLParagraphElement | undefined>(undefined);
   let terminalHeightPx = $state<number | null>(null);
   let isPhoneViewport = $state(false);
+  let isResizingTerminal = $state(false);
+  let terminalDragStartY = 0;
+  let terminalDragStartHeight = 0;
 
   function detectPhoneViewport(): boolean {
     return window.innerWidth <= 768;
@@ -68,6 +74,7 @@
   }
 
   function disposeTerminalResources(): void {
+    stopTerminalResizeDrag();
     if (webSocket !== null) {
       webSocket.onopen = null;
       webSocket.onmessage = null;
@@ -160,19 +167,35 @@
   }
 
   function getMaxTerminalHeightPx(): number {
-    const minHeightPx = isPhoneViewport ? 180 : 260;
+    const minHeightPx = isPhoneViewport ? 160 : 220;
     if (terminalContainer === undefined) {
       return Math.max(minHeightPx, Math.floor(window.innerHeight * 0.8));
     }
-    const reservedSpacePx = isPhoneViewport ? 28 : 88;
+
+    const controlsHeightPx = terminalControls?.offsetHeight ?? 0;
+    const handleHeightPx = terminalResizeHandle?.offsetHeight ?? 0;
+    const rowGapPx = Number.parseFloat(
+      window.getComputedStyle(terminalContainer).rowGap,
+    );
+    const safeRowGapPx = Number.isFinite(rowGapPx) ? rowGapPx : 0;
+    const reservedInsideContainerPx =
+      controlsHeightPx + handleHeightPx + safeRowGapPx * 2;
+    const sessionMetaHeightPx =
+      terminalSessionMeta !== undefined
+        ? terminalSessionMeta.offsetHeight + 8
+        : 0;
+    const maxAvailableHeightPx =
+      (terminalContainer.parentElement?.clientHeight ?? window.innerHeight) -
+      sessionMetaHeightPx;
+
     return Math.max(
       minHeightPx,
-      terminalContainer.clientHeight - reservedSpacePx,
+      maxAvailableHeightPx - reservedInsideContainerPx,
     );
   }
 
   function clampTerminalHeight(heightPx: number): number {
-    const minHeightPx = isPhoneViewport ? 180 : 260;
+    const minHeightPx = isPhoneViewport ? 160 : 220;
     return Math.max(minHeightPx, Math.min(getMaxTerminalHeightPx(), heightPx));
   }
 
@@ -197,11 +220,46 @@
     });
   }
 
-  function maximizeTerminalHeight(): void {
-    terminalHeightPx = getMaxTerminalHeightPx();
+  function handleTerminalResizeMouseDown(event: MouseEvent): void {
+    event.preventDefault();
+    ensureTerminalHeight();
+    if (terminalHeightPx === null) {
+      return;
+    }
+
+    isResizingTerminal = true;
+    terminalDragStartY = event.clientY;
+    terminalDragStartHeight = terminalHeightPx;
+
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+
+    window.addEventListener("mousemove", handleTerminalResizeMouseMove);
+    window.addEventListener("mouseup", handleTerminalResizeMouseUp);
+  }
+
+  function handleTerminalResizeMouseMove(event: MouseEvent): void {
+    if (!isResizingTerminal) {
+      return;
+    }
+    // Bottom-handle resize: dragging down should increase height.
+    const deltaPx = event.clientY - terminalDragStartY;
+    terminalHeightPx = clampTerminalHeight(terminalDragStartHeight + deltaPx);
     requestAnimationFrame(() => {
       fitAndResizeTerminal();
     });
+  }
+
+  function stopTerminalResizeDrag(): void {
+    isResizingTerminal = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
+    window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
+  }
+
+  function handleTerminalResizeMouseUp(): void {
+    stopTerminalResizeDrag();
   }
 
   function resetTerminalHeight(): void {
@@ -394,6 +452,7 @@
   });
 
   onDestroy(() => {
+    stopTerminalResizeDrag();
     disposeTerminalResources();
   });
 </script>
@@ -421,42 +480,83 @@
         class="h-full w-full flex flex-col gap-2"
         bind:this={terminalContainer}
       >
-        <div class="flex justify-end gap-2 flex-wrap">
+        <div
+          class="flex justify-end gap-2 flex-wrap"
+          bind:this={terminalControls}
+        >
           <button
             type="button"
             class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
                    bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="Increase terminal height"
+            title="Increase terminal height"
             onclick={() => {
               resizeTerminalHeight(120);
             }}
           >
-            +
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M8 3v10M3 8h10"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
           </button>
           <button
             type="button"
             class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
                    bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="Decrease terminal height"
+            title="Decrease terminal height"
             onclick={() => {
               resizeTerminalHeight(-120);
             }}
           >
-            -
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 8h10"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+              />
+            </svg>
           </button>
           <button
             type="button"
             class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
                    bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
-            onclick={maximizeTerminalHeight}
-          >
-            max
-          </button>
-          <button
-            type="button"
-            class="px-2 py-1.5 text-xs font-medium rounded-md border border-border-default
-                   bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-colors"
+            aria-label="Reset terminal height"
+            title="Reset terminal height"
             onclick={resetTerminalHeight}
           >
-            reset
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M3 8a5 5 0 1 0 1.5-3.6M3 3v3h3"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
           </button>
           <button
             type="button"
@@ -465,8 +565,30 @@
                    disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={disconnect}
             disabled={isConnecting}
+            aria-label="Disconnect terminal"
+            title="Disconnect terminal"
           >
-            disconnect
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path
+                d="M6 4.5A4.5 4.5 0 1 0 10 12"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              />
+              <path
+                d="M10 3.5h3v3M13 3.5l-4 4"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
           </button>
         </div>
         <div
@@ -482,9 +604,25 @@
             class="terminal-host h-full w-full"
           ></div>
         </div>
+        <div
+          bind:this={terminalResizeHandle}
+          class="h-5 cursor-row-resize flex items-center justify-center
+                 group hover:bg-accent-muted/40 transition-colors rounded-sm"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize terminal height"
+          onmousedown={handleTerminalResizeMouseDown}
+        >
+          <div
+            class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
+          ></div>
+        </div>
       </div>
       {#if activeSessionId !== null}
-        <p class="mt-2 text-xs text-text-tertiary">
+        <p
+          bind:this={terminalSessionMeta}
+          class="mt-2 text-xs text-text-tertiary"
+        >
           session: {activeSessionId}
         </p>
       {/if}

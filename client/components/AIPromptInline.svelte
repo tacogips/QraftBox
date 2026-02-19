@@ -275,7 +275,7 @@
     ></textarea>
 
     <!-- Autocomplete dropdown -->
-    <div class="absolute left-0 right-0 top-full mt-1">
+    <div class="absolute z-[130] left-0 right-0 bottom-full mb-1 pointer-events-auto">
       <FileAutocomplete
         query={autocompleteQuery}
         {changedFiles}

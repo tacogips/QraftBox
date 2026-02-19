@@ -907,7 +907,7 @@
         </div>
 
         <div
-          class="shrink-0 overflow-hidden min-h-0 flex flex-col"
+          class="shrink-0 overflow-visible min-h-0 flex flex-col"
           style:height={aiPromptCollapsed
             ? "0px"
             : isPhoneViewport

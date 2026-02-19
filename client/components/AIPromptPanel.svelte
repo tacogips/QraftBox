@@ -830,7 +830,7 @@
       {#if isSessionPopupOpen}
         <div
           bind:this={sessionPopupRef}
-          class="z-50 bg-bg-primary border border-border-default rounded-lg shadow-lg flex flex-col"
+          class="z-[120] bg-bg-primary border border-border-default rounded-lg shadow-lg flex flex-col"
           style={sessionPopupStyle}
           role="dialog"
           aria-label="Session search"
@@ -946,7 +946,7 @@
   <div
     class="{isIphone
       ? 'shrink-0'
-      : 'flex-1 min-h-0'} p-4 flex flex-col overflow-hidden"
+      : 'flex-1 min-h-0'} p-4 flex flex-col overflow-visible"
   >
     <!-- Input area -->
     <div class="{isIphone ? 'shrink-0' : 'flex-1 min-h-0'} flex gap-3">
@@ -976,7 +976,7 @@
         ></textarea>
 
         <!-- Autocomplete dropdown -->
-        <div class="absolute left-0 right-0 bottom-full mb-1">
+        <div class="absolute z-[130] left-0 right-0 bottom-full mb-1 pointer-events-auto">
           <FileAutocomplete
             {contextId}
             query={autocompleteQuery}

@@ -1021,7 +1021,7 @@
         {#if isSessionPopupOpen}
           <div
             bind:this={sessionPopupRef}
-            class="z-50 bg-bg-primary border border-border-default rounded-lg shadow-lg flex flex-col"
+            class="z-[120] bg-bg-primary border border-border-default rounded-lg shadow-lg flex flex-col"
             style={sessionPopupStyle}
             role="dialog"
             aria-label="Session search"

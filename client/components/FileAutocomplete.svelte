@@ -287,7 +287,7 @@
 
 {#if visible && filteredFiles.length > 0}
   <div
-    class="file-autocomplete absolute z-50 w-full max-w-md
+    class="file-autocomplete relative z-[120] w-full max-w-md
            bg-bg-primary border border-border-default rounded-lg shadow-lg
            max-h-80 overflow-y-auto"
     role="listbox"
