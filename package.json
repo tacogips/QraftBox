@@ -29,10 +29,10 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"client/**/*.svelte\"",
     "clean": "rm -rf dist"
   },
-  "homepage": "https://github.com/user/repo",
+  "homepage": "https://github.com/tacogips/QraftBox",
   "repository": {
     "type": "git",
-    "url": "https://github.com/user/repo"
+    "url": "https://github.com/tacogips/QraftBox.git"
   },
   "license": "MIT",
   "trustedDependencies": [],

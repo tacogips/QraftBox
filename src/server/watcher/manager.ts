@@ -94,7 +94,11 @@ export function createProjectWatcherManager(
 
     try {
       const watcher = createFileWatcher(projectPath);
-      const broadcaster = createWatcherBroadcaster(watcher, wsManager);
+      const broadcaster = createWatcherBroadcaster(
+        projectPath,
+        watcher,
+        wsManager,
+      );
       broadcaster.start();
       await watcher.start();
       watchers.set(projectPath, { watcher, broadcaster });

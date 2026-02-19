@@ -112,6 +112,14 @@ jobs:
           "
           cd release/npm && npm pack --pack-destination ..
 
+      - name: Publish to npm
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > release/npm/.npmrc
+          cd release/npm && npm publish
+          rm -f release/npm/.npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:

@@ -47,14 +47,14 @@ describe("createWatcherBroadcaster", () => {
 
   describe("initialization", () => {
     test("registers handler on watcher immediately", () => {
-      createWatcherBroadcaster(mockWatcher, mockWsManager);
+      createWatcherBroadcaster("/test/project", mockWatcher, mockWsManager);
 
       expect(mockWatcher.onFileChange).toHaveBeenCalledTimes(1);
       expect(registeredHandler).toBeDefined();
     });
 
     test("does not broadcast before start", () => {
-      createWatcherBroadcaster(mockWatcher, mockWsManager);
+      createWatcherBroadcaster("/test/project", mockWatcher, mockWsManager);
 
       const events = [createFileChangeEvent("modify", "test.ts")];
       registeredHandler?.(events);
@@ -65,7 +65,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("start", () => {
     test("enables broadcasting", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.start();
 
@@ -76,7 +80,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("can be called multiple times safely", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.start();
       broadcaster.start();
@@ -91,7 +99,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("stop", () => {
     test("disables broadcasting", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.start();
       const events1 = [createFileChangeEvent("modify", "test1.ts")];
@@ -107,7 +119,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("can be called multiple times safely", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.start();
       broadcaster.stop();
@@ -121,7 +137,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("can be called before start", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.stop();
 
@@ -134,7 +154,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("lifecycle", () => {
     test("supports start/stop/restart cycle", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       // Start
       broadcaster.start();
@@ -158,7 +182,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("event formatting", () => {
     test("broadcasts with 'file-change' event type", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [createFileChangeEvent("modify", "test.ts")];
@@ -172,7 +200,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("wraps events in changes array", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [
@@ -182,12 +214,17 @@ describe("createWatcherBroadcaster", () => {
       registeredHandler?.(events);
 
       expect(mockWsManager.broadcast).toHaveBeenCalledWith("file-change", {
+        projectPath: "/test/project",
         changes: events,
       });
     });
 
     test("preserves all event properties", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const event = createFileChangeEvent("delete", "removed.ts");
@@ -199,9 +236,10 @@ describe("createWatcherBroadcaster", () => {
 
       const [eventType, data] = broadcastCall as [
         string,
-        { changes: FileChangeEvent[] },
+        { projectPath: string; changes: FileChangeEvent[] },
       ];
       expect(eventType).toBe("file-change");
+      expect(data.projectPath).toBe("/test/project");
       expect(data.changes).toHaveLength(1);
       expect(data.changes[0]).toEqual({
         type: "delete",
@@ -213,7 +251,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("batch handling", () => {
     test("broadcasts single event", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [createFileChangeEvent("modify", "single.ts")];
@@ -224,13 +266,18 @@ describe("createWatcherBroadcaster", () => {
         .mock.calls[0];
       const [, data] = broadcastCall as [
         string,
-        { changes: FileChangeEvent[] },
+        { projectPath: string; changes: FileChangeEvent[] },
       ];
+      expect(data.projectPath).toBe("/test/project");
       expect(data.changes).toHaveLength(1);
     });
 
     test("broadcasts multiple events together", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [
@@ -245,13 +292,18 @@ describe("createWatcherBroadcaster", () => {
         .mock.calls[0];
       const [, data] = broadcastCall as [
         string,
-        { changes: FileChangeEvent[] },
+        { projectPath: string; changes: FileChangeEvent[] },
       ];
+      expect(data.projectPath).toBe("/test/project");
       expect(data.changes).toHaveLength(3);
     });
 
     test("skips empty event arrays", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       registeredHandler?.([]);
@@ -267,7 +319,11 @@ describe("createWatcherBroadcaster", () => {
         throw new Error(errorMessage);
       });
 
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [createFileChangeEvent("modify", "test.ts")];
@@ -287,7 +343,11 @@ describe("createWatcherBroadcaster", () => {
         }
       });
 
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       // First call throws
@@ -306,7 +366,11 @@ describe("createWatcherBroadcaster", () => {
         throw "string error";
       });
 
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       const events = [createFileChangeEvent("modify", "test.ts")];
@@ -319,7 +383,11 @@ describe("createWatcherBroadcaster", () => {
 
   describe("integration scenarios", () => {
     test("handles rapid start/stop cycles", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       for (let i = 0; i < 10; i++) {
         broadcaster.start();
@@ -333,7 +401,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("handles events during state transitions", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
 
       broadcaster.start();
       const events1 = [createFileChangeEvent("modify", "test1.ts")];
@@ -349,7 +421,11 @@ describe("createWatcherBroadcaster", () => {
     });
 
     test("works with readonly event arrays", () => {
-      const broadcaster = createWatcherBroadcaster(mockWatcher, mockWsManager);
+      const broadcaster = createWatcherBroadcaster(
+        "/test/project",
+        mockWatcher,
+        mockWsManager,
+      );
       broadcaster.start();
 
       // Readonly array (as specified in FileWatcher interface)

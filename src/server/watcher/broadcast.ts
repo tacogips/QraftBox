@@ -39,6 +39,7 @@ export interface WatcherBroadcaster {
  * Wrapper for file change events sent via WebSocket.
  */
 export interface FileChangeBroadcast {
+  readonly projectPath: string;
   readonly changes: readonly FileChangeEvent[];
 }
 
@@ -49,8 +50,10 @@ export interface FileChangeBroadcast {
  * to WebSocket broadcast. The broadcaster registers a handler on the FileWatcher
  * that formats and broadcasts events to all connected WebSocket clients.
  *
- * The "file-change" event is broadcast with data: { changes: FileChangeEvent[] }.
+ * The "file-change" event is broadcast with data:
+ * { projectPath: string, changes: FileChangeEvent[] }.
  *
+ * @param projectPath - Absolute project path that produced the events
  * @param watcher - FileWatcher instance to listen to
  * @param wsManager - WebSocketManager instance for broadcasting
  * @returns WatcherBroadcaster instance
@@ -59,7 +62,7 @@ export interface FileChangeBroadcast {
  * ```typescript
  * const watcher = createFileWatcher('/path/to/repo');
  * const wsManager = createWebSocketManager();
- * const broadcaster = createWatcherBroadcaster(watcher, wsManager);
+ * const broadcaster = createWatcherBroadcaster('/path/to/repo', watcher, wsManager);
  *
  * broadcaster.start();
  * await watcher.start();
@@ -71,6 +74,7 @@ export interface FileChangeBroadcast {
  * ```
  */
 export function createWatcherBroadcaster(
+  projectPath: string,
   watcher: FileWatcher,
   wsManager: WebSocketManager,
 ): WatcherBroadcaster {
@@ -95,6 +99,7 @@ export function createWatcherBroadcaster(
 
     // Format and broadcast
     const broadcast: FileChangeBroadcast = {
+      projectPath,
       changes: events,
     };
 

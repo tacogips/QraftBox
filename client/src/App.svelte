@@ -508,12 +508,15 @@
 
   const realtimeController = createAppRealtimeController({
     getContextId: () => contextId,
+    getProjectPath: () => projectPath,
+    getSelectedPath: () => selectedPath,
     getFileTreeMode: () => fileTreeMode,
     markAllFilesTreeStale: () => {
       allFilesTreeStale = true;
     },
     fetchDiff,
     refreshAllFiles,
+    fetchFileContent,
     setPromptQueue: (prompts) => {
       serverPromptQueue = prompts;
     },

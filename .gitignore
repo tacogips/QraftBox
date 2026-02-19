@@ -37,6 +37,7 @@ result-*
 logs/
 *.log
 npm-debug.log*
+**/.npmrc
 
 # Test coverage
 coverage/

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="usage/resource/qraftbox_log.png" alt="QraftBox" width="400" />
+</p>
+
 # QraftBox
 
 **Craft from Anywhere.**
@@ -440,6 +444,10 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 ## 日本語 (Japanese)
+
+<p align="center">
+  <img src="usage/resource/qraftbox_log.png" alt="QraftBox" width="400" />
+</p>
 
 **Craft from Anywhere.**
 

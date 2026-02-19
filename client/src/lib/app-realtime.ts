@@ -1,12 +1,21 @@
 import { buildQueueStatus } from "./ai-runtime";
 import type { PromptQueueItem } from "./app-api";
+import type { FileChangeEvent } from "../../../src/types/watcher";
+
+interface FileChangeMessage {
+  readonly changes: readonly FileChangeEvent[];
+  readonly projectPath?: string;
+}
 
 interface AppRealtimeDeps {
   getContextId: () => string | null;
+  getProjectPath: () => string;
+  getSelectedPath: () => string | null;
   getFileTreeMode: () => "diff" | "all";
   markAllFilesTreeStale: () => void;
   fetchDiff: (ctxId: string) => Promise<void>;
   refreshAllFiles: (ctxId: string) => Promise<void>;
+  fetchFileContent: (ctxId: string, filePath: string) => Promise<void>;
   setPromptQueue: (prompts: PromptQueueItem[]) => void;
   setQueueStatus: (status: ReturnType<typeof buildQueueStatus>) => void;
   fetchActiveSessions: () => Promise<void>;
@@ -45,6 +54,12 @@ export function createAppRealtimeController(deps: AppRealtimeDeps): {
           if (contextId === null) {
             return;
           }
+          const fileChangeMessage = message.data as FileChangeMessage;
+          const selectedPath = deps.getSelectedPath();
+          const activeProjectPath = deps.getProjectPath();
+          const isCurrentProjectEvent =
+            fileChangeMessage.projectPath === undefined ||
+            fileChangeMessage.projectPath === activeProjectPath;
 
           deps.markAllFilesTreeStale();
           if (refetchTimer !== null) {
@@ -59,6 +74,14 @@ export function createAppRealtimeController(deps: AppRealtimeDeps): {
             }
             refetchTimer = null;
           }, 500);
+
+          if (
+            isCurrentProjectEvent &&
+            selectedPath !== null &&
+            fileChangeMessage.changes.some((change) => change.path === selectedPath)
+          ) {
+            void deps.fetchFileContent(contextId, selectedPath);
+          }
           return;
         }
 

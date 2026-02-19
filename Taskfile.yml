@@ -237,6 +237,18 @@ tasks:
           TARGET: bun-linux-arm64
           SUFFIX: linux-arm64
 
+  release:npm-publish:
+    desc: Build npm package and publish to npmjs.com
+    cmds:
+      - task: release:npm
+      - cd release/npm && npm publish
+
+  release:npm-publish-dry:
+    desc: Build npm package and dry-run publish (no actual upload)
+    cmds:
+      - task: release:npm
+      - cd release/npm && npm publish --dry-run
+
   release:npm-run:
     desc: Build npm package and run it locally
     cmds:
@@ -256,8 +268,8 @@ tasks:
       - chmod +x release/npm/bin/qraftbox.js
       # Generate package.json for npm distribution
       - |
-        node -e "
-          const pkg = require('./package.json');
+        bun -e "
+          const pkg = await Bun.file('./package.json').json();
           const npmPkg = {
             name: pkg.name,
             version: pkg.version,
@@ -271,15 +283,15 @@ tasks:
             homepage: pkg.homepage,
             repository: pkg.repository,
           };
-          require('fs').writeFileSync(
+          await Bun.write(
             'release/npm/package.json',
             JSON.stringify(npmPkg, null, 2) + '\n'
           );
         "
       # Pack the npm tarball
-      - cd release/npm && npm pack --pack-destination ..
+      - cd release/npm && bun pm pack --destination ..
       - |
-        VERSION=$(node -p "require('./package.json').version")
+        VERSION=$(bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)")
         echo "Built release/qraftbox-${VERSION}.tgz"
 
   release:all:
