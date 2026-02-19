@@ -42,6 +42,45 @@ export class GitExecutorError extends Error {
  * Default timeout for git operations (30 seconds)
  */
 const DEFAULT_TIMEOUT_MS = 30000;
+const DEFAULT_MAX_BUFFER_BYTES = 8 * 1024 * 1024; // 8MB
+
+interface StreamReadResult {
+  readonly text: string;
+  readonly exceeded: boolean;
+}
+
+async function readStreamWithLimit(
+  stream: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  onLimitExceeded: () => void,
+): Promise<StreamReadResult> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+  let exceeded = false;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        exceeded = true;
+        onLimitExceeded();
+        break;
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+
+  return { text, exceeded };
+}
 
 /**
  * Execute a git command and return stdout, stderr, and exit code
@@ -64,6 +103,7 @@ export async function execGit(
   options: GitExecOptions,
 ): Promise<GitExecResult> {
   const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+  const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER_BYTES;
   const command = `git ${args.join(" ")}`;
 
   let proc;
@@ -89,16 +129,34 @@ export async function execGit(
   }, timeout);
 
   try {
-    const [stdout, stderr, exitCode] = await Promise.all([
-      new Response(proc.stdout).text(),
-      new Response(proc.stderr).text(),
+    const [stdoutResult, stderrResult, exitCode] = await Promise.all([
+      readStreamWithLimit(proc.stdout, maxBuffer, () => {
+        try {
+          proc.kill();
+        } catch {
+          // Process may have already exited
+        }
+      }),
+      readStreamWithLimit(proc.stderr, maxBuffer, () => {
+        try {
+          proc.kill();
+        } catch {
+          // Process may have already exited
+        }
+      }),
       proc.exited,
     ]);
 
     clearTimeout(timeoutId);
 
+    const exceeded =
+      stdoutResult.exceeded === true || stderrResult.exceeded === true;
+    const stderr = exceeded
+      ? `${stderrResult.text}\n[execGit] output exceeded maxBuffer (${maxBuffer} bytes)`
+      : stderrResult.text;
+
     return {
-      stdout,
+      stdout: stdoutResult.text,
       stderr,
       exitCode,
     };

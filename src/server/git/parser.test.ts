@@ -216,6 +216,34 @@ Binary files a/image.png and b/image.png differ`;
     expect(result.chunks.length).toBe(0);
   });
 
+  test("should parse binary deleted file as deleted", () => {
+    const diff = `diff --git a/image.png b/image.png
+deleted file mode 100644
+index cb8d9ce..0000000
+Binary files a/image.png and /dev/null differ`;
+
+    const result = parseFileDiff(diff);
+
+    expect(result.path).toBe("image.png");
+    expect(result.status).toBe("deleted");
+    expect(result.isBinary).toBe(true);
+    expect(result.chunks.length).toBe(0);
+  });
+
+  test("should parse binary added file as added", () => {
+    const diff = `diff --git a/image.png b/image.png
+new file mode 100644
+index 0000000..cb8d9ce
+Binary files /dev/null and b/image.png differ`;
+
+    const result = parseFileDiff(diff);
+
+    expect(result.path).toBe("image.png");
+    expect(result.status).toBe("added");
+    expect(result.isBinary).toBe(true);
+    expect(result.chunks.length).toBe(0);
+  });
+
   test("should parse multiple chunks in one file", () => {
     const diff = `diff --git a/file.ts b/file.ts
 --- a/file.ts

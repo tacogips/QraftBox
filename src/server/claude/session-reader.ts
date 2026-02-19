@@ -31,6 +31,7 @@ import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/i
 import { createProductionContainer } from "claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
 
 /**
  * Options for listing sessions
@@ -78,6 +79,14 @@ export class ClaudeSessionReader {
   }
 
   /**
+   * Encode an absolute path into Claude project directory naming style.
+   * Example: "/g/learning-contents" -> "-g-learning-contents"
+   */
+  private encodeProjectPath(path: string): string {
+    return path.replace(/\//g, "-");
+  }
+
+  /**
    * List all Claude projects with session metadata
    *
    * @param pathFilter - Optional path prefix to filter projects (e.g., "/g/gits/tacogips")
@@ -89,21 +98,24 @@ export class ClaudeSessionReader {
 
     const entries = await readdir(this.projectsDir, { withFileTypes: true });
     const projects: ProjectInfo[] = [];
+    const encodedPathFilter =
+      pathFilter !== undefined ? this.encodeProjectPath(pathFilter) : undefined;
 
     for (const entry of entries) {
       if (!entry.isDirectory()) {
         continue;
       }
 
-      // Early filtering: skip directories that clearly can't match pathFilter
+      // Early filtering: avoid scanning unrelated project directories.
+      // Match either encoded directory prefix or simple decoded prefix.
       if (pathFilter !== undefined) {
         const simpleDecoded = entry.name.replace(/-/g, "/");
-        // Only skip if it's definitely not a match (doesn't start with filter)
-        // AND the filter doesn't contain hyphens (which could cause ambiguity)
-        if (
-          !simpleDecoded.startsWith(pathFilter) &&
-          !pathFilter.includes("-")
-        ) {
+        const matchesEncodedPrefix =
+          encodedPathFilter !== undefined &&
+          entry.name.startsWith(encodedPathFilter);
+        const matchesSimpleDecodedPrefix = simpleDecoded.startsWith(pathFilter);
+
+        if (!matchesEncodedPrefix && !matchesSimpleDecodedPrefix) {
           continue;
         }
       }
@@ -303,6 +315,11 @@ export class ClaudeSessionReader {
   private async readSessionIndex(path: string): Promise<ClaudeSessionIndex> {
     if (!existsSync(path)) {
       throw new Error(`Session index not found: ${path}`);
+    }
+
+    const indexStat = await stat(path);
+    if (indexStat.size > MAX_SESSION_INDEX_SIZE) {
+      throw new Error(`Session index too large: ${path}`);
     }
 
     const content = await readFile(path, "utf-8");

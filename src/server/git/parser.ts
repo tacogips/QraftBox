@@ -102,6 +102,17 @@ export function parseFileDiff(rawFileDiff: string): DiffFile {
       continue;
     }
 
+    // Check for file mode headers used by binary add/delete diffs
+    if (line.startsWith("new file mode ")) {
+      status = "added";
+      continue;
+    }
+
+    if (line.startsWith("deleted file mode ")) {
+      status = "deleted";
+      continue;
+    }
+
     // Check for new file (added)
     if (line.startsWith("--- /dev/null")) {
       status = "added";

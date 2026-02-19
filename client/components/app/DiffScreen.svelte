@@ -424,6 +424,26 @@
       onCollapseSidebar();
     }
   }
+
+  const autocompleteAllFiles = $derived.by(() => {
+    const paths: string[] = [];
+
+    function collect(node: FileNode): void {
+      if (!node.isDirectory) {
+        paths.push(node.path);
+        return;
+      }
+      if (node.children === undefined) {
+        return;
+      }
+      for (const child of node.children) {
+        collect(child);
+      }
+    }
+
+    collect(fileTree);
+    return paths;
+  });
 </script>
 
 <div class="relative flex flex-1 min-h-0 overflow-hidden">
@@ -474,7 +494,11 @@
       type="button"
       class="absolute top-12 z-20 flex items-center justify-center
              {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
-             {isPhoneViewport && sidebarCollapsed ? '-left-0.5' : '-right-4'}
+             {isPhoneViewport
+        ? sidebarCollapsed
+          ? '-left-0.5'
+          : '-right-6'
+        : '-right-4'}
              bg-bg-secondary border border-l-0 border-border-default
              rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
              transition-colors cursor-pointer"
@@ -896,7 +920,7 @@
             {queueStatus}
             {isFirstMessage}
             changedFiles={changedFilePaths}
-            allFiles={changedFilePaths}
+            allFiles={autocompleteAllFiles}
             modelProfiles={aiModelProfiles}
             selectedModelProfileId={selectedAiModelProfileId}
             onSelectModelProfile={(profileId) => {

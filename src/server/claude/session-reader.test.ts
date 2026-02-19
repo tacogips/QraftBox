@@ -282,6 +282,40 @@ describe("ClaudeSessionReader", () => {
 
       expect(projects).toHaveLength(0);
     });
+
+    it("should filter correctly when pathFilter contains hyphens", async () => {
+      const matchingDir = join(projectsDir, "-g-learning-contents");
+      const nonMatchingDir = join(projectsDir, "-g-learning-other");
+
+      await mkdir(matchingDir, { recursive: true });
+      await mkdir(nonMatchingDir, { recursive: true });
+
+      const matchingIndex: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/learning-contents",
+        entries: [createMockSessionEntry("session-1", "2026-02-05T10:00:00Z")],
+      };
+
+      const nonMatchingIndex: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/learning-other",
+        entries: [createMockSessionEntry("session-2", "2026-02-05T10:00:00Z")],
+      };
+
+      await writeFile(
+        join(matchingDir, "sessions-index.json"),
+        JSON.stringify(matchingIndex, null, 2),
+      );
+      await writeFile(
+        join(nonMatchingDir, "sessions-index.json"),
+        JSON.stringify(nonMatchingIndex, null, 2),
+      );
+
+      const projects = await reader.listProjects("/g/learning-contents");
+
+      expect(projects).toHaveLength(1);
+      expect(projects[0]?.path).toBe("/g/learning-contents");
+    });
   });
 
   describe("listSessions", () => {

@@ -33,6 +33,11 @@ export type FileContentResponse = {
   mimeType?: string;
 };
 
+export type FileAutocompleteResult = {
+  path: string;
+  status?: string | undefined;
+};
+
 export function buildRawFileUrl(ctxId: string, filePath: string): string {
   return `/api/ctx/${ctxId}/files/file-raw/${filePath}`;
 }
@@ -229,6 +234,25 @@ export async function fetchFileContentApi(
   const response = await fetch(`/api/ctx/${ctxId}/files/file/${filePath}`);
   ensureOk(response, "File API error");
   return (await response.json()) as FileContentResponse;
+}
+
+export async function fetchFileAutocompleteApi(
+  ctxId: string,
+  query: string,
+  limit = 50,
+): Promise<readonly FileAutocompleteResult[]> {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  });
+  const response = await fetch(
+    `/api/ctx/${ctxId}/files/autocomplete?${params.toString()}`,
+  );
+  ensureOk(response, "File autocomplete API error");
+  const data = (await response.json()) as {
+    results: readonly FileAutocompleteResult[];
+  };
+  return data.results;
 }
 
 export async function submitAIPrompt(params: {

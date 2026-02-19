@@ -240,6 +240,68 @@ async function getUntrackedDiffFiles(
   return results;
 }
 
+function mapNameStatusToFileStatus(statusCode: string): FileStatusCode {
+  if (statusCode.startsWith("A")) return "added";
+  if (statusCode.startsWith("D")) return "deleted";
+  if (statusCode.startsWith("R")) return "renamed";
+  return "modified";
+}
+
+async function getDiffSummaryOnly(
+  projectPath: string,
+  options?: DiffOptions | undefined,
+): Promise<readonly DiffFile[]> {
+  const args: string[] = ["diff", "--name-status"];
+
+  if (options?.base !== undefined && options?.target !== undefined) {
+    args.push(`${options.base}..${options.target}`);
+  } else if (options?.base !== undefined) {
+    args.push(options.base);
+  } else {
+    args.push("HEAD");
+  }
+
+  if (options?.paths !== undefined && options.paths.length > 0) {
+    args.push("--", ...options.paths);
+  }
+
+  const result = await execGit(args, { cwd: projectPath });
+  if (result.exitCode !== 0) {
+    return [];
+  }
+
+  const files: DiffFile[] = [];
+  for (const line of result.stdout.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+
+    const parts = trimmed.split("\t");
+    const code = parts[0];
+    const firstPath = parts[1];
+    const secondPath = parts[2];
+    if (code === undefined || firstPath === undefined) continue;
+
+    const status = mapNameStatusToFileStatus(code);
+    const path =
+      status === "renamed" && secondPath !== undefined ? secondPath : firstPath;
+
+    files.push({
+      path: unquoteGitPath(path),
+      status,
+      oldPath:
+        status === "renamed" && secondPath !== undefined
+          ? unquoteGitPath(firstPath)
+          : undefined,
+      additions: 0,
+      deletions: 0,
+      chunks: [],
+      isBinary: false,
+    });
+  }
+
+  return files;
+}
+
 /**
  * Generate full diff between base and target (or working tree)
  *
@@ -305,6 +367,19 @@ export async function getDiff(
 
       const stagedResult = await execGit(stagedArgs, { cwd: projectPath });
       return parseDiff(stagedResult.stdout);
+    }
+
+    if (result.stderr.includes("[execGit] output exceeded maxBuffer")) {
+      const summaryFiles = await getDiffSummaryOnly(projectPath, options);
+      const isWorkingTreeDiff = options?.target === undefined;
+      if (isWorkingTreeDiff) {
+        const untrackedFiles = await getUntrackedDiffFiles(
+          projectPath,
+          options?.paths,
+        );
+        return [...summaryFiles, ...untrackedFiles];
+      }
+      return summaryFiles;
     }
 
     // Other fatal errors should be thrown

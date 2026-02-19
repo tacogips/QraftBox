@@ -978,6 +978,7 @@
         <!-- Autocomplete dropdown -->
         <div class="absolute left-0 right-0 bottom-full mb-1">
           <FileAutocomplete
+            {contextId}
             query={autocompleteQuery}
             {changedFiles}
             {allFiles}

@@ -20,12 +20,15 @@
    * - Touch-friendly with 48px items
    */
 
+  import { fetchFileAutocompleteApi } from "../src/lib/app-api";
+
   interface LineRange {
     readonly start: number;
     readonly end: number;
   }
 
   interface Props {
+    contextId?: string | null;
     query: string;
     changedFiles: readonly string[];
     allFiles: readonly string[];
@@ -35,13 +38,22 @@
   }
 
   // Svelte 5 props syntax
-  const { query, changedFiles, allFiles, visible, onSelect, onClose }: Props =
-    $props();
+  const {
+    contextId = null,
+    query,
+    changedFiles,
+    allFiles,
+    visible,
+    onSelect,
+    onClose,
+  }: Props = $props();
 
   /**
    * Selected index in results
    */
   let selectedIndex = $state(0);
+  let remoteFiles = $state<readonly { path: string; status?: string }[]>([]);
+  let remoteRequestId = 0;
 
   /**
    * Parse line range from query
@@ -139,12 +151,18 @@
   const filteredFiles = $derived.by(() => {
     const { path: searchPath } = parseLineRange(query);
 
+    const useRemoteFiles =
+      contextId !== null && searchPath.length > 0 && remoteFiles.length > 0;
+    const searchPool = useRemoteFiles
+      ? remoteFiles.map((result) => result.path)
+      : allFiles;
+
     // Score all files
     const changedSet = new Set(changedFiles);
     const scored: { path: string; score: number; isChanged: boolean }[] = [];
 
     // Add changed files first
-    for (const path of changedFiles) {
+    for (const path of useRemoteFiles ? [] : changedFiles) {
       const score = fuzzyScore(path, searchPath);
       if (score > 0 || searchPath.length === 0) {
         scored.push({ path, score, isChanged: true });
@@ -152,7 +170,7 @@
     }
 
     // Add other files
-    for (const path of allFiles) {
+    for (const path of searchPool) {
       if (!changedSet.has(path)) {
         const score = fuzzyScore(path, searchPath);
         if (score > 0 || searchPath.length === 0) {
@@ -175,6 +193,34 @@
 
     // Limit to top 10
     return scored.slice(0, 10);
+  });
+
+  $effect(() => {
+    const { path: searchPath } = parseLineRange(query);
+    const shouldFetch =
+      visible && contextId !== null && searchPath.trim().length > 0;
+    if (!shouldFetch) {
+      remoteFiles = [];
+      return;
+    }
+
+    const requestId = ++remoteRequestId;
+    void (async () => {
+      try {
+        const results = await fetchFileAutocompleteApi(
+          contextId,
+          searchPath,
+          60,
+        );
+        if (requestId === remoteRequestId) {
+          remoteFiles = results;
+        }
+      } catch {
+        if (requestId === remoteRequestId) {
+          remoteFiles = [];
+        }
+      }
+    })();
   });
 
   /**
