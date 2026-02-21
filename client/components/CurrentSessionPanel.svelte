@@ -14,6 +14,7 @@
 
   import type { AISession } from "../../src/types/ai";
   import type { ExtendedSessionEntry } from "../../src/types/claude-session";
+  import type { Snippet } from "svelte";
   import { stripSystemTags } from "../../src/utils/strip-system-tags";
   import SessionTranscriptInline from "./sessions/SessionTranscriptInline.svelte";
   import SessionSearchPopup from "./SessionSearchPopup.svelte";
@@ -50,6 +51,7 @@
     onCancelQueuedPrompt?: (id: string) => Promise<void>;
     onResumeSession: (sessionId: string) => void;
     projectPath: string;
+    nextPromptContent?: Snippet;
   }
 
   const {
@@ -64,6 +66,7 @@
     onCancelQueuedPrompt,
     onResumeSession,
     projectPath,
+    nextPromptContent,
   }: Props = $props();
 
   /**
@@ -930,6 +933,10 @@
               : undefined}
           />
         {/if}
+
+        <div class="border-t border-border-default/50 bg-bg-secondary">
+          {@render nextPromptContent?.()}
+        </div>
       </div>
     {/if}
   {:else}
@@ -1034,6 +1041,10 @@
             />
           </div>
         {/if}
+      </div>
+
+      <div class="border-t border-border-default/50 bg-bg-secondary w-full">
+        {@render nextPromptContent?.()}
       </div>
     </div>
   {/if}

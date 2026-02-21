@@ -279,7 +279,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   function handleResumeToChanges(resumeQraftId: string): void {
     deps.setQraftAiSessionId(resumeQraftId as QraftAiSessionId);
     deps.setResumeDisplaySessionId(resumeQraftId);
-    deps.navigateToScreen("files");
+    deps.navigateToScreen("ai-session");
     void fetchActiveSessions();
     void fetchPromptQueue();
   }

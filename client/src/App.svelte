@@ -29,6 +29,7 @@
   import AppTopNav from "../components/app/AppTopNav.svelte";
   import DirectoryPicker from "./components/DirectoryPicker.svelte";
   import DiffScreen from "../components/app/DiffScreen.svelte";
+  import AiSessionScreen from "../components/app/AiSessionScreen.svelte";
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
@@ -560,9 +561,12 @@
     }
   });
 
-  // On mobile, entering the files screen should start with tree collapsed.
+  // On mobile, entering a file-tree heavy screen should start with tree collapsed.
   $effect(() => {
-    if (currentScreen === "files" && shouldDefaultToCollapsedSidebar()) {
+    if (
+      (currentScreen === "files" || currentScreen === "ai-session") &&
+      shouldDefaultToCollapsedSidebar()
+    ) {
       sidebarCollapsed = true;
     }
   });
@@ -605,7 +609,6 @@
   <div class="flex flex-1 min-h-0 overflow-hidden">
     {#if currentScreen === "files"}
       <DiffScreen
-        {activeTabIsGitRepo}
         {loading}
         {error}
         {sidebarCollapsed}
@@ -624,6 +627,65 @@
         {stats}
         {navigatePrev}
         {navigateNext}
+        canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
+        canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
+        currentQraftAiSessionId={qraftAiSessionId}
+        onToggleSidebar={toggleSidebar}
+        onFileSelect={handleFileSelect}
+        onFileTreeModeChange={(mode) => {
+          fileTreeMode = mode;
+          if (mode === "all" && contextId !== null) {
+            void fetchAllFiles(contextId);
+          }
+        }}
+        {showIgnored}
+        onShowIgnoredChange={(value) => {
+          showIgnored = value;
+          allFilesTree = null;
+          allFilesTreeStale = true;
+          if (contextId !== null && fileTreeMode === "all") {
+            void fetchAllFiles(contextId);
+          }
+        }}
+        {showAllFiles}
+        onShowAllFilesChange={(value) => {
+          showAllFiles = value;
+          allFilesTree = null;
+          allFilesTreeStale = true;
+          if (contextId !== null && fileTreeMode === "all") {
+            void fetchAllFiles(contextId);
+          }
+        }}
+        onReloadFileTree={() => {
+          if (contextId !== null) {
+            void fetchDiff(contextId);
+            if (fileTreeMode === "all") {
+              allFilesTree = null;
+              allFilesTreeStale = true;
+              void fetchAllFiles(contextId);
+            }
+          }
+        }}
+        onDirectoryExpand={handleDirectoryExpand}
+        onLoadFullTree={handleLoadFullTree}
+        onCollapseSidebar={collapseSidebar}
+        onNarrowSidebar={narrowSidebar}
+        onWidenSidebar={widenSidebar}
+        onSetViewMode={setViewMode}
+        onSubmitPrompt={submitPrompt}
+      />
+    {:else if currentScreen === "ai-session"}
+      <AiSessionScreen
+        {loading}
+        {error}
+        {sidebarCollapsed}
+        {sidebarWidth}
+        {allFilesLoading}
+        {fileTree}
+        {fileTreeMode}
+        {selectedPath}
+        {diffFiles}
+        {contextId}
         canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
         canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
         {queueStatus}
@@ -677,7 +739,6 @@
         onCollapseSidebar={collapseSidebar}
         onNarrowSidebar={narrowSidebar}
         onWidenSidebar={widenSidebar}
-        onSetViewMode={setViewMode}
         onSubmitPrompt={submitPrompt}
         onNewSession={handleNewSession}
         onResumeCliSession={handleResumeCliSession}

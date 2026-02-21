@@ -280,7 +280,34 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 
 # Open browser automatically on start
 qraftbox --open
+
+# Allow access from external browsers (e.g., from other devices on your network)
+# SECURITY WARNING: Only use this on trusted networks (see Security Warning above)
+qraftbox --host 0.0.0.0
 ```
+
+**Accessing from External Devices:**
+
+**Recommended: Use a VPN (Tailscale, WireGuard, ZeroTier)**
+
+The safest way to access QraftBox from another device is to use a VPN such as:
+- [Tailscale](https://tailscale.com/) (easiest setup, free for personal use)
+- [WireGuard](https://www.wireguard.com/)
+- [ZeroTier](https://www.zerotier.com/)
+
+With a VPN, QraftBox remains bound to `localhost`, but you can access it securely from any of your devices as if they were on the same local network. This approach works both within your home network and over the internet.
+
+**Alternative: Local Network Only (`--host 0.0.0.0`)**
+
+If you only need access within your trusted local network (not over the internet), you can bind the server to `0.0.0.0`:
+
+```bash
+qraftbox --host 0.0.0.0
+```
+
+Then access it using your computer's IP address from the other device (e.g., `http://192.168.1.100:7144`).
+
+**SECURITY WARNING:** Using `--host 0.0.0.0` exposes QraftBox to all network interfaces. Only use this on trusted private networks, never expose it to the internet. For remote access, always use a VPN instead.
 
 ### Feature Preview (Video / Images)
 
@@ -718,7 +745,34 @@ qraftbox -d /path/to/project1 -d /path/to/project2
 
 # 起動時にブラウザを自動で開く
 qraftbox --open
+
+# 外部のブラウザからアクセスを許可（例：ネットワーク上の他のデバイスから）
+# セキュリティ警告: 信頼できるネットワーク上でのみ使用してください（上記のセキュリティ警告を参照）
+qraftbox --host 0.0.0.0
 ```
+
+**外部デバイスからのアクセス:**
+
+**推奨: VPN を使用する（Tailscale、WireGuard、ZeroTier）**
+
+別のデバイスから QraftBox にアクセスする最も安全な方法は、以下のような VPN を使用することです:
+- [Tailscale](https://tailscale.com/)（最も簡単にセットアップ可能、個人利用は無料）
+- [WireGuard](https://www.wireguard.com/)
+- [ZeroTier](https://www.zerotier.com/)
+
+VPN を使用すると、QraftBox は `localhost` にバインドされたままで、すべてのデバイスから同じローカルネットワーク上にいるかのように安全にアクセスできます。この方法は、自宅のネットワーク内でもインターネット経由でも機能します。
+
+**代替方法: ローカルネットワーク内のみ（`--host 0.0.0.0`）**
+
+信頼できるローカルネットワーク内でのみアクセスが必要な場合（インターネット経由ではない）、サーバーを `0.0.0.0` にバインドできます:
+
+```bash
+qraftbox --host 0.0.0.0
+```
+
+その後、他のデバイスからコンピュータのIPアドレスを使ってアクセスします（例：`http://192.168.1.100:7144`）。
+
+**セキュリティ警告:** `--host 0.0.0.0` を使用すると、QraftBox がすべてのネットワークインターフェースに公開されます。信頼できるプライベートネットワーク上でのみ使用し、絶対にインターネットに公開しないでください。リモートアクセスには必ず VPN を使用してください。
 
 ### 機能プレビュー（動画 / 画像）
 

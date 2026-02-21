@@ -1,70 +1,13 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
-  import type { QueueStatus, AISession } from "../../../src/types/ai";
-  import type { ModelProfile } from "../../../src/types/model-config";
-  import {
-    buildRawFileUrl,
-    fetchModelConfigState,
-    type PromptQueueItem,
-  } from "../../src/lib/app-api";
+  import { buildRawFileUrl } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
-  import AIPromptPanel from "../AIPromptPanel.svelte";
-  import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
 
-  // AI panel resize constants
-  const AI_PANEL_HEIGHT_KEY = "qraftbox-ai-panel-height";
-  const AI_PANEL_MIN_HEIGHT = 120;
-  const AI_PANEL_DEFAULT_HEIGHT = 400;
-  // Minimum space reserved for file viewer + stats bar + drag handle
-  const FILE_VIEWER_MIN_HEIGHT = 48;
-
-  // AI prompt panel resize constants
-  const AI_PROMPT_HEIGHT_KEY = "qraftbox-ai-prompt-height";
-  const AI_PROMPT_MIN_HEIGHT = 100;
-  const AI_PROMPT_DEFAULT_HEIGHT = 200;
-  // Minimum space reserved for CurrentSessionPanel within bottom section
-  const CURRENT_SESSION_MIN_HEIGHT = 60;
-
-  function loadAiPanelHeight(): number {
-    try {
-      const stored = localStorage.getItem(AI_PANEL_HEIGHT_KEY);
-      if (stored !== null) {
-        const val = parseInt(stored, 10);
-        if (!isNaN(val) && val >= AI_PANEL_MIN_HEIGHT) {
-          return val;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return AI_PANEL_DEFAULT_HEIGHT;
-  }
-
-  function loadAiPromptHeight(): number {
-    try {
-      const stored = localStorage.getItem(AI_PROMPT_HEIGHT_KEY);
-      if (stored !== null) {
-        const val = parseInt(stored, 10);
-        if (!isNaN(val) && val >= AI_PROMPT_MIN_HEIGHT) {
-          return val;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return AI_PROMPT_DEFAULT_HEIGHT;
-  }
-
-  let aiPanelHeight = $state(loadAiPanelHeight());
-  let aiPromptHeight = $state(loadAiPromptHeight());
-  let aiPromptCollapsed = $state(false);
-  let aiSessionCollapsed = $state(false);
-  let contentColumnRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockHeight = $state(0);
   let mobileViewportBottomOffset = $state(0);
@@ -199,68 +142,6 @@
     };
   });
 
-  function handleResizeMouseDown(event: MouseEvent): void {
-    event.preventDefault();
-    const startY = event.clientY;
-    const startHeight = aiPanelHeight;
-    // Compute max from actual container height at drag start
-    const containerHeight = contentColumnRef?.clientHeight ?? 800;
-    const maxHeight = containerHeight - FILE_VIEWER_MIN_HEIGHT;
-
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-
-    function onMouseMove(e: MouseEvent): void {
-      const deltaY = startY - e.clientY;
-      aiPanelHeight = Math.min(
-        maxHeight,
-        Math.max(AI_PANEL_MIN_HEIGHT, startHeight + deltaY),
-      );
-    }
-
-    function onMouseUp(): void {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      localStorage.setItem(AI_PANEL_HEIGHT_KEY, String(aiPanelHeight));
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    }
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }
-
-  function handlePromptResizeMouseDown(event: MouseEvent): void {
-    event.preventDefault();
-    const startY = event.clientY;
-    const startPromptHeight = aiPromptHeight;
-    // Max prompt height: leave minimum space for CurrentSessionPanel
-    const maxPromptHeight = aiPanelHeight - CURRENT_SESSION_MIN_HEIGHT;
-
-    document.body.style.cursor = "row-resize";
-    document.body.style.userSelect = "none";
-
-    function onMouseMove(mouseEvent: MouseEvent): void {
-      // Dragging up (startY > mouseEvent.clientY) increases prompt height
-      const deltaY = startY - mouseEvent.clientY;
-      aiPromptHeight = Math.min(
-        maxPromptHeight,
-        Math.max(AI_PROMPT_MIN_HEIGHT, startPromptHeight + deltaY),
-      );
-    }
-
-    function onMouseUp(): void {
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-      localStorage.setItem(AI_PROMPT_HEIGHT_KEY, String(aiPromptHeight));
-      window.removeEventListener("mousemove", onMouseMove);
-      window.removeEventListener("mouseup", onMouseUp);
-    }
-
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-  }
-
   type FileContent = {
     path: string;
     content: string;
@@ -271,7 +152,6 @@
   };
 
   let {
-    activeTabIsGitRepo,
     loading,
     error,
     sidebarCollapsed,
@@ -292,16 +172,7 @@
     navigateNext,
     canNarrow,
     canWiden,
-    queueStatus,
-    changedFilePaths,
-    projectPath,
-    runningSessions,
-    queuedSessions,
-    recentlyCompletedSessions,
-    pendingPrompts,
-    resumeDisplaySessionId,
     currentQraftAiSessionId,
-    isFirstMessage,
     showIgnored,
     onToggleSidebar,
     onFileSelect,
@@ -316,13 +187,8 @@
     onWidenSidebar,
     onSetViewMode,
     onSubmitPrompt,
-    onNewSession,
-    onResumeCliSession,
-    onCancelActiveSession,
-    onCancelQueuedPrompt,
     onReloadFileTree,
   }: {
-    activeTabIsGitRepo: boolean;
     loading: boolean;
     error: string | null;
     sidebarCollapsed: boolean;
@@ -347,16 +213,7 @@
     navigateNext: (() => void) | undefined;
     canNarrow: boolean;
     canWiden: boolean;
-    queueStatus: QueueStatus;
-    changedFilePaths: string[];
-    projectPath: string;
-    runningSessions: AISession[];
-    queuedSessions: AISession[];
-    recentlyCompletedSessions: AISession[];
-    pendingPrompts: PromptQueueItem[];
-    resumeDisplaySessionId: string | null;
     currentQraftAiSessionId: string;
-    isFirstMessage: boolean;
     showIgnored: boolean;
     showAllFiles: boolean;
     onToggleSidebar: () => void;
@@ -375,31 +232,8 @@
       immediate: boolean,
       context: AIPromptContext,
     ) => Promise<void>;
-    onNewSession: () => void;
-    onResumeCliSession: (resumeQraftId: string) => void;
-    onCancelActiveSession: (sessionId: string) => Promise<void>;
-    onCancelQueuedPrompt: (promptId: string) => Promise<void>;
     onReloadFileTree: () => void;
   } = $props();
-
-  let aiModelProfiles = $state<ModelProfile[]>([]);
-  let selectedAiModelProfileId = $state<string | undefined>(undefined);
-
-  async function loadAiModelConfig(): Promise<void> {
-    try {
-      const state = await fetchModelConfigState();
-      aiModelProfiles = [...state.profiles];
-      selectedAiModelProfileId =
-        state.operationBindings.aiDefaultProfileId ?? undefined;
-    } catch {
-      aiModelProfiles = [];
-      selectedAiModelProfileId = undefined;
-    }
-  }
-
-  $effect(() => {
-    void loadAiModelConfig();
-  });
 
   function handleInlineCommentSubmit(
     startLine: number,
@@ -414,7 +248,6 @@
       references: [],
       diffSummary: undefined,
       resumeSessionId: currentQraftAiSessionId,
-      modelProfileId: selectedAiModelProfileId,
     });
   }
 
@@ -425,25 +258,6 @@
     }
   }
 
-  const autocompleteAllFiles = $derived.by(() => {
-    const paths: string[] = [];
-
-    function collect(node: FileNode): void {
-      if (!node.isDirectory) {
-        paths.push(node.path);
-        return;
-      }
-      if (node.children === undefined) {
-        return;
-      }
-      for (const child of node.children) {
-        collect(child);
-      }
-    }
-
-    collect(fileTree);
-    return paths;
-  });
 </script>
 
 <div class="relative flex flex-1 min-h-0 overflow-hidden">
@@ -514,7 +328,6 @@
   </div>
 
   <div
-    bind:this={contentColumnRef}
     class="flex flex-col flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
     style:transform={isPhoneViewport && !sidebarCollapsed
       ? `translateX(${sidebarWidth}px)`
@@ -773,171 +586,6 @@
               />
             </svg>
           </button>
-        </div>
-      </div>
-
-      <!-- Toggle button + drag handle to resize AI panel (current session) -->
-      <div
-        class="shrink-0 flex items-center border-t border-border-default bg-bg-secondary"
-      >
-        <button
-          type="button"
-          class="shrink-0 w-7 h-5 flex items-center justify-center
-                 text-text-secondary hover:text-text-primary hover:bg-bg-tertiary active:bg-bg-tertiary
-                 transition-colors cursor-pointer"
-          onclick={() => {
-            aiSessionCollapsed = !aiSessionCollapsed;
-          }}
-          aria-label={aiSessionCollapsed
-            ? "Expand session panel"
-            : "Collapse session panel"}
-          title={aiSessionCollapsed
-            ? "Expand session panel"
-            : "Collapse session panel"}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 16 16"
-            fill="none"
-            class="transition-transform duration-150"
-            style:transform={aiSessionCollapsed
-              ? "rotate(180deg)"
-              : "rotate(0deg)"}
-          >
-            <path
-              d="M4 6l4 4 4-4"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-        </button>
-        <div
-          class="flex-1 h-5 cursor-row-resize flex items-center justify-center
-                 group hover:bg-accent-muted/40 transition-colors"
-          onmousedown={handleResizeMouseDown}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize AI panel"
-        >
-          <div
-            class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-          ></div>
-        </div>
-      </div>
-
-      <div
-        class="shrink-0 flex flex-col min-h-0 overflow-hidden"
-        style:height={isPhoneViewport || aiSessionCollapsed
-          ? "auto"
-          : `${aiPanelHeight}px`}
-      >
-        <div
-          class={aiSessionCollapsed
-            ? "shrink-0 h-0 overflow-hidden"
-            : "flex-1 min-h-0 overflow-auto"}
-        >
-          <CurrentSessionPanel
-            {contextId}
-            currentClientSessionId={currentQraftAiSessionId}
-            running={runningSessions}
-            queued={queuedSessions}
-            recentlyCompleted={recentlyCompletedSessions}
-            {pendingPrompts}
-            resumeSessionId={resumeDisplaySessionId}
-            onCancelSession={onCancelActiveSession}
-            {onCancelQueuedPrompt}
-            onResumeSession={onResumeCliSession}
-            {projectPath}
-          />
-        </div>
-
-        <!-- Toggle button + drag handle to resize AI prompt panel -->
-        <div
-          class="shrink-0 flex items-center border-t border-border-default bg-bg-secondary"
-        >
-          <button
-            type="button"
-            class="shrink-0 w-7 h-5 flex items-center justify-center
-                   text-text-secondary hover:text-text-primary hover:bg-bg-tertiary active:bg-bg-tertiary
-                   transition-colors cursor-pointer"
-            onclick={() => {
-              aiPromptCollapsed = !aiPromptCollapsed;
-            }}
-            aria-label={aiPromptCollapsed
-              ? "Expand AI prompt"
-              : "Collapse AI prompt"}
-            title={aiPromptCollapsed
-              ? "Expand AI prompt"
-              : "Collapse AI prompt"}
-          >
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 16 16"
-              fill="none"
-              class="transition-transform duration-150"
-              style:transform={aiPromptCollapsed
-                ? "rotate(180deg)"
-                : "rotate(0deg)"}
-            >
-              <path
-                d="M4 6l4 4 4-4"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </button>
-          <div
-            class="flex-1 h-5 cursor-row-resize flex items-center justify-center
-                   group hover:bg-accent-muted/40 transition-colors"
-            onmousedown={handlePromptResizeMouseDown}
-            role="separator"
-            aria-orientation="horizontal"
-            aria-label="Resize AI prompt panel"
-          >
-            <div
-              class="w-8 h-0.5 rounded-full bg-border-default group-hover:bg-accent-emphasis transition-colors"
-            ></div>
-          </div>
-        </div>
-
-        <div
-          class="shrink-0 overflow-visible min-h-0 flex flex-col"
-          style:height={aiPromptCollapsed
-            ? "0px"
-            : isPhoneViewport
-              ? "auto"
-              : `${aiPromptHeight}px`}
-        >
-          <AIPromptPanel
-            {contextId}
-            {projectPath}
-            {queueStatus}
-            {isFirstMessage}
-            changedFiles={changedFilePaths}
-            allFiles={autocompleteAllFiles}
-            modelProfiles={aiModelProfiles}
-            selectedModelProfileId={selectedAiModelProfileId}
-            onSelectModelProfile={(profileId) => {
-              selectedAiModelProfileId = profileId;
-            }}
-            onSubmit={(prompt, immediate, refs, modelProfileId) => {
-              void onSubmitPrompt(prompt, immediate, {
-                primaryFile: undefined,
-                references: refs,
-                diffSummary: undefined,
-                resumeSessionId: currentQraftAiSessionId,
-                modelProfileId: modelProfileId ?? selectedAiModelProfileId,
-              });
-            }}
-            {onNewSession}
-            onResumeSession={onResumeCliSession}
-          />
         </div>
       </div>
     </div>
