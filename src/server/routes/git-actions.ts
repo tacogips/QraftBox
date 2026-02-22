@@ -24,6 +24,17 @@ import {
 } from "../git-actions/executor.js";
 import { isGitRepository } from "../git/executor.js";
 import type { ModelConfigStore } from "../model-config/store.js";
+import {
+  ensureSystemPromptFiles,
+  loadSystemPrompt,
+  resolveSystemPromptPath,
+  type SystemPromptName,
+} from "../git-actions/system-prompt.js";
+import {
+  ensurePurposePromptFile,
+  getPurposePromptPath,
+  loadPurposePromptTemplate,
+} from "../claude/session-purpose.js";
 
 /**
  * Error response format
@@ -75,6 +86,15 @@ interface CancelRequest {
   readonly actionId: string;
 }
 
+type EffectivePromptName = SystemPromptName | "ai-session-purpose";
+
+interface EffectivePromptResponse {
+  readonly name: EffectivePromptName;
+  readonly path: string;
+  readonly content: string;
+  readonly source: "file" | "fallback";
+}
+
 /**
  * Validate that a string is non-empty
  *
@@ -123,6 +143,61 @@ export function createGitActionsRoutes(
   modelConfigStore?: ModelConfigStore | undefined,
 ): Hono {
   const app = new Hono();
+
+  app.get("/prompts/:name", async (c) => {
+    const name = c.req.param("name") as EffectivePromptName;
+    if (
+      name !== "commit" &&
+      name !== "create-pr" &&
+      name !== "ai-session-purpose"
+    ) {
+      const errorResponse: ErrorResponse = {
+        error:
+          "Invalid prompt name: must be commit, create-pr, or ai-session-purpose",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      if (name === "ai-session-purpose") {
+        await ensurePurposePromptFile();
+        const template = await loadPurposePromptTemplate();
+        const response: EffectivePromptResponse = {
+          name,
+          path: getPurposePromptPath(),
+          content: template.template,
+          source: template.source,
+        };
+        return c.json(response);
+      }
+
+      await ensureSystemPromptFiles();
+      const content = await loadSystemPrompt(name);
+      const resolvedPath = resolveSystemPromptPath(name);
+      if (resolvedPath === null) {
+        throw new Error("System prompt path was not resolved");
+      }
+
+      const response: EffectivePromptResponse = {
+        name,
+        path: resolvedPath,
+        content,
+        source: "file",
+      };
+      return c.json(response);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error
+          ? e.message
+          : "Failed to load effective prompt configuration";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
 
   /**
    * GET /operating

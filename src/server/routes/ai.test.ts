@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, vi, type Mock } from "vitest";
 import { createAIRoutes } from "./ai";
 import type { SessionManager } from "../ai/session-manager";
-import type { PromptId, WorktreeId } from "../../types/ai";
+import type { PromptId, QraftAiSessionId, WorktreeId } from "../../types/ai";
 
 describe("AI Routes", () => {
   let cancelMock: Mock<(sessionId: string) => Promise<void>>;
@@ -24,6 +24,7 @@ describe("AI Routes", () => {
       subscribe: vi.fn(() => () => {}),
       cleanup: vi.fn(),
       submitPrompt: vi.fn(() => ({
+        sessionId: "qs_test_session_123" as QraftAiSessionId,
         promptId: "prompt-123" as PromptId,
         worktreeId: "test_abc123" as WorktreeId,
       })),
@@ -32,6 +33,8 @@ describe("AI Routes", () => {
       getMappingStore: vi.fn(() => undefined),
       listCompletedRows: vi.fn(() => []),
       getSessionPurpose: vi.fn(() => undefined),
+      listHiddenQraftSessionIds: vi.fn(() => []),
+      setQraftSessionHidden: vi.fn(),
     };
 
     app = createAIRoutes({
@@ -89,7 +92,7 @@ describe("AI Routes", () => {
   });
 
   describe("POST /submit", () => {
-    test("returns 201 with promptId and worktreeId on valid submission", async () => {
+    test("returns 201 with sessionId, promptId and worktreeId on valid submission", async () => {
       const res = await app.request("/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -104,10 +107,12 @@ describe("AI Routes", () => {
 
       expect(res.status).toBe(201);
       const body = (await res.json()) as {
+        sessionId: string;
         promptId: string;
         worktreeId: string;
       };
       expect(body).toEqual({
+        sessionId: "qs_test_session_123",
         promptId: "prompt-123",
         worktreeId: "test_abc123",
       });
@@ -215,6 +220,49 @@ describe("AI Routes", () => {
       await app.request("/prompt-queue", { method: "GET" });
 
       expect(getPromptQueueMock).toHaveBeenCalledWith(undefined);
+    });
+  });
+
+  describe("session hidden routes", () => {
+    test("GET /sessions/hidden returns hidden session IDs", async () => {
+      const listHiddenMock = sessionManager.listHiddenQraftSessionIds as Mock;
+      listHiddenMock.mockReturnValue([
+        "qs_hidden_1" as QraftAiSessionId,
+        "qs_hidden_2" as QraftAiSessionId,
+      ]);
+
+      const res = await app.request("/sessions/hidden", { method: "GET" });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { sessionIds: string[] };
+      expect(body).toEqual({ sessionIds: ["qs_hidden_1", "qs_hidden_2"] });
+    });
+
+    test("PUT /sessions/:id/hidden updates hidden flag", async () => {
+      const setHiddenMock = sessionManager.setQraftSessionHidden as Mock;
+
+      const res = await app.request("/sessions/qs_123/hidden", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden: true }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(setHiddenMock).toHaveBeenCalledWith("qs_123", true);
+      const body = (await res.json()) as { sessionId: string; hidden: boolean };
+      expect(body).toEqual({ sessionId: "qs_123", hidden: true });
+    });
+
+    test("PUT /sessions/:id/hidden validates body", async () => {
+      const res = await app.request("/sessions/qs_123/hidden", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hidden: "true" }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; code: number };
+      expect(body.code).toBe(400);
+      expect(body.error).toContain("hidden is required and must be a boolean");
     });
   });
 

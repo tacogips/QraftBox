@@ -543,7 +543,7 @@ export function generateQraftAiSessionId(): QraftAiSessionId {
  * Default AI configuration
  */
 export const DEFAULT_AI_CONFIG: AIConfig = {
-  maxConcurrent: 1,
+  maxConcurrent: 4,
   maxQueueSize: 10,
   sessionTimeoutMs: 5 * 60 * 1000, // 5 minutes
   enabled: true,

@@ -55,9 +55,9 @@ describe("session-purpose", () => {
     expect(signature.length).toBeGreaterThan(0);
     expect(
       normalizePurposeText(
-        "  [qraftbox-context]  Build  compact cards \n now ",
+        "  <qraftbox-system-prompt>internal</qraftbox-system-prompt>  Build  compact cards \n now ",
       ),
-    ).toBe("Build compact cards now");
+    ).toBe("internal Build compact cards now");
   });
 
   test("refreshes purpose every 3 new user intents", () => {
@@ -67,8 +67,8 @@ describe("session-purpose", () => {
     expect(shouldRefreshPurpose(4, 7)).toBe(true);
   });
 
-  test("builds purpose prompt with output language requirement", () => {
-    const prompt = buildPurposePrompt(
+  test("builds purpose prompt with output language requirement", async () => {
+    const prompt = await buildPurposePrompt(
       ["Summarize architecture changes", "Update tests"],
       "Japanese",
     );

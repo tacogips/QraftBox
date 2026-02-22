@@ -197,6 +197,48 @@ export function createAIRoutes(context: AIServerContext): Hono {
   });
 
   /**
+   * GET /api/ai/sessions/hidden
+   *
+   * List hidden qraft session IDs.
+   */
+  app.get("/sessions/hidden", (c) => {
+    const sessionIds = context.sessionManager.listHiddenQraftSessionIds();
+    return c.json({ sessionIds });
+  });
+
+  /**
+   * PUT /api/ai/sessions/:id/hidden
+   *
+   * Set hidden state for a qraft session ID.
+   * Request body: { hidden: boolean }
+   */
+  app.put("/sessions/:id/hidden", async (c) => {
+    const sessionId = c.req.param("id") as QraftAiSessionId;
+
+    try {
+      const body = await c.req.json<{ hidden?: unknown }>();
+      if (typeof body.hidden !== "boolean") {
+        const errorResponse: ErrorResponse = {
+          error: "hidden is required and must be a boolean",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      context.sessionManager.setQraftSessionHidden(sessionId, body.hidden);
+      return c.json({ sessionId, hidden: body.hidden });
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to update hidden state";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
    * GET /api/ai/sessions/:id
    *
    * Get details for a specific session.

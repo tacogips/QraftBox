@@ -1,9 +1,61 @@
 import type { TranscriptEvent } from "./session-reader.js";
 import { stripSystemTags } from "../../utils/strip-system-tags";
+import { homedir } from "node:os";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 
 const MAX_INTENT_ITEMS = 10;
 const MAX_INPUT_CHARS = 1600;
 const PURPOSE_REFRESH_INTERVAL = 3;
+const PURPOSE_PROMPT_FILE = "ai-session-purpose.md";
+const PURPOSE_PROMPT_TEMPLATE = `You summarize a coding session's current objective.
+Input contains user intent messages only.
+Return exactly one concise purpose sentence.
+Rules:
+- Max 90 characters.
+- Do not include labels, bullets, or quotes.
+- Prefer the most recent objective when intents conflict.
+- Write the sentence in {{outputLanguage}}.
+
+User intent messages (oldest to newest):
+{{intentLines}}`;
+
+function getPurposePromptDir(): string {
+  return join(homedir(), ".config", "qraftbox", "prompt");
+}
+
+export function getPurposePromptPath(): string {
+  return join(getPurposePromptDir(), PURPOSE_PROMPT_FILE);
+}
+
+export type PurposePromptSource = "file" | "fallback";
+
+export async function loadPurposePromptTemplate(): Promise<{
+  readonly template: string;
+  readonly source: PurposePromptSource;
+}> {
+  const path = getPurposePromptPath();
+  try {
+    const template = await readFile(path, "utf-8");
+    return { template, source: "file" };
+  } catch {
+    return { template: PURPOSE_PROMPT_TEMPLATE, source: "fallback" };
+  }
+}
+
+export async function ensurePurposePromptFile(): Promise<void> {
+  const dir = getPurposePromptDir();
+  const path = getPurposePromptPath();
+
+  if (!existsSync(dir)) {
+    await mkdir(dir, { recursive: true });
+  }
+
+  if (!existsSync(path)) {
+    await writeFile(path, PURPOSE_PROMPT_TEMPLATE, "utf-8");
+  }
+}
 
 function normalizeWhitespace(text: string): string {
   return text.replaceAll("\n", " ").replace(/\s+/g, " ").trim();
@@ -150,25 +202,18 @@ export function compactIntentInputs(
   return compacted.reverse();
 }
 
-export function buildPurposePrompt(
+export async function buildPurposePrompt(
   intents: readonly string[],
   outputLanguage = "English",
-): string {
+): Promise<string> {
   const language = normalizeWhitespace(outputLanguage);
-  const lines = [
-    "You summarize a coding session's current objective.",
-    "Input contains user intent messages only.",
-    "Return exactly one concise purpose sentence.",
-    "Rules:",
-    "- Max 90 characters.",
-    "- Do not include labels, bullets, or quotes.",
-    "- Prefer the most recent objective when intents conflict.",
-    `- Write the sentence in ${language.length > 0 ? language : "English"}.`,
-    "",
-    "User intent messages (oldest to newest):",
-    ...intents.map((intent, idx) => `${idx + 1}. ${intent}`),
-  ];
-  return lines.join("\n");
+  const resolvedLanguage = language.length > 0 ? language : "English";
+  const intentLines = intents.map((intent, idx) => `${idx + 1}. ${intent}`);
+  const { template } = await loadPurposePromptTemplate();
+
+  return template
+    .replace("{{outputLanguage}}", resolvedLanguage)
+    .replace("{{intentLines}}", intentLines.join("\n"));
 }
 
 export function normalizePurposeText(text: string): string {

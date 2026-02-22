@@ -930,4 +930,30 @@ describe("AiSessionStore", () => {
       expect(resumeId).toBeUndefined();
     });
   });
+
+  describe("hidden qraft sessions", () => {
+    test("stores and lists hidden qraft session IDs", () => {
+      sessionStore.setQraftSessionHidden(
+        "qs_hidden_a" as QraftAiSessionId,
+        true,
+      );
+      sessionStore.setQraftSessionHidden(
+        "qs_hidden_b" as QraftAiSessionId,
+        true,
+      );
+
+      const hiddenIds = sessionStore.listHiddenQraftSessionIds();
+      expect(hiddenIds).toContain("qs_hidden_a");
+      expect(hiddenIds).toContain("qs_hidden_b");
+    });
+
+    test("removes hidden qraft session ID when shown again", () => {
+      const sessionId = "qs_hidden_toggle" as QraftAiSessionId;
+      sessionStore.setQraftSessionHidden(sessionId, true);
+      sessionStore.setQraftSessionHidden(sessionId, false);
+
+      const hiddenIds = sessionStore.listHiddenQraftSessionIds();
+      expect(hiddenIds).not.toContain(sessionId);
+    });
+  });
 });

@@ -259,6 +259,22 @@
 
       if (!response.ok) {
         const errorData = (await response.json()) as { error: string };
+        const errorMessage = errorData.error ?? "Failed to fetch transcript";
+        const isTransientSessionNotFound =
+          errorMessage.startsWith("Session not found:") &&
+          targetSessionId.startsWith("qs_");
+
+        // Qraft session IDs can become visible in UI before the underlying
+        // Claude transcript is indexable. Keep UI usable during that window.
+        if (isTransientSessionNotFound) {
+          loadingState = {
+            status: "success",
+            data: [],
+            total: 0,
+          };
+          return;
+        }
+
         // Keep existing data on silent refresh (don't regress from success)
         if (isSilentRefresh && loadingState.status === "success") {
           return;
@@ -270,7 +286,7 @@
         }
         loadingState = {
           status: "error",
-          error: errorData.error ?? "Failed to fetch transcript",
+          error: errorMessage,
         };
         return;
       }

@@ -146,6 +146,7 @@ export interface SessionManager {
    * Returns the prompt ID and the resolved worktree ID.
    */
   submitPrompt(msg: AIPromptMessage): {
+    sessionId: QraftAiSessionId;
     promptId: PromptId;
     worktreeId: WorktreeId;
   };
@@ -176,6 +177,16 @@ export interface SessionManager {
    * Returns undefined when no purpose is available.
    */
   getSessionPurpose(sessionGroupId: string): string | undefined;
+
+  /**
+   * List qraft session IDs hidden from the AI session overview.
+   */
+  listHiddenQraftSessionIds(): readonly QraftAiSessionId[];
+
+  /**
+   * Set hidden state for a qraft session ID.
+   */
+  setQraftSessionHidden(sessionId: QraftAiSessionId, hidden: boolean): void;
 }
 
 /**
@@ -232,6 +243,7 @@ export function createSessionManager(
   const store = sessionStore ?? createInMemoryAiSessionStore();
   const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
   const pendingClientSessions = new Set<QraftAiSessionId>();
+  const pendingWorktreeDispatches = new Set<WorktreeId>();
   const purposeBySessionGroup = new Map<
     QraftAiSessionId,
     SessionPurposeState
@@ -319,6 +331,10 @@ export function createSessionManager(
       return "No purpose available";
     }
     return latest.length > 120 ? `${latest.slice(0, 120)}...` : latest;
+  }
+
+  function resolveSessionWorktreeId(session: AiSessionRow): WorktreeId {
+    return session.worktreeId ?? generateWorktreeId(session.projectPath);
   }
 
   function maybeUpdatePurposeAsync(sessionGroupId: QraftAiSessionId): void {
@@ -725,6 +741,7 @@ export function createSessionManager(
     const session = store.get(sessionId);
     if (session === undefined) return;
     const pendingClientSessionId = session.clientSessionId;
+    const pendingWorktreeId = resolveSessionWorktreeId(session);
 
     try {
       const handle = runtimeHandles.get(sessionId);
@@ -785,6 +802,7 @@ export function createSessionManager(
       if (pendingClientSessionId !== undefined) {
         pendingClientSessions.delete(pendingClientSessionId);
       }
+      pendingWorktreeDispatches.delete(pendingWorktreeId);
       // Clean up runtime handle for terminal states
       const finalSession = store.get(sessionId);
       if (
@@ -805,13 +823,25 @@ export function createSessionManager(
    */
   function processQueue(): void {
     while (store.countByState("running") < config.maxConcurrent) {
+      const activeWorktreeIds = new Set(
+        store
+          .listByState("running")
+          .map((session) => resolveSessionWorktreeId(session)),
+      );
       const queuedSessions = [...store.listByState("queued")].sort((a, b) =>
         a.createdAt.localeCompare(b.createdAt),
       );
       const nextSession = queuedSessions.find((candidate) => {
+        const candidateWorktreeId = resolveSessionWorktreeId(candidate);
         if (
           candidate.clientSessionId !== undefined &&
           pendingClientSessions.has(candidate.clientSessionId)
+        ) {
+          return false;
+        }
+        if (
+          activeWorktreeIds.has(candidateWorktreeId) ||
+          pendingWorktreeDispatches.has(candidateWorktreeId)
         ) {
           return false;
         }
@@ -838,6 +868,7 @@ export function createSessionManager(
       if (session.clientSessionId !== undefined) {
         pendingClientSessions.add(session.clientSessionId);
       }
+      pendingWorktreeDispatches.add(resolveSessionWorktreeId(session));
 
       // Don't await - run in background
       runExecution(nextSessionId).catch(() => {
@@ -1090,6 +1121,7 @@ export function createSessionManager(
     },
 
     submitPrompt(msg: AIPromptMessage): {
+      sessionId: QraftAiSessionId;
       promptId: PromptId;
       worktreeId: WorktreeId;
     } {
@@ -1182,7 +1214,7 @@ export function createSessionManager(
       // Try to dispatch immediately if capacity available
       processQueue();
 
-      return { promptId, worktreeId };
+      return { sessionId, promptId, worktreeId };
     },
 
     getPromptQueue(worktreeId?: WorktreeId): readonly QueuedPromptInfo[] {
@@ -1229,6 +1261,14 @@ export function createSessionManager(
         sessionGroupId as QraftAiSessionId,
       );
       return state?.purpose;
+    },
+
+    listHiddenQraftSessionIds(): readonly QraftAiSessionId[] {
+      return store.listHiddenQraftSessionIds();
+    },
+
+    setQraftSessionHidden(sessionId: QraftAiSessionId, hidden: boolean): void {
+      store.setQraftSessionHidden(sessionId, hidden);
     },
   };
 

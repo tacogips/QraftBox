@@ -844,6 +844,89 @@ describe("createSessionManager", () => {
       const expectedWorktreeId = generateWorktreeId(projectPath);
       expect(result.worktreeId).toBe(expectedWorktreeId);
     });
+
+    test("serializes same worktree while allowing different worktrees to run concurrently", async () => {
+      const config: AIConfig = {
+        ...DEFAULT_AI_CONFIG,
+        maxConcurrent: 2,
+      };
+      let executeCount = 0;
+      let runningExecutions = 0;
+      let maxRunningExecutions = 0;
+
+      const mockRunner: AgentRunner = {
+        execute() {
+          executeCount++;
+          runningExecutions++;
+          maxRunningExecutions = Math.max(
+            maxRunningExecutions,
+            runningExecutions,
+          );
+
+          return {
+            async *events() {
+              yield {
+                type: "activity",
+                activity: "working",
+              } as AgentEvent;
+              await new Promise((resolve) => setTimeout(resolve, 120));
+              yield {
+                type: "completed",
+                success: true,
+              } as AgentEvent;
+              runningExecutions--;
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "worktree A first",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "worktree A second",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "worktree B first",
+        project_path: "/tmp/project-b",
+        worktree_id: "worktree_b",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      const queueA = manager.getPromptQueue("worktree_a" as WorktreeId);
+      const queueB = manager.getPromptQueue("worktree_b" as WorktreeId);
+
+      expect(queueA.filter((item) => item.status === "running")).toHaveLength(
+        1,
+      );
+      expect(queueA.filter((item) => item.status === "queued")).toHaveLength(1);
+      expect(queueB.filter((item) => item.status === "running")).toHaveLength(
+        1,
+      );
+      expect(maxRunningExecutions).toBe(2);
+
+      await new Promise((resolve) => setTimeout(resolve, 260));
+      expect(executeCount).toBe(3);
+    });
   });
 
   describe("AgentRunner integration", () => {

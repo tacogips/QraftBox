@@ -155,7 +155,7 @@ export function createClaudeSessionsRoutes(
     let assistantText = "";
     try {
       const prompt = wrapInternalPurposePrompt(
-        buildPurposePrompt(intents, outputLanguage),
+        await buildPurposePrompt(intents, outputLanguage),
       );
       const session = await runner.startSession({ prompt });
       session.on("message", (msg: unknown) => {

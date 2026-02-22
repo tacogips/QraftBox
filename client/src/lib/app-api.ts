@@ -1,5 +1,9 @@
 import type { DiffFile } from "../types/diff";
-import type { QraftAiSessionId, FileReference } from "../../../src/types/ai";
+import type {
+  QraftAiSessionId,
+  FileReference,
+  AISessionSubmitResult,
+} from "../../../src/types/ai";
 import { AIAgent } from "../../../src/types/ai-agent";
 import type {
   ModelConfigState,
@@ -278,7 +282,7 @@ export async function submitAIPrompt(params: {
     references: readonly FileReference[];
     diffSummary: string | undefined;
   };
-}): Promise<void> {
+}): Promise<AISessionSubmitResult> {
   const response = await fetch("/api/ai/submit", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -294,6 +298,7 @@ export async function submitAIPrompt(params: {
   });
 
   ensureOk(response, "AI submit error");
+  return (await response.json()) as AISessionSubmitResult;
 }
 
 export async function fetchModelConfigState(): Promise<ModelConfigState> {
@@ -386,6 +391,25 @@ export async function fetchAISessionsApi(): Promise<AISessionInfo[]> {
   ensureOk(response, "AI sessions error");
   const data = (await response.json()) as { sessions: AISessionInfo[] };
   return data.sessions;
+}
+
+export async function fetchHiddenAISessionIdsApi(): Promise<readonly string[]> {
+  const response = await fetch("/api/ai/sessions/hidden");
+  ensureOk(response, "Hidden AI sessions error");
+  const data = (await response.json()) as { sessionIds: string[] };
+  return data.sessionIds;
+}
+
+export async function setAISessionHiddenApi(
+  sessionId: string,
+  hidden: boolean,
+): Promise<void> {
+  const response = await fetch(`/api/ai/sessions/${sessionId}/hidden`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ hidden }),
+  });
+  ensureOk(response, "Failed to update hidden state");
 }
 
 export async function cancelAISessionApi(sessionId: string): Promise<void> {

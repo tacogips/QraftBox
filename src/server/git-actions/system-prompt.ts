@@ -1,7 +1,7 @@
 /**
  * System Prompt Management for Git Actions
  *
- * Manages system prompt files stored in ~/.config/qraftbox/system-prompt/.
+ * Manages system prompt files stored in ~/.config/qraftbox/prompt/.
  * These files contain instructions sent to Claude Code agent for git operations.
  * Users can customize them by editing the files directly.
  */
@@ -19,9 +19,13 @@ export type SystemPromptName = "commit" | "create-pr";
 /**
  * Get the system prompt configuration directory path
  *
- * @returns Directory path: ~/.config/qraftbox/system-prompt/
+ * @returns Directory path: ~/.config/qraftbox/prompt/
  */
 export function getSystemPromptDir(): string {
+  return join(homedir(), ".config", "qraftbox", "prompt");
+}
+
+function getLegacySystemPromptDir(): string {
   return join(homedir(), ".config", "qraftbox", "system-prompt");
 }
 
@@ -34,6 +38,31 @@ export function getSystemPromptDir(): string {
 function getSystemPromptPath(name: SystemPromptName): string {
   const filename = name === "commit" ? "commit.md" : "create-pr.md";
   return join(getSystemPromptDir(), filename);
+}
+
+function getLegacySystemPromptPath(name: SystemPromptName): string {
+  const filename = name === "commit" ? "commit.md" : "create-pr.md";
+  return join(getLegacySystemPromptDir(), filename);
+}
+
+/**
+ * Resolve the current system prompt file path with legacy fallback.
+ *
+ * @param name - System prompt name
+ * @returns Existing prompt file path if found, null otherwise
+ */
+export function resolveSystemPromptPath(name: SystemPromptName): string | null {
+  const primaryPath = getSystemPromptPath(name);
+  if (existsSync(primaryPath)) {
+    return primaryPath;
+  }
+
+  const legacyPath = getLegacySystemPromptPath(name);
+  if (existsSync(legacyPath)) {
+    return legacyPath;
+  }
+
+  return null;
 }
 
 /**
@@ -115,24 +144,40 @@ async function loadDefaultContent(name: SystemPromptName): Promise<string> {
  */
 export async function ensureSystemPromptFiles(): Promise<void> {
   const dir = getSystemPromptDir();
+  const legacyDir = getLegacySystemPromptDir();
 
   // Create directory if it doesn't exist
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
+  if (!existsSync(legacyDir)) {
+    await mkdir(legacyDir, { recursive: true });
+  }
 
   // Ensure commit.md exists
   const commitPath = getSystemPromptPath("commit");
   if (!existsSync(commitPath)) {
-    const defaultContent = await loadDefaultContent("commit");
-    await writeFile(commitPath, defaultContent, "utf-8");
+    const legacyCommitPath = getLegacySystemPromptPath("commit");
+    if (existsSync(legacyCommitPath)) {
+      const legacyContent = await readFile(legacyCommitPath, "utf-8");
+      await writeFile(commitPath, legacyContent, "utf-8");
+    } else {
+      const defaultContent = await loadDefaultContent("commit");
+      await writeFile(commitPath, defaultContent, "utf-8");
+    }
   }
 
   // Ensure create-pr.md exists
   const prPath = getSystemPromptPath("create-pr");
   if (!existsSync(prPath)) {
-    const defaultContent = await loadDefaultContent("create-pr");
-    await writeFile(prPath, defaultContent, "utf-8");
+    const legacyPrPath = getLegacySystemPromptPath("create-pr");
+    if (existsSync(legacyPrPath)) {
+      const legacyContent = await readFile(legacyPrPath, "utf-8");
+      await writeFile(prPath, legacyContent, "utf-8");
+    } else {
+      const defaultContent = await loadDefaultContent("create-pr");
+      await writeFile(prPath, defaultContent, "utf-8");
+    }
   }
 }
 
@@ -148,14 +193,17 @@ export async function ensureSystemPromptFiles(): Promise<void> {
 export async function loadSystemPrompt(
   name: SystemPromptName,
 ): Promise<string> {
-  const filePath = getSystemPromptPath(name);
-
-  if (!existsSync(filePath)) {
-    throw new Error(`System prompt file not found: ${filePath}`);
+  const resolvedPath = resolveSystemPromptPath(name);
+  if (resolvedPath === null) {
+    const filePath = getSystemPromptPath(name);
+    const legacyPath = getLegacySystemPromptPath(name);
+    throw new Error(
+      `System prompt file not found: ${filePath} (legacy fallback: ${legacyPath})`,
+    );
   }
 
   try {
-    return await readFile(filePath, "utf-8");
+    return await readFile(resolvedPath, "utf-8");
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
     throw new Error(`Failed to read system prompt file: ${errorMessage}`);

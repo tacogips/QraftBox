@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { QueueStatus, AISession } from "../../../src/types/ai";
+  import type {
+    QueueStatus,
+    AISession,
+    AISessionSubmitResult,
+    QraftAiSessionId,
+  } from "../../../src/types/ai";
   import type { ModelProfile } from "../../../src/types/model-config";
   import {
     fetchModelConfigState,
@@ -14,7 +19,9 @@
     runningSessions,
     queuedSessions,
     pendingPrompts,
+    currentQraftAiSessionId,
     onSubmitPrompt,
+    onNewSession,
     onResumeCliSession,
   }: {
     contextId: string | null;
@@ -22,11 +29,13 @@
     runningSessions: AISession[];
     queuedSessions: AISession[];
     pendingPrompts: PromptQueueItem[];
+    currentQraftAiSessionId?: string;
     onSubmitPrompt: (
       message: string,
       immediate: boolean,
       context: AIPromptContext,
-    ) => Promise<void>;
+    ) => Promise<AISessionSubmitResult | null>;
+    onNewSession?: () => void;
     onResumeCliSession?: (resumeQraftId: string) => void;
     // Unused parent props are allowed to preserve call-site compatibility.
     loading?: boolean;
@@ -92,16 +101,29 @@
     sessionId: string,
     message: string,
     immediate: boolean,
-  ): Promise<void> {
+  ): Promise<AISessionSubmitResult | null> {
     if (typeof onResumeCliSession === "function") {
       onResumeCliSession(sessionId);
     }
 
-    await onSubmitPrompt(message, immediate, {
+    return onSubmitPrompt(message, immediate, {
       primaryFile: undefined,
       references: [],
       diffSummary: undefined,
       resumeSessionId: sessionId,
+      modelProfileId: selectedAiModelProfileId,
+    });
+  }
+
+  async function handleOverviewNewSessionPromptSubmit(
+    message: string,
+    immediate: boolean,
+  ): Promise<AISessionSubmitResult | null> {
+    return onSubmitPrompt(message, immediate, {
+      primaryFile: undefined,
+      references: [],
+      diffSummary: undefined,
+      resumeSessionId: currentQraftAiSessionId as QraftAiSessionId | undefined,
       modelProfileId: selectedAiModelProfileId,
     });
   }
@@ -114,11 +136,9 @@
     {runningSessions}
     {queuedSessions}
     {pendingPrompts}
-    onResumeSession={(sessionId) => {
-      if (typeof onResumeCliSession === "function") {
-        onResumeCliSession(sessionId);
-      }
-    }}
+    newSessionSeedId={currentQraftAiSessionId ?? null}
+    {onNewSession}
+    onStartNewSessionPrompt={handleOverviewNewSessionPromptSubmit}
     onSubmitPrompt={handleOverviewPromptSubmit}
   />
 </div>

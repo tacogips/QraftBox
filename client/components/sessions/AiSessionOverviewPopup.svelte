@@ -1,13 +1,17 @@
 <script lang="ts">
   import type { AIAgent } from "../../../src/types/ai-agent";
+  import {
+    getSessionStatusMeta,
+    type SessionStatus,
+  } from "../../src/lib/session-status";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
 
   interface Props {
     open: boolean;
     contextId: string | null;
-    sessionId: string;
+    sessionId: string | null;
     title: string;
-    status: "running" | "queued" | "idle";
+    status: SessionStatus;
     purpose: string;
     latestResponse: string;
     source: "qraftbox" | "claude-cli" | "unknown";
@@ -17,8 +21,9 @@
       message: string;
       status: "queued" | "running";
     }[];
+    isHidden: boolean;
+    onToggleHidden: () => Promise<void>;
     onClose: () => void;
-    onResumeSession: (sessionId: string) => void;
     onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
   }
 
@@ -34,10 +39,22 @@
     aiAgent,
     queuedPromptCount,
     pendingPromptMessages,
+    isHidden,
+    onToggleHidden,
     onClose,
-    onResumeSession,
     onSubmitPrompt,
   }: Props = $props();
+
+  const normalizedSessionId = $derived.by(() => {
+    if (typeof sessionId !== "string") {
+      return null;
+    }
+    const trimmed = sessionId.trim();
+    if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  });
 
   let promptText = $state("");
   let submitting = $state(false);
@@ -45,6 +62,7 @@
   let optimisticUserMessage = $state<string | undefined>(undefined);
   let optimisticUserStatus = $state<"queued" | "running">("queued");
   let focusTailNonce = $state(0);
+  let showSubmitOptions = $state(false);
 
   function normalizePromptText(message: string): string {
     return message.replace(/\s+/g, " ").trim();
@@ -67,6 +85,8 @@
     } catch (error: unknown) {
       submitError =
         error instanceof Error ? error.message : "Failed to submit prompt";
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
     } finally {
       submitting = false;
     }
@@ -95,16 +115,13 @@
       optimisticUserStatus = pendingMatch.status;
       return;
     }
-    if (!submitting) {
-      optimisticUserMessage = undefined;
-      optimisticUserStatus = "queued";
-    }
   });
 
   $effect(() => {
     if (!open) {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      showSubmitOptions = false;
       return;
     }
     const onKeydown = (event: KeyboardEvent): void => {
@@ -145,14 +162,9 @@
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 mb-1">
             <span
-              class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide {status ===
-              'running'
-                ? 'bg-accent-muted text-accent-fg'
-                : status === 'queued'
-                  ? 'bg-attention-muted text-attention-fg'
-                  : 'bg-bg-tertiary text-text-secondary'}"
+              class={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusMeta(status).badgeClass}`}
             >
-              {status}
+              {getSessionStatusMeta(status).label}
             </span>
             <span
               class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {source ===
@@ -182,18 +194,21 @@
             Purpose: {purpose}
           </p>
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
-            Latest: {latestResponse}
+            Latest activity: {latestResponse}
           </p>
         </div>
 
         <div class="shrink-0 flex items-center gap-2">
           <button
             type="button"
-            class="px-2.5 py-1 text-xs rounded border border-border-default
-                   text-text-secondary hover:text-text-primary hover:bg-bg-hover"
-            onclick={() => onResumeSession(sessionId)}
+            class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+            onclick={() => {
+              void onToggleHidden();
+            }}
+            aria-label={isHidden ? "Show session in grid" : "Hide session"}
+            title={isHidden ? "Show session" : "Hide session"}
           >
-            Set Active
+            {isHidden ? "Show" : "Hide"}
           </button>
           <button
             type="button"
@@ -208,9 +223,9 @@
 
       <div class="min-h-0 flex-1 grid grid-cols-1 lg:grid-cols-[1fr_340px]">
         <div class="min-h-0 overflow-hidden border-r border-border-default/70">
-          {#if contextId !== null}
+          {#if contextId !== null && normalizedSessionId !== null}
             <SessionTranscriptInline
-              {sessionId}
+              sessionId={normalizedSessionId}
               {contextId}
               autoRefreshMs={status === "running" || submitting ? 1500 : 0}
               followLatest={status === "running"}
@@ -219,6 +234,12 @@
               {optimisticUserStatus}
               pendingUserMessages={pendingPromptMessages}
             />
+          {:else if normalizedSessionId === null}
+            <div
+              class="h-full flex items-center justify-center text-sm text-text-tertiary"
+            >
+              New session ready. Submit the first prompt to start.
+            </div>
           {:else}
             <div
               class="h-full flex items-center justify-center text-sm text-text-tertiary"
@@ -246,31 +267,54 @@
             <p class="mt-2 text-xs text-danger-fg">{submitError}</p>
           {/if}
 
-          <div class="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs rounded bg-accent-muted text-accent-fg
-                     border border-accent-emphasis/40 hover:bg-accent-muted/80 disabled:opacity-60 font-medium"
-              disabled={submitting || promptText.trim().length === 0}
-              onclick={() => void submitNextPrompt(false)}
-            >
-              {submitting ? "Submitting..." : "Queue"}
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs rounded bg-danger-muted text-danger-fg
-                     border border-danger-fg/30 hover:bg-danger-muted/80 disabled:opacity-60"
-              disabled={submitting || promptText.trim().length === 0}
-              onclick={() => void submitNextPrompt(true)}
-              title="Priority: run immediately and bypass normal queue order"
-            >
-              {submitting ? "Submitting..." : "Run Now (Priority)"}
-            </button>
+          <div class="mt-3">
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-xs rounded bg-accent-muted text-accent-fg
+                       border border-accent-emphasis/40 hover:bg-accent-muted/80 disabled:opacity-60 font-medium"
+                disabled={submitting || promptText.trim().length === 0}
+                onclick={() => void submitNextPrompt(false)}
+              >
+                {submitting ? "Submitting..." : "Submit"}
+              </button>
+              <button
+                type="button"
+                class="px-2 py-1.5 text-xs rounded border border-border-default bg-bg-primary
+                       text-text-secondary hover:bg-bg-hover disabled:opacity-60"
+                disabled={submitting || promptText.trim().length === 0}
+                aria-expanded={showSubmitOptions}
+                aria-label="Toggle submit options"
+                onclick={() => {
+                  showSubmitOptions = !showSubmitOptions;
+                }}
+              >
+                {showSubmitOptions ? "▲" : "▼"}
+              </button>
+            </div>
+
+            {#if showSubmitOptions}
+              <div
+                class="mt-2 rounded border border-border-default bg-bg-primary p-2"
+              >
+                <button
+                  type="button"
+                  class="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-hover
+                         text-text-secondary disabled:opacity-60"
+                  disabled={submitting || promptText.trim().length === 0}
+                  onclick={() => void submitNextPrompt(true)}
+                  title="Priority: run immediately and bypass normal queue order"
+                >
+                  {submitting ? "Submitting..." : "Run immediately"}
+                </button>
+              </div>
+            {/if}
           </div>
           <p class="mt-2 text-[11px] text-text-tertiary">
-            Default is <span class="font-medium text-text-secondary">Queue</span
-            >. Shortcut: Ctrl/Cmd+Enter queues, Ctrl/Cmd+Shift+Enter runs
-            immediately as priority.
+            Default is <span class="font-medium text-text-secondary"
+              >Submit (queued)</span
+            >. Shortcut: Ctrl/Cmd+Enter submits queued, Ctrl/Cmd+Shift+Enter
+            runs immediately.
           </p>
         </div>
       </div>

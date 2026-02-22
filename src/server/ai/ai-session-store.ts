@@ -98,6 +98,10 @@ export interface AiSessionStore {
   countByState(state: SessionState): number;
   /** Get next queued session (oldest by created_at) */
   nextQueued(): QraftAiSessionId | undefined;
+  /** List qraft session IDs currently hidden in AI session overview */
+  listHiddenQraftSessionIds(): readonly QraftAiSessionId[];
+  /** Set hidden state for a qraft session ID */
+  setQraftSessionHidden(sessionId: QraftAiSessionId, hidden: boolean): void;
 }
 
 /**
@@ -162,6 +166,11 @@ class AiSessionStoreImpl implements AiSessionStore {
   private readonly stmtDelete: ReturnType<Database["prepare"]>;
   private readonly stmtCountByState: ReturnType<Database["prepare"]>;
   private readonly stmtNextQueued: ReturnType<Database["prepare"]>;
+  private readonly stmtListHiddenQraftSessionIds: ReturnType<
+    Database["prepare"]
+  >;
+  private readonly stmtHideQraftSession: ReturnType<Database["prepare"]>;
+  private readonly stmtShowQraftSession: ReturnType<Database["prepare"]>;
 
   constructor(db: Database) {
     this.db = db;
@@ -261,6 +270,21 @@ class AiSessionStoreImpl implements AiSessionStore {
       WHERE state = 'queued'
       ORDER BY created_at ASC
       LIMIT 1
+    `);
+
+    this.stmtListHiddenQraftSessionIds = db.prepare(`
+      SELECT qraft_ai_session_id FROM hidden_qraft_sessions
+      ORDER BY hidden_at DESC
+    `);
+
+    this.stmtHideQraftSession = db.prepare(`
+      INSERT INTO hidden_qraft_sessions (qraft_ai_session_id, hidden_at)
+      VALUES (?, ?)
+      ON CONFLICT(qraft_ai_session_id) DO UPDATE SET hidden_at = excluded.hidden_at
+    `);
+
+    this.stmtShowQraftSession = db.prepare(`
+      DELETE FROM hidden_qraft_sessions WHERE qraft_ai_session_id = ?
     `);
   }
 
@@ -448,6 +472,23 @@ class AiSessionStoreImpl implements AiSessionStore {
       | { id: QraftAiSessionId }
       | undefined;
     return row?.id;
+  }
+
+  listHiddenQraftSessionIds(): readonly QraftAiSessionId[] {
+    const rows = this.stmtListHiddenQraftSessionIds.all() as Array<{
+      qraft_ai_session_id: string;
+    }>;
+    return rows.map(
+      (row) => row.qraft_ai_session_id as QraftAiSessionId,
+    );
+  }
+
+  setQraftSessionHidden(sessionId: QraftAiSessionId, hidden: boolean): void {
+    if (hidden) {
+      this.stmtHideQraftSession.run(sessionId, new Date().toISOString());
+      return;
+    }
+    this.stmtShowQraftSession.run(sessionId);
   }
 
   updateError(id: QraftAiSessionId, error: string | undefined): void {
@@ -689,6 +730,14 @@ export function createAiSessionStore(
     CREATE INDEX IF NOT EXISTS idx_ai_sessions_client_session_id ON ai_sessions(client_session_id)
   `);
 
+  // Hidden qraft session IDs for AI session overview visibility toggles
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hidden_qraft_sessions (
+      qraft_ai_session_id TEXT PRIMARY KEY,
+      hidden_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   // Migration: Add prompt queue columns to existing databases
   for (const columnDef of [
     "prompt_id TEXT",
@@ -769,6 +818,14 @@ export function createInMemoryAiSessionStore(): AiSessionStore {
   // Create index for client_session_id lookup
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_ai_sessions_client_session_id ON ai_sessions(client_session_id)
+  `);
+
+  // Hidden qraft session IDs for AI session overview visibility toggles
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS hidden_qraft_sessions (
+      qraft_ai_session_id TEXT PRIMARY KEY,
+      hidden_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
   `);
 
   logger.debug("In-memory AI session store initialized");

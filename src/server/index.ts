@@ -26,6 +26,7 @@ import { createSessionMappingStore } from "./ai/session-mapping-store";
 import { createModelConfigStore } from "./model-config/store.js";
 import { resolveClientDir } from "./client-dir";
 import type { ProjectWatcherManager } from "./watcher/manager";
+import { ensurePurposePromptFile } from "./claude/session-purpose";
 import type {
   TerminalSessionManager,
   TerminalSocketData,
@@ -177,6 +178,9 @@ export function createServer(options: ServerOptions): Hono {
   // Initialize system prompt files (fire and forget)
   void ensureSystemPromptFiles().catch((e) => {
     logger.error("Failed to initialize system prompt files", e);
+  });
+  void ensurePurposePromptFile().catch((e) => {
+    logger.error("Failed to initialize session purpose prompt file", e);
   });
 
   mountAllRoutes(app, {

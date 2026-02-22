@@ -1,5 +1,6 @@
 import {
   generateQraftAiSessionId,
+  type AISessionSubmitResult,
   type AISession,
   type FileReference,
   type QraftAiSessionId,
@@ -94,7 +95,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     message: string,
     immediate: boolean,
     context: AIPromptContext,
-  ) => Promise<void>;
+  ) => Promise<AISessionSubmitResult | null>;
   fetchPromptQueue: () => Promise<void>;
   fetchActiveSessions: () => Promise<void>;
   handleCancelActiveSession: (sessionId: string) => Promise<void>;
@@ -223,8 +224,10 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     message: string,
     immediate: boolean,
     context: AIPromptContext,
-  ): Promise<void> {
-    if (deps.getContextId() === null) return;
+  ): Promise<AISessionSubmitResult | null> {
+    if (deps.getContextId() === null) {
+      return null;
+    }
 
     try {
       await requestAIPromptNotificationPermission();
@@ -241,13 +244,15 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         aiAgent: AIAgent.CLAUDE,
         modelProfileId: context.modelProfileId,
       };
-      await submitAIPrompt(payload);
+      const result = await submitAIPrompt(payload);
 
       deps.setSessionMessageSubmitted(true);
       void fetchPromptQueue();
       void fetchActiveSessions();
+      return result;
     } catch (error) {
       console.error("AI prompt submit error:", error);
+      return null;
     }
   }
 
