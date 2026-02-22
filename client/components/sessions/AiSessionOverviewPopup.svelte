@@ -127,7 +127,7 @@
                    text-text-secondary hover:text-text-primary hover:bg-bg-hover"
             onclick={() => onResumeSession(sessionId)}
           >
-            Open Detail
+            Set Active
           </button>
           <button
             type="button"

@@ -7,10 +7,10 @@
 
 ## Design Document Reference
 
-Add a dual-mode AI Session experience:
+Add an overview-first AI Session experience:
 
-- `detail` mode keeps the existing split layout (file tree, current session panel, session history).
-- `overview` mode shows many sessions as cards for multi-terminal operation monitoring.
+- Remove legacy detail mode UI (current session panel + inline prompt + history side panel).
+- Keep a single `overview` mode showing many sessions as cards for multi-terminal operation monitoring.
 
 The overview cards must expose:
 
@@ -28,40 +28,38 @@ The overview cards must expose:
 
 ## Modules
 
-### 1. AI Session Screen Mode Management
+### 1. AI Session Screen Consolidation
 
 #### client/components/app/AiSessionScreen.svelte
 
 **Status**: COMPLETED
 
 ```typescript
-type AISessionViewMode = "detail" | "overview";
-
-interface OverviewSessionCardData {
-  readonly qraftAiSessionId: string;
-  readonly title: string;
-  readonly purpose: string;
-  readonly latestResponse: string;
-  readonly status: "running" | "queued" | "idle";
-  readonly queuedPromptCount: number;
-  readonly modifiedAt: string;
+interface OverviewPromptSubmission {
+  readonly sessionId: string;
+  readonly message: string;
+  readonly immediate: boolean;
 }
 ```
 
 **Checklist**:
 
-- [x] Add mode toggle UI with default `detail`
-- [x] Keep existing detail mode rendering unchanged
-- [x] Render new overview mode branch
+- [x] Remove detail-mode rendering branch
+- [x] Keep AI Session screen as overview-only container
 - [x] Pass session runtime state + submit handlers into overview component
 
-### 2. Overview Grid UI
+### 2. Overview Search & History
 
 #### client/components/sessions/AiSessionOverviewGrid.svelte
 
 **Status**: COMPLETED
 
 ```typescript
+interface OverviewSearchState {
+  readonly query: string;
+  readonly includeTranscript: boolean;
+}
+
 interface AiSessionOverviewGridProps {
   readonly contextId: string | null;
   readonly projectPath: string;
@@ -84,6 +82,8 @@ interface AiSessionOverviewGridProps {
 - [x] Render 5-column default grid (responsive fallback)
 - [x] Status badges for running/queued/idle
 - [x] Show session purpose + latest response/activity
+- [x] Add metadata search (purpose/summary/latest response)
+- [x] Add transcript text search option (internal chat content)
 
 ### 3. Session Progress Popup
 
@@ -120,11 +120,12 @@ interface AiSessionOverviewPopupProps {
 
 ## Module Status
 
-| Module                | File Path                                                  | Status    | Tests    |
-| --------------------- | ---------------------------------------------------------- | --------- | -------- |
-| Mode toggle + routing | `client/components/app/AiSessionScreen.svelte`             | Completed | Verified |
-| Overview grid         | `client/components/sessions/AiSessionOverviewGrid.svelte`  | Completed | Verified |
-| Progress popup        | `client/components/sessions/AiSessionOverviewPopup.svelte` | Completed | Verified |
+| Module                    | File Path                                                   | Status    | Tests    |
+| ------------------------- | ----------------------------------------------------------- | --------- | -------- |
+| Screen consolidation      | `client/components/app/AiSessionScreen.svelte`              | Completed | Verified |
+| Overview grid + search    | `client/components/sessions/AiSessionOverviewGrid.svelte`   | Completed | Verified |
+| Progress popup            | `client/components/sessions/AiSessionOverviewPopup.svelte`  | Completed | Verified |
+| Legacy component removals | `client/components/{AIPromptPanel,CurrentSessionPanel,...}` | Completed | Verified |
 
 ## Dependencies
 
@@ -136,9 +137,11 @@ interface AiSessionOverviewPopupProps {
 
 ## Completion Criteria
 
-- [x] AI Session screen supports `detail` and `overview` mode switching
+- [x] AI Session screen is overview-only (detail mode removed)
 - [x] Overview shows sessions in 5-column card grid by default
 - [x] Each card shows purpose + latest response + status (running/queued/idle)
+- [x] Overview can search by session metadata (purpose/summary/latest response)
+- [x] Overview can search internal chat content (transcript text)
 - [x] Card popup displays current progress transcript
 - [x] Popup can submit next prompt (run now or queue)
 - [x] Typecheck passes
@@ -156,7 +159,7 @@ interface AiSessionOverviewPopupProps {
 
 ### Session: 2026-02-22 (Completion)
 
-**Tasks Completed**: Implemented detail/overview mode toggle, overview card grid, session progress popup, and prompt submission from popup. Executed typecheck/tests and browser verification.
+**Tasks Completed**: Converted AI Session to overview-only, implemented overview card grid, session progress popup, prompt submission from popup, transcript-aware search, and deleted legacy detail/history components. Executed typecheck/tests and browser verification.
 **Tasks In Progress**: None.
 **Blockers**: None.
-**Notes**: Overview cards merge Claude session history with runtime queue/session state so running/queued/idle status and latest activity are visible in one screen.
+**Notes**: Overview cards merge Claude session history with runtime queue/session state so running/queued/idle status and latest activity are visible in one screen. Search supports metadata-only or metadata+chat transcript matching.

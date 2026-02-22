@@ -1,140 +1,72 @@
 <script lang="ts">
-  import type { DiffFile } from "../../src/types/diff";
-  import type { FileNode } from "../../src/stores/files";
   import type { QueueStatus, AISession } from "../../../src/types/ai";
   import type { ModelProfile } from "../../../src/types/model-config";
   import {
     fetchModelConfigState,
     type PromptQueueItem,
   } from "../../src/lib/app-api";
-  import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
-  import FileTree from "../FileTree.svelte";
-  import AIPromptPanel from "../AIPromptPanel.svelte";
-  import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
-  import HistorySessionsPanel from "../sessions/HistorySessionsPanel.svelte";
   import AiSessionOverviewGrid from "../sessions/AiSessionOverviewGrid.svelte";
 
   let {
-    loading,
-    error,
-    sidebarCollapsed,
-    sidebarWidth,
-    allFilesLoading,
-    fileTree,
-    fileTreeMode,
-    selectedPath,
-    diffFiles,
     contextId,
-    canNarrow,
-    canWiden,
-    queueStatus,
-    changedFilePaths,
     projectPath,
     runningSessions,
     queuedSessions,
-    recentlyCompletedSessions,
     pendingPrompts,
-    resumeDisplaySessionId,
-    currentQraftAiSessionId,
-    isFirstMessage,
-    showIgnored,
-    onToggleSidebar,
-    onFileSelect,
-    onFileTreeModeChange,
-    onShowIgnoredChange,
-    showAllFiles,
-    onShowAllFilesChange,
-    onDirectoryExpand,
-    onLoadFullTree,
-    onCollapseSidebar,
-    onNarrowSidebar,
-    onWidenSidebar,
     onSubmitPrompt,
-    onNewSession,
     onResumeCliSession,
-    onCancelActiveSession,
-    onCancelQueuedPrompt,
-    onReloadFileTree,
   }: {
-    loading: boolean;
-    error: string | null;
-    sidebarCollapsed: boolean;
-    sidebarWidth: number;
-    allFilesLoading: boolean;
-    fileTree: FileNode;
-    fileTreeMode: "diff" | "all";
-    selectedPath: string | null;
-    diffFiles: DiffFile[];
     contextId: string | null;
-    canNarrow: boolean;
-    canWiden: boolean;
-    queueStatus: QueueStatus;
-    changedFilePaths: string[];
     projectPath: string;
     runningSessions: AISession[];
     queuedSessions: AISession[];
-    recentlyCompletedSessions: AISession[];
     pendingPrompts: PromptQueueItem[];
-    resumeDisplaySessionId: string | null;
-    currentQraftAiSessionId: string;
-    isFirstMessage: boolean;
-    showIgnored: boolean;
-    showAllFiles: boolean;
-    onToggleSidebar: () => void;
-    onFileSelect: (path: string) => void;
-    onFileTreeModeChange: (mode: "diff" | "all") => void;
-    onShowIgnoredChange: (value: boolean) => void;
-    onShowAllFilesChange: (value: boolean) => void;
-    onDirectoryExpand: (dirPath: string) => Promise<void>;
-    onLoadFullTree: () => Promise<FileNode | undefined>;
-    onCollapseSidebar: () => void;
-    onNarrowSidebar: () => void;
-    onWidenSidebar: () => void;
     onSubmitPrompt: (
       message: string,
       immediate: boolean,
       context: AIPromptContext,
     ) => Promise<void>;
-    onNewSession: () => void;
-    onResumeCliSession: (resumeQraftId: string) => void;
-    onCancelActiveSession: (sessionId: string) => Promise<void>;
-    onCancelQueuedPrompt: (promptId: string) => Promise<void>;
-    onReloadFileTree: () => void;
+    onResumeCliSession?: (resumeQraftId: string) => void;
+    // Unused parent props are allowed to preserve call-site compatibility.
+    loading?: boolean;
+    error?: string | null;
+    sidebarCollapsed?: boolean;
+    sidebarWidth?: number;
+    allFilesLoading?: boolean;
+    fileTree?: unknown;
+    fileTreeMode?: "diff" | "all";
+    selectedPath?: string | null;
+    diffFiles?: unknown[];
+    canNarrow?: boolean;
+    canWiden?: boolean;
+    queueStatus?: QueueStatus;
+    changedFilePaths?: string[];
+    recentlyCompletedSessions?: AISession[];
+    resumeDisplaySessionId?: string | null;
+    currentQraftAiSessionId?: string;
+    isFirstMessage?: boolean;
+    showIgnored?: boolean;
+    showAllFiles?: boolean;
+    onToggleSidebar?: () => void;
+    onFileSelect?: (path: string) => void;
+    onFileTreeModeChange?: (mode: "diff" | "all") => void;
+    onShowIgnoredChange?: (value: boolean) => void;
+    onShowAllFilesChange?: (value: boolean) => void;
+    onDirectoryExpand?: (dirPath: string) => Promise<void>;
+    onLoadFullTree?: () => Promise<unknown>;
+    onCollapseSidebar?: () => void;
+    onNarrowSidebar?: () => void;
+    onWidenSidebar?: () => void;
+    onNewSession?: () => void;
+    onCancelActiveSession?: (sessionId: string) => Promise<void>;
+    onCancelQueuedPrompt?: (promptId: string) => Promise<void>;
+    onReloadFileTree?: () => void;
   } = $props();
-
-  let isPhoneViewport = $state(window.innerWidth <= 480);
-  let historyPaneCollapsed = $state(window.innerWidth <= 480);
-  let historyPaneWidth = $state(420);
-  let sessionViewMode = $state<"detail" | "overview">("detail");
-
-  function detectPhoneViewport(): boolean {
-    return window.innerWidth <= 480;
-  }
-
-  function detectMobileDevice(): boolean {
-    const ua = navigator.userAgent;
-    return /iPhone|iPod|Android/i.test(ua);
-  }
-
-  $effect(() => {
-    const update = (): void => {
-      isPhoneViewport = detectPhoneViewport();
-      if (isPhoneViewport) {
-        historyPaneCollapsed = true;
-      }
-    };
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("orientationchange", update);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", update);
-    };
-  });
 
   let aiModelProfiles = $state<ModelProfile[]>([]);
   let selectedAiModelProfileId = $state<string | undefined>(undefined);
+  let modelConfigLoaded = $state(false);
 
   async function loadAiModelConfig(): Promise<void> {
     try {
@@ -149,40 +81,12 @@
   }
 
   $effect(() => {
-    void loadAiModelConfig();
-  });
-
-  $effect(() => {
-    claudeSessionsStore.reset();
-    if (contextId === null || contextId.length === 0) {
+    if (modelConfigLoaded) {
       return;
     }
-    claudeSessionsStore.setContextId(contextId);
-    if (projectPath.length > 0) {
-      claudeSessionsStore.setInitialFilters({
-        workingDirectoryPrefix: projectPath,
-      });
-    }
-    void claudeSessionsStore.fetchSessions();
+    modelConfigLoaded = true;
+    void loadAiModelConfig();
   });
-
-  function handleTreeFileSelect(path: string): void {
-    onFileSelect(path);
-    if ((detectPhoneViewport() || detectMobileDevice()) && !sidebarCollapsed) {
-      onCollapseSidebar();
-    }
-  }
-
-  function toggleHistoryPane(): void {
-    historyPaneCollapsed = !historyPaneCollapsed;
-  }
-
-  function handleHistorySessionResume(sessionId: string): void {
-    onResumeCliSession(sessionId);
-    if (isPhoneViewport) {
-      historyPaneCollapsed = true;
-    }
-  }
 
   async function handleOverviewPromptSubmit(
     sessionId: string,
@@ -197,246 +101,20 @@
       modelProfileId: selectedAiModelProfileId,
     });
   }
-
-  const autocompleteAllFiles = $derived.by(() => {
-    const paths: string[] = [];
-
-    function collect(node: FileNode): void {
-      if (!node.isDirectory) {
-        paths.push(node.path);
-        return;
-      }
-      if (node.children === undefined) {
-        return;
-      }
-      for (const child of node.children) {
-        collect(child);
-      }
-    }
-
-    collect(fileTree);
-    return paths;
-  });
 </script>
 
-<div
-  class="relative flex flex-col flex-1 min-h-0 overflow-hidden bg-bg-primary"
->
-  <div
-    class="h-9 px-3 border-b border-border-default bg-bg-secondary flex items-center gap-2"
-    role="tablist"
-    aria-label="AI Session view mode"
-  >
-    <button
-      type="button"
-      role="tab"
-      aria-selected={sessionViewMode === "detail"}
-      class="px-2.5 py-1 rounded text-xs font-medium transition-colors
-             {sessionViewMode === 'detail'
-        ? 'bg-bg-tertiary text-text-primary border border-border-default'
-        : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
-      onclick={() => {
-        sessionViewMode = "detail";
-      }}
-    >
-      Detail
-    </button>
-    <button
-      type="button"
-      role="tab"
-      aria-selected={sessionViewMode === "overview"}
-      class="px-2.5 py-1 rounded text-xs font-medium transition-colors
-             {sessionViewMode === 'overview'
-        ? 'bg-bg-tertiary text-text-primary border border-border-default'
-        : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
-      onclick={() => {
-        sessionViewMode = "overview";
-      }}
-    >
-      Overview
-    </button>
-  </div>
-
-  {#if sessionViewMode === "detail"}
-    <div class="relative flex flex-1 min-h-0 overflow-hidden">
-      <div
-        class="relative {isPhoneViewport
-          ? 'absolute left-0 top-0 bottom-0 z-30'
-          : 'flex shrink-0'}"
-      >
-        {#if !sidebarCollapsed}
-          <aside
-            class="h-full border-r border-border-default bg-bg-secondary overflow-auto"
-            style:width="{sidebarWidth}px"
-          >
-            {#if loading}
-              <div class="p-4 text-sm text-text-secondary">
-                Loading files...
-              </div>
-            {:else if error !== null}
-              <div class="p-4 text-sm text-danger-fg">{error}</div>
-            {:else if allFilesLoading && fileTreeMode === "all"}
-              <div class="p-4 text-sm text-text-secondary">
-                Loading all files...
-              </div>
-            {:else}
-              <FileTree
-                tree={fileTree}
-                mode={fileTreeMode}
-                {selectedPath}
-                onFileSelect={handleTreeFileSelect}
-                changedCount={diffFiles.length}
-                {contextId}
-                {showIgnored}
-                {showAllFiles}
-                onModeChange={onFileTreeModeChange}
-                {onShowIgnoredChange}
-                {onShowAllFilesChange}
-                {onDirectoryExpand}
-                {onLoadFullTree}
-                onNarrow={onNarrowSidebar}
-                onWiden={onWidenSidebar}
-                {canNarrow}
-                {canWiden}
-                onReload={onReloadFileTree}
-              />
-            {/if}
-          </aside>
-        {/if}
-
-        <button
-          type="button"
-          class="absolute top-12 z-20 flex items-center justify-center
-                 {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
-                 {isPhoneViewport
-            ? sidebarCollapsed
-              ? '-left-0.5'
-              : '-right-6'
-            : '-right-4'}
-                 bg-bg-secondary border border-l-0 border-border-default
-                 rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
-                 transition-colors cursor-pointer"
-          onclick={onToggleSidebar}
-          aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
-          title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
-        >
-          <span
-            class="{isPhoneViewport
-              ? 'text-[12px]'
-              : 'text-[9px]'} leading-none"
-            >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
-          >
-        </button>
-      </div>
-
-      <div
-        class="flex flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
-        style:transform={isPhoneViewport && !sidebarCollapsed
-          ? `translateX(${sidebarWidth}px)`
-          : undefined}
-      >
-        <main class="flex-1 min-w-0 min-h-0 overflow-hidden bg-bg-primary">
-          <CurrentSessionPanel
-            {contextId}
-            currentClientSessionId={currentQraftAiSessionId}
-            running={runningSessions}
-            queued={queuedSessions}
-            recentlyCompleted={recentlyCompletedSessions}
-            {pendingPrompts}
-            resumeSessionId={resumeDisplaySessionId}
-            onCancelSession={onCancelActiveSession}
-            {onCancelQueuedPrompt}
-            onResumeSession={onResumeCliSession}
-            {projectPath}
-          >
-            {#snippet nextPromptContent()}
-              <AIPromptPanel
-                {contextId}
-                {projectPath}
-                {queueStatus}
-                {isFirstMessage}
-                changedFiles={changedFilePaths}
-                allFiles={autocompleteAllFiles}
-                modelProfiles={aiModelProfiles}
-                selectedModelProfileId={selectedAiModelProfileId}
-                onSelectModelProfile={(profileId) => {
-                  selectedAiModelProfileId = profileId;
-                }}
-                onSubmit={(prompt, immediate, refs, modelProfileId) => {
-                  void onSubmitPrompt(prompt, immediate, {
-                    primaryFile: undefined,
-                    references: refs,
-                    diffSummary: undefined,
-                    resumeSessionId: currentQraftAiSessionId,
-                    modelProfileId: modelProfileId ?? selectedAiModelProfileId,
-                  });
-                }}
-                {onNewSession}
-                onResumeSession={onResumeCliSession}
-              />
-            {/snippet}
-          </CurrentSessionPanel>
-        </main>
-
-        <div
-          class="relative {isPhoneViewport
-            ? 'absolute right-0 top-0 bottom-0 z-30'
-            : 'flex shrink-0'}"
-        >
-          {#if !historyPaneCollapsed}
-            <aside
-              class="h-full border-l border-border-default bg-bg-secondary overflow-hidden"
-              style:width="{historyPaneWidth}px"
-            >
-              {#if contextId !== null}
-                <HistorySessionsPanel
-                  {contextId}
-                  onResumeSession={handleHistorySessionResume}
-                  onSelectSession={() => {}}
-                />
-              {/if}
-            </aside>
-          {/if}
-
-          <button
-            type="button"
-            class="absolute top-12 z-20 flex items-center justify-center
-                   {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
-                   {isPhoneViewport
-              ? historyPaneCollapsed
-                ? '-right-0.5'
-                : '-left-6'
-              : '-left-4'}
-                   bg-bg-secondary border border-r-0 border-border-default
-                   rounded-l text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
-                   transition-colors cursor-pointer"
-            onclick={toggleHistoryPane}
-            aria-label={historyPaneCollapsed
-              ? "Show Session History"
-              : "Hide Session History"}
-            title={historyPaneCollapsed
-              ? "Show Session History"
-              : "Hide Session History"}
-          >
-            <span
-              class="{isPhoneViewport
-                ? 'text-[12px]'
-                : 'text-[9px]'} leading-none"
-              >{historyPaneCollapsed ? "\u25C0" : "\u25B6"}</span
-            >
-          </button>
-        </div>
-      </div>
-    </div>
-  {:else}
-    <AiSessionOverviewGrid
-      {contextId}
-      {projectPath}
-      {runningSessions}
-      {queuedSessions}
-      {pendingPrompts}
-      onResumeSession={onResumeCliSession}
-      onSubmitPrompt={handleOverviewPromptSubmit}
-    />
-  {/if}
+<div class="relative flex flex-1 min-h-0 overflow-hidden bg-bg-primary">
+  <AiSessionOverviewGrid
+    {contextId}
+    {projectPath}
+    {runningSessions}
+    {queuedSessions}
+    {pendingPrompts}
+    onResumeSession={(sessionId) => {
+      if (typeof onResumeCliSession === "function") {
+        onResumeCliSession(sessionId);
+      }
+    }}
+    onSubmitPrompt={handleOverviewPromptSubmit}
+  />
 </div>

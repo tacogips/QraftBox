@@ -186,15 +186,19 @@
    */
   async function fetchTranscript(options?: {
     silent?: boolean;
+    contextId?: string;
+    sessionId?: string;
   }): Promise<void> {
     const isSilentRefresh = options?.silent === true;
+    const targetContextId = options?.contextId ?? contextId;
+    const targetSessionId = options?.sessionId ?? sessionId;
     if (!isSilentRefresh) {
       loadingState = { status: "loading" };
     }
 
     try {
       const response = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/transcript?limit=1000`,
+        `/api/ctx/${targetContextId}/claude-sessions/sessions/${targetSessionId}/transcript?limit=1000`,
       );
 
       if (!response.ok) {
@@ -251,7 +255,12 @@
    * Initial fetch on mount
    */
   $effect(() => {
-    void fetchTranscript();
+    const activeContextId = contextId;
+    const activeSessionId = sessionId;
+    void fetchTranscript({
+      contextId: activeContextId,
+      sessionId: activeSessionId,
+    });
   });
 
   /**
@@ -259,9 +268,15 @@
    * Uses silent refresh so existing content stays visible while fetching.
    */
   $effect(() => {
+    const activeContextId = contextId;
+    const activeSessionId = sessionId;
     if (autoRefreshMs <= 0) return;
     const pollTimerId = setInterval(() => {
-      void fetchTranscript({ silent: true });
+      void fetchTranscript({
+        silent: true,
+        contextId: activeContextId,
+        sessionId: activeSessionId,
+      });
     }, autoRefreshMs);
     return () => clearInterval(pollTimerId);
   });

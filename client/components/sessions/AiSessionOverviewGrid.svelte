@@ -15,6 +15,16 @@
     readonly updatedAt: string;
   }
 
+  interface TranscriptEvent {
+    readonly type: string;
+    readonly raw: Record<string, unknown>;
+    readonly content?: unknown;
+  }
+
+  interface TranscriptResponse {
+    readonly events: readonly TranscriptEvent[];
+  }
+
   interface Props {
     contextId: string | null;
     projectPath: string;
@@ -44,9 +54,25 @@
   let sessionsError = $state<string | null>(null);
   let selectedSessionId = $state<string | null>(null);
 
+  let searchQueryInput = $state("");
+  let searchQuery = $state("");
+  let searchInTranscript = $state(true);
+  let transcriptSearchRunning = $state(false);
+  let transcriptMatchedSessionIds = $state<Set<string>>(new Set());
+  const transcriptSearchCache = new Map<string, string>();
+
+  let latestFetchToken = 0;
+  let latestTranscriptSearchToken = 0;
+
   function normalizeText(text: string): string {
-    const strippedText = stripSystemTags(text).replaceAll("\n", " ").trim();
-    return strippedText;
+    return stripSystemTags(text)
+      .replaceAll("\n", " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function normalizeForSearch(text: string): string {
+    return normalizeText(text).toLowerCase();
   }
 
   function truncate(text: string, maxLength: number): string {
@@ -95,14 +121,13 @@
   function queuedPromptMessagesForSession(
     sessionId: string,
   ): readonly string[] {
-    const queuedMessages = pendingPrompts
+    return pendingPrompts
       .filter(
         (pendingPrompt) =>
           pendingPrompt.qraft_ai_session_id === sessionId &&
           pendingPrompt.status === "queued",
       )
       .map((pendingPrompt) => pendingPrompt.message);
-    return queuedMessages;
   }
 
   function buildCardFromSession(
@@ -209,6 +234,160 @@
     return fallbackCards;
   }
 
+  function cardMatchesQuery(card: OverviewSessionCard, query: string): boolean {
+    const normalizedQuery = normalizeForSearch(query);
+    if (normalizedQuery.length === 0) {
+      return true;
+    }
+
+    return (
+      normalizeForSearch(card.title).includes(normalizedQuery) ||
+      normalizeForSearch(card.purpose).includes(normalizedQuery) ||
+      normalizeForSearch(card.latestResponse).includes(normalizedQuery)
+    );
+  }
+
+  function extractTextFromContentBlocks(contentBlocks: unknown[]): string {
+    const textSegments: string[] = [];
+    for (const contentBlock of contentBlocks) {
+      if (typeof contentBlock !== "object" || contentBlock === null) {
+        continue;
+      }
+      const contentBlockObj = contentBlock as Record<string, unknown>;
+      if (
+        contentBlockObj["type"] === "text" &&
+        typeof contentBlockObj["text"] === "string"
+      ) {
+        textSegments.push(contentBlockObj["text"]);
+      }
+    }
+    return textSegments.join(" ");
+  }
+
+  function extractTranscriptEventText(
+    transcriptEvent: TranscriptEvent,
+  ): string {
+    const raw = transcriptEvent.raw;
+
+    if (
+      (transcriptEvent.type === "user" ||
+        transcriptEvent.type === "assistant") &&
+      typeof raw["message"] === "object" &&
+      raw["message"] !== null
+    ) {
+      const message = raw["message"] as Record<string, unknown>;
+      const content = message["content"];
+      if (typeof content === "string") {
+        return content;
+      }
+      if (Array.isArray(content)) {
+        return extractTextFromContentBlocks(content);
+      }
+    }
+
+    if (typeof transcriptEvent.content === "string") {
+      return transcriptEvent.content;
+    }
+
+    if (typeof raw["summary"] === "string") {
+      return raw["summary"];
+    }
+
+    return "";
+  }
+
+  async function fetchSessionTranscriptText(
+    sessionId: string,
+  ): Promise<string> {
+    const cachedText = transcriptSearchCache.get(sessionId);
+    if (cachedText !== undefined) {
+      return cachedText;
+    }
+
+    if (contextId === null) {
+      return "";
+    }
+
+    try {
+      const response = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/transcript?limit=1000`,
+      );
+      if (!response.ok) {
+        transcriptSearchCache.set(sessionId, "");
+        return "";
+      }
+
+      const transcript = (await response.json()) as TranscriptResponse;
+      const text = transcript.events
+        .map((transcriptEvent) => extractTranscriptEventText(transcriptEvent))
+        .join(" ");
+      const normalizedTranscriptText = normalizeForSearch(text);
+      transcriptSearchCache.set(sessionId, normalizedTranscriptText);
+      return normalizedTranscriptText;
+    } catch {
+      transcriptSearchCache.set(sessionId, "");
+      return "";
+    }
+  }
+
+  async function runTranscriptSearch(
+    sessionEntries: readonly ExtendedSessionEntry[],
+    query: string,
+    token: number,
+  ): Promise<void> {
+    const normalizedQuery = normalizeForSearch(query);
+    if (normalizedQuery.length === 0 || contextId === null) {
+      transcriptMatchedSessionIds = new Set();
+      transcriptSearchRunning = false;
+      return;
+    }
+
+    transcriptSearchRunning = true;
+
+    const matchedIds = new Set<string>();
+
+    for (const sessionEntry of sessionEntries) {
+      const metadataText = `${sessionEntry.firstPrompt} ${sessionEntry.summary}`;
+      if (normalizeForSearch(metadataText).includes(normalizedQuery)) {
+        matchedIds.add(sessionEntry.qraftAiSessionId);
+      }
+    }
+
+    const candidates = sessionEntries.filter(
+      (sessionEntry) => !matchedIds.has(sessionEntry.qraftAiSessionId),
+    );
+
+    let candidateIndex = 0;
+    const workerCount = Math.min(6, candidates.length);
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (candidateIndex < candidates.length) {
+        const currentIndex = candidateIndex;
+        candidateIndex += 1;
+        const candidate = candidates[currentIndex];
+        if (candidate === undefined) {
+          continue;
+        }
+
+        const transcriptText = await fetchSessionTranscriptText(
+          candidate.qraftAiSessionId,
+        );
+        if (transcriptText.includes(normalizedQuery)) {
+          matchedIds.add(candidate.qraftAiSessionId);
+        }
+      }
+    });
+
+    await Promise.all(workers);
+
+    if (token !== latestTranscriptSearchToken) {
+      return;
+    }
+
+    transcriptMatchedSessionIds = matchedIds;
+    transcriptSearchRunning = false;
+  }
+
   const cards = $derived.by(() => {
     const sessionCards = sessions.map((sessionEntry) =>
       buildCardFromSession(sessionEntry),
@@ -225,17 +404,36 @@
     });
   });
 
+  const filteredCards = $derived.by(() => {
+    const normalizedQuery = searchQuery.trim();
+    if (normalizedQuery.length === 0) {
+      return cards;
+    }
+
+    if (searchInTranscript) {
+      return cards.filter(
+        (card) =>
+          transcriptMatchedSessionIds.has(card.qraftAiSessionId) ||
+          cardMatchesQuery(card, normalizedQuery),
+      );
+    }
+
+    return cards.filter((card) => cardMatchesQuery(card, normalizedQuery));
+  });
+
   const selectedCard = $derived.by(() => {
     if (selectedSessionId === null) {
       return null;
     }
-    const card = cards.find(
+    const card = filteredCards.find(
       (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
     );
     return card ?? null;
   });
 
   async function fetchOverviewSessions(): Promise<void> {
+    const fetchToken = ++latestFetchToken;
+
     if (contextId === null || contextId.length === 0) {
       sessions = [];
       sessionsError = null;
@@ -257,6 +455,11 @@
         query.set("workingDirectoryPrefix", projectPath);
       }
 
+      const trimmedSearch = searchQuery.trim();
+      if (trimmedSearch.length > 0 && !searchInTranscript) {
+        query.set("search", trimmedSearch);
+      }
+
       const response = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions?${query.toString()}`,
       );
@@ -268,37 +471,79 @@
       const data = (await response.json()) as {
         sessions: ExtendedSessionEntry[];
       };
+
+      if (fetchToken !== latestFetchToken) {
+        return;
+      }
+
       sessions = data.sessions;
+
+      if (trimmedSearch.length > 0 && searchInTranscript) {
+        latestTranscriptSearchToken += 1;
+        const transcriptSearchToken = latestTranscriptSearchToken;
+        void runTranscriptSearch(
+          data.sessions,
+          trimmedSearch,
+          transcriptSearchToken,
+        );
+      } else {
+        transcriptMatchedSessionIds = new Set();
+        transcriptSearchRunning = false;
+      }
     } catch (error: unknown) {
+      if (fetchToken !== latestFetchToken) {
+        return;
+      }
       sessions = [];
       sessionsError =
         error instanceof Error ? error.message : "Failed to load sessions";
+      transcriptMatchedSessionIds = new Set();
+      transcriptSearchRunning = false;
     } finally {
-      sessionsLoading = false;
+      if (fetchToken === latestFetchToken) {
+        sessionsLoading = false;
+      }
     }
   }
 
   $effect(() => {
-    void fetchOverviewSessions();
+    const debounceTimer = setTimeout(() => {
+      searchQuery = searchQueryInput.trim();
+    }, 250);
+
+    return () => {
+      clearTimeout(debounceTimer);
+    };
   });
 
   $effect(() => {
-    if (contextId === null) {
+    const activeContextId = contextId;
+    const activeProjectPath = projectPath;
+    const activeSearchQuery = searchQuery;
+    const activeSearchInTranscript = searchInTranscript;
+    void activeContextId;
+    void activeProjectPath;
+    void activeSearchQuery;
+    void activeSearchInTranscript;
+
+    void fetchOverviewSessions();
+
+    if (activeContextId === null) {
       return;
     }
+
     const refreshTimerId = setInterval(() => {
       void fetchOverviewSessions();
     }, 4000);
-    return () => {
-      clearInterval(refreshTimerId);
-    };
+
+    return () => clearInterval(refreshTimerId);
   });
 
   $effect(() => {
     if (selectedSessionId === null) {
       return;
     }
-    const exists = cards.some(
+    const exists = filteredCards.some(
       (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
     );
     if (!exists) {
@@ -324,11 +569,34 @@
     <div class="min-w-0">
       <h2 class="text-sm font-semibold text-text-primary">Session Overview</h2>
       <p class="text-xs text-text-tertiary truncate">
-        Monitor active and idle sessions across parallel terminals
+        Monitor and search sessions across parallel terminals
       </p>
     </div>
     <div class="text-xs text-text-secondary shrink-0">
-      {cards.length} sessions
+      {filteredCards.length} / {cards.length} sessions
+    </div>
+  </div>
+
+  <div class="px-4 py-2 border-b border-border-default bg-bg-primary">
+    <div class="flex flex-col md:flex-row gap-2 md:items-center">
+      <input
+        type="text"
+        class="flex-1 min-w-0 rounded border border-border-default bg-bg-secondary
+               px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+        placeholder="Search session purpose/summary/chat text"
+        bind:value={searchQueryInput}
+      />
+      <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
+        <input
+          type="checkbox"
+          class="rounded border-border-default"
+          bind:checked={searchInTranscript}
+        />
+        Include chat transcript
+      </label>
+      {#if transcriptSearchRunning}
+        <span class="text-xs text-text-tertiary">Searching chat...</span>
+      {/if}
     </div>
   </div>
 
@@ -337,13 +605,15 @@
       <div class="text-sm text-text-secondary">Loading sessions...</div>
     {:else if sessionsError !== null && cards.length === 0}
       <div class="text-sm text-danger-fg">{sessionsError}</div>
-    {:else if cards.length === 0}
+    {:else if filteredCards.length === 0}
       <div class="text-sm text-text-secondary">
-        No sessions found for this project.
+        {searchQuery.length > 0
+          ? "No sessions matched your search."
+          : "No sessions found for this project."}
       </div>
     {:else}
       <div class="overview-grid">
-        {#each cards as card (card.qraftAiSessionId)}
+        {#each filteredCards as card (card.qraftAiSessionId)}
           <button
             type="button"
             class="w-full text-left rounded-lg border border-border-default bg-bg-secondary
