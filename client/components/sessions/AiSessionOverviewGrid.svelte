@@ -14,6 +14,14 @@
     readonly updatedAt: string;
   }
 
+  interface SelectedSessionMeta {
+    readonly title: string;
+    readonly purpose: string;
+    readonly latestResponse: string;
+    readonly status: "running" | "queued" | "idle";
+    readonly queuedPromptCount: number;
+  }
+
   interface TranscriptEvent {
     readonly type: string;
     readonly raw: Record<string, unknown>;
@@ -52,6 +60,13 @@
   let sessionsLoading = $state(false);
   let sessionsError = $state<string | null>(null);
   let selectedSessionId = $state<string | null>(null);
+  let selectedSessionMeta = $state<SelectedSessionMeta>({
+    title: "Session",
+    purpose: "No purpose available",
+    latestResponse: "No active response available",
+    status: "idle",
+    queuedPromptCount: 0,
+  });
 
   let searchQueryInput = $state("");
   let searchQuery = $state("");
@@ -443,7 +458,7 @@
     if (selectedSessionId === null) {
       return null;
     }
-    const card = filteredCards.find(
+    const card = cards.find(
       (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
     );
     return card ?? null;
@@ -570,15 +585,16 @@
   });
 
   $effect(() => {
-    if (selectedSessionId === null) {
+    if (selectedCard === null) {
       return;
     }
-    const exists = filteredCards.some(
-      (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
-    );
-    if (!exists) {
-      selectedSessionId = null;
-    }
+    selectedSessionMeta = {
+      title: selectedCard.purpose,
+      purpose: selectedCard.purpose,
+      latestResponse: selectedCard.latestResponse,
+      status: selectedCard.status,
+      queuedPromptCount: selectedCard.queuedPromptCount,
+    };
   });
 
   $effect(() => {
@@ -656,6 +672,13 @@
             aria-label={`${card.status} ${getRelativeTime(card.updatedAt)} ${card.purpose} ${card.latestResponse}`}
             onclick={() => {
               selectedSessionId = card.qraftAiSessionId;
+              selectedSessionMeta = {
+                title: card.purpose,
+                purpose: card.purpose,
+                latestResponse: card.latestResponse,
+                status: card.status,
+                queuedPromptCount: card.queuedPromptCount,
+              };
             }}
           >
             <div class="flex items-center justify-between gap-2">
@@ -706,22 +729,24 @@
   </div>
 </div>
 
-{#if selectedCard !== null}
+{#if selectedSessionId !== null}
   <AiSessionOverviewPopup
     open={true}
     {contextId}
-    sessionId={selectedCard.qraftAiSessionId}
-    title={selectedCard.purpose}
-    status={selectedCard.status}
-    purpose={selectedCard.purpose}
-    latestResponse={selectedCard.latestResponse}
-    queuedPromptCount={selectedCard.queuedPromptCount}
+    sessionId={selectedSessionId}
+    title={selectedCard?.purpose ?? selectedSessionMeta.title}
+    status={selectedCard?.status ?? selectedSessionMeta.status}
+    purpose={selectedCard?.purpose ?? selectedSessionMeta.purpose}
+    latestResponse={selectedCard?.latestResponse ??
+      selectedSessionMeta.latestResponse}
+    queuedPromptCount={selectedCard?.queuedPromptCount ??
+      selectedSessionMeta.queuedPromptCount}
     onClose={() => {
       selectedSessionId = null;
     }}
     {onResumeSession}
     onSubmitPrompt={(message, immediate) =>
-      handlePopupSubmit(selectedCard.qraftAiSessionId, message, immediate)}
+      handlePopupSubmit(selectedSessionId, message, immediate)}
   />
 {/if}
 
