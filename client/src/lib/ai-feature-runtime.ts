@@ -300,7 +300,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
   }
 
   function handleSearchSession(): void {
-    deps.navigateToScreen("sessions");
+    deps.navigateToScreen("ai-session");
     void fetchActiveSessions();
     void fetchPromptQueue();
   }

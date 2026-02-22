@@ -31,7 +31,6 @@
   import DiffScreen from "../components/app/DiffScreen.svelte";
   import AiSessionScreen from "../components/app/AiSessionScreen.svelte";
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
-  import UnifiedSessionsScreen from "../components/sessions/UnifiedSessionsScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
@@ -426,7 +425,6 @@
     fetchActiveSessions,
     handleCancelActiveSession,
     handleCancelQueuedPrompt,
-    handleResumeToChanges,
     handleResumeCliSession,
     handleNewSession,
     hasActiveSessionWork,
@@ -750,17 +748,6 @@
       <main class="flex-1 overflow-hidden">
         {#if contextId !== null}
           <CommitsScreen {contextId} isGitRepo={activeTabIsGitRepo} />
-        {/if}
-      </main>
-    {:else if currentScreen === "sessions"}
-      <!-- Unified Sessions Screen -->
-      <main class="flex-1 overflow-hidden">
-        {#if contextId !== null}
-          <UnifiedSessionsScreen
-            {contextId}
-            {projectPath}
-            onResumeToChanges={handleResumeToChanges}
-          />
         {/if}
       </main>
     {:else if currentScreen === "terminal"}

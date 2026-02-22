@@ -3,7 +3,6 @@ export type ScreenType =
   | "ai-session"
   | "commits"
   | "terminal"
-  | "sessions"
   | "project"
   | "tools"
   | "system-info"
@@ -14,7 +13,6 @@ export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "ai-session",
   "commits",
   "terminal",
-  "sessions",
   "project",
   "tools",
   "system-info",
@@ -31,16 +29,21 @@ export function parseHash(hashValue: string): {
   if (parts.length >= 2) {
     const slug = parts[0] ?? null;
     const page = parts[1] ?? "files";
+    // Backward compatibility for old URLs.
+    const normalizedPage = page === "sessions" ? "ai-session" : page;
     return {
       slug,
-      screen: VALID_SCREENS.has(page) ? (page as ScreenType) : "files",
+      screen: VALID_SCREENS.has(normalizedPage)
+        ? (normalizedPage as ScreenType)
+        : "files",
     };
   }
 
   if (parts.length === 1) {
     const single = parts[0] ?? "";
-    if (VALID_SCREENS.has(single)) {
-      return { slug: null, screen: single as ScreenType };
+    const normalizedSingle = single === "sessions" ? "ai-session" : single;
+    if (VALID_SCREENS.has(normalizedSingle)) {
+      return { slug: null, screen: normalizedSingle as ScreenType };
     }
     return { slug: single, screen: "files" };
   }

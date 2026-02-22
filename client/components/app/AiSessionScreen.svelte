@@ -7,10 +7,12 @@
     fetchModelConfigState,
     type PromptQueueItem,
   } from "../../src/lib/app-api";
+  import { claudeSessionsStore } from "../../src/stores/claude-sessions";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import FileTree from "../FileTree.svelte";
   import AIPromptPanel from "../AIPromptPanel.svelte";
   import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
+  import HistorySessionsPanel from "../sessions/HistorySessionsPanel.svelte";
 
   let {
     loading,
@@ -101,6 +103,8 @@
   } = $props();
 
   let isPhoneViewport = $state(window.innerWidth <= 480);
+  let historyPaneCollapsed = $state(window.innerWidth <= 480);
+  let historyPaneWidth = $state(420);
 
   function detectPhoneViewport(): boolean {
     return window.innerWidth <= 480;
@@ -114,6 +118,9 @@
   $effect(() => {
     const update = (): void => {
       isPhoneViewport = detectPhoneViewport();
+      if (isPhoneViewport) {
+        historyPaneCollapsed = true;
+      }
     };
     update();
     window.addEventListener("resize", update);
@@ -143,10 +150,35 @@
     void loadAiModelConfig();
   });
 
+  $effect(() => {
+    claudeSessionsStore.reset();
+    if (contextId === null || contextId.length === 0) {
+      return;
+    }
+    claudeSessionsStore.setContextId(contextId);
+    if (projectPath.length > 0) {
+      claudeSessionsStore.setInitialFilters({
+        workingDirectoryPrefix: projectPath,
+      });
+    }
+    void claudeSessionsStore.fetchSessions();
+  });
+
   function handleTreeFileSelect(path: string): void {
     onFileSelect(path);
     if ((detectPhoneViewport() || detectMobileDevice()) && !sidebarCollapsed) {
       onCollapseSidebar();
+    }
+  }
+
+  function toggleHistoryPane(): void {
+    historyPaneCollapsed = !historyPaneCollapsed;
+  }
+
+  function handleHistorySessionResume(sessionId: string): void {
+    onResumeCliSession(sessionId);
+    if (isPhoneViewport) {
+      historyPaneCollapsed = true;
     }
   }
 
@@ -239,12 +271,12 @@
   </div>
 
   <div
-    class="flex flex-col flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
+    class="flex flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
     style:transform={isPhoneViewport && !sidebarCollapsed
       ? `translateX(${sidebarWidth}px)`
       : undefined}
   >
-    <main class="flex-1 min-h-0 overflow-hidden bg-bg-primary">
+    <main class="flex-1 min-w-0 min-h-0 overflow-hidden bg-bg-primary">
       <CurrentSessionPanel
         {contextId}
         currentClientSessionId={currentQraftAiSessionId}
@@ -286,5 +318,52 @@
         {/snippet}
       </CurrentSessionPanel>
     </main>
+
+    <div
+      class="relative {isPhoneViewport
+        ? 'absolute right-0 top-0 bottom-0 z-30'
+        : 'flex shrink-0'}"
+    >
+      {#if !historyPaneCollapsed}
+        <aside
+          class="h-full border-l border-border-default bg-bg-secondary overflow-hidden"
+          style:width="{historyPaneWidth}px"
+        >
+          {#if contextId !== null}
+            <HistorySessionsPanel
+              {contextId}
+              onResumeSession={handleHistorySessionResume}
+              onSelectSession={() => {}}
+            />
+          {/if}
+        </aside>
+      {/if}
+
+      <button
+        type="button"
+        class="absolute top-12 z-20 flex items-center justify-center
+               {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
+               {isPhoneViewport
+          ? historyPaneCollapsed
+            ? '-right-0.5'
+            : '-left-6'
+          : '-left-4'}
+               bg-bg-secondary border border-r-0 border-border-default
+               rounded-l text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
+               transition-colors cursor-pointer"
+        onclick={toggleHistoryPane}
+        aria-label={historyPaneCollapsed
+          ? "Show Session History"
+          : "Hide Session History"}
+        title={historyPaneCollapsed
+          ? "Show Session History"
+          : "Hide Session History"}
+      >
+        <span
+          class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
+          >{historyPaneCollapsed ? "\u25C0" : "\u25B6"}</span
+        >
+      </button>
+    </div>
   </div>
 </div>
