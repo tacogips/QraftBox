@@ -59,6 +59,7 @@
       message: string,
       immediate: boolean,
     ) => Promise<AISessionSubmitResult | null>;
+    onCancelActiveSession?: (sessionId: string) => Promise<void>;
     onSubmitPrompt: (
       sessionId: string,
       message: string,
@@ -85,6 +86,7 @@
     pendingPrompts,
     onNewSession,
     onStartNewSessionPrompt,
+    onCancelActiveSession,
     onSubmitPrompt,
   }: Props = $props();
 
@@ -120,6 +122,8 @@
   const SESSION_QUERY_KEY = "ai_session_id";
   let hiddenSessionIds = $state<ReadonlySet<string>>(new Set());
   let includeHiddenSessions = $state(false);
+  let cancellingPrompt = $state(false);
+  let cancelPromptError = $state<string | null>(null);
 
   function openSessionById(
     sessionId: string,
@@ -523,9 +527,7 @@
     if (includeHiddenSessions) {
       return cards;
     }
-    return cards.filter(
-      (card) => !hiddenSessionIds.has(card.qraftAiSessionId),
-    );
+    return cards.filter((card) => !hiddenSessionIds.has(card.qraftAiSessionId));
   });
 
   const filteredCards = $derived.by(() => {
@@ -542,7 +544,9 @@
       );
     }
 
-    return visibleCards.filter((card) => cardMatchesQuery(card, normalizedQuery));
+    return visibleCards.filter((card) =>
+      cardMatchesQuery(card, normalizedQuery),
+    );
   });
 
   const selectedCard = $derived.by(() => {
@@ -722,7 +726,11 @@
     }
     hiddenSessionIds = nextHiddenIds;
 
-    if (nextHidden && !includeHiddenSessions && selectedSessionId === sessionId) {
+    if (
+      nextHidden &&
+      !includeHiddenSessions &&
+      selectedSessionId === sessionId
+    ) {
       creatingNewSession = false;
       selectedSessionId = null;
     }
@@ -849,6 +857,40 @@
       immediate ? "running" : "queued",
     );
     await fetchOverviewSessions();
+  }
+
+  const canCancelSelectedPrompt = $derived.by(() => {
+    if (creatingNewSession || selectedSessionId === null) {
+      return false;
+    }
+    const currentStatus = selectedCard?.status ?? selectedSessionMeta.status;
+    return (
+      typeof onCancelActiveSession === "function" &&
+      (currentStatus === "running" || currentStatus === "queued")
+    );
+  });
+
+  async function handleCancelSelectedPrompt(): Promise<void> {
+    if (
+      creatingNewSession ||
+      selectedSessionId === null ||
+      typeof onCancelActiveSession !== "function" ||
+      cancellingPrompt
+    ) {
+      return;
+    }
+
+    cancellingPrompt = true;
+    cancelPromptError = null;
+    try {
+      await onCancelActiveSession(selectedSessionId);
+      await fetchOverviewSessions();
+    } catch (error: unknown) {
+      cancelPromptError =
+        error instanceof Error ? error.message : "Failed to cancel prompt";
+    } finally {
+      cancellingPrompt = false;
+    }
   }
 </script>
 
@@ -1016,7 +1058,9 @@
                       ? "Show session"
                       : "Hide session"}
                   >
-                    {hiddenSessionIds.has(card.qraftAiSessionId) ? "Show" : "Hide"}
+                    {hiddenSessionIds.has(card.qraftAiSessionId)
+                      ? "Show"
+                      : "Hide"}
                   </button>
                 </div>
               </div>
@@ -1092,9 +1136,15 @@
     onClose={() => {
       creatingNewSession = false;
       selectedSessionId = null;
+      cancellingPrompt = false;
+      cancelPromptError = null;
     }}
     onSubmitPrompt={(message, immediate) =>
       handlePopupSubmit(message, immediate)}
+    canCancelPrompt={canCancelSelectedPrompt}
+    cancelPromptInProgress={cancellingPrompt}
+    {cancelPromptError}
+    onCancelPrompt={handleCancelSelectedPrompt}
   />
 {/if}
 

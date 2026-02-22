@@ -21,8 +21,12 @@
       message: string;
       status: "queued" | "running";
     }[];
+    canCancelPrompt: boolean;
+    cancelPromptInProgress: boolean;
+    cancelPromptError: string | null;
     isHidden: boolean;
     onToggleHidden: () => Promise<void>;
+    onCancelPrompt: () => Promise<void>;
     onClose: () => void;
     onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
   }
@@ -39,8 +43,12 @@
     aiAgent,
     queuedPromptCount,
     pendingPromptMessages,
+    canCancelPrompt,
+    cancelPromptInProgress,
+    cancelPromptError,
     isHidden,
     onToggleHidden,
+    onCancelPrompt,
     onClose,
     onSubmitPrompt,
   }: Props = $props();
@@ -114,6 +122,12 @@
     if (pendingMatch !== undefined) {
       optimisticUserStatus = pendingMatch.status;
       return;
+    }
+    // Clear stale optimistic message when no matching pending prompt exists
+    // and the session is no longer actively processing (e.g. after cancel).
+    if (status === "awaiting_input") {
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
     }
   });
 
@@ -199,6 +213,20 @@
         </div>
 
         <div class="shrink-0 flex items-center gap-2">
+          {#if canCancelPrompt}
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-danger-emphasis/40 text-xs text-danger-fg hover:bg-danger-emphasis/10 disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => {
+                void onCancelPrompt();
+              }}
+              disabled={cancelPromptInProgress}
+              aria-label="Cancel current prompt"
+              title="Cancel prompt execution"
+            >
+              {cancelPromptInProgress ? "Cancelling..." : "Cancel Prompt"}
+            </button>
+          {/if}
           <button
             type="button"
             class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover"
@@ -265,6 +293,9 @@
 
           {#if submitError !== null}
             <p class="mt-2 text-xs text-danger-fg">{submitError}</p>
+          {/if}
+          {#if cancelPromptError !== null}
+            <p class="mt-2 text-xs text-danger-fg">{cancelPromptError}</p>
           {/if}
 
           <div class="mt-3">

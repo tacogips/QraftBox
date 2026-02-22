@@ -23,6 +23,7 @@
     onSubmitPrompt,
     onNewSession,
     onResumeCliSession,
+    onCancelActiveSession,
   }: {
     contextId: string | null;
     projectPath: string;
@@ -37,6 +38,7 @@
     ) => Promise<AISessionSubmitResult | null>;
     onNewSession?: () => void;
     onResumeCliSession?: (resumeQraftId: string) => void;
+    onCancelActiveSession?: (sessionId: string) => Promise<void>;
     // Unused parent props are allowed to preserve call-site compatibility.
     loading?: boolean;
     error?: string | null;
@@ -68,7 +70,6 @@
     onNarrowSidebar?: () => void;
     onWidenSidebar?: () => void;
     onNewSession?: () => void;
-    onCancelActiveSession?: (sessionId: string) => Promise<void>;
     onCancelQueuedPrompt?: (promptId: string) => Promise<void>;
     onReloadFileTree?: () => void;
   } = $props();
@@ -138,6 +139,7 @@
     {pendingPrompts}
     newSessionSeedId={currentQraftAiSessionId ?? null}
     {onNewSession}
+    {onCancelActiveSession}
     onStartNewSessionPrompt={handleOverviewNewSessionPromptSubmit}
     onSubmitPrompt={handleOverviewPromptSubmit}
   />
