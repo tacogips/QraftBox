@@ -13,6 +13,7 @@ import type {
   PromptId,
   WorktreeId,
 } from "../../types/ai";
+import { AIAgent } from "../../types/ai-agent";
 import type { SessionManager } from "../ai/session-manager";
 import { createLogger } from "../logger.js";
 import type { ModelConfigStore } from "../model-config/store.js";
@@ -120,6 +121,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
           body.qraft_ai_session_id.length > 0
             ? body.qraft_ai_session_id
             : undefined,
+        ai_agent: AIAgent.CLAUDE,
       };
 
       const result = context.sessionManager.submitPrompt(msg);

@@ -6,6 +6,7 @@
  */
 
 import type { QraftAiSessionId } from "./ai";
+import { isAIAgent, type AIAgent } from "./ai-agent";
 
 /**
  * Claude session index structure
@@ -68,6 +69,8 @@ export interface ExtendedSessionEntry extends ClaudeSessionEntry {
   projectEncoded: string;
   /** QraftBox AI session group ID - primary identifier for client-facing use */
   qraftAiSessionId: QraftAiSessionId;
+  /** AI agent used by this session */
+  aiAgent?: AIAgent | undefined;
 }
 
 /**
@@ -188,6 +191,10 @@ export function isExtendedSessionEntry(
   const obj = value as unknown as Record<string, unknown>;
 
   return (
-    isSessionSource(obj["source"]) && typeof obj["projectEncoded"] === "string"
+    isSessionSource(obj["source"]) &&
+    typeof obj["projectEncoded"] === "string" &&
+    (obj["aiAgent"] === undefined ||
+      obj["aiAgent"] === null ||
+      isAIAgent(obj["aiAgent"]))
   );
 }

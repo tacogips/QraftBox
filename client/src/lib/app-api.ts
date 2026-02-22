@@ -1,5 +1,6 @@
 import type { DiffFile } from "../types/diff";
 import type { QraftAiSessionId, FileReference } from "../../../src/types/ai";
+import { AIAgent } from "../../../src/types/ai-agent";
 import type {
   ModelConfigState,
   OperationLanguageSettings,
@@ -53,6 +54,7 @@ export type PromptQueueItem = {
   created_at: string;
   worktree_id: string;
   qraft_ai_session_id?: QraftAiSessionId | undefined;
+  ai_agent?: AIAgent | undefined;
 };
 
 export type AISessionInfo = {
@@ -66,6 +68,7 @@ export type AISessionInfo = {
   lastAssistantMessage?: string | undefined;
   currentActivity?: string | undefined;
   clientSessionId?: QraftAiSessionId | undefined;
+  aiAgent?: AIAgent | undefined;
 };
 
 function ensureOk(response: Response, message: string): Response {
@@ -261,6 +264,7 @@ export async function submitAIPrompt(params: {
   message: string;
   projectPath: string;
   qraftAiSessionId: QraftAiSessionId;
+  aiAgent?: AIAgent | undefined;
   modelProfileId?: string | undefined;
   context: {
     primaryFile:
@@ -284,6 +288,7 @@ export async function submitAIPrompt(params: {
       context: params.context,
       project_path: params.projectPath,
       qraft_ai_session_id: params.qraftAiSessionId,
+      ai_agent: params.aiAgent ?? AIAgent.CLAUDE,
       model_profile_id: params.modelProfileId,
     }),
   });

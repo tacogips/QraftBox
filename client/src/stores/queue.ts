@@ -10,6 +10,7 @@ import type {
   ConversationViewMode,
   SessionState,
 } from "../../../src/types/ai";
+import type { AIAgent } from "../../../src/types/ai-agent";
 
 /**
  * Queue store state
@@ -284,6 +285,7 @@ export function createQueueStore(): QueueStore {
             startedAt?: string | undefined;
             completedAt?: string | undefined;
             context: unknown;
+            aiAgent?: AIAgent | undefined;
           }[];
         };
 

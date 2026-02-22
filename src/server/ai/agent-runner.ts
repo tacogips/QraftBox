@@ -8,6 +8,7 @@
  */
 
 import type { ClaudeSessionId, AIConfig } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import { createLogger } from "../logger.js";
 import {
@@ -139,6 +140,7 @@ export interface AgentRunParams {
   readonly projectPath: string;
   readonly resumeSessionId?: ClaudeSessionId | undefined;
   readonly attachments?: readonly AgentSessionAttachment[] | undefined;
+  readonly aiAgent?: AIAgent | undefined;
   readonly vendor?: "anthropics" | "openai" | undefined;
   readonly model?: string | undefined;
   readonly additionalArgs?: readonly string[] | undefined;
@@ -229,6 +231,19 @@ class ClaudeAgentRunner implements AgentRunner {
     private readonly toolRegistry: QraftBoxToolRegistry,
   ) {}
 
+  private resolveCliPath(params: AgentRunParams): string {
+    if (params.aiAgent === AIAgent.CODEX) {
+      return "codex";
+    }
+    if (params.aiAgent === AIAgent.GEMINI) {
+      return "gemini";
+    }
+    if (params.aiAgent === AIAgent.CLAUDE) {
+      return "claude";
+    }
+    return params.vendor === "openai" ? "codex" : "claude";
+  }
+
   execute(params: AgentRunParams): AgentExecution {
     const channel = new EventChannel<AgentEvent>();
     let runningSession: RunningSession | undefined;
@@ -250,7 +265,7 @@ class ClaudeAgentRunner implements AgentRunner {
             "qraftbox-tools": mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
-          cliPath: params.vendor === "openai" ? "codex" : "claude",
+          cliPath: this.resolveCliPath(params),
           model: params.model ?? this.config.assistantModel,
           additionalArgs:
             params.additionalArgs !== undefined

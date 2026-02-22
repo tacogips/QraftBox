@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AISession } from "../../../src/types/ai";
+  import { AIAgent } from "../../../src/types/ai-agent";
   import type { PromptQueueItem } from "../../src/lib/app-api";
   import type { ExtendedSessionEntry } from "../../../src/types/claude-session";
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
@@ -10,6 +11,7 @@
     readonly purpose: string;
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "unknown";
+    readonly aiAgent: AIAgent;
     readonly status: "running" | "queued" | "idle";
     readonly queuedPromptCount: number;
     readonly updatedAt: string;
@@ -20,6 +22,7 @@
     readonly purpose: string;
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "unknown";
+    readonly aiAgent: AIAgent;
     readonly status: "running" | "queued" | "idle";
     readonly queuedPromptCount: number;
   }
@@ -51,6 +54,7 @@
   interface PendingPromptMessage {
     readonly message: string;
     readonly status: "queued" | "running";
+    readonly ai_agent?: AIAgent | undefined;
   }
 
   const {
@@ -72,6 +76,7 @@
     purpose: "No purpose available",
     latestResponse: "No active response available",
     source: "unknown",
+    aiAgent: AIAgent.CLAUDE,
     status: "idle",
     queuedPromptCount: 0,
   });
@@ -178,6 +183,7 @@
       .map((pendingPrompt) => ({
         message: pendingPrompt.message,
         status: pendingPrompt.status,
+        ai_agent: pendingPrompt.ai_agent,
       }));
   }
 
@@ -229,6 +235,11 @@
       purpose: truncate(purposeCandidate || "No purpose available", 90),
       latestResponse: truncate(latestResponseCandidate, 160),
       source: entry.source,
+      aiAgent:
+        entry.aiAgent ??
+        runningMatch?.aiAgent ??
+        queuedMatch?.aiAgent ??
+        AIAgent.CLAUDE,
       status,
       queuedPromptCount: activePromptMessages.length,
       updatedAt: entry.modified,
@@ -270,6 +281,10 @@
           160,
         ),
         source: "qraftbox",
+        aiAgent:
+          sessionEntry.aiAgent ??
+          activePromptMessages[0]?.ai_agent ??
+          AIAgent.CLAUDE,
         status,
         queuedPromptCount: activePromptMessages.length,
         updatedAt:
@@ -699,6 +714,7 @@
                 purpose: card.purpose,
                 latestResponse: card.latestResponse,
                 source: card.source,
+                aiAgent: card.aiAgent,
                 status: card.status,
                 queuedPromptCount: card.queuedPromptCount,
               };
@@ -725,6 +741,11 @@
                       : 'bg-bg-tertiary text-text-secondary'}"
                 >
                   {card.source}
+                </span>
+                <span
+                  class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-bg-tertiary text-text-secondary"
+                >
+                  {card.aiAgent}
                 </span>
               </div>
               <span class="text-[11px] text-text-tertiary"
@@ -775,6 +796,7 @@
     latestResponse={selectedCard?.latestResponse ??
       selectedSessionMeta.latestResponse}
     source={selectedCard?.source ?? selectedSessionMeta.source}
+    aiAgent={selectedCard?.aiAgent ?? selectedSessionMeta.aiAgent}
     queuedPromptCount={selectedCard?.queuedPromptCount ??
       selectedSessionMeta.queuedPromptCount}
     pendingPromptMessages={selectedSessionPendingPromptMessages}

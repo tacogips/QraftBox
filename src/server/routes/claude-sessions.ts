@@ -19,6 +19,7 @@ import {
 import { stripSystemTags } from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import type { QraftAiSessionId } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 import { SessionEnrichmentService } from "../claude/session-enrichment.js";
 import type { SessionManager } from "../ai/session-manager.js";
 import type { AiSessionRow } from "../ai/ai-session-store.js";
@@ -493,6 +494,7 @@ export function createClaudeSessionsRoutes(
             projectEncoded: "",
             qraftAiSessionId: (row.clientSessionId ??
               row.id) as QraftAiSessionId,
+            aiAgent: row.aiAgent ?? AIAgent.CLAUDE,
             hasUserPrompt: true,
           };
 

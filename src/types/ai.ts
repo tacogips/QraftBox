@@ -5,6 +5,8 @@
  * AI prompts from the diff viewer.
  */
 
+import { AIAgent } from "./ai-agent";
+
 /**
  * File reference for context in AI prompts
  */
@@ -265,6 +267,10 @@ export interface AISessionInfo {
    */
   readonly modelProfileId?: string | undefined;
   /**
+   * AI agent used for this session execution.
+   */
+  readonly aiAgent?: AIAgent | undefined;
+  /**
    * Resolved model vendor snapshot at submission time.
    */
   readonly modelVendor?: "anthropics" | "openai" | undefined;
@@ -392,6 +398,8 @@ export interface AIPromptMessage {
   readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
   /** Optional model profile ID to override default AI Ask profile */
   readonly model_profile_id?: string | undefined;
+  /** AI agent to execute prompt with (defaults to claude on server) */
+  readonly ai_agent?: AIAgent | undefined;
   /** Resolved model vendor snapshot at submission time */
   readonly model_vendor?: "anthropics" | "openai" | undefined;
   /** Resolved model name snapshot at submission time */
@@ -419,6 +427,8 @@ export interface QueuedPromptInfo {
   readonly worktree_id: WorktreeId;
   /** Client-generated session group ID for prompt continuity */
   readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+  /** AI agent used for this queued prompt */
+  readonly ai_agent?: AIAgent | undefined;
 }
 
 /**

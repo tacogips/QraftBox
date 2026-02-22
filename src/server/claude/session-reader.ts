@@ -30,6 +30,7 @@ import {
   deriveQraftAiSessionIdFromClaude,
   type ClaudeSessionId,
 } from "../../types/ai";
+import { AIAgent } from "../../types/ai-agent";
 import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
 import { createProductionContainer } from "claude-code-agent/src/container";
 
@@ -206,6 +207,7 @@ export class ClaudeSessionReader {
             qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
               entry.sessionId as ClaudeSessionId,
             ),
+            aiAgent: AIAgent.CLAUDE,
           };
 
           // Apply additional filters
@@ -229,6 +231,7 @@ export class ClaudeSessionReader {
               qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
                 entry.sessionId as ClaudeSessionId,
               ),
+              aiAgent: AIAgent.CLAUDE,
             };
 
             // Apply additional filters
@@ -291,6 +294,7 @@ export class ClaudeSessionReader {
             qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
               entry.sessionId as ClaudeSessionId,
             ),
+            aiAgent: AIAgent.CLAUDE,
           };
         }
       } catch (error: unknown) {
@@ -310,6 +314,7 @@ export class ClaudeSessionReader {
               qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
                 entry.sessionId as ClaudeSessionId,
               ),
+              aiAgent: AIAgent.CLAUDE,
             };
           }
         } catch (buildError: unknown) {

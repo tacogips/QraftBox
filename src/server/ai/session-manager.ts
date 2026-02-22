@@ -41,6 +41,7 @@ import {
   type AgentExecution,
   type AgentEvent,
 } from "./agent-runner.js";
+import { AIAgent } from "../../types/ai-agent.js";
 
 /**
  * Runtime session handle - only stores non-serializable runtime state
@@ -393,6 +394,7 @@ export function createSessionManager(
       created_at: row.createdAt,
       worktree_id: row.worktreeId ?? ("" as WorktreeId),
       qraft_ai_session_id: row.clientSessionId,
+      ai_agent: row.aiAgent ?? AIAgent.CLAUDE,
     };
   }
 
@@ -740,6 +742,7 @@ export function createSessionManager(
         projectPath: session.projectPath,
         resumeSessionId: session.currentClaudeSessionId,
         attachments: handle.attachments,
+        aiAgent: session.aiAgent ?? AIAgent.CLAUDE,
         vendor: handle.modelOverride?.vendor,
         model: handle.modelOverride?.model,
         additionalArgs:
@@ -880,6 +883,7 @@ export function createSessionManager(
           createdAt: new Date().toISOString(),
           currentActivity: undefined,
           currentClaudeSessionId: request.options.resumeSessionId,
+          aiAgent: AIAgent.CLAUDE,
         };
 
         store.insert(sessionRow);
@@ -921,6 +925,7 @@ export function createSessionManager(
           createdAt: new Date().toISOString(),
           currentActivity: undefined,
           currentClaudeSessionId: request.options.resumeSessionId,
+          aiAgent: AIAgent.CLAUDE,
         };
 
         store.insert(sessionRow);
@@ -1130,6 +1135,7 @@ export function createSessionManager(
         message: messageForDisplay,
         clientSessionId,
         modelProfileId: msg.model_profile_id,
+        aiAgent: msg.ai_agent ?? AIAgent.CLAUDE,
         modelVendor: msg.model_vendor,
         modelName: msg.model_name,
         modelArguments: msg.model_arguments,

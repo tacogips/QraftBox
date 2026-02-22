@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AIAgent } from "../../../src/types/ai-agent";
   import SessionTranscriptInline from "./SessionTranscriptInline.svelte";
 
   interface Props {
@@ -10,6 +11,7 @@
     purpose: string;
     latestResponse: string;
     source: "qraftbox" | "claude-cli" | "unknown";
+    aiAgent: AIAgent;
     queuedPromptCount: number;
     pendingPromptMessages: readonly {
       message: string;
@@ -29,6 +31,7 @@
     purpose,
     latestResponse,
     source,
+    aiAgent,
     queuedPromptCount,
     pendingPromptMessages,
     onClose,
@@ -160,6 +163,11 @@
                   : 'bg-bg-tertiary text-text-secondary'}"
             >
               {source}
+            </span>
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-bg-tertiary text-text-secondary"
+            >
+              {aiAgent}
             </span>
             {#if queuedPromptCount > 0}
               <span class="text-xs text-text-tertiary"

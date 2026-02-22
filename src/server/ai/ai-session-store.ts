@@ -18,6 +18,7 @@ import type {
   PromptId,
   WorktreeId,
 } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 import { createLogger } from "../logger.js";
 
 const logger = createLogger("AiSessionStore");
@@ -41,6 +42,7 @@ export interface AiSessionRow {
   readonly error?: string | undefined;
   readonly clientSessionId?: QraftAiSessionId | undefined; // client-generated group ID
   readonly modelProfileId?: string | undefined;
+  readonly aiAgent?: AIAgent | undefined;
   readonly modelVendor?: "anthropics" | "openai" | undefined;
   readonly modelName?: string | undefined;
   readonly modelArguments?: readonly string[] | undefined;
@@ -115,6 +117,7 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     claudeSessionId: row.currentClaudeSessionId,
     clientSessionId: row.clientSessionId,
     modelProfileId: row.modelProfileId,
+    aiAgent: row.aiAgent ?? AIAgent.CLAUDE,
     modelVendor: row.modelVendor,
     modelName: row.modelName,
     modelArguments: row.modelArguments,
@@ -170,8 +173,8 @@ class AiSessionStoreImpl implements AiSessionStore {
         created_at, started_at, completed_at,
         current_activity, current_claude_session_id,
         prompt_id, worktree_id, message, last_assistant_message, error, client_session_id,
-        model_profile_id, model_vendor, model_name, model_arguments_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model_profile_id, ai_agent, model_vendor, model_name, model_arguments_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtGet = db.prepare(`
@@ -278,6 +281,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       row.error ?? null,
       row.clientSessionId ?? null,
       row.modelProfileId ?? null,
+      row.aiAgent ?? AIAgent.CLAUDE,
       row.modelVendor ?? null,
       row.modelName ?? null,
       row.modelArguments !== undefined
@@ -305,6 +309,7 @@ class AiSessionStoreImpl implements AiSessionStore {
           error: string | null;
           client_session_id: string | null;
           model_profile_id: string | null;
+          ai_agent: AIAgent | null;
           model_vendor: "anthropics" | "openai" | null;
           model_name: string | null;
           model_arguments_json: string | null;
@@ -336,6 +341,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       error: string | null;
       client_session_id: string | null;
       model_profile_id: string | null;
+      ai_agent: AIAgent | null;
       model_vendor: "anthropics" | "openai" | null;
       model_name: string | null;
       model_arguments_json: string | null;
@@ -361,6 +367,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       error: string | null;
       client_session_id: string | null;
       model_profile_id: string | null;
+      ai_agent: AIAgent | null;
       model_vendor: "anthropics" | "openai" | null;
       model_name: string | null;
       model_arguments_json: string | null;
@@ -472,6 +479,7 @@ class AiSessionStoreImpl implements AiSessionStore {
           error: string | null;
           client_session_id: string | null;
           model_profile_id: string | null;
+          ai_agent: AIAgent | null;
           model_vendor: "anthropics" | "openai" | null;
           model_name: string | null;
           model_arguments_json: string | null;
@@ -500,6 +508,7 @@ class AiSessionStoreImpl implements AiSessionStore {
         error: string | null;
         client_session_id: string | null;
         model_profile_id: string | null;
+        ai_agent: AIAgent | null;
         model_vendor: "anthropics" | "openai" | null;
         model_name: string | null;
         model_arguments_json: string | null;
@@ -522,6 +531,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       error: string | null;
       client_session_id: string | null;
       model_profile_id: string | null;
+      ai_agent: AIAgent | null;
       model_vendor: "anthropics" | "openai" | null;
       model_name: string | null;
       model_arguments_json: string | null;
@@ -568,6 +578,7 @@ class AiSessionStoreImpl implements AiSessionStore {
     error: string | null;
     client_session_id: string | null;
     model_profile_id: string | null;
+    ai_agent: AIAgent | null;
     model_vendor: "anthropics" | "openai" | null;
     model_name: string | null;
     model_arguments_json: string | null;
@@ -605,6 +616,7 @@ class AiSessionStoreImpl implements AiSessionStore {
         | QraftAiSessionId
         | undefined,
       modelProfileId: row.model_profile_id ?? undefined,
+      aiAgent: row.ai_agent ?? AIAgent.CLAUDE,
       modelVendor: row.model_vendor ?? undefined,
       modelName: row.model_name ?? undefined,
       modelArguments,
@@ -650,6 +662,7 @@ export function createAiSessionStore(
       error TEXT,
       client_session_id TEXT,
       model_profile_id TEXT,
+      ai_agent TEXT,
       model_vendor TEXT,
       model_name TEXT,
       model_arguments_json TEXT
@@ -685,6 +698,7 @@ export function createAiSessionStore(
     "error TEXT",
     "client_session_id TEXT",
     "model_profile_id TEXT",
+    "ai_agent TEXT",
     "model_vendor TEXT",
     "model_name TEXT",
     "model_arguments_json TEXT",
@@ -730,6 +744,7 @@ export function createInMemoryAiSessionStore(): AiSessionStore {
       error TEXT,
       client_session_id TEXT,
       model_profile_id TEXT,
+      ai_agent TEXT,
       model_vendor TEXT,
       model_name TEXT,
       model_arguments_json TEXT
