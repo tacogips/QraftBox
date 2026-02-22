@@ -292,7 +292,7 @@ export async function submitAIPrompt(params: {
       context: params.context,
       project_path: params.projectPath,
       qraft_ai_session_id: params.qraftAiSessionId,
-      ai_agent: params.aiAgent ?? AIAgent.CLAUDE,
+      ai_agent: params.aiAgent,
       model_profile_id: params.modelProfileId,
     }),
   });

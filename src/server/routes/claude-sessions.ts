@@ -287,7 +287,7 @@ export function createClaudeSessionsRoutes(
       if (sourceParam !== undefined) {
         if (!isSessionSource(sourceParam)) {
           const errorResponse: ErrorResponse = {
-            error: `Invalid source value: ${sourceParam}. Must be one of: qraftbox, claude-cli, unknown`,
+            error: `Invalid source value: ${sourceParam}. Must be one of: qraftbox, claude-cli, codex-cli, unknown`,
             code: 400,
           };
           return c.json(errorResponse, 400);

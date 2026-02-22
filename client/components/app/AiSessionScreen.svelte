@@ -112,7 +112,8 @@
       references: [],
       diffSummary: undefined,
       resumeSessionId: sessionId,
-      modelProfileId: selectedAiModelProfileId,
+      // Existing sessions keep their already resolved profile.
+      modelProfileId: undefined,
     });
   }
 
@@ -138,6 +139,11 @@
     {queuedSessions}
     {pendingPrompts}
     newSessionSeedId={currentQraftAiSessionId ?? null}
+    newSessionModelProfiles={aiModelProfiles}
+    selectedNewSessionModelProfileId={selectedAiModelProfileId}
+    onSelectNewSessionModelProfile={(profileId) => {
+      selectedAiModelProfileId = profileId;
+    }}
     {onNewSession}
     {onCancelActiveSession}
     onStartNewSessionPrompt={handleOverviewNewSessionPromptSubmit}

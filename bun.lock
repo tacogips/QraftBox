@@ -7,6 +7,7 @@
       "dependencies": {
         "@octokit/rest": "22.0.1",
         "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
+        "codex-agent": "github:tacogips/codex-agent#800b1b07fb920a8b222a75db396de9c294f878d3",
         "commander": "14.0.3",
         "hono": "4.11.7",
       },
@@ -22,6 +23,9 @@
       },
     },
   },
+  "trustedDependencies": [
+    "codex-agent",
+  ],
   "packages": {
     "@borewit/text-codec": ["@borewit/text-codec@0.2.1", "", {}, "sha512-k7vvKPbf7J2fZ5klGRD9AeKfUvojuZIQ3BT5u7Jfv+puwXkUBUT5PVyMDfJZpy30CBDXGMgw7fguK/lpOMBvgw=="],
 
@@ -222,6 +226,8 @@
     "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#5bc71fe", { "dependencies": { "@elysiajs/cors": "1.4.1", "@elysiajs/static": "1.4.7", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-5bc71fe"],
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
+
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#800b1b0", {}, "tacogips-codex-agent-800b1b0"],
 
     "commander": ["commander@14.0.3", "", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 

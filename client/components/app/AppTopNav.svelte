@@ -57,7 +57,6 @@
   let addProjectMenuOpen = $state(false);
   let projectPanelOpen = $state(false);
   let projectTreeExpanded = $state(true);
-  let addProjectBtnEl = $state<HTMLButtonElement | undefined>(undefined);
 
   const activeProjectTab = $derived(
     workspaceTabs.find((tab) => tab.id === contextId) ?? null,
@@ -155,7 +154,6 @@
       onclick={() => {
         projectPanelOpen = !projectPanelOpen;
         if (projectPanelOpen) {
-          addProjectMenuOpen = false;
           headerMenuOpen = false;
         }
       }}
@@ -168,7 +166,9 @@
         fill="currentColor"
         class="transition-transform {projectPanelOpen ? 'rotate-90' : ''}"
       >
-        <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" />
+        <path
+          d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+        />
       </svg>
       <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
         <path
@@ -177,23 +177,6 @@
       </svg>
       <span class="truncate">{activeProjectLabel}</span>
       <span class="text-xs text-text-tertiary">({workspaceTabs.length})</span>
-    </button>
-
-    <button
-      type="button"
-      class="h-9 w-9 rounded border border-border-default text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
-      bind:this={addProjectBtnEl}
-      onclick={() => {
-        addProjectMenuOpen = !addProjectMenuOpen;
-        if (addProjectMenuOpen) {
-          projectPanelOpen = false;
-          onNewProjectPathChange("");
-          void onFetchRecentProjects();
-        }
-      }}
-      title="Add project"
-    >
-      +
     </button>
 
     <div class="relative">
@@ -220,190 +203,61 @@
         <div
           class="absolute right-0 top-full mt-1 w-40 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
         >
-        <button
-          type="button"
-          class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
                  {currentScreen === 'tools'
-            ? 'text-text-primary font-semibold'
-            : 'text-text-secondary'}"
-          onclick={() => {
-            onNavigateToScreen("tools");
-            headerMenuOpen = false;
-          }}
-        >
-          Tools
-        </button>
-        <button
-          type="button"
-          class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("tools");
+              headerMenuOpen = false;
+            }}
+          >
+            Tools
+          </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
                  {currentScreen === 'system-info'
-            ? 'text-text-primary font-semibold'
-            : 'text-text-secondary'}"
-          onclick={() => {
-            onNavigateToScreen("system-info");
-            headerMenuOpen = false;
-          }}
-        >
-          System Info
-        </button>
-        <button
-          type="button"
-          class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("system-info");
+              headerMenuOpen = false;
+            }}
+          >
+            System Info
+          </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
                  {currentScreen === 'model-config'
-            ? 'text-text-primary font-semibold'
-            : 'text-text-secondary'}"
-          onclick={() => {
-            onNavigateToScreen("model-config");
-            headerMenuOpen = false;
-          }}
-        >
-          Model Config
-        </button>
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("model-config");
+              headerMenuOpen = false;
+            }}
+          >
+            Model Config
+          </button>
         </div>
       {/if}
     </div>
   </div>
 </header>
 
-{#if headerMenuOpen || addProjectMenuOpen || projectPanelOpen}
+{#if headerMenuOpen || projectPanelOpen}
   <div
     class="fixed inset-0 z-40"
     onclick={() => {
       headerMenuOpen = false;
-      addProjectMenuOpen = false;
       projectPanelOpen = false;
     }}
     onkeydown={() => {}}
     role="presentation"
   ></div>
-{/if}
-
-{#if addProjectMenuOpen && addProjectBtnEl !== undefined}
-  {@const rect = addProjectBtnEl.getBoundingClientRect()}
-  <div
-    class="fixed w-80 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
-    style="top: {rect.bottom + 4}px; left: {Math.min(
-      rect.left,
-      window.innerWidth - 336,
-    )}px;"
-  >
-    <div class="px-3 py-2">
-      <label
-        for="open-directory-input"
-        class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block"
-      >
-        Open Directory
-      </label>
-      <form
-        class="flex items-center gap-1.5"
-        onsubmit={(e) => {
-          e.preventDefault();
-          void onOpenProjectByPath(newProjectPath);
-        }}
-      >
-        <input
-          id="open-directory-input"
-          type="text"
-          value={newProjectPath}
-          oninput={(e) =>
-            onNewProjectPathChange((e.currentTarget as HTMLInputElement).value)}
-          class="flex-1 px-2 py-1.5 text-sm rounded border border-border-default
-                 bg-bg-primary text-text-primary font-mono
-                 focus:outline-none focus:ring-2 focus:ring-accent-emphasis
-                 placeholder:text-text-tertiary"
-          placeholder="/path/to/project"
-          disabled={newProjectLoading || pickingDirectory}
-        />
-        <button
-          type="button"
-          disabled={pickingDirectory || newProjectLoading}
-          onclick={() => void onPickDirectory()}
-          class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-colors shrink-0"
-          title="Browse directories"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-            <path
-              d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
-            />
-          </svg>
-        </button>
-        <button
-          type="submit"
-          disabled={newProjectPath.trim().length === 0 || newProjectLoading}
-          class="px-2 py-1.5 rounded text-sm font-medium
-                 bg-bg-tertiary text-text-primary hover:bg-border-default
-                 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-colors shrink-0"
-        >
-          {newProjectLoading ? "..." : "Open"}
-        </button>
-      </form>
-      {#if newProjectError !== null}
-        <p class="mt-1.5 text-xs text-danger-fg">{newProjectError}</p>
-      {/if}
-    </div>
-
-    {#if availableRecentProjects.length > 0}
-      <div class="border-t border-border-default my-1"></div>
-      <div
-        class="px-4 py-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider"
-      >
-        Previous Projects
-      </div>
-      <div class="max-h-60 overflow-y-auto">
-        {#each availableRecentProjects as recent (recent.path)}
-          <div class="flex items-center hover:bg-bg-tertiary transition-colors">
-            <button
-              type="button"
-              class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
-              onclick={() => void onOpenRecentProject(recent.path)}
-              title={recent.path}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-                class="shrink-0 {recent.isGitRepo
-                  ? 'text-accent-fg'
-                  : 'text-text-tertiary'}"
-              >
-                <path
-                  d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
-                />
-              </svg>
-              <span class="truncate flex-1">{recent.name}</span>
-              <span class="text-xs text-text-tertiary truncate max-w-[120px]"
-                >{truncatePath(recent.path, 20)}</span
-              >
-            </button>
-            <button
-              type="button"
-              class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
-              title="Remove from history"
-              onclick={(e) => {
-                e.stopPropagation();
-                void onRemoveRecentProject(recent.path);
-              }}
-            >
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-              >
-                <path
-                  d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
-                />
-              </svg>
-            </button>
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
 {/if}
 
 {#if projectPanelOpen}
@@ -413,36 +267,56 @@
     <div
       class="h-10 px-3 border-b border-border-default flex items-center justify-between"
     >
-      <span class="text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+      <span
+        class="text-xs font-semibold uppercase tracking-wider text-text-tertiary"
         >Workspace</span
       >
-      <span class="text-xs text-text-tertiary">{workspaceTabs.length} projects</span>
+      <span class="text-xs text-text-tertiary"
+        >{workspaceTabs.length} projects</span
+      >
     </div>
 
     <div class="overflow-y-auto flex-1 p-2">
-      <button
-        type="button"
-        class="w-full h-8 px-2 rounded text-sm text-left text-text-secondary hover:text-text-primary hover:bg-bg-tertiary flex items-center gap-2"
-        onclick={() => {
-          projectTreeExpanded = !projectTreeExpanded;
-        }}
-      >
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          class="transition-transform {projectTreeExpanded ? 'rotate-90' : ''}"
+      <div class="flex items-center gap-1">
+        <button
+          type="button"
+          class="flex-1 h-8 px-2 rounded text-sm text-left text-text-secondary hover:text-text-primary hover:bg-bg-tertiary flex items-center gap-2"
+          onclick={() => {
+            projectTreeExpanded = !projectTreeExpanded;
+          }}
         >
-          <path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z" />
-        </svg>
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-          <path
-            d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
-          />
-        </svg>
-        <span>Projects</span>
-      </button>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            class="transition-transform {projectTreeExpanded ? 'rotate-90' : ''}"
+          >
+            <path
+              d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
+            />
+          </svg>
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+            />
+          </svg>
+          <span>Projects</span>
+        </button>
+        <button
+          type="button"
+          class="h-8 w-8 rounded border border-border-default text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+          onclick={() => {
+            addProjectMenuOpen = true;
+            onNewProjectPathChange("");
+            void onFetchRecentProjects();
+          }}
+          title="New project"
+          aria-label="New project"
+        >
+          +
+        </button>
+      </div>
 
       {#if projectTreeExpanded}
         <div class="pl-4 pr-1 py-1 space-y-0.5">
@@ -471,11 +345,18 @@
                   type="button"
                   class="project-tab-close w-5 h-5 flex items-center justify-center shrink-0 mr-1
                          rounded-sm text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary
-                         {tab.id === contextId ? 'project-tab-close-active' : ''}"
+                         {tab.id === contextId
+                    ? 'project-tab-close-active'
+                    : ''}"
                   onclick={(e) => void onCloseProjectTab(tab.id, e)}
                   title="Close {tab.name}"
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                  >
                     <path
                       d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
                     />
@@ -488,6 +369,171 @@
       {/if}
     </div>
   </aside>
+{/if}
+
+{#if addProjectMenuOpen}
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Project selector"
+    onkeydown={(e) => {
+      if (e.key === "Escape") {
+        addProjectMenuOpen = false;
+      }
+    }}
+  >
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/40"
+      aria-label="Close project selector"
+      onclick={() => {
+        addProjectMenuOpen = false;
+      }}
+    ></button>
+    <div
+      class="relative z-10 w-full max-w-xl bg-bg-secondary border border-border-default rounded-md shadow-xl"
+    >
+      <div
+        class="px-4 py-3 border-b border-border-default flex items-center justify-between gap-2"
+      >
+        <h2 class="text-sm font-semibold text-text-primary">Select Project</h2>
+        <button
+          type="button"
+          class="h-7 w-7 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+          onclick={() => {
+            addProjectMenuOpen = false;
+          }}
+          aria-label="Close"
+        >
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+            <path
+              d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+            />
+          </svg>
+        </button>
+      </div>
+
+      <div class="p-3">
+        <label
+          for="project-popup-open-directory-input"
+          class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block"
+        >
+          Open Directory
+        </label>
+        <form
+          class="flex items-center gap-1.5"
+          onsubmit={async (e) => {
+            e.preventDefault();
+            await onOpenProjectByPath(newProjectPath);
+            addProjectMenuOpen = false;
+            projectPanelOpen = false;
+          }}
+        >
+          <input
+            id="project-popup-open-directory-input"
+            type="text"
+            value={newProjectPath}
+            oninput={(e) =>
+              onNewProjectPathChange((e.currentTarget as HTMLInputElement).value)}
+            class="flex-1 px-2 py-1.5 text-sm rounded border border-border-default
+                   bg-bg-primary text-text-primary font-mono
+                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis
+                   placeholder:text-text-tertiary"
+            placeholder="/path/to/project"
+            disabled={newProjectLoading || pickingDirectory}
+          />
+          <button
+            type="button"
+            disabled={pickingDirectory || newProjectLoading}
+            onclick={() => void onPickDirectory()}
+            class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-colors shrink-0"
+            title="Browse directories"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path
+                d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+              />
+            </svg>
+          </button>
+          <button
+            type="submit"
+            disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+            class="px-2 py-1.5 rounded text-sm font-medium
+                   bg-bg-tertiary text-text-primary hover:bg-border-default
+                   disabled:opacity-50 disabled:cursor-not-allowed
+                   transition-colors shrink-0"
+          >
+            {newProjectLoading ? "..." : "Open"}
+          </button>
+        </form>
+        {#if newProjectError !== null}
+          <p class="mt-1.5 text-xs text-danger-fg">{newProjectError}</p>
+        {/if}
+      </div>
+
+      {#if availableRecentProjects.length > 0}
+        <div class="border-t border-border-default py-2">
+          <div
+            class="px-4 pb-1 text-xs text-text-tertiary font-semibold uppercase tracking-wider"
+          >
+            Previous Projects
+          </div>
+          <div class="max-h-60 overflow-y-auto">
+            {#each availableRecentProjects as recent (recent.path)}
+              <div class="flex items-center hover:bg-bg-tertiary transition-colors">
+                <button
+                  type="button"
+                  class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
+                  onclick={async () => {
+                    await onOpenRecentProject(recent.path);
+                    addProjectMenuOpen = false;
+                    projectPanelOpen = false;
+                  }}
+                  title={recent.path}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    class="shrink-0 {recent.isGitRepo
+                      ? 'text-accent-fg'
+                      : 'text-text-tertiary'}"
+                  >
+                    <path
+                      d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z"
+                    />
+                  </svg>
+                  <span class="truncate flex-1">{recent.name}</span>
+                  <span class="text-xs text-text-tertiary truncate max-w-[120px]"
+                    >{truncatePath(recent.path, 20)}</span
+                  >
+                </button>
+                <button
+                  type="button"
+                  class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
+                  title="Remove from history"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    void onRemoveRecentProject(recent.path);
+                  }}
+                >
+                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
+                    />
+                  </svg>
+                </button>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
+  </div>
 {/if}
 
 <style>

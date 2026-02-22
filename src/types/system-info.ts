@@ -1,7 +1,7 @@
 /**
  * System Information Types
  *
- * Types for system information including git and Claude Code version information.
+ * Types for system information including git, Claude Code, and Codex version information.
  */
 
 /**
@@ -63,6 +63,7 @@ export interface ClaudeCodeUsage {
 export interface SystemInfo {
   readonly git: VersionInfo;
   readonly claudeCode: VersionInfo;
+  readonly codexCode: VersionInfo;
   readonly models: ModelConfig;
   readonly claudeCodeUsage: ClaudeCodeUsage | null;
 }

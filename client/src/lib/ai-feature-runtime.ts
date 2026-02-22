@@ -6,7 +6,6 @@ import {
   type QraftAiSessionId,
   type QueueStatus,
 } from "../../../src/types/ai";
-import { AIAgent } from "../../../src/types/ai-agent";
 import {
   cancelAISessionApi,
   cancelQueuedPromptApi,
@@ -241,7 +240,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         context,
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: targetSessionId,
-        aiAgent: AIAgent.CLAUDE,
+        aiAgent: undefined,
         modelProfileId: context.modelProfileId,
       };
       const result = await submitAIPrompt(payload);

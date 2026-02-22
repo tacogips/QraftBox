@@ -20,6 +20,7 @@ import type { ClaudeSessionId, WorktreeId } from "../../types/ai";
 describe("ClaudeSessionReader", () => {
   let tempDir: string;
   let projectsDir: string;
+  let codexSessionsDir: string;
   let reader: ClaudeSessionReader;
   let mappingStore: SessionMappingStore;
 
@@ -27,11 +28,13 @@ describe("ClaudeSessionReader", () => {
     // Create temporary test directory
     tempDir = join(tmpdir(), `qraftbox-test-${Date.now()}`);
     projectsDir = join(tempDir, ".claude", "projects");
+    codexSessionsDir = join(tempDir, ".codex", "sessions");
 
     await mkdir(projectsDir, { recursive: true });
+    await mkdir(codexSessionsDir, { recursive: true });
 
     mappingStore = createInMemorySessionMappingStore();
-    reader = new ClaudeSessionReader(projectsDir, mappingStore);
+    reader = new ClaudeSessionReader(projectsDir, mappingStore, codexSessionsDir);
   });
 
   afterEach(async () => {
@@ -1028,6 +1031,104 @@ describe("ClaudeSessionReader", () => {
 
       expect(result.sessions).toHaveLength(1);
       expect(result.sessions[0]?.firstPrompt).toBe("Summary text");
+    });
+  });
+
+  describe("codex sessions", () => {
+    it("includes codex CLI sessions in listSessions", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "22");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-22T10-00-00-test-session.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-22T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-test-id",
+            timestamp: "2026-02-22T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+            git: { branch: "main" },
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-22T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Hello from codex" }],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const result = await reader.listSessions({
+        workingDirectoryPrefix: "/g/gits/tacogips",
+      });
+
+      const codexSession = result.sessions.find((s) =>
+        s.sessionId.startsWith("codex-session-"),
+      );
+      expect(codexSession).toBeDefined();
+      expect(codexSession?.aiAgent).toBe("codex");
+      expect(codexSession?.firstPrompt).toContain("Hello from codex");
+    });
+
+    it("reads codex transcript events", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "22");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-22T10-00-00-test-transcript.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-22T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-transcript-id",
+            timestamp: "2026-02-22T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-22T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "User says hi" }],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-22T10:00:02.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "input_text", text: "Assistant reply" }],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const session = await reader.getSession("codex-session-codex-transcript-id");
+      expect(session).not.toBeNull();
+
+      const transcript = await reader.readTranscript(
+        "codex-session-codex-transcript-id",
+        0,
+        100,
+      );
+      expect(transcript).not.toBeNull();
+      expect(transcript?.events).toHaveLength(2);
+      expect(transcript?.events[0]?.type).toBe("user");
+      expect(transcript?.events[1]?.type).toBe("assistant");
     });
   });
 });

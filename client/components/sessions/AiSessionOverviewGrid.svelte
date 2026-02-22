@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { AISession, AISessionSubmitResult } from "../../../src/types/ai";
   import { AIAgent } from "../../../src/types/ai-agent";
+  import type { ModelProfile } from "../../../src/types/model-config";
   import type { PromptQueueItem } from "../../src/lib/app-api";
   import type { ExtendedSessionEntry } from "../../../src/types/claude-session";
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
@@ -20,7 +21,7 @@
     readonly qraftAiSessionId: string;
     readonly purpose: string;
     readonly latestResponse: string;
-    readonly source: "qraftbox" | "claude-cli" | "unknown";
+    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
@@ -31,7 +32,7 @@
     readonly title: string;
     readonly purpose: string;
     readonly latestResponse: string;
-    readonly source: "qraftbox" | "claude-cli" | "unknown";
+    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
@@ -54,6 +55,9 @@
     runningSessions: readonly AISession[];
     queuedSessions: readonly AISession[];
     pendingPrompts: readonly PromptQueueItem[];
+    newSessionModelProfiles?: readonly ModelProfile[];
+    selectedNewSessionModelProfileId?: string | undefined;
+    onSelectNewSessionModelProfile?: (profileId: string | undefined) => void;
     onNewSession?: () => void;
     onStartNewSessionPrompt?: (
       message: string,
@@ -84,6 +88,9 @@
     runningSessions,
     queuedSessions,
     pendingPrompts,
+    newSessionModelProfiles = [],
+    selectedNewSessionModelProfileId = undefined,
+    onSelectNewSessionModelProfile,
     onNewSession,
     onStartNewSessionPrompt,
     onCancelActiveSession,
@@ -1023,6 +1030,8 @@
                       ? 'bg-success-muted text-success-fg'
                       : card.source === 'claude-cli'
                         ? 'bg-accent-muted text-accent-fg'
+                        : card.source === 'codex-cli'
+                          ? 'bg-attention-emphasis/20 text-attention-fg'
                         : 'bg-bg-tertiary text-text-secondary'}"
                   >
                     {card.source}
@@ -1141,6 +1150,10 @@
     }}
     onSubmitPrompt={(message, immediate) =>
       handlePopupSubmit(message, immediate)}
+    showModelProfileSelector={creatingNewSession}
+    modelProfiles={newSessionModelProfiles}
+    selectedModelProfileId={selectedNewSessionModelProfileId}
+    onModelProfileChange={onSelectNewSessionModelProfile}
     canCancelPrompt={canCancelSelectedPrompt}
     cancelPromptInProgress={cancellingPrompt}
     {cancelPromptError}

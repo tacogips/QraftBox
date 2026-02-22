@@ -35,7 +35,9 @@
     "url": "https://github.com/tacogips/QraftBox.git"
   },
   "license": "MIT",
-  "trustedDependencies": [],
+  "trustedDependencies": [
+    "codex-agent"
+  ],
   "devDependencies": {
     "@playwright/test": "1.58.1",
     "@types/bun": "1.1.14",
@@ -49,6 +51,7 @@
   "dependencies": {
     "@octokit/rest": "22.0.1",
     "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
+    "codex-agent": "github:tacogips/codex-agent#800b1b07fb920a8b222a75db396de9c294f878d3",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

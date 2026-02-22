@@ -2,7 +2,7 @@
   /**
    * SystemInfoScreen Component
    *
-   * Screen for displaying system information (git version, Claude Code version).
+   * Screen for displaying system information (git version, Claude/Codex versions).
    *
    * Features:
    * - Fetches system info from API on mount
@@ -40,6 +40,10 @@
       readonly error: string | null;
     };
     readonly claudeCode: {
+      readonly version: string | null;
+      readonly error: string | null;
+    };
+    readonly codexCode: {
       readonly version: string | null;
       readonly error: string | null;
     };
@@ -264,6 +268,32 @@
               {:else if systemInfo.claudeCode.error !== null}
                 <p class="text-sm text-danger-fg">
                   {systemInfo.claudeCode.error}
+                </p>
+              {:else}
+                <p class="text-sm text-text-tertiary">
+                  Version information not available
+                </p>
+              {/if}
+            </div>
+          </div>
+        </div>
+
+        <!-- Codex -->
+        <div
+          class="rounded-lg border border-border-default bg-bg-secondary p-4"
+        >
+          <div class="flex items-start gap-3">
+            <div class="flex-1">
+              <h3 class="text-sm font-semibold text-text-primary mb-1">
+                Codex
+              </h3>
+              {#if systemInfo.codexCode.version !== null}
+                <p class="text-sm text-success-fg font-mono">
+                  {systemInfo.codexCode.version}
+                </p>
+              {:else if systemInfo.codexCode.error !== null}
+                <p class="text-sm text-danger-fg">
+                  {systemInfo.codexCode.error}
                 </p>
               {:else}
                 <p class="text-sm text-text-tertiary">

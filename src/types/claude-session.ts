@@ -55,9 +55,14 @@ export interface ClaudeSessionEntry {
  * Session source identifier
  * - qraftbox: Created by qraftbox
  * - claude-cli: Created by Claude CLI directly
+ * - codex-cli: Created by Codex CLI directly
  * - unknown: Cannot determine source
  */
-export type SessionSource = "qraftbox" | "claude-cli" | "unknown";
+export type SessionSource =
+  | "qraftbox"
+  | "claude-cli"
+  | "codex-cli"
+  | "unknown";
 
 /**
  * Extended session entry with source tracking
@@ -175,7 +180,12 @@ export function isClaudeSessionEntry(
  * Type guard for SessionSource
  */
 export function isSessionSource(value: unknown): value is SessionSource {
-  return value === "qraftbox" || value === "claude-cli" || value === "unknown";
+  return (
+    value === "qraftbox" ||
+    value === "claude-cli" ||
+    value === "codex-cli" ||
+    value === "unknown"
+  );
 }
 
 /**

@@ -1,0 +1,10 @@
+{
+  "plans": [
+    {
+      "id": "codex-agent-browser-e2e",
+      "file": "test-plans/codex-agent-browser-e2e.md",
+      "status": "Completed",
+      "lastUpdated": "2026-02-22"
+    }
+  ]
+}

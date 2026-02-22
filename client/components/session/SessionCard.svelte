@@ -204,7 +204,7 @@
         <span
           class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide bg-bg-tertiary text-text-secondary"
         >
-          {session.aiAgent ?? "claude"}
+          {session.aiAgent ?? "unknown"}
         </span>
         {#if variant === "running" && session.currentActivity}
           <span class="text-xs text-text-tertiary animate-pulse">

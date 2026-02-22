@@ -29,12 +29,14 @@ import {
 import {
   deriveQraftAiSessionIdFromClaude,
   type ClaudeSessionId,
+  type QraftAiSessionId,
 } from "../../types/ai";
 import { AIAgent } from "../../types/ai-agent";
 import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
 import { createProductionContainer } from "claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
 const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
 const LEGACY_INTERNAL_PURPOSE_PREFIX =
   "You summarize a coding session's current objective.";
@@ -71,14 +73,17 @@ export interface ListSessionsOptions {
  */
 export class ClaudeSessionReader {
   private readonly projectsDir: string;
+  private readonly codexSessionsDir: string;
   private readonly mappingStore: SessionMappingStore | undefined;
   private readonly agentSessionReader: AgentSessionReader;
 
   constructor(
     projectsDir?: string,
     mappingStore?: SessionMappingStore | undefined,
+    codexSessionsDir?: string,
   ) {
     this.projectsDir = projectsDir ?? CLAUDE_PROJECTS_DIR;
+    this.codexSessionsDir = codexSessionsDir ?? CODEX_SESSIONS_DIR;
     this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
@@ -246,6 +251,10 @@ export class ClaudeSessionReader {
       }
     }
 
+    // Merge Codex CLI sessions from ~/.codex/sessions.
+    const codexSessions = await this.listCodexSessions(options);
+    allSessions.push(...codexSessions);
+
     // Sort sessions
     allSessions.sort((a, b) => {
       const field = options.sortBy ?? "modified";
@@ -272,6 +281,11 @@ export class ClaudeSessionReader {
    * Get a specific session by ID
    */
   async getSession(sessionId: string): Promise<ExtendedSessionEntry | null> {
+    const codexSession = await this.getCodexSessionById(sessionId);
+    if (codexSession !== null) {
+      return codexSession;
+    }
+
     const projects = await this.listProjects();
 
     for (const project of projects) {
@@ -325,6 +339,219 @@ export class ClaudeSessionReader {
     }
 
     return null;
+  }
+
+  private async listCodexSessions(
+    options: ListSessionsOptions,
+  ): Promise<ExtendedSessionEntry[]> {
+    if (!existsSync(this.codexSessionsDir)) {
+      return [];
+    }
+
+    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    const sessions: ExtendedSessionEntry[] = [];
+    for (const file of files) {
+      const session = await this.readCodexSessionEntry(file);
+      if (session === null) {
+        continue;
+      }
+      if (this.matchesFilters(session, options)) {
+        sessions.push(session);
+      }
+    }
+    return sessions;
+  }
+
+  private async getCodexSessionById(
+    sessionId: string,
+  ): Promise<ExtendedSessionEntry | null> {
+    if (!existsSync(this.codexSessionsDir)) {
+      return null;
+    }
+
+    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    for (const file of files) {
+      const session = await this.readCodexSessionEntry(file);
+      if (session?.sessionId === sessionId) {
+        return session;
+      }
+    }
+    return null;
+  }
+
+  private async listCodexJsonlFiles(dir: string): Promise<string[]> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    const files: string[] = [];
+    for (const entry of entries) {
+      const fullPath = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        files.push(...(await this.listCodexJsonlFiles(fullPath)));
+        continue;
+      }
+      if (entry.isFile() && entry.name.endsWith(".jsonl")) {
+        files.push(fullPath);
+      }
+    }
+    return files;
+  }
+
+  private extractCodexMessageText(payload: Record<string, unknown>): string {
+    if (payload["type"] !== "message" || !Array.isArray(payload["content"])) {
+      return "";
+    }
+
+    const textParts: string[] = [];
+    for (const contentItem of payload["content"]) {
+      if (typeof contentItem !== "object" || contentItem === null) {
+        continue;
+      }
+      const contentObj = contentItem as Record<string, unknown>;
+      if (
+        contentObj["type"] === "input_text" &&
+        typeof contentObj["text"] === "string"
+      ) {
+        textParts.push(contentObj["text"]);
+      }
+    }
+
+    return textParts.join("\n").trim();
+  }
+
+  private isCodexBootstrapPrompt(text: string): boolean {
+    const normalized = text.trim();
+    return (
+      normalized.startsWith("# AGENTS.md instructions") ||
+      normalized.startsWith("<environment_context>") ||
+      normalized.includes("## Rule of the Responses") ||
+      normalized.includes("## Autonomous Operation Policy")
+    );
+  }
+
+  private async readCodexSessionEntry(
+    jsonlPath: string,
+  ): Promise<ExtendedSessionEntry | null> {
+    try {
+      const fileStat = await stat(jsonlPath);
+      const content = await readFile(jsonlPath, "utf-8");
+      const lines = content.split("\n").filter((line) => line.trim().length > 0);
+      if (lines.length === 0) {
+        return null;
+      }
+
+      let codexId = "";
+      let created = new Date(fileStat.birthtimeMs).toISOString();
+      let modified = new Date(fileStat.mtimeMs).toISOString();
+      let projectPath = "";
+      let gitBranch = "";
+      let firstPrompt = "";
+      let summary = "";
+      let messageCount = 0;
+
+      for (const line of lines) {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(line);
+        } catch {
+          continue;
+        }
+        if (typeof parsed !== "object" || parsed === null) {
+          continue;
+        }
+
+        const raw = parsed as Record<string, unknown>;
+        if (typeof raw["timestamp"] === "string") {
+          modified = raw["timestamp"];
+        }
+
+        if (raw["type"] === "session_meta") {
+          const payload =
+            typeof raw["payload"] === "object" && raw["payload"] !== null
+              ? (raw["payload"] as Record<string, unknown>)
+              : undefined;
+          if (payload !== undefined) {
+            if (typeof payload["id"] === "string") {
+              codexId = payload["id"];
+            }
+            if (typeof payload["timestamp"] === "string") {
+              created = payload["timestamp"];
+            }
+            if (typeof payload["cwd"] === "string") {
+              projectPath = payload["cwd"];
+            }
+            if (
+              typeof payload["git"] === "object" &&
+              payload["git"] !== null &&
+              typeof (payload["git"] as Record<string, unknown>)["branch"] ===
+                "string"
+            ) {
+              const branchValue = (payload["git"] as Record<string, unknown>)[
+                "branch"
+              ];
+              if (typeof branchValue === "string") {
+                gitBranch = branchValue;
+              }
+            }
+          }
+        }
+
+        if (raw["type"] === "response_item") {
+          const payload =
+            typeof raw["payload"] === "object" && raw["payload"] !== null
+              ? (raw["payload"] as Record<string, unknown>)
+              : undefined;
+          if (payload === undefined) {
+            continue;
+          }
+          if (payload["type"] !== "message") {
+            continue;
+          }
+
+          messageCount += 1;
+          const role =
+            typeof payload["role"] === "string"
+              ? payload["role"].toLowerCase()
+              : "";
+          const text = this.extractCodexMessageText(payload);
+
+          if (
+            role === "user" &&
+            firstPrompt.length === 0 &&
+            text.length > 0 &&
+            !this.isCodexBootstrapPrompt(text) &&
+            !this.isInternalSessionPrompt(text)
+          ) {
+            firstPrompt = stripSystemTags(text);
+          }
+          if (role === "assistant" && text.length > 0) {
+            summary = stripSystemTags(text).slice(0, 240);
+          }
+        }
+      }
+
+      const fallbackId = jsonlPath.replace(/^.*\//, "").replace(/\.jsonl$/, "");
+      const sessionId = `codex-session-${codexId || fallbackId}`;
+      return {
+        sessionId,
+        fullPath: jsonlPath,
+        fileMtime: fileStat.mtimeMs,
+        firstPrompt:
+          firstPrompt.length > 0 ? firstPrompt : "(No user prompt found)",
+        summary,
+        messageCount,
+        created,
+        modified,
+        gitBranch,
+        projectPath,
+        isSidechain: false,
+        source: "codex-cli",
+        projectEncoded: "codex-sessions",
+        qraftAiSessionId: sessionId as QraftAiSessionId,
+        aiAgent: AIAgent.CODEX,
+        hasUserPrompt: firstPrompt.length > 0,
+      };
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -942,6 +1169,10 @@ export class ClaudeSessionReader {
       throw new Error(`Transcript file not found: ${jsonlPath}`);
     }
 
+    if (session.aiAgent === AIAgent.CODEX) {
+      return await this.readCodexTranscript(jsonlPath, offset, limit);
+    }
+
     const content = await readFile(jsonlPath, "utf-8");
     const lines = content.split("\n").filter((line) => line.trim().length > 0);
 
@@ -973,6 +1204,63 @@ export class ClaudeSessionReader {
     const paginated = events.slice(offset, offset + limit);
 
     return { events: paginated, total };
+  }
+
+  private async readCodexTranscript(
+    jsonlPath: string,
+    offset: number,
+    limit: number,
+  ): Promise<{ events: TranscriptEvent[]; total: number }> {
+    const content = await readFile(jsonlPath, "utf-8");
+    const lines = content.split("\n").filter((line) => line.trim().length > 0);
+
+    const events: TranscriptEvent[] = [];
+    for (const line of lines) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof parsed !== "object" || parsed === null) {
+        continue;
+      }
+
+      const raw = parsed as Record<string, unknown>;
+      if (raw["type"] !== "response_item") {
+        continue;
+      }
+
+      const payload =
+        typeof raw["payload"] === "object" && raw["payload"] !== null
+          ? (raw["payload"] as Record<string, unknown>)
+          : undefined;
+      if (payload === undefined || payload["type"] !== "message") {
+        continue;
+      }
+
+      const role =
+        typeof payload["role"] === "string"
+          ? payload["role"].toLowerCase()
+          : "unknown";
+      const text = this.extractCodexMessageText(payload);
+      if (text.length === 0) {
+        continue;
+      }
+
+      events.push({
+        type: role === "assistant" ? "assistant" : role === "user" ? "user" : role,
+        timestamp: typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+        content: text,
+        raw: parsed as object,
+      });
+    }
+
+    const total = events.length;
+    return {
+      events: events.slice(offset, offset + limit),
+      total,
+    };
   }
 
   /**

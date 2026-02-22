@@ -27,6 +27,7 @@ describe("System Info Routes", () => {
       // Verify response structure
       expect(body).toHaveProperty("git");
       expect(body).toHaveProperty("claudeCode");
+      expect(body).toHaveProperty("codexCode");
       expect(body).toHaveProperty("models");
       expect(body).toHaveProperty("claudeCodeUsage");
 
@@ -37,6 +38,8 @@ describe("System Info Routes", () => {
       // Verify claudeCode version info structure
       expect(body.claudeCode).toHaveProperty("version");
       expect(body.claudeCode).toHaveProperty("error");
+      expect(body.codexCode).toHaveProperty("version");
+      expect(body.codexCode).toHaveProperty("error");
 
       // Verify model config structure
       expect(body.models).toHaveProperty("promptModel");
@@ -64,6 +67,16 @@ describe("System Info Routes", () => {
       }
       if (claudeHasError) {
         expect(body.claudeCode.version).toBe(null);
+      }
+
+      const codexHasVersion = body.codexCode.version !== null;
+      const codexHasError = body.codexCode.error !== null;
+      expect(codexHasVersion || codexHasError).toBe(true);
+      if (codexHasVersion) {
+        expect(body.codexCode.error).toBe(null);
+      }
+      if (codexHasError) {
+        expect(body.codexCode.version).toBe(null);
       }
     });
 

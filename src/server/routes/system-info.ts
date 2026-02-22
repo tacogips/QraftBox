@@ -2,7 +2,7 @@
  * System Info API Routes
  *
  * Provides REST API endpoints for retrieving system information including
- * installed tool versions (git, Claude Code).
+ * installed tool versions (git, Claude Code, Codex).
  */
 
 import { Hono } from "hono";
@@ -91,6 +91,33 @@ async function getClaudeCodeVersion(): Promise<VersionInfo> {
     // Return the full output as version string
     return {
       version: output,
+      error: null,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : "Unknown error";
+    return {
+      version: null,
+      error: errorMessage,
+    };
+  }
+}
+
+/**
+ * Get Codex version from codex --version command.
+ */
+async function getCodexCodeVersion(): Promise<VersionInfo> {
+  try {
+    const result = await $`codex --version`.quiet().nothrow();
+
+    if (result.exitCode !== 0) {
+      return {
+        version: null,
+        error: "codex command failed or not found",
+      };
+    }
+
+    return {
+      version: result.stdout.toString().trim(),
       error: null,
     };
   } catch (e) {
@@ -276,21 +303,24 @@ export function createSystemInfoRoutes(modelConfig: ModelConfig): Hono {
    * Returns:
    * - git: Git version information (version string or error)
    * - claudeCode: Claude Code version information (version string or error)
+   * - codexCode: Codex version information (version string or error)
    * - models: Model configuration (promptModel and assistantModel)
    * - claudeCodeUsage: Claude Code usage statistics (or null if unavailable)
    */
   app.get("/", async (c) => {
     try {
       // Fetch versions and usage data in parallel
-      const [git, claudeCode, claudeCodeUsage] = await Promise.all([
+      const [git, claudeCode, codexCode, claudeCodeUsage] = await Promise.all([
         getGitVersion(),
         getClaudeCodeVersion(),
+        getCodexCodeVersion(),
         getClaudeCodeUsage(),
       ]);
 
       const response: SystemInfo = {
         git,
         claudeCode,
+        codexCode,
         models: modelConfig,
         claudeCodeUsage,
       };

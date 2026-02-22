@@ -68,6 +68,8 @@
         return "bg-accent-muted text-accent-fg border-accent-emphasis/30";
       case "claude-cli":
         return "bg-done-muted text-done-fg border-done-emphasis/30";
+      case "codex-cli":
+        return "bg-attention-emphasis/20 text-attention-fg border-attention-emphasis/40";
       default:
         return "bg-bg-emphasis/20 text-text-tertiary border-border-emphasis/30";
     }
@@ -81,7 +83,9 @@
       case "qraftbox":
         return "QraftBox";
       case "claude-cli":
-        return "CLI";
+        return "Claude CLI";
+      case "codex-cli":
+        return "Codex CLI";
       default:
         return "UNKNOWN";
     }

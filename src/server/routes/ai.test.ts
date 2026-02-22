@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach, vi, type Mock } from "vitest";
 import { createAIRoutes } from "./ai";
 import type { SessionManager } from "../ai/session-manager";
 import type { PromptId, QraftAiSessionId, WorktreeId } from "../../types/ai";
+import { AIAgent } from "../../types/ai-agent";
 
 describe("AI Routes", () => {
   let cancelMock: Mock<(sessionId: string) => Promise<void>>;
@@ -190,6 +191,58 @@ describe("AI Routes", () => {
           project_path: "/custom/path",
           message: "Test message",
           run_immediately: false,
+        }),
+      );
+    });
+
+    test("respects explicit ai_agent from request body", async () => {
+      const submitPromptMock = sessionManager.submitPrompt as Mock;
+
+      await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Use codex explicitly",
+          run_immediately: true,
+          ai_agent: AIAgent.CODEX,
+        }),
+      });
+
+      expect(submitPromptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ai_agent: AIAgent.CODEX,
+        }),
+      );
+    });
+
+    test("derives ai_agent=codex from resolved openai profile when omitted", async () => {
+      const submitPromptMock = sessionManager.submitPrompt as Mock;
+      const appWithModelStore = createAIRoutes({
+        projectPath: "/tmp/test-project",
+        sessionManager,
+        modelConfigStore: {
+          resolveForOperation: vi.fn(() => ({
+            profileId: "profile-openai",
+            vendor: "openai",
+            model: "codex-cli-latest",
+            arguments: [],
+          })),
+        } as any,
+      });
+
+      await appWithModelStore.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Use default resolved agent",
+          run_immediately: false,
+        }),
+      });
+
+      expect(submitPromptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model_vendor: "openai",
+          ai_agent: AIAgent.CODEX,
         }),
       );
     });

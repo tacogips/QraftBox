@@ -15,6 +15,7 @@ describe("Type Guards", () => {
     test("returns true for valid session sources", () => {
       expect(isSessionSource("qraftbox")).toBe(true);
       expect(isSessionSource("claude-cli")).toBe(true);
+      expect(isSessionSource("codex-cli")).toBe(true);
       expect(isSessionSource("unknown")).toBe(true);
     });
 
@@ -208,6 +209,13 @@ describe("Type Guards", () => {
         isExtendedSessionEntry({
           ...validExtendedEntry,
           source: "claude-cli",
+        }),
+      ).toBe(true);
+
+      expect(
+        isExtendedSessionEntry({
+          ...validExtendedEntry,
+          source: "codex-cli",
         }),
       ).toBe(true);
 

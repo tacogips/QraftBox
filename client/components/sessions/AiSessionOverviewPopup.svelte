@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AIAgent } from "../../../src/types/ai-agent";
+  import type { ModelProfile } from "../../../src/types/model-config";
   import {
     getSessionStatusMeta,
     type SessionStatus,
@@ -14,13 +15,17 @@
     status: SessionStatus;
     purpose: string;
     latestResponse: string;
-    source: "qraftbox" | "claude-cli" | "unknown";
+    source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     aiAgent: AIAgent;
     queuedPromptCount: number;
     pendingPromptMessages: readonly {
       message: string;
       status: "queued" | "running";
     }[];
+    showModelProfileSelector?: boolean;
+    modelProfiles?: readonly ModelProfile[];
+    selectedModelProfileId?: string | undefined;
+    onModelProfileChange?: (profileId: string | undefined) => void;
     canCancelPrompt: boolean;
     cancelPromptInProgress: boolean;
     cancelPromptError: string | null;
@@ -43,6 +48,10 @@
     aiAgent,
     queuedPromptCount,
     pendingPromptMessages,
+    showModelProfileSelector = false,
+    modelProfiles = [],
+    selectedModelProfileId = undefined,
+    onModelProfileChange,
     canCancelPrompt,
     cancelPromptInProgress,
     cancelPromptError,
@@ -186,6 +195,8 @@
                 ? 'bg-success-muted text-success-fg'
                 : source === 'claude-cli'
                   ? 'bg-accent-muted text-accent-fg'
+                  : source === 'codex-cli'
+                    ? 'bg-attention-emphasis/20 text-attention-fg'
                   : 'bg-bg-tertiary text-text-secondary'}"
             >
               {source}
@@ -283,6 +294,39 @@
           >
             Next Prompt
           </h3>
+          {#if showModelProfileSelector}
+            <div class="mb-3 space-y-1">
+              <label
+                for="new-session-profile-select"
+                class="block text-[11px] font-semibold uppercase tracking-wide text-text-secondary"
+              >
+                Profile (new session)
+              </label>
+              <select
+                id="new-session-profile-select"
+                class="w-full rounded border border-border-default bg-bg-primary px-2 py-2 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+                value={selectedModelProfileId}
+                disabled={modelProfiles.length === 0 || submitting}
+                onchange={(event) => {
+                  const nextValue = (event.currentTarget as HTMLSelectElement)
+                    .value;
+                  onModelProfileChange?.(
+                    nextValue.length > 0 ? nextValue : undefined,
+                  );
+                }}
+              >
+                {#if modelProfiles.length === 0}
+                  <option value="">No profile available</option>
+                {:else}
+                  {#each modelProfiles as profile (profile.id)}
+                    <option value={profile.id}>
+                      {profile.name} ({profile.vendor} / {profile.model})
+                    </option>
+                  {/each}
+                {/if}
+              </select>
+            </div>
+          {/if}
           <textarea
             class="w-full h-40 resize-y min-h-28 rounded border border-border-default bg-bg-primary
                    px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"

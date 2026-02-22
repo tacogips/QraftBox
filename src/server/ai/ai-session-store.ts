@@ -18,7 +18,7 @@ import type {
   PromptId,
   WorktreeId,
 } from "../../types/ai.js";
-import { AIAgent } from "../../types/ai-agent.js";
+import { AIAgent, resolveAIAgentFromVendor } from "../../types/ai-agent.js";
 import { createLogger } from "../logger.js";
 
 const logger = createLogger("AiSessionStore");
@@ -121,7 +121,7 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     claudeSessionId: row.currentClaudeSessionId,
     clientSessionId: row.clientSessionId,
     modelProfileId: row.modelProfileId,
-    aiAgent: row.aiAgent ?? AIAgent.CLAUDE,
+    aiAgent: row.aiAgent ?? resolveAIAgentFromVendor(row.modelVendor),
     modelVendor: row.modelVendor,
     modelName: row.modelName,
     modelArguments: row.modelArguments,
@@ -305,7 +305,7 @@ class AiSessionStoreImpl implements AiSessionStore {
       row.error ?? null,
       row.clientSessionId ?? null,
       row.modelProfileId ?? null,
-      row.aiAgent ?? AIAgent.CLAUDE,
+      row.aiAgent ?? resolveAIAgentFromVendor(row.modelVendor),
       row.modelVendor ?? null,
       row.modelName ?? null,
       row.modelArguments !== undefined
@@ -478,9 +478,7 @@ class AiSessionStoreImpl implements AiSessionStore {
     const rows = this.stmtListHiddenQraftSessionIds.all() as Array<{
       qraft_ai_session_id: string;
     }>;
-    return rows.map(
-      (row) => row.qraft_ai_session_id as QraftAiSessionId,
-    );
+    return rows.map((row) => row.qraft_ai_session_id as QraftAiSessionId);
   }
 
   setQraftSessionHidden(sessionId: QraftAiSessionId, hidden: boolean): void {
@@ -657,7 +655,8 @@ class AiSessionStoreImpl implements AiSessionStore {
         | QraftAiSessionId
         | undefined,
       modelProfileId: row.model_profile_id ?? undefined,
-      aiAgent: row.ai_agent ?? AIAgent.CLAUDE,
+      aiAgent:
+        row.ai_agent ?? resolveAIAgentFromVendor(row.model_vendor ?? undefined),
       modelVendor: row.model_vendor ?? undefined,
       modelName: row.model_name ?? undefined,
       modelArguments,

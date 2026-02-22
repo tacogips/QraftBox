@@ -14,7 +14,7 @@
    * Design:
    * - Expanded by default
    * - Project Directory filter with searchable list (primary)
-   * - Source filter (dropdown: All / QraftBox / CLI)
+   * - Source filter (dropdown: All / QraftBox / Claude CLI / Codex CLI)
    * - Clear all filters button
    * - Accessible with proper ARIA labels
    */
@@ -299,7 +299,8 @@
         >
           <option value="all">All</option>
           <option value="qraftbox">QraftBox</option>
-          <option value="claude-cli">CLI</option>
+          <option value="claude-cli">Claude CLI</option>
+          <option value="codex-cli">Codex CLI</option>
         </select>
       </div>
     </div>
