@@ -257,7 +257,6 @@
       onCollapseSidebar();
     }
   }
-
 </script>
 
 <div class="relative flex flex-1 min-h-0 overflow-hidden">

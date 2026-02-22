@@ -13,6 +13,7 @@
   import AIPromptPanel from "../AIPromptPanel.svelte";
   import CurrentSessionPanel from "../CurrentSessionPanel.svelte";
   import HistorySessionsPanel from "../sessions/HistorySessionsPanel.svelte";
+  import AiSessionOverviewGrid from "../sessions/AiSessionOverviewGrid.svelte";
 
   let {
     loading,
@@ -105,6 +106,7 @@
   let isPhoneViewport = $state(window.innerWidth <= 480);
   let historyPaneCollapsed = $state(window.innerWidth <= 480);
   let historyPaneWidth = $state(420);
+  let sessionViewMode = $state<"detail" | "overview">("detail");
 
   function detectPhoneViewport(): boolean {
     return window.innerWidth <= 480;
@@ -182,6 +184,20 @@
     }
   }
 
+  async function handleOverviewPromptSubmit(
+    sessionId: string,
+    message: string,
+    immediate: boolean,
+  ): Promise<void> {
+    await onSubmitPrompt(message, immediate, {
+      primaryFile: undefined,
+      references: [],
+      diffSummary: undefined,
+      resumeSessionId: sessionId,
+      modelProfileId: selectedAiModelProfileId,
+    });
+  }
+
   const autocompleteAllFiles = $derived.by(() => {
     const paths: string[] = [];
 
@@ -203,167 +219,224 @@
   });
 </script>
 
-<div class="relative flex flex-1 min-h-0 overflow-hidden bg-bg-primary">
+<div
+  class="relative flex flex-col flex-1 min-h-0 overflow-hidden bg-bg-primary"
+>
   <div
-    class="relative {isPhoneViewport
-      ? 'absolute left-0 top-0 bottom-0 z-30'
-      : 'flex shrink-0'}"
+    class="h-9 px-3 border-b border-border-default bg-bg-secondary flex items-center gap-2"
+    role="tablist"
+    aria-label="AI Session view mode"
   >
-    {#if !sidebarCollapsed}
-      <aside
-        class="h-full border-r border-border-default bg-bg-secondary overflow-auto"
-        style:width="{sidebarWidth}px"
-      >
-        {#if loading}
-          <div class="p-4 text-sm text-text-secondary">Loading files...</div>
-        {:else if error !== null}
-          <div class="p-4 text-sm text-danger-fg">{error}</div>
-        {:else if allFilesLoading && fileTreeMode === "all"}
-          <div class="p-4 text-sm text-text-secondary">
-            Loading all files...
-          </div>
-        {:else}
-          <FileTree
-            tree={fileTree}
-            mode={fileTreeMode}
-            {selectedPath}
-            onFileSelect={handleTreeFileSelect}
-            changedCount={diffFiles.length}
-            {contextId}
-            {showIgnored}
-            {showAllFiles}
-            onModeChange={onFileTreeModeChange}
-            {onShowIgnoredChange}
-            {onShowAllFilesChange}
-            {onDirectoryExpand}
-            {onLoadFullTree}
-            onNarrow={onNarrowSidebar}
-            onWiden={onWidenSidebar}
-            {canNarrow}
-            {canWiden}
-            onReload={onReloadFileTree}
-          />
-        {/if}
-      </aside>
-    {/if}
-
     <button
       type="button"
-      class="absolute top-12 z-20 flex items-center justify-center
-             {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
-             {isPhoneViewport
-        ? sidebarCollapsed
-          ? '-left-0.5'
-          : '-right-6'
-        : '-right-4'}
-             bg-bg-secondary border border-l-0 border-border-default
-             rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
-             transition-colors cursor-pointer"
-      onclick={onToggleSidebar}
-      aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
-      title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
+      role="tab"
+      aria-selected={sessionViewMode === "detail"}
+      class="px-2.5 py-1 rounded text-xs font-medium transition-colors
+             {sessionViewMode === 'detail'
+        ? 'bg-bg-tertiary text-text-primary border border-border-default'
+        : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
+      onclick={() => {
+        sessionViewMode = "detail";
+      }}
     >
-      <span
-        class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
-        >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
-      >
+      Detail
+    </button>
+    <button
+      type="button"
+      role="tab"
+      aria-selected={sessionViewMode === "overview"}
+      class="px-2.5 py-1 rounded text-xs font-medium transition-colors
+             {sessionViewMode === 'overview'
+        ? 'bg-bg-tertiary text-text-primary border border-border-default'
+        : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
+      onclick={() => {
+        sessionViewMode = "overview";
+      }}
+    >
+      Overview
     </button>
   </div>
 
-  <div
-    class="flex flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
-    style:transform={isPhoneViewport && !sidebarCollapsed
-      ? `translateX(${sidebarWidth}px)`
-      : undefined}
-  >
-    <main class="flex-1 min-w-0 min-h-0 overflow-hidden bg-bg-primary">
-      <CurrentSessionPanel
-        {contextId}
-        currentClientSessionId={currentQraftAiSessionId}
-        running={runningSessions}
-        queued={queuedSessions}
-        recentlyCompleted={recentlyCompletedSessions}
-        {pendingPrompts}
-        resumeSessionId={resumeDisplaySessionId}
-        onCancelSession={onCancelActiveSession}
-        {onCancelQueuedPrompt}
-        onResumeSession={onResumeCliSession}
-        {projectPath}
+  {#if sessionViewMode === "detail"}
+    <div class="relative flex flex-1 min-h-0 overflow-hidden">
+      <div
+        class="relative {isPhoneViewport
+          ? 'absolute left-0 top-0 bottom-0 z-30'
+          : 'flex shrink-0'}"
       >
-        {#snippet nextPromptContent()}
-          <AIPromptPanel
+        {#if !sidebarCollapsed}
+          <aside
+            class="h-full border-r border-border-default bg-bg-secondary overflow-auto"
+            style:width="{sidebarWidth}px"
+          >
+            {#if loading}
+              <div class="p-4 text-sm text-text-secondary">
+                Loading files...
+              </div>
+            {:else if error !== null}
+              <div class="p-4 text-sm text-danger-fg">{error}</div>
+            {:else if allFilesLoading && fileTreeMode === "all"}
+              <div class="p-4 text-sm text-text-secondary">
+                Loading all files...
+              </div>
+            {:else}
+              <FileTree
+                tree={fileTree}
+                mode={fileTreeMode}
+                {selectedPath}
+                onFileSelect={handleTreeFileSelect}
+                changedCount={diffFiles.length}
+                {contextId}
+                {showIgnored}
+                {showAllFiles}
+                onModeChange={onFileTreeModeChange}
+                {onShowIgnoredChange}
+                {onShowAllFilesChange}
+                {onDirectoryExpand}
+                {onLoadFullTree}
+                onNarrow={onNarrowSidebar}
+                onWiden={onWidenSidebar}
+                {canNarrow}
+                {canWiden}
+                onReload={onReloadFileTree}
+              />
+            {/if}
+          </aside>
+        {/if}
+
+        <button
+          type="button"
+          class="absolute top-12 z-20 flex items-center justify-center
+                 {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
+                 {isPhoneViewport
+            ? sidebarCollapsed
+              ? '-left-0.5'
+              : '-right-6'
+            : '-right-4'}
+                 bg-bg-secondary border border-l-0 border-border-default
+                 rounded-r text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
+                 transition-colors cursor-pointer"
+          onclick={onToggleSidebar}
+          aria-label={sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar"}
+          title={sidebarCollapsed ? "Show Sidebar (b)" : "Hide Sidebar (b)"}
+        >
+          <span
+            class="{isPhoneViewport
+              ? 'text-[12px]'
+              : 'text-[9px]'} leading-none"
+            >{sidebarCollapsed ? "\u25B6" : "\u25C0"}</span
+          >
+        </button>
+      </div>
+
+      <div
+        class="flex flex-1 min-w-0 min-h-0 transition-transform duration-200 ease-out"
+        style:transform={isPhoneViewport && !sidebarCollapsed
+          ? `translateX(${sidebarWidth}px)`
+          : undefined}
+      >
+        <main class="flex-1 min-w-0 min-h-0 overflow-hidden bg-bg-primary">
+          <CurrentSessionPanel
             {contextId}
-            {projectPath}
-            {queueStatus}
-            {isFirstMessage}
-            changedFiles={changedFilePaths}
-            allFiles={autocompleteAllFiles}
-            modelProfiles={aiModelProfiles}
-            selectedModelProfileId={selectedAiModelProfileId}
-            onSelectModelProfile={(profileId) => {
-              selectedAiModelProfileId = profileId;
-            }}
-            onSubmit={(prompt, immediate, refs, modelProfileId) => {
-              void onSubmitPrompt(prompt, immediate, {
-                primaryFile: undefined,
-                references: refs,
-                diffSummary: undefined,
-                resumeSessionId: currentQraftAiSessionId,
-                modelProfileId: modelProfileId ?? selectedAiModelProfileId,
-              });
-            }}
-            {onNewSession}
+            currentClientSessionId={currentQraftAiSessionId}
+            running={runningSessions}
+            queued={queuedSessions}
+            recentlyCompleted={recentlyCompletedSessions}
+            {pendingPrompts}
+            resumeSessionId={resumeDisplaySessionId}
+            onCancelSession={onCancelActiveSession}
+            {onCancelQueuedPrompt}
             onResumeSession={onResumeCliSession}
-          />
-        {/snippet}
-      </CurrentSessionPanel>
-    </main>
+            {projectPath}
+          >
+            {#snippet nextPromptContent()}
+              <AIPromptPanel
+                {contextId}
+                {projectPath}
+                {queueStatus}
+                {isFirstMessage}
+                changedFiles={changedFilePaths}
+                allFiles={autocompleteAllFiles}
+                modelProfiles={aiModelProfiles}
+                selectedModelProfileId={selectedAiModelProfileId}
+                onSelectModelProfile={(profileId) => {
+                  selectedAiModelProfileId = profileId;
+                }}
+                onSubmit={(prompt, immediate, refs, modelProfileId) => {
+                  void onSubmitPrompt(prompt, immediate, {
+                    primaryFile: undefined,
+                    references: refs,
+                    diffSummary: undefined,
+                    resumeSessionId: currentQraftAiSessionId,
+                    modelProfileId: modelProfileId ?? selectedAiModelProfileId,
+                  });
+                }}
+                {onNewSession}
+                onResumeSession={onResumeCliSession}
+              />
+            {/snippet}
+          </CurrentSessionPanel>
+        </main>
 
-    <div
-      class="relative {isPhoneViewport
-        ? 'absolute right-0 top-0 bottom-0 z-30'
-        : 'flex shrink-0'}"
-    >
-      {#if !historyPaneCollapsed}
-        <aside
-          class="h-full border-l border-border-default bg-bg-secondary overflow-hidden"
-          style:width="{historyPaneWidth}px"
+        <div
+          class="relative {isPhoneViewport
+            ? 'absolute right-0 top-0 bottom-0 z-30'
+            : 'flex shrink-0'}"
         >
-          {#if contextId !== null}
-            <HistorySessionsPanel
-              {contextId}
-              onResumeSession={handleHistorySessionResume}
-              onSelectSession={() => {}}
-            />
+          {#if !historyPaneCollapsed}
+            <aside
+              class="h-full border-l border-border-default bg-bg-secondary overflow-hidden"
+              style:width="{historyPaneWidth}px"
+            >
+              {#if contextId !== null}
+                <HistorySessionsPanel
+                  {contextId}
+                  onResumeSession={handleHistorySessionResume}
+                  onSelectSession={() => {}}
+                />
+              {/if}
+            </aside>
           {/if}
-        </aside>
-      {/if}
 
-      <button
-        type="button"
-        class="absolute top-12 z-20 flex items-center justify-center
-               {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
-               {isPhoneViewport
-          ? historyPaneCollapsed
-            ? '-right-0.5'
-            : '-left-6'
-          : '-left-4'}
-               bg-bg-secondary border border-r-0 border-border-default
-               rounded-l text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
-               transition-colors cursor-pointer"
-        onclick={toggleHistoryPane}
-        aria-label={historyPaneCollapsed
-          ? "Show Session History"
-          : "Hide Session History"}
-        title={historyPaneCollapsed
-          ? "Show Session History"
-          : "Hide Session History"}
-      >
-        <span
-          class="{isPhoneViewport ? 'text-[12px]' : 'text-[9px]'} leading-none"
-          >{historyPaneCollapsed ? "\u25C0" : "\u25B6"}</span
-        >
-      </button>
+          <button
+            type="button"
+            class="absolute top-12 z-20 flex items-center justify-center
+                   {isPhoneViewport ? 'w-6 h-10' : 'w-4 h-7'}
+                   {isPhoneViewport
+              ? historyPaneCollapsed
+                ? '-right-0.5'
+                : '-left-6'
+              : '-left-4'}
+                   bg-bg-secondary border border-r-0 border-border-default
+                   rounded-l text-text-secondary hover:text-text-primary hover:bg-bg-tertiary
+                   transition-colors cursor-pointer"
+            onclick={toggleHistoryPane}
+            aria-label={historyPaneCollapsed
+              ? "Show Session History"
+              : "Hide Session History"}
+            title={historyPaneCollapsed
+              ? "Show Session History"
+              : "Hide Session History"}
+          >
+            <span
+              class="{isPhoneViewport
+                ? 'text-[12px]'
+                : 'text-[9px]'} leading-none"
+              >{historyPaneCollapsed ? "\u25C0" : "\u25B6"}</span
+            >
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
+  {:else}
+    <AiSessionOverviewGrid
+      {contextId}
+      {projectPath}
+      {runningSessions}
+      {queuedSessions}
+      {pendingPrompts}
+      onResumeSession={onResumeCliSession}
+      onSubmitPrompt={handleOverviewPromptSubmit}
+    />
+  {/if}
 </div>
