@@ -407,7 +407,8 @@ export class ClaudeSessionReader {
       }
       const contentObj = contentItem as Record<string, unknown>;
       if (
-        contentObj["type"] === "input_text" &&
+        (contentObj["type"] === "input_text" ||
+          contentObj["type"] === "output_text") &&
         typeof contentObj["text"] === "string"
       ) {
         textParts.push(contentObj["text"]);

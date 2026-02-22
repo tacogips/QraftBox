@@ -1111,7 +1111,7 @@ describe("ClaudeSessionReader", () => {
           payload: {
             type: "message",
             role: "assistant",
-            content: [{ type: "input_text", text: "Assistant reply" }],
+            content: [{ type: "output_text", text: "Assistant reply" }],
           },
         }),
       ].join("\n");
@@ -1129,6 +1129,7 @@ describe("ClaudeSessionReader", () => {
       expect(transcript?.events).toHaveLength(2);
       expect(transcript?.events[0]?.type).toBe("user");
       expect(transcript?.events[1]?.type).toBe("assistant");
+      expect(transcript?.events[1]?.content).toBe("Assistant reply");
     });
   });
 });

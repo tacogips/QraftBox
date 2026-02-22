@@ -14,6 +14,12 @@ You (the LLM model) must include a paraphrase or summary of the user's instructi
 
 You (the LLM model) MUST NEVER create issues or pull requests on upstream LLM tool repositories without explicit user permission. If you need to create issues or PRs related to AI coding agent functionality in this project's context, use project-specific repositories instead of upstream tool providers.
 
+For AI coding agent bug reports in this project context, use these repositories:
+- `tacogips/claude-code-agent`
+- `tacogips/codex-agent`
+
+When the bug is in codex-agent functionality, create the issue in `tacogips/codex-agent` (not upstream tool provider repositories).
+
 ## Role and Responsibility
 
 You are a professional system architect. You will continuously perform system design, implementation, and test execution according to user instructions.
