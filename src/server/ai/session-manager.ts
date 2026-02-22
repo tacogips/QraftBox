@@ -34,6 +34,7 @@ import {
 } from "./ai-session-store.js";
 import { createLogger } from "../logger.js";
 import { basename } from "node:path";
+import { stripSystemTags } from "../../utils/strip-system-tags.js";
 import {
   createAgentRunner,
   type AgentRunner,
@@ -70,6 +71,15 @@ export type BroadcastFn = (event: string, data: unknown) => void;
 
 const SESSION_CANCEL_TIMEOUT_MS = 3000;
 const UPLOAD_REF_PREFIX = "upload/";
+const PURPOSE_UPDATE_INTERVAL = 3;
+const MAX_PURPOSE_PROMPTS = 12;
+
+interface SessionPurposeState {
+  prompts: string[];
+  purpose: string;
+  lastSummarizedPromptCount: number;
+  updating: boolean;
+}
 
 /**
  * Generate a deterministic, URL-safe worktree identifier from a project path.
@@ -159,6 +169,12 @@ export interface SessionManager {
    * List completed/failed/cancelled sessions as raw rows (includes projectPath)
    */
   listCompletedRows(): readonly AiSessionRow[];
+
+  /**
+   * Get computed purpose for a qraft session group.
+   * Returns undefined when no purpose is available.
+   */
+  getSessionPurpose(sessionGroupId: string): string | undefined;
 }
 
 /**
@@ -215,6 +231,10 @@ export function createSessionManager(
   const store = sessionStore ?? createInMemoryAiSessionStore();
   const runtimeHandles = new Map<QraftAiSessionId, RuntimeSessionHandle>();
   const pendingClientSessions = new Set<QraftAiSessionId>();
+  const purposeBySessionGroup = new Map<
+    QraftAiSessionId,
+    SessionPurposeState
+  >();
   const runner = agentRunner ?? createAgentRunner(config, toolRegistry);
 
   function isAttachmentReference(ref: FileReference): boolean {
@@ -286,6 +306,77 @@ export function createSessionManager(
 
   function delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function normalizePurposeInput(message: string): string {
+    return stripSystemTags(message).replace(/\s+/g, " ").trim();
+  }
+
+  function derivePurposeFromPrompts(prompts: readonly string[]): string {
+    const latest = prompts[prompts.length - 1];
+    if (latest === undefined || latest.length === 0) {
+      return "No purpose available";
+    }
+    return latest.length > 120 ? `${latest.slice(0, 120)}...` : latest;
+  }
+
+  function maybeUpdatePurposeAsync(sessionGroupId: QraftAiSessionId): void {
+    const purposeState = purposeBySessionGroup.get(sessionGroupId);
+    if (purposeState === undefined) {
+      return;
+    }
+
+    const promptCount = purposeState.prompts.length;
+    const delta = promptCount - purposeState.lastSummarizedPromptCount;
+    if (delta < PURPOSE_UPDATE_INTERVAL || purposeState.updating) {
+      return;
+    }
+
+    purposeState.updating = true;
+    const promptSnapshot = [...purposeState.prompts];
+    void (async () => {
+      try {
+        // Lightweight async synthesis to avoid blocking prompt dispatch.
+        // This intentionally avoids spawning new Claude sessions.
+        const synthesized = derivePurposeFromPrompts(promptSnapshot);
+        purposeState.purpose = synthesized;
+        purposeState.lastSummarizedPromptCount = promptSnapshot.length;
+      } catch {
+        // Keep previous purpose on failure.
+      } finally {
+        purposeState.updating = false;
+      }
+    })();
+  }
+
+  function recordPromptForPurpose(
+    sessionGroupId: QraftAiSessionId,
+    message: string,
+  ): void {
+    const normalized = normalizePurposeInput(message);
+    if (normalized.length === 0) {
+      return;
+    }
+
+    const existing = purposeBySessionGroup.get(sessionGroupId);
+    if (existing === undefined) {
+      purposeBySessionGroup.set(sessionGroupId, {
+        prompts: [normalized],
+        purpose: derivePurposeFromPrompts([normalized]),
+        lastSummarizedPromptCount: 1,
+        updating: false,
+      });
+      return;
+    }
+
+    existing.prompts.push(normalized);
+    if (existing.prompts.length > MAX_PURPOSE_PROMPTS) {
+      existing.prompts = existing.prompts.slice(
+        existing.prompts.length - MAX_PURPOSE_PROMPTS,
+      );
+    }
+
+    maybeUpdatePurposeAsync(sessionGroupId);
   }
 
   /**
@@ -1015,6 +1106,10 @@ export function createSessionManager(
           ? (msg.qraft_ai_session_id as QraftAiSessionId)
           : undefined;
 
+      if (clientSessionId !== undefined) {
+        recordPromptForPurpose(clientSessionId, msg.message);
+      }
+
       const messageForDisplay =
         msg.message.length > 200
           ? msg.message.slice(0, 200) + "..."
@@ -1118,6 +1213,16 @@ export function createSessionManager(
       const failed = store.listByState("failed");
       const cancelled = store.listByState("cancelled");
       return [...completed, ...failed, ...cancelled];
+    },
+
+    getSessionPurpose(sessionGroupId: string): string | undefined {
+      if (sessionGroupId.length === 0) {
+        return undefined;
+      }
+      const state = purposeBySessionGroup.get(
+        sessionGroupId as QraftAiSessionId,
+      );
+      return state?.purpose;
     },
   };
 

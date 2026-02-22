@@ -22,6 +22,15 @@ import type { QraftAiSessionId } from "../../types/ai.js";
 import { SessionEnrichmentService } from "../claude/session-enrichment.js";
 import type { SessionManager } from "../ai/session-manager.js";
 import type { AiSessionRow } from "../ai/ai-session-store.js";
+import {
+  buildPurposePrompt,
+  compactIntentInputs,
+  createIntentSignature,
+  extractUserIntents,
+  normalizePurposeText,
+  shouldRefreshPurpose,
+} from "../claude/session-purpose.js";
+import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 
 /**
  * Error response format
@@ -38,6 +47,26 @@ interface ResumeSessionResponse {
   readonly sessionId: string;
   readonly instructions: string;
   readonly prompt?: string | undefined;
+}
+
+interface SessionPurposeResponse {
+  readonly purpose: string;
+  readonly updatedAt: string;
+  readonly source: "llm" | "fallback";
+}
+
+interface PurposeCacheEntry {
+  readonly signature: string;
+  readonly intentCount: number;
+  readonly purpose: string;
+  readonly updatedAt: string;
+  readonly source: "llm" | "fallback";
+}
+
+function wrapInternalPurposePrompt(content: string): string {
+  return `<qraftbox-internal-prompt label="ai-session-purpose" anchor="session-purpose-v1">
+${content}
+</qraftbox-internal-prompt>`;
 }
 
 /**
@@ -65,6 +94,89 @@ export function createClaudeSessionsRoutes(
     mappingStore !== undefined
       ? new SessionEnrichmentService(mappingStore)
       : undefined;
+  const purposeCache = new Map<string, PurposeCacheEntry>();
+  const inFlightPurpose = new Map<string, Promise<SessionPurposeResponse>>();
+
+  function extractAssistantTextFromMessage(msg: unknown): string | undefined {
+    if (typeof msg !== "object" || msg === null || !("type" in msg)) {
+      return undefined;
+    }
+    const rawMsg = msg as {
+      type?: string;
+      message?: { role?: string; content?: unknown };
+      content?: unknown;
+    };
+    if (rawMsg.type !== "assistant") {
+      return undefined;
+    }
+
+    const nestedContent = rawMsg.message?.content;
+    if (typeof nestedContent === "string" && nestedContent.trim().length > 0) {
+      return nestedContent.trim();
+    }
+    if (Array.isArray(nestedContent)) {
+      const textParts: string[] = [];
+      for (const block of nestedContent) {
+        if (
+          typeof block === "object" &&
+          block !== null &&
+          "text" in block &&
+          typeof (block as { text: unknown }).text === "string"
+        ) {
+          textParts.push((block as { text: string }).text);
+        }
+      }
+      const joined = textParts.join(" ").trim();
+      return joined.length > 0 ? joined : undefined;
+    }
+    if (
+      typeof rawMsg.content === "string" &&
+      rawMsg.content.trim().length > 0
+    ) {
+      return rawMsg.content.trim();
+    }
+    return undefined;
+  }
+
+  async function summarizePurposeWithLlm(
+    projectPath: string,
+    intents: readonly string[],
+  ): Promise<string> {
+    const runner = new SessionRunner({
+      cwd: projectPath,
+      allowedTools: [],
+      mcpServers: {},
+    });
+
+    let assistantText = "";
+    try {
+      const prompt = wrapInternalPurposePrompt(buildPurposePrompt(intents));
+      const session = await runner.startSession({ prompt });
+      session.on("message", (msg: unknown) => {
+        const extracted = extractAssistantTextFromMessage(msg);
+        if (extracted !== undefined && extracted.length > 0) {
+          assistantText = extracted;
+        }
+      });
+
+      for await (const _msg of session.messages()) {
+      }
+      const result = await session.waitForCompletion();
+      if (!result.success) {
+        const errorMessage =
+          result.error?.message ?? "Purpose summarization failed";
+        throw new Error(errorMessage);
+      }
+    } finally {
+      await runner.close();
+    }
+
+    const normalized = normalizePurposeText(assistantText);
+    if (normalized.length === 0) {
+      throw new Error("Purpose summarization returned empty text");
+    }
+    return normalized;
+  }
 
   /**
    * Resolve a qraftAiSessionId to a Claude session UUID via the mapping store.
@@ -362,6 +474,23 @@ export function createClaudeSessionsRoutes(
         response.total = response.sessions.length;
       }
 
+      // Apply purpose override only for QraftBox-originated sessions.
+      // Claude CLI-originated sessions keep their first user prompt as purpose.
+      if (sessionManager !== undefined) {
+        for (const session of response.sessions) {
+          if (session.source !== "qraftbox") {
+            continue;
+          }
+          const computedPurpose = sessionManager.getSessionPurpose(
+            session.qraftAiSessionId,
+          );
+          if (computedPurpose === undefined || computedPurpose.length === 0) {
+            continue;
+          }
+          session.firstPrompt = computedPurpose;
+        }
+      }
+
       return c.json(response);
     } catch (e) {
       const errorMessage =
@@ -523,6 +652,150 @@ export function createClaudeSessionsRoutes(
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to read transcript";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * GET /api/claude/sessions/:id/purpose
+   *
+   * Generate a concise session purpose from user intent messages.
+   * Accepts qraftAiSessionId as :id param.
+   */
+  app.get("/sessions/:id/purpose", async (c) => {
+    const qraftId = c.req.param("id");
+
+    if (!qraftId || qraftId.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Session ID is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const claudeSessionId = resolveClaudeSessionId(qraftId);
+    if (claudeSessionId === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Session not found: ${qraftId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    try {
+      const session = await sessionReader.getSession(claudeSessionId);
+      if (session === null) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${qraftId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      const transcript = await sessionReader.readTranscript(
+        claudeSessionId,
+        0,
+        1200,
+      );
+      if (transcript === null) {
+        const errorResponse: ErrorResponse = {
+          error: `Session not found: ${qraftId}`,
+          code: 404,
+        };
+        return c.json(errorResponse, 404);
+      }
+
+      const intents = compactIntentInputs(
+        extractUserIntents(transcript.events),
+      );
+      const signature = createIntentSignature(intents);
+
+      const cached = purposeCache.get(qraftId);
+      if (
+        cached !== undefined &&
+        !shouldRefreshPurpose(cached.intentCount, intents.length)
+      ) {
+        return c.json({
+          purpose: cached.purpose,
+          updatedAt: cached.updatedAt,
+          source: cached.source,
+        } satisfies SessionPurposeResponse);
+      }
+
+      const fallbackPurpose = normalizePurposeText(
+        session.firstPrompt || session.summary || "No purpose available",
+      );
+
+      const existingInFlight = inFlightPurpose.get(qraftId);
+      if (existingInFlight !== undefined) {
+        const inFlightResult = await existingInFlight;
+        return c.json(inFlightResult);
+      }
+
+      if (intents.length === 0) {
+        const fallbackResponse: SessionPurposeResponse = {
+          purpose:
+            fallbackPurpose.length > 0
+              ? fallbackPurpose
+              : "No purpose available",
+          updatedAt: new Date().toISOString(),
+          source: "fallback",
+        };
+        purposeCache.set(qraftId, {
+          ...fallbackResponse,
+          signature,
+          intentCount: intents.length,
+        });
+        return c.json(fallbackResponse);
+      }
+
+      const summarizePromise = (async (): Promise<SessionPurposeResponse> => {
+        try {
+          const purpose = await summarizePurposeWithLlm(
+            session.projectPath,
+            intents,
+          );
+          const response: SessionPurposeResponse = {
+            purpose,
+            updatedAt: new Date().toISOString(),
+            source: "llm",
+          };
+          purposeCache.set(qraftId, {
+            ...response,
+            signature,
+            intentCount: intents.length,
+          });
+          return response;
+        } catch {
+          const response: SessionPurposeResponse = {
+            purpose:
+              fallbackPurpose.length > 0
+                ? fallbackPurpose
+                : "No purpose available",
+            updatedAt: new Date().toISOString(),
+            source: "fallback",
+          };
+          purposeCache.set(qraftId, {
+            ...response,
+            signature,
+            intentCount: intents.length,
+          });
+          return response;
+        } finally {
+          inFlightPurpose.delete(qraftId);
+        }
+      })();
+
+      inFlightPurpose.set(qraftId, summarizePromise);
+      const purposeResponse = await summarizePromise;
+      return c.json(purposeResponse);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to generate session purpose";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

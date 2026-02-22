@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { stripSystemTags } from "./strip-system-tags";
+import {
+  hasQraftboxInternalPrompt,
+  stripSystemTags,
+} from "./strip-system-tags";
 
 describe("stripSystemTags", () => {
   it("removes command/system metadata tags with content", () => {
@@ -31,5 +34,18 @@ describe("stripSystemTags", () => {
     ].join("\n");
 
     expect(stripSystemTags(input)).toBe("Please fix tests");
+  });
+
+  it("removes qraftbox internal prompt blocks", () => {
+    const input = [
+      '<qraftbox-internal-prompt label="ai-session-purpose" anchor="session-purpose-v1">',
+      "internal prompt payload",
+      "</qraftbox-internal-prompt>",
+      "Visible text",
+    ].join("\n");
+
+    expect(stripSystemTags(input)).toBe("Visible text");
+    expect(hasQraftboxInternalPrompt(input)).toBe(true);
+    expect(hasQraftboxInternalPrompt("Visible text")).toBe(false);
   });
 });

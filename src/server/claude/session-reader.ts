@@ -22,7 +22,10 @@ import {
   isClaudeSessionEntry,
 } from "../../types/claude-session";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
-import { stripSystemTags } from "../../utils/strip-system-tags";
+import {
+  hasQraftboxInternalPrompt,
+  stripSystemTags,
+} from "../../utils/strip-system-tags";
 import {
   deriveQraftAiSessionIdFromClaude,
   type ClaudeSessionId,
@@ -32,6 +35,8 @@ import { createProductionContainer } from "claude-code-agent/src/container";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
+const LEGACY_INTERNAL_PURPOSE_PREFIX =
+  "You summarize a coding session's current objective.";
 
 /**
  * Options for listing sessions
@@ -76,6 +81,14 @@ export class ClaudeSessionReader {
     this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
+  }
+
+  private isInternalSessionPrompt(text: string): boolean {
+    if (hasQraftboxInternalPrompt(text)) {
+      return true;
+    }
+    const stripped = stripSystemTags(text);
+    return stripped.startsWith(LEGACY_INTERNAL_PURPOSE_PREFIX);
   }
 
   /**
@@ -410,6 +423,13 @@ export class ClaudeSessionReader {
   private async fixSystemTagFirstPrompt(
     entry: ClaudeSessionEntry,
   ): Promise<void> {
+    if (this.isInternalSessionPrompt(entry.firstPrompt)) {
+      entry.firstPrompt = "";
+      entry.summary = "";
+      entry.hasUserPrompt = false;
+      return;
+    }
+
     // Strip system tags from firstPrompt
     const strippedFirstPrompt = stripSystemTags(entry.firstPrompt);
 
@@ -452,6 +472,7 @@ export class ClaudeSessionReader {
 
       // Search for the first real user message and track assistant activity
       let hasAssistantMessage = false;
+      let sawInternalPrompt = false;
       for (const line of lines) {
         try {
           const event: unknown = JSON.parse(line);
@@ -468,6 +489,10 @@ export class ClaudeSessionReader {
 
               // Handle string content
               if (typeof message["content"] === "string") {
+                if (this.isInternalSessionPrompt(message["content"])) {
+                  sawInternalPrompt = true;
+                  continue;
+                }
                 const stripped = stripSystemTags(message["content"]);
                 if (stripped.length > 0) {
                   entry.firstPrompt = stripped;
@@ -493,6 +518,10 @@ export class ClaudeSessionReader {
                   })
                   .join("\n");
 
+                if (this.isInternalSessionPrompt(allText)) {
+                  sawInternalPrompt = true;
+                  continue;
+                }
                 const stripped = stripSystemTags(allText);
                 if (stripped.length > 0) {
                   entry.firstPrompt = stripped;
@@ -508,6 +537,13 @@ export class ClaudeSessionReader {
       }
 
       // No real user prompt found, use stripped summary as fallback
+      if (sawInternalPrompt) {
+        entry.firstPrompt = "";
+        entry.summary = "";
+        entry.hasUserPrompt = false;
+        return;
+      }
+
       const strippedSummary = stripSystemTags(entry.summary);
       entry.firstPrompt =
         strippedSummary.length > 0 ? strippedSummary : "(No user prompt found)";
@@ -605,6 +641,7 @@ export class ClaudeSessionReader {
     let gitBranch = "";
     let isSidechain = false;
     let created = new Date(fileStat.birthtimeMs).toISOString();
+    let sawInternalPrompt = false;
 
     const firstLine = lines[0];
     if (firstLine !== undefined) {
@@ -632,6 +669,9 @@ export class ClaudeSessionReader {
           if (obj["type"] === "user" && typeof obj["message"] === "object") {
             const message = obj["message"] as Record<string, unknown>;
             if (typeof message["content"] === "string") {
+              if (this.isInternalSessionPrompt(message["content"])) {
+                sawInternalPrompt = true;
+              }
               const stripped = stripSystemTags(message["content"]);
               if (stripped.length > 0) {
                 firstPrompt = stripped;
@@ -647,6 +687,9 @@ export class ClaudeSessionReader {
               if (textBlocks.length > 0) {
                 const firstBlock = textBlocks[0] as Record<string, unknown>;
                 if (typeof firstBlock["text"] === "string") {
+                  if (this.isInternalSessionPrompt(firstBlock["text"])) {
+                    sawInternalPrompt = true;
+                  }
                   const stripped = stripSystemTags(firstBlock["text"]);
                   if (stripped.length > 0) {
                     firstPrompt = stripped;
@@ -679,6 +722,10 @@ export class ClaudeSessionReader {
             if (obj["type"] === "user" && typeof obj["message"] === "object") {
               const message = obj["message"] as Record<string, unknown>;
               if (typeof message["content"] === "string") {
+                if (this.isInternalSessionPrompt(message["content"])) {
+                  sawInternalPrompt = true;
+                  continue;
+                }
                 const stripped = stripSystemTags(message["content"]);
                 if (stripped.length > 0) {
                   firstPrompt = stripped;
@@ -694,6 +741,10 @@ export class ClaudeSessionReader {
                 if (textBlocks.length > 0) {
                   const firstBlock = textBlocks[0] as Record<string, unknown>;
                   if (typeof firstBlock["text"] === "string") {
+                    if (this.isInternalSessionPrompt(firstBlock["text"])) {
+                      sawInternalPrompt = true;
+                      continue;
+                    }
                     const stripped = stripSystemTags(firstBlock["text"]);
                     if (stripped.length > 0) {
                       firstPrompt = stripped;
@@ -743,19 +794,26 @@ export class ClaudeSessionReader {
       }
     }
 
+    const isInternalOnly = sawInternalPrompt && firstPrompt.length === 0;
+
     return {
       sessionId,
       fullPath: jsonlPath,
       fileMtime: fileStat.mtimeMs,
-      firstPrompt: firstPrompt || "(No user prompt found)",
-      summary: stripSystemTags(summary),
+      firstPrompt: isInternalOnly
+        ? ""
+        : firstPrompt || "(No user prompt found)",
+      summary: isInternalOnly ? "" : stripSystemTags(summary),
       messageCount: lines.length,
       created,
       modified,
       gitBranch,
       projectPath,
       isSidechain,
-      hasUserPrompt: firstPrompt.length > 0 || hasAssistantMessage,
+      hasUserPrompt:
+        isInternalOnly === true
+          ? false
+          : firstPrompt.length > 0 || hasAssistantMessage,
     };
   }
 
@@ -800,6 +858,10 @@ export class ClaudeSessionReader {
     session: ExtendedSessionEntry,
     options: ListSessionsOptions,
   ): boolean {
+    if (this.isInternalSessionPrompt(session.firstPrompt)) {
+      return false;
+    }
+
     // Exclude sessions without user prompts (undefined treated as true for backward compat)
     if (session.hasUserPrompt === false) {
       return false;

@@ -7,7 +7,6 @@
 
   interface OverviewSessionCard {
     readonly qraftAiSessionId: string;
-    readonly title: string;
     readonly purpose: string;
     readonly latestResponse: string;
     readonly status: "running" | "queued" | "idle";
@@ -63,6 +62,7 @@
 
   let latestFetchToken = 0;
   let latestTranscriptSearchToken = 0;
+  const SESSION_QUERY_KEY = "ai_session_id";
 
   function normalizeText(text: string): string {
     return stripSystemTags(text)
@@ -80,6 +80,30 @@
       return text;
     }
     return `${text.slice(0, maxLength)}...`;
+  }
+
+  function readSelectedSessionIdFromUrl(): string | null {
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get(SESSION_QUERY_KEY);
+    if (value === null || value.trim().length === 0) {
+      return null;
+    }
+    return value.trim();
+  }
+
+  function writeSelectedSessionIdToUrl(sessionId: string | null): void {
+    const url = new URL(window.location.href);
+    if (sessionId === null || sessionId.length === 0) {
+      url.searchParams.delete(SESSION_QUERY_KEY);
+    } else {
+      url.searchParams.set(SESSION_QUERY_KEY, sessionId);
+    }
+
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      window.history.replaceState(window.history.state, "", next);
+    }
   }
 
   function getRelativeTime(isoDate: string): string {
@@ -155,7 +179,7 @@
     );
 
     const purposeCandidate =
-      normalizedRuntimePrompt || normalizedSummary || normalizedFirstPrompt;
+      normalizedFirstPrompt || normalizedRuntimePrompt || normalizedSummary;
 
     const runtimeLatest = normalizeText(
       runningMatch?.currentActivity ??
@@ -175,8 +199,7 @@
 
     return {
       qraftAiSessionId: entry.qraftAiSessionId,
-      title: truncate(normalizedFirstPrompt || "Untitled session", 90),
-      purpose: truncate(purposeCandidate || "No purpose available", 140),
+      purpose: truncate(purposeCandidate || "No purpose available", 90),
       latestResponse: truncate(latestResponseCandidate, 160),
       status,
       queuedPromptCount: queuedPromptMessages.length,
@@ -205,13 +228,9 @@
 
       fallbackCards.push({
         qraftAiSessionId: groupId,
-        title: truncate(
-          normalizeText(sessionEntry.prompt) || "Live session",
-          90,
-        ),
         purpose: truncate(
           normalizeText(sessionEntry.prompt) || "No purpose available",
-          140,
+          90,
         ),
         latestResponse: truncate(
           normalizeText(
@@ -241,7 +260,6 @@
     }
 
     return (
-      normalizeForSearch(card.title).includes(normalizedQuery) ||
       normalizeForSearch(card.purpose).includes(normalizedQuery) ||
       normalizeForSearch(card.latestResponse).includes(normalizedQuery)
     );
@@ -517,6 +535,18 @@
   });
 
   $effect(() => {
+    const onPopState = (): void => {
+      selectedSessionId = readSelectedSessionIdFromUrl();
+    };
+
+    selectedSessionId = readSelectedSessionIdFromUrl();
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+    };
+  });
+
+  $effect(() => {
     const activeContextId = contextId;
     const activeProjectPath = projectPath;
     const activeSearchQuery = searchQuery;
@@ -549,6 +579,10 @@
     if (!exists) {
       selectedSessionId = null;
     }
+  });
+
+  $effect(() => {
+    writeSelectedSessionIdToUrl(selectedSessionId);
   });
 
   async function handlePopupSubmit(
@@ -618,7 +652,8 @@
             type="button"
             class="w-full text-left rounded-lg border border-border-default bg-bg-secondary
                    hover:border-accent-emphasis/60 hover:bg-bg-hover transition-colors
-                   p-3 flex flex-col gap-2 min-h-[190px]"
+                   p-2.5 flex flex-col gap-1.5 min-h-[142px]"
+            aria-label={`${card.status} ${getRelativeTime(card.updatedAt)} ${card.purpose} ${card.latestResponse}`}
             onclick={() => {
               selectedSessionId = card.qraftAiSessionId;
             }}
@@ -639,24 +674,20 @@
               >
             </div>
 
-            <h3 class="text-xs font-semibold text-text-primary line-clamp-2">
-              {card.title}
-            </h3>
-
             <div class="space-y-1">
-              <p class="text-[11px] text-text-tertiary uppercase tracking-wide">
+              <p class="text-[10px] text-text-tertiary uppercase tracking-wide">
                 Purpose
               </p>
-              <p class="text-xs text-text-secondary line-clamp-3">
+              <p class="text-[11px] text-text-secondary line-clamp-2">
                 {card.purpose}
               </p>
             </div>
 
             <div class="space-y-1 mt-auto">
-              <p class="text-[11px] text-text-tertiary uppercase tracking-wide">
+              <p class="text-[10px] text-text-tertiary uppercase tracking-wide">
                 Latest Response
               </p>
-              <p class="text-xs text-text-primary line-clamp-3">
+              <p class="text-[11px] text-text-primary line-clamp-2">
                 {card.latestResponse}
               </p>
             </div>
@@ -680,7 +711,7 @@
     open={true}
     {contextId}
     sessionId={selectedCard.qraftAiSessionId}
-    title={selectedCard.title}
+    title={selectedCard.purpose}
     status={selectedCard.status}
     purpose={selectedCard.purpose}
     latestResponse={selectedCard.latestResponse}

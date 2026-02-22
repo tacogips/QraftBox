@@ -9,8 +9,9 @@
  */
 
 const REMOVE_WITH_CONTENT_PATTERN =
-  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder)[^>]*>[\s\S]*?<\/\1>/g;
+  /<(local-command-caveat|command-name|local-command-stdout|command-message|command-args|system-reminder|qraftbox-internal-prompt)[^>]*>[\s\S]*?<\/\1>/g;
 const UNWRAP_ONLY_PATTERN = /<\/?qraftbox-system-prompt[^>]*>/g;
+const INTERNAL_PROMPT_PATTERN = /<qraftbox-internal-prompt\b[^>]*>/i;
 
 /**
  * Remove system command XML tags and their content from text.
@@ -20,4 +21,11 @@ export function stripSystemTags(text: string): string {
   const withoutSystemBlocks = text.replace(REMOVE_WITH_CONTENT_PATTERN, "");
   const unwrapped = withoutSystemBlocks.replace(UNWRAP_ONLY_PATTERN, "");
   return unwrapped.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+/**
+ * Check if text contains an internal QraftBox prompt marker.
+ */
+export function hasQraftboxInternalPrompt(text: string): boolean {
+  return INTERNAL_PROMPT_PATTERN.test(text);
 }

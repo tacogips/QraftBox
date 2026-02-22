@@ -389,6 +389,50 @@ describe("ClaudeSessionReader", () => {
       expect(result.limit).toBe(50);
     });
 
+    it("should exclude internal purpose synthesis sessions from history", async () => {
+      const projectDir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      const internalEntry = createMockSessionEntry(
+        "session-internal-purpose",
+        "2026-02-06T10:00:00Z",
+        "2026-02-06T10:30:00Z",
+        "main",
+        "You summarize a coding session's current objective. Input contains user intent messages only.",
+      );
+
+      const updatedIndex: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [
+          createMockSessionEntry(
+            "session-1",
+            "2026-02-05T10:00:00Z",
+            "2026-02-05T12:00:00Z",
+            "main",
+            "Implement feature X",
+          ),
+          createMockSessionEntry(
+            "session-2",
+            "2026-02-04T10:00:00Z",
+            "2026-02-04T11:00:00Z",
+            "feature/auth",
+            "Fix authentication bug",
+          ),
+          internalEntry,
+        ],
+      };
+
+      await writeFile(
+        join(projectDir, "sessions-index.json"),
+        JSON.stringify(updatedIndex, null, 2),
+      );
+
+      const result = await reader.listSessions();
+
+      expect(
+        result.sessions.find((s) => s.sessionId === "session-internal-purpose"),
+      ).toBeUndefined();
+    });
+
     it("should sort sessions by modified date descending by default", async () => {
       const result = await reader.listSessions();
 
