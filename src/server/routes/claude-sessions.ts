@@ -31,6 +31,7 @@ import {
   shouldRefreshPurpose,
 } from "../claude/session-purpose.js";
 import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
+import type { ModelConfigStore } from "../model-config/store.js";
 
 /**
  * Error response format
@@ -87,6 +88,7 @@ ${content}
 export function createClaudeSessionsRoutes(
   mappingStore?: SessionMappingStore | undefined,
   sessionManager?: SessionManager | undefined,
+  modelConfigStore?: ModelConfigStore | undefined,
 ): Hono {
   const app = new Hono();
   const sessionReader = new ClaudeSessionReader(undefined, mappingStore);
@@ -141,6 +143,7 @@ export function createClaudeSessionsRoutes(
   async function summarizePurposeWithLlm(
     projectPath: string,
     intents: readonly string[],
+    outputLanguage: string,
   ): Promise<string> {
     const runner = new SessionRunner({
       cwd: projectPath,
@@ -150,7 +153,9 @@ export function createClaudeSessionsRoutes(
 
     let assistantText = "";
     try {
-      const prompt = wrapInternalPurposePrompt(buildPurposePrompt(intents));
+      const prompt = wrapInternalPurposePrompt(
+        buildPurposePrompt(intents, outputLanguage),
+      );
       const session = await runner.startSession({ prompt });
       session.on("message", (msg: unknown) => {
         const extracted = extractAssistantTextFromMessage(msg);
@@ -185,12 +190,44 @@ export function createClaudeSessionsRoutes(
   function resolveClaudeSessionId(
     qraftAiSessionId: string,
   ): string | undefined {
-    if (mappingStore === undefined) {
+    if (mappingStore !== undefined) {
+      const mappedClaudeSessionId = mappingStore.findClaudeSessionId(
+        qraftAiSessionId as QraftAiSessionId,
+      );
+      if (mappedClaudeSessionId !== undefined) {
+        return mappedClaudeSessionId;
+      }
+    }
+
+    if (sessionManager === undefined) {
       return undefined;
     }
-    return mappingStore.findClaudeSessionId(
+
+    // Direct lookup (when qraftAiSessionId matches a concrete session row id)
+    const direct = sessionManager.getSession(
       qraftAiSessionId as QraftAiSessionId,
     );
+    if (direct?.claudeSessionId !== undefined) {
+      return direct.claudeSessionId;
+    }
+
+    // Fallback: qraftAiSessionId is typically the client session group ID,
+    // while actual session rows have distinct generated ids.
+    const bestMatch = sessionManager
+      .listSessions()
+      .filter(
+        (session) =>
+          session.claudeSessionId !== undefined &&
+          (session.clientSessionId === qraftAiSessionId ||
+            session.id === qraftAiSessionId),
+      )
+      .sort((a, b) => {
+        const aTime = Date.parse(a.completedAt ?? a.startedAt ?? a.createdAt);
+        const bTime = Date.parse(b.completedAt ?? b.startedAt ?? b.createdAt);
+        return bTime - aTime;
+      })[0];
+
+    return bestMatch?.claudeSessionId;
   }
 
   /**
@@ -755,9 +792,14 @@ export function createClaudeSessionsRoutes(
 
       const summarizePromise = (async (): Promise<SessionPurposeResponse> => {
         try {
+          const purposeOutputLanguage =
+            modelConfigStore?.resolveLanguageForOperation(
+              "ai_session_purpose",
+            ) ?? "English";
           const purpose = await summarizePurposeWithLlm(
             session.projectPath,
             intents,
+            purposeOutputLanguage,
           );
           const response: SessionPurposeResponse = {
             purpose,

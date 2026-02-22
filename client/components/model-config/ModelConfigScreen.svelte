@@ -4,11 +4,13 @@
     deleteModelProfileApi,
     fetchModelConfigState,
     updateModelBindingsApi,
+    updateModelLanguagesApi,
   } from "../../src/lib/app-api";
   import type {
     ModelConfigState,
     ModelProfile,
     ModelVendor,
+    OperationLanguageSettings,
     OperationModelBindings,
   } from "../../../src/types/model-config";
 
@@ -21,6 +23,11 @@
     gitCommitProfileId: null,
     gitPrProfileId: null,
     aiDefaultProfileId: null,
+  });
+  let operationLanguages = $state<OperationLanguageSettings>({
+    gitCommitLanguage: "English",
+    gitPrLanguage: "English",
+    aiSessionPurposeLanguage: "English",
   });
 
   let draftName = $state("");
@@ -35,6 +42,7 @@
       const state = (await fetchModelConfigState()) as ModelConfigState;
       profiles = [...state.profiles];
       bindings = state.operationBindings;
+      operationLanguages = state.operationLanguages;
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to load model config";
     } finally {
@@ -103,6 +111,20 @@
     } catch (e) {
       error =
         e instanceof Error ? e.message : "Failed to update operation mappings";
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function saveLanguages(): Promise<void> {
+    try {
+      saving = true;
+      error = null;
+      operationLanguages = await updateModelLanguagesApi(operationLanguages);
+      await load();
+    } catch (e) {
+      error =
+        e instanceof Error ? e.message : "Failed to update operation languages";
     } finally {
       saving = false;
     }
@@ -188,6 +210,61 @@
           onclick={() => void saveBindings()}
         >
           Save operation mappings
+        </button>
+      </section>
+
+      <section
+        class="rounded-lg border border-border-default bg-bg-secondary p-4 space-y-3"
+      >
+        <h3 class="text-sm font-semibold text-text-primary">Output Language</h3>
+
+        <label class="block text-sm">
+          <span class="text-text-secondary">Git Commit</span>
+          <input
+            class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
+            bind:value={operationLanguages.gitCommitLanguage}
+            list="operation-language-options"
+            placeholder="English / Japanese / ..."
+          />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-text-secondary">Git PR (create/update)</span>
+          <input
+            class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
+            bind:value={operationLanguages.gitPrLanguage}
+            list="operation-language-options"
+            placeholder="English / Japanese / ..."
+          />
+        </label>
+
+        <label class="block text-sm">
+          <span class="text-text-secondary">AI Session Purpose Summary</span>
+          <input
+            class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
+            bind:value={operationLanguages.aiSessionPurposeLanguage}
+            list="operation-language-options"
+            placeholder="English / Japanese / ..."
+          />
+        </label>
+
+        <datalist id="operation-language-options">
+          <option value="English"></option>
+          <option value="Japanese"></option>
+          <option value="Spanish"></option>
+          <option value="French"></option>
+          <option value="German"></option>
+          <option value="Chinese"></option>
+          <option value="Korean"></option>
+        </datalist>
+
+        <button
+          type="button"
+          class="px-3 py-1.5 rounded bg-accent-emphasis text-white text-sm disabled:opacity-50"
+          disabled={saving}
+          onclick={() => void saveLanguages()}
+        >
+          Save output language settings
         </button>
       </section>
 

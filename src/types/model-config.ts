@@ -36,13 +36,29 @@ export interface OperationModelBindings {
   readonly aiDefaultProfileId: string | null;
 }
 
+export interface OperationLanguageSettings {
+  readonly gitCommitLanguage: string;
+  readonly gitPrLanguage: string;
+  readonly aiSessionPurposeLanguage: string;
+}
+
 export interface UpdateOperationModelBindingsInput {
   readonly gitCommitProfileId?: string | null;
   readonly gitPrProfileId?: string | null;
   readonly aiDefaultProfileId?: string | null;
 }
 
+export interface UpdateOperationLanguageSettingsInput {
+  readonly gitCommitLanguage?: string | undefined;
+  readonly gitPrLanguage?: string | undefined;
+  readonly aiSessionPurposeLanguage?: string | undefined;
+}
+
 export type ModelOperation = "git_commit" | "git_pr" | "ai_ask";
+export type OperationLanguageTarget =
+  | "git_commit"
+  | "git_pr"
+  | "ai_session_purpose";
 
 export interface ResolvedModelProfile {
   readonly profileId: string;
@@ -55,4 +71,5 @@ export interface ResolvedModelProfile {
 export interface ModelConfigState {
   readonly profiles: readonly ModelProfile[];
   readonly operationBindings: OperationModelBindings;
+  readonly operationLanguages: OperationLanguageSettings;
 }

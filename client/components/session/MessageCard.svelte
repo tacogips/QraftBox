@@ -239,9 +239,9 @@
     </div>
 
     <!-- Content -->
-    <div class="px-3 py-1.5">
+    <div class="px-3 py-2">
       <div
-        class="text-xs text-text-primary whitespace-pre-wrap break-words max-h-40 overflow-y-auto"
+        class="text-sm leading-6 text-text-primary whitespace-pre-wrap break-words"
       >
         {turn.content}
       </div>

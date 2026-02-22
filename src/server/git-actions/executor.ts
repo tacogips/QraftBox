@@ -283,6 +283,7 @@ async function getCurrentPRView(projectPath: string): Promise<PRView | null> {
 function buildPRRecoveryPrompt(
   baseBranch: string,
   customCtx?: string | undefined,
+  outputLanguage = "English",
 ): string {
   const userContext =
     customCtx !== undefined && customCtx.trim().length > 0
@@ -296,7 +297,7 @@ Your task is to update that PR so it matches Claude Code /git-pr quality.
 Requirements:
 - Body must NOT be: "${PR_PLACEHOLDER_BODY}"
 - Title must NOT be: "${PR_PLACEHOLDER_TITLE}"
-- Write title and body in English
+- Write title and body in ${outputLanguage}
 - Body must clearly explain what changed and why
 - Include a "## Summary" section and a "## Changes" section
 - Include concrete file/component references when possible
@@ -318,6 +319,7 @@ Do not stop until the PR body is a meaningful description.`;
 function buildPRUpdatePrompt(
   baseBranch: string,
   customCtx?: string | undefined,
+  outputLanguage = "English",
 ): string {
   const userContext =
     customCtx !== undefined && customCtx.trim().length > 0
@@ -327,7 +329,7 @@ function buildPRUpdatePrompt(
   return `Update the existing GitHub PR for the current branch.
 
 Requirements:
-- Keep title/body in English
+- Keep title/body in ${outputLanguage}
 - Body must clearly explain what changed and why
 - Include "## Summary" and "## Changes"
 - Reflect the latest commits and file changes
@@ -361,11 +363,12 @@ export async function executeCommit(
   customCtx?: string | undefined,
   actionId?: string | undefined,
   modelProfile?: ResolvedModelProfile | undefined,
+  outputLanguage = "English",
 ): Promise<GitActionResult> {
   currentOperationPhase = "committing";
   try {
     // Build prompt with commit system prompt
-    const prompt = await buildPrompt("commit", customCtx);
+    const prompt = await buildPrompt("commit", customCtx, outputLanguage);
 
     return await runClaude(modelProfile, projectPath, prompt, actionId);
   } catch (e) {
@@ -566,6 +569,7 @@ export async function executeCreatePR(
   customCtx?: string | undefined,
   actionId?: string | undefined,
   modelProfile?: ResolvedModelProfile | undefined,
+  outputLanguage = "English",
 ): Promise<GitActionResult> {
   currentOperationPhase = "creating-pr";
   try {
@@ -577,7 +581,11 @@ export async function executeCreatePR(
         ? `${baseBranchCtx}\n\n${customCtx}`
         : baseBranchCtx;
 
-    const prompt = await buildPrompt("create-pr", fullCustomCtx);
+    const prompt = await buildPrompt(
+      "create-pr",
+      fullCustomCtx,
+      outputLanguage,
+    );
 
     const initial = await runClaude(
       modelProfile,
@@ -603,7 +611,11 @@ export async function executeCreatePR(
       return initial;
     }
 
-    const recoveryPrompt = buildPRRecoveryPrompt(baseBranch, customCtx);
+    const recoveryPrompt = buildPRRecoveryPrompt(
+      baseBranch,
+      customCtx,
+      outputLanguage,
+    );
     const recovery = await runClaude(
       modelProfile,
       projectPath,
@@ -661,6 +673,7 @@ export async function executeUpdatePR(
   customCtx?: string | undefined,
   actionId?: string | undefined,
   modelProfile?: ResolvedModelProfile | undefined,
+  outputLanguage = "English",
 ): Promise<GitActionResult> {
   currentOperationPhase = "creating-pr";
   try {
@@ -673,7 +686,7 @@ export async function executeUpdatePR(
       };
     }
 
-    const prompt = buildPRUpdatePrompt(baseBranch, customCtx);
+    const prompt = buildPRUpdatePrompt(baseBranch, customCtx, outputLanguage);
     return await runClaude(modelProfile, projectPath, prompt, actionId);
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);

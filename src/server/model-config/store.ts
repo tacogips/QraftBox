@@ -9,9 +9,12 @@ import type {
   ModelProfile,
   ModelVendor,
   NewModelProfileInput,
+  OperationLanguageSettings,
+  OperationLanguageTarget,
   OperationModelBindings,
   ResolvedModelProfile,
   UpdateModelProfileInput,
+  UpdateOperationLanguageSettingsInput,
   UpdateOperationModelBindingsInput,
 } from "../../types/model-config.js";
 import { createLogger } from "../logger.js";
@@ -27,6 +30,11 @@ export interface ModelConfigStore {
   updateOperationBindings(
     input: UpdateOperationModelBindingsInput,
   ): OperationModelBindings;
+  getOperationLanguages(): OperationLanguageSettings;
+  updateOperationLanguages(
+    input: UpdateOperationLanguageSettingsInput,
+  ): OperationLanguageSettings;
+  resolveLanguageForOperation(target: OperationLanguageTarget): string;
   getState(): ModelConfigState;
   resolveForOperation(
     operation: ModelOperation,
@@ -59,10 +67,43 @@ interface BindingRow {
   readonly git_commit_profile_id: string | null;
   readonly git_pr_profile_id: string | null;
   readonly ai_default_profile_id: string | null;
+  readonly git_commit_language: string | null;
+  readonly git_pr_language: string | null;
+  readonly ai_session_purpose_language: string | null;
 }
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+const DEFAULT_OPERATION_LANGUAGE = "English";
+
+function normalizeLanguage(input: string | null | undefined): string {
+  const trimmed = (input ?? "").trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_OPERATION_LANGUAGE;
+}
+
+function ensureModelOperationBindingsLanguageColumns(db: Database): void {
+  const rows = db
+    .prepare("PRAGMA table_info(model_operation_bindings)")
+    .all() as Array<{ readonly name: string }>;
+  const existing = new Set(rows.map((row) => row.name));
+
+  if (!existing.has("git_commit_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN git_commit_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
+  if (!existing.has("git_pr_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN git_pr_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
+  if (!existing.has("ai_session_purpose_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN ai_session_purpose_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
 }
 
 function toProfile(row: ProfileRow): ModelProfile {
@@ -144,19 +185,37 @@ class ModelConfigStoreImpl implements ModelConfigStore {
     `);
 
     this.stmtGetBindings = db.prepare(`
-      SELECT git_commit_profile_id, git_pr_profile_id, ai_default_profile_id
+      SELECT
+        git_commit_profile_id,
+        git_pr_profile_id,
+        ai_default_profile_id,
+        git_commit_language,
+        git_pr_language,
+        ai_session_purpose_language
       FROM model_operation_bindings
       WHERE id = 1
       LIMIT 1
     `);
 
     this.stmtUpsertBindings = db.prepare(`
-      INSERT INTO model_operation_bindings (id, git_commit_profile_id, git_pr_profile_id, ai_default_profile_id, updated_at)
-      VALUES (1, ?, ?, ?, ?)
+      INSERT INTO model_operation_bindings (
+        id,
+        git_commit_profile_id,
+        git_pr_profile_id,
+        ai_default_profile_id,
+        git_commit_language,
+        git_pr_language,
+        ai_session_purpose_language,
+        updated_at
+      )
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         git_commit_profile_id = excluded.git_commit_profile_id,
         git_pr_profile_id = excluded.git_pr_profile_id,
         ai_default_profile_id = excluded.ai_default_profile_id,
+        git_commit_language = excluded.git_commit_language,
+        git_pr_language = excluded.git_pr_language,
+        ai_session_purpose_language = excluded.ai_session_purpose_language,
         updated_at = excluded.updated_at
     `);
 
@@ -349,7 +408,15 @@ class ModelConfigStoreImpl implements ModelConfigStore {
         aiDefaultProfileId: null,
       };
 
-      this.stmtUpsertBindings.run(null, null, null, nowIso());
+      this.stmtUpsertBindings.run(
+        null,
+        null,
+        null,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        nowIso(),
+      );
       return defaultBindings;
     }
 
@@ -364,6 +431,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
     input: UpdateOperationModelBindingsInput,
   ): OperationModelBindings {
     const current = this.getOperationBindings();
+    const currentLanguages = this.getOperationLanguages();
 
     const next: OperationModelBindings = {
       gitCommitProfileId:
@@ -388,16 +456,94 @@ class ModelConfigStoreImpl implements ModelConfigStore {
       next.gitCommitProfileId,
       next.gitPrProfileId,
       next.aiDefaultProfileId,
+      currentLanguages.gitCommitLanguage,
+      currentLanguages.gitPrLanguage,
+      currentLanguages.aiSessionPurposeLanguage,
       nowIso(),
     );
 
     return this.getOperationBindings();
   }
 
+  getOperationLanguages(): OperationLanguageSettings {
+    const row = this.stmtGetBindings.get() as BindingRow | undefined | null;
+    if (row === undefined || row === null) {
+      this.stmtUpsertBindings.run(
+        null,
+        null,
+        null,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        nowIso(),
+      );
+      return {
+        gitCommitLanguage: DEFAULT_OPERATION_LANGUAGE,
+        gitPrLanguage: DEFAULT_OPERATION_LANGUAGE,
+        aiSessionPurposeLanguage: DEFAULT_OPERATION_LANGUAGE,
+      };
+    }
+
+    return {
+      gitCommitLanguage: normalizeLanguage(row.git_commit_language),
+      gitPrLanguage: normalizeLanguage(row.git_pr_language),
+      aiSessionPurposeLanguage: normalizeLanguage(
+        row.ai_session_purpose_language,
+      ),
+    };
+  }
+
+  updateOperationLanguages(
+    input: UpdateOperationLanguageSettingsInput,
+  ): OperationLanguageSettings {
+    const currentBindings = this.getOperationBindings();
+    const current = this.getOperationLanguages();
+
+    const next: OperationLanguageSettings = {
+      gitCommitLanguage:
+        input.gitCommitLanguage !== undefined
+          ? normalizeLanguage(input.gitCommitLanguage)
+          : current.gitCommitLanguage,
+      gitPrLanguage:
+        input.gitPrLanguage !== undefined
+          ? normalizeLanguage(input.gitPrLanguage)
+          : current.gitPrLanguage,
+      aiSessionPurposeLanguage:
+        input.aiSessionPurposeLanguage !== undefined
+          ? normalizeLanguage(input.aiSessionPurposeLanguage)
+          : current.aiSessionPurposeLanguage,
+    };
+
+    this.stmtUpsertBindings.run(
+      currentBindings.gitCommitProfileId,
+      currentBindings.gitPrProfileId,
+      currentBindings.aiDefaultProfileId,
+      next.gitCommitLanguage,
+      next.gitPrLanguage,
+      next.aiSessionPurposeLanguage,
+      nowIso(),
+    );
+
+    return this.getOperationLanguages();
+  }
+
+  resolveLanguageForOperation(target: OperationLanguageTarget): string {
+    const operationLanguages = this.getOperationLanguages();
+    switch (target) {
+      case "git_commit":
+        return operationLanguages.gitCommitLanguage;
+      case "git_pr":
+        return operationLanguages.gitPrLanguage;
+      case "ai_session_purpose":
+        return operationLanguages.aiSessionPurposeLanguage;
+    }
+  }
+
   getState(): ModelConfigState {
     return {
       profiles: this.listProfiles(),
       operationBindings: this.getOperationBindings(),
+      operationLanguages: this.getOperationLanguages(),
     };
   }
 
@@ -465,9 +611,14 @@ export function createModelConfigStore(
       git_commit_profile_id TEXT,
       git_pr_profile_id TEXT,
       ai_default_profile_id TEXT,
+      git_commit_language TEXT NOT NULL DEFAULT 'English',
+      git_pr_language TEXT NOT NULL DEFAULT 'English',
+      ai_session_purpose_language TEXT NOT NULL DEFAULT 'English',
       updated_at TEXT NOT NULL
     )
   `);
+
+  ensureModelOperationBindingsLanguageColumns(db);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_model_profiles_name

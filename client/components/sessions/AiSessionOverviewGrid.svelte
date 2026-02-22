@@ -9,6 +9,7 @@
     readonly qraftAiSessionId: string;
     readonly purpose: string;
     readonly latestResponse: string;
+    readonly source: "qraftbox" | "claude-cli" | "unknown";
     readonly status: "running" | "queued" | "idle";
     readonly queuedPromptCount: number;
     readonly updatedAt: string;
@@ -18,6 +19,7 @@
     readonly title: string;
     readonly purpose: string;
     readonly latestResponse: string;
+    readonly source: "qraftbox" | "claude-cli" | "unknown";
     readonly status: "running" | "queued" | "idle";
     readonly queuedPromptCount: number;
   }
@@ -46,6 +48,11 @@
     ) => Promise<void>;
   }
 
+  interface PendingPromptMessage {
+    readonly message: string;
+    readonly status: "queued" | "running";
+  }
+
   const {
     contextId,
     projectPath,
@@ -64,6 +71,7 @@
     title: "Session",
     purpose: "No purpose available",
     latestResponse: "No active response available",
+    source: "unknown",
     status: "idle",
     queuedPromptCount: 0,
   });
@@ -157,16 +165,20 @@
     return { runningMatch, queuedMatch };
   }
 
-  function queuedPromptMessagesForSession(
+  function activePromptMessagesForSession(
     sessionId: string,
-  ): readonly string[] {
+  ): readonly PendingPromptMessage[] {
     return pendingPrompts
       .filter(
         (pendingPrompt) =>
           pendingPrompt.qraft_ai_session_id === sessionId &&
-          pendingPrompt.status === "queued",
+          (pendingPrompt.status === "queued" ||
+            pendingPrompt.status === "running"),
       )
-      .map((pendingPrompt) => pendingPrompt.message);
+      .map((pendingPrompt) => ({
+        message: pendingPrompt.message,
+        status: pendingPrompt.status,
+      }));
   }
 
   function buildCardFromSession(
@@ -176,14 +188,14 @@
       entry.qraftAiSessionId,
     );
 
-    const queuedPromptMessages = queuedPromptMessagesForSession(
+    const activePromptMessages = activePromptMessagesForSession(
       entry.qraftAiSessionId,
     );
 
     const status: OverviewSessionCard["status"] =
       runningMatch !== undefined
         ? "running"
-        : queuedMatch !== undefined || queuedPromptMessages.length > 0
+        : queuedMatch !== undefined || activePromptMessages.length > 0
           ? "queued"
           : "idle";
 
@@ -204,7 +216,7 @@
         "",
     );
 
-    const queuedHead = normalizeText(queuedPromptMessages[0] ?? "");
+    const queuedHead = normalizeText(activePromptMessages[0]?.message ?? "");
 
     const latestResponseCandidate =
       runtimeLatest ||
@@ -216,8 +228,9 @@
       qraftAiSessionId: entry.qraftAiSessionId,
       purpose: truncate(purposeCandidate || "No purpose available", 90),
       latestResponse: truncate(latestResponseCandidate, 160),
+      source: entry.source,
       status,
-      queuedPromptCount: queuedPromptMessages.length,
+      queuedPromptCount: activePromptMessages.length,
       updatedAt: entry.modified,
     };
   }
@@ -233,11 +246,11 @@
         continue;
       }
 
-      const queuedPromptMessages = queuedPromptMessagesForSession(groupId);
+      const activePromptMessages = activePromptMessagesForSession(groupId);
       const status: OverviewSessionCard["status"] =
         sessionEntry.state === "running"
           ? "running"
-          : queuedPromptMessages.length > 0 || sessionEntry.state === "queued"
+          : activePromptMessages.length > 0 || sessionEntry.state === "queued"
             ? "queued"
             : "idle";
 
@@ -251,13 +264,14 @@
           normalizeText(
             sessionEntry.currentActivity ??
               sessionEntry.lastAssistantMessage ??
-              queuedPromptMessages[0] ??
+              activePromptMessages[0]?.message ??
               "No active response available",
           ),
           160,
         ),
+        source: "qraftbox",
         status,
-        queuedPromptCount: queuedPromptMessages.length,
+        queuedPromptCount: activePromptMessages.length,
         updatedAt:
           sessionEntry.completedAt ??
           sessionEntry.startedAt ??
@@ -464,6 +478,13 @@
     return card ?? null;
   });
 
+  const selectedSessionPendingPromptMessages = $derived.by(() => {
+    if (selectedSessionId === null) {
+      return [] as readonly PendingPromptMessage[];
+    }
+    return activePromptMessagesForSession(selectedSessionId);
+  });
+
   async function fetchOverviewSessions(): Promise<void> {
     const fetchToken = ++latestFetchToken;
 
@@ -592,6 +613,7 @@
       title: selectedCard.purpose,
       purpose: selectedCard.purpose,
       latestResponse: selectedCard.latestResponse,
+      source: selectedCard.source,
       status: selectedCard.status,
       queuedPromptCount: selectedCard.queuedPromptCount,
     };
@@ -676,22 +698,35 @@
                 title: card.purpose,
                 purpose: card.purpose,
                 latestResponse: card.latestResponse,
+                source: card.source,
                 status: card.status,
                 queuedPromptCount: card.queuedPromptCount,
               };
             }}
           >
             <div class="flex items-center justify-between gap-2">
-              <span
-                class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide {card.status ===
-                'running'
-                  ? 'bg-accent-muted text-accent-fg'
-                  : card.status === 'queued'
-                    ? 'bg-attention-muted text-attention-fg'
-                    : 'bg-bg-tertiary text-text-secondary'}"
-              >
-                {card.status}
-              </span>
+              <div class="flex items-center gap-1.5">
+                <span
+                  class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide {card.status ===
+                  'running'
+                    ? 'bg-accent-muted text-accent-fg'
+                    : card.status === 'queued'
+                      ? 'bg-attention-muted text-attention-fg'
+                      : 'bg-bg-tertiary text-text-secondary'}"
+                >
+                  {card.status}
+                </span>
+                <span
+                  class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {card.source ===
+                  'qraftbox'
+                    ? 'bg-success-muted text-success-fg'
+                    : card.source === 'claude-cli'
+                      ? 'bg-accent-muted text-accent-fg'
+                      : 'bg-bg-tertiary text-text-secondary'}"
+                >
+                  {card.source}
+                </span>
+              </div>
               <span class="text-[11px] text-text-tertiary"
                 >{getRelativeTime(card.updatedAt)}</span
               >
@@ -739,8 +774,10 @@
     purpose={selectedCard?.purpose ?? selectedSessionMeta.purpose}
     latestResponse={selectedCard?.latestResponse ??
       selectedSessionMeta.latestResponse}
+    source={selectedCard?.source ?? selectedSessionMeta.source}
     queuedPromptCount={selectedCard?.queuedPromptCount ??
       selectedSessionMeta.queuedPromptCount}
+    pendingPromptMessages={selectedSessionPendingPromptMessages}
     onClose={() => {
       selectedSessionId = null;
     }}

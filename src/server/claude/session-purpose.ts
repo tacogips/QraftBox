@@ -150,7 +150,11 @@ export function compactIntentInputs(
   return compacted.reverse();
 }
 
-export function buildPurposePrompt(intents: readonly string[]): string {
+export function buildPurposePrompt(
+  intents: readonly string[],
+  outputLanguage = "English",
+): string {
+  const language = normalizeWhitespace(outputLanguage);
   const lines = [
     "You summarize a coding session's current objective.",
     "Input contains user intent messages only.",
@@ -159,6 +163,7 @@ export function buildPurposePrompt(intents: readonly string[]): string {
     "- Max 90 characters.",
     "- Do not include labels, bullets, or quotes.",
     "- Prefer the most recent objective when intents conflict.",
+    `- Write the sentence in ${language.length > 0 ? language : "English"}.`,
     "",
     "User intent messages (oldest to newest):",
     ...intents.map((intent, idx) => `${idx + 1}. ${intent}`),

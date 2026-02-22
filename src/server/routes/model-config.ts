@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  UpdateOperationLanguageSettingsInput,
   ModelVendor,
   UpdateOperationModelBindingsInput,
   UpdateModelProfileInput,
@@ -24,6 +25,12 @@ interface UpdateBindingsRequest {
   readonly aiDefaultProfileId?: string | null;
 }
 
+interface UpdateLanguagesRequest {
+  readonly gitCommitLanguage?: string | undefined;
+  readonly gitPrLanguage?: string | undefined;
+  readonly aiSessionPurposeLanguage?: string | undefined;
+}
+
 function toErrorResponse(message: string, code: number): ErrorResponse {
   return { error: message, code };
 }
@@ -36,6 +43,16 @@ function sanitizeOptionalProfileId(value: unknown): string | null | undefined {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function sanitizeOptionalLanguage(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return undefined;
+  if (typeof value !== "string") {
+    throw new Error("Language must be a string");
+  }
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : "English";
 }
 
 export function createModelConfigRoutes(store: ModelConfigStore): Hono {
@@ -118,6 +135,39 @@ export function createModelConfigRoutes(store: ModelConfigStore): Hono {
           : "Failed to update operation bindings";
       const status = message.includes("not found") ? 404 : 400;
       return c.json(toErrorResponse(message, status), status);
+    }
+  });
+
+  app.patch("/languages", async (c) => {
+    try {
+      const body = await c.req.json<UpdateLanguagesRequest>();
+      const nextGitCommitLanguage = sanitizeOptionalLanguage(
+        body.gitCommitLanguage,
+      );
+      const nextGitPrLanguage = sanitizeOptionalLanguage(body.gitPrLanguage);
+      const nextAiSessionPurposeLanguage = sanitizeOptionalLanguage(
+        body.aiSessionPurposeLanguage,
+      );
+      const input: UpdateOperationLanguageSettingsInput = {
+        ...(nextGitCommitLanguage !== undefined && {
+          gitCommitLanguage: nextGitCommitLanguage,
+        }),
+        ...(nextGitPrLanguage !== undefined && {
+          gitPrLanguage: nextGitPrLanguage,
+        }),
+        ...(nextAiSessionPurposeLanguage !== undefined && {
+          aiSessionPurposeLanguage: nextAiSessionPurposeLanguage,
+        }),
+      };
+
+      const operationLanguages = store.updateOperationLanguages(input);
+      return c.json({ operationLanguages });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update operation languages";
+      return c.json(toErrorResponse(message, 400), 400);
     }
   });
 

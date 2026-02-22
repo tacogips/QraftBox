@@ -9,7 +9,12 @@
     status: "running" | "queued" | "idle";
     purpose: string;
     latestResponse: string;
+    source: "qraftbox" | "claude-cli" | "unknown";
     queuedPromptCount: number;
+    pendingPromptMessages: readonly {
+      message: string;
+      status: "queued" | "running";
+    }[];
     onClose: () => void;
     onResumeSession: (sessionId: string) => void;
     onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
@@ -23,7 +28,9 @@
     status,
     purpose,
     latestResponse,
+    source,
     queuedPromptCount,
+    pendingPromptMessages,
     onClose,
     onResumeSession,
     onSubmitPrompt,
@@ -32,6 +39,13 @@
   let promptText = $state("");
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+  let optimisticUserMessage = $state<string | undefined>(undefined);
+  let optimisticUserStatus = $state<"queued" | "running">("queued");
+  let focusTailNonce = $state(0);
+
+  function normalizePromptText(message: string): string {
+    return message.replace(/\s+/g, " ").trim();
+  }
 
   async function submitNextPrompt(immediate: boolean): Promise<void> {
     const trimmedPrompt = promptText.trim();
@@ -41,6 +55,9 @@
 
     submitting = true;
     submitError = null;
+    optimisticUserMessage = trimmedPrompt;
+    optimisticUserStatus = immediate ? "running" : "queued";
+    focusTailNonce += 1;
     try {
       await onSubmitPrompt(trimmedPrompt, immediate);
       promptText = "";
@@ -52,8 +69,39 @@
     }
   }
 
+  function handlePromptComposerKeydown(event: KeyboardEvent): void {
+    if (submitting || promptText.trim().length === 0) {
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void submitNextPrompt(event.shiftKey);
+    }
+  }
+
+  $effect(() => {
+    const optimisticMessage = optimisticUserMessage;
+    if (optimisticMessage === undefined) {
+      return;
+    }
+    const normalizedOptimistic = normalizePromptText(optimisticMessage);
+    const pendingMatch = pendingPromptMessages.find(
+      (item) => normalizePromptText(item.message) === normalizedOptimistic,
+    );
+    if (pendingMatch !== undefined) {
+      optimisticUserStatus = pendingMatch.status;
+      return;
+    }
+    if (!submitting) {
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
+    }
+  });
+
   $effect(() => {
     if (!open) {
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
       return;
     }
     const onKeydown = (event: KeyboardEvent): void => {
@@ -103,6 +151,16 @@
             >
               {status}
             </span>
+            <span
+              class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide {source ===
+              'qraftbox'
+                ? 'bg-success-muted text-success-fg'
+                : source === 'claude-cli'
+                  ? 'bg-accent-muted text-accent-fg'
+                  : 'bg-bg-tertiary text-text-secondary'}"
+            >
+              {source}
+            </span>
             {#if queuedPromptCount > 0}
               <span class="text-xs text-text-tertiary"
                 >{queuedPromptCount} queued</span
@@ -146,8 +204,12 @@
             <SessionTranscriptInline
               {sessionId}
               {contextId}
-              autoRefreshMs={status === "running" ? 1500 : 0}
+              autoRefreshMs={status === "running" || submitting ? 1500 : 0}
               followLatest={status === "running"}
+              {focusTailNonce}
+              {optimisticUserMessage}
+              {optimisticUserStatus}
+              pendingUserMessages={pendingPromptMessages}
             />
           {:else}
             <div
@@ -169,6 +231,7 @@
                    px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder="Add the next instruction for this session"
             bind:value={promptText}
+            onkeydown={handlePromptComposerKeydown}
           ></textarea>
 
           {#if submitError !== null}
@@ -179,22 +242,28 @@
             <button
               type="button"
               class="px-3 py-1.5 text-xs rounded bg-accent-muted text-accent-fg
-                     border border-accent-emphasis/40 hover:bg-accent-muted/80 disabled:opacity-60"
-              disabled={submitting || promptText.trim().length === 0}
-              onclick={() => void submitNextPrompt(true)}
-            >
-              {submitting ? "Submitting..." : "Run Now"}
-            </button>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs rounded bg-bg-tertiary text-text-secondary
-                     border border-border-default hover:bg-bg-hover disabled:opacity-60"
+                     border border-accent-emphasis/40 hover:bg-accent-muted/80 disabled:opacity-60 font-medium"
               disabled={submitting || promptText.trim().length === 0}
               onclick={() => void submitNextPrompt(false)}
             >
-              Queue
+              {submitting ? "Submitting..." : "Queue"}
+            </button>
+            <button
+              type="button"
+              class="px-3 py-1.5 text-xs rounded bg-danger-muted text-danger-fg
+                     border border-danger-fg/30 hover:bg-danger-muted/80 disabled:opacity-60"
+              disabled={submitting || promptText.trim().length === 0}
+              onclick={() => void submitNextPrompt(true)}
+              title="Priority: run immediately and bypass normal queue order"
+            >
+              {submitting ? "Submitting..." : "Run Now (Priority)"}
             </button>
           </div>
+          <p class="mt-2 text-[11px] text-text-tertiary">
+            Default is <span class="font-medium text-text-secondary">Queue</span
+            >. Shortcut: Ctrl/Cmd+Enter queues, Ctrl/Cmd+Shift+Enter runs
+            immediately as priority.
+          </p>
         </div>
       </div>
     </div>

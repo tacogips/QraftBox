@@ -19,10 +19,21 @@
     autoRefreshMs?: number | undefined;
     /** Keep the viewport anchored to the latest message while refreshing */
     followLatest?: boolean | undefined;
+    /** Increment to explicitly focus the latest rendered message */
+    focusTailNonce?: number | undefined;
     /** Optimistic user message shown before transcript persistence */
     optimisticUserMessage?: string | undefined;
+    /** Status for optimistic user message */
+    optimisticUserStatus?: "queued" | "running" | undefined;
     /** Optimistic assistant message shown before transcript persistence */
     optimisticAssistantMessage?: string | undefined;
+    /** Queued user prompts not yet persisted to transcript */
+    pendingUserMessages?:
+      | readonly {
+          message: string;
+          status: "queued" | "running";
+        }[]
+      | undefined;
   }
 
   import { stripSystemTags } from "../../../src/utils/strip-system-tags";
@@ -33,8 +44,11 @@
     maxMessages = undefined,
     autoRefreshMs = 0,
     followLatest = false,
+    focusTailNonce = 0,
     optimisticUserMessage = undefined,
+    optimisticUserStatus = "queued",
     optimisticAssistantMessage = undefined,
+    pendingUserMessages = [],
   }: Props = $props();
 
   /**
@@ -91,6 +105,7 @@
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
   let copiedEventId: string | null = $state(null);
+  let lastInitializedSessionId: string | null = $state(null);
 
   /**
    * Copy event content to clipboard
@@ -157,9 +172,49 @@
     return textSet;
   });
 
+  interface PendingUserMessage {
+    readonly raw: string;
+    readonly normalized: string;
+    readonly status: "queued" | "running";
+  }
+
+  const pendingQueuedUserMessages = $derived.by(() => {
+    const items: PendingUserMessage[] = [];
+    const seenNormalized = new Set<string>();
+    for (const pendingMessage of pendingUserMessages) {
+      const rawText = stripSystemTags(pendingMessage.message).trim();
+      const normalizedText = normalizeMessageText(rawText);
+      if (normalizedText.length === 0) {
+        continue;
+      }
+      if (normalizedChatTextSet.has(normalizedText)) {
+        continue;
+      }
+      if (seenNormalized.has(normalizedText)) {
+        continue;
+      }
+      seenNormalized.add(normalizedText);
+      items.push({
+        raw: rawText,
+        normalized: normalizedText,
+        status: pendingMessage.status,
+      });
+    }
+    return items;
+  });
+
+  const pendingQueuedNormalizedSet = $derived.by(() => {
+    const normalizedSet = new Set<string>();
+    for (const pendingMessage of pendingQueuedUserMessages) {
+      normalizedSet.add(pendingMessage.normalized);
+    }
+    return normalizedSet;
+  });
+
   const showOptimisticUser = $derived(
     normalizedOptimisticUser.length > 0 &&
-      !normalizedChatTextSet.has(normalizedOptimisticUser),
+      !normalizedChatTextSet.has(normalizedOptimisticUser) &&
+      !pendingQueuedNormalizedSet.has(normalizedOptimisticUser),
   );
 
   const showOptimisticAssistant = $derived(
@@ -178,7 +233,8 @@
    */
   const hasOptimisticContent = $derived(
     (optimisticUserMessage ?? "").length > 0 ||
-      (optimisticAssistantMessage ?? "").length > 0,
+      (optimisticAssistantMessage ?? "").length > 0 ||
+      pendingQueuedUserMessages.length > 0,
   );
 
   /**
@@ -291,7 +347,7 @@
   });
 
   /**
-   * Scroll chat view to bottom when data loads or when switching to chat mode
+   * In chat mode, initialize to the latest message when opening a session.
    */
   $effect(() => {
     if (
@@ -299,14 +355,31 @@
       loadingState.status === "success" &&
       chatScrollContainer !== null
     ) {
+      if (chatEvents.length === 0) return;
+
       const _liveTail = optimisticTailCount;
-      const container = chatScrollContainer;
-      if (followLatest) {
-        requestAnimationFrame(() => {
-          container.scrollTop = container.scrollHeight;
-        });
+      void _liveTail;
+
+      const targetIndex = chatEvents.length - 1;
+      const isSessionSwitch = lastInitializedSessionId !== sessionId;
+      const shouldFollowTail = followLatest || isSessionSwitch;
+      if (!shouldFollowTail) {
+        return;
       }
+
+      lastInitializedSessionId = sessionId;
+      focusChatIndex(targetIndex, "auto");
     }
+  });
+
+  $effect(() => {
+    const nonce = focusTailNonce;
+    if (nonce === 0 || viewMode !== "chat" || chatScrollContainer === null) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      focusLatestRenderedMessage("auto");
+    });
   });
 
   /**
@@ -478,11 +551,65 @@
     expandedMessages = newSet;
   }
 
+  function getChatItemElement(index: number): HTMLElement | null {
+    if (chatScrollContainer === null) {
+      return null;
+    }
+    return chatScrollContainer.querySelector<HTMLElement>(
+      `[data-chat-index="${index}"]`,
+    );
+  }
+
+  function focusChatIndex(index: number, behavior: ScrollBehavior): void {
+    if (chatEvents.length === 0) {
+      return;
+    }
+
+    const boundedIndex = Math.max(0, Math.min(index, chatEvents.length - 1));
+    currentIndex = boundedIndex;
+
+    const targetElement = getChatItemElement(boundedIndex);
+    if (targetElement !== null) {
+      targetElement.scrollIntoView({ block: "nearest", behavior });
+      targetElement.focus({ preventScroll: true });
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      const deferredTargetElement = getChatItemElement(boundedIndex);
+      if (deferredTargetElement === null) {
+        return;
+      }
+      deferredTargetElement.scrollIntoView({ block: "nearest", behavior });
+      deferredTargetElement.focus({ preventScroll: true });
+    });
+  }
+
+  function focusLatestRenderedMessage(behavior: ScrollBehavior): void {
+    if (chatScrollContainer === null) {
+      return;
+    }
+    const anchors = chatScrollContainer.querySelectorAll<HTMLElement>(
+      "[data-chat-tail-anchor='true']",
+    );
+    if (anchors.length === 0) {
+      return;
+    }
+    const latest = anchors[anchors.length - 1];
+    if (latest === undefined) {
+      return;
+    }
+    latest.scrollIntoView({ block: "nearest", behavior });
+    latest.focus({ preventScroll: true });
+  }
+
   /**
    * Navigate to previous carousel item
    */
   function handlePrevious(): void {
-    if (currentIndex > 0) {
+    if (viewMode === "chat") {
+      focusChatIndex(currentIndex - 1, "smooth");
+    } else if (currentIndex > 0) {
       currentIndex = currentIndex - 1;
     }
   }
@@ -491,7 +618,9 @@
    * Navigate to next carousel item
    */
   function handleNext(): void {
-    if (currentIndex < chatEvents.length - 1) {
+    if (viewMode === "chat") {
+      focusChatIndex(currentIndex + 1, "smooth");
+    } else if (currentIndex < chatEvents.length - 1) {
       currentIndex = currentIndex + 1;
     }
   }
@@ -510,7 +639,7 @@
     if (viewMode === "carousel") {
       currentIndex = 0;
     } else if (chatScrollContainer !== null) {
-      chatScrollContainer.scrollTop = 0;
+      focusChatIndex(0, "smooth");
     }
   }
 
@@ -521,7 +650,7 @@
     if (viewMode === "carousel") {
       currentIndex = chatEvents.length - 1;
     } else if (chatScrollContainer !== null) {
-      chatScrollContainer.scrollTop = chatScrollContainer.scrollHeight;
+      focusChatIndex(chatEvents.length - 1, "smooth");
     }
   }
 
@@ -782,7 +911,7 @@
         bind:this={chatScrollContainer}
         class="{isCompact
           ? 'max-h-[120px]'
-          : 'max-h-[600px]'} overflow-y-auto space-y-1.5"
+          : 'max-h-[600px]'} chat-scroll overflow-y-auto space-y-2"
       >
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
@@ -793,7 +922,13 @@
           <div
             class="border-l-4 {getBorderColor(
               event.type,
-            )} bg-bg-secondary rounded-r"
+            )} bg-bg-secondary rounded-r
+                   {currentIndex === index
+              ? 'ring-1 ring-accent-emphasis/55'
+              : ''}"
+            data-chat-index={index}
+            data-chat-tail-anchor="true"
+            tabindex={currentIndex === index ? 0 : -1}
           >
             <!-- Message header -->
             <div class="px-3 py-1.5 flex items-center justify-between">
@@ -863,7 +998,7 @@
             <!-- Message content -->
             <div class="px-3 py-2">
               <div
-                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
               >
                 {#if isLong && !isExpanded}
                   {textContent.slice(0, 500)}...
@@ -885,20 +1020,55 @@
           </div>
         {/each}
 
-        {#if showOptimisticUser}
+        {#each pendingQueuedUserMessages as pendingMessage}
           <div
-            class="border-l-4 border-accent-emphasis bg-bg-secondary rounded-r"
+            class="border-l-4 {pendingMessage.status === 'running'
+              ? 'border-accent-emphasis'
+              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            data-chat-tail-anchor="true"
+            tabindex="-1"
           >
             <div class="px-3 py-1.5 flex items-center justify-between">
               <span
-                class="text-xs font-semibold px-2 py-0.5 rounded bg-accent-muted text-accent-fg"
+                class="text-xs font-semibold px-2 py-0.5 rounded {pendingMessage.status ===
+                'running'
+                  ? 'bg-accent-muted text-accent-fg'
+                  : 'bg-attention-muted text-attention-fg'}"
               >
-                user (pending)
+                user ({pendingMessage.status})
               </span>
             </div>
             <div class="px-3 py-2">
               <div
-                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
+              >
+                {pendingMessage.raw}
+              </div>
+            </div>
+          </div>
+        {/each}
+
+        {#if showOptimisticUser}
+          <div
+            class="border-l-4 {optimisticUserStatus === 'running'
+              ? 'border-accent-emphasis'
+              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            data-chat-tail-anchor="true"
+            tabindex="-1"
+          >
+            <div class="px-3 py-1.5 flex items-center justify-between">
+              <span
+                class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatus ===
+                'running'
+                  ? 'bg-accent-muted text-accent-fg'
+                  : 'bg-attention-muted text-attention-fg'}"
+              >
+                user ({optimisticUserStatus})
+              </span>
+            </div>
+            <div class="px-3 py-2">
+              <div
+                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
               >
                 {stripSystemTags(optimisticUserMessage ?? "")}
               </div>
@@ -909,6 +1079,8 @@
         {#if showOptimisticAssistant}
           <div
             class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
+            data-chat-tail-anchor="true"
+            tabindex="-1"
           >
             <div class="px-3 py-1.5 flex items-center justify-between">
               <span
@@ -919,7 +1091,7 @@
             </div>
             <div class="px-3 py-2">
               <div
-                class="text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
               >
                 {stripSystemTags(optimisticAssistantMessage ?? "")}
               </div>
@@ -1126,3 +1298,29 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  .chat-scroll {
+    scrollbar-width: auto;
+    scrollbar-color: var(--color-border-emphasis) transparent;
+  }
+
+  .chat-scroll::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .chat-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .chat-scroll::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-default);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .chat-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-border-emphasis);
+  }
+</style>

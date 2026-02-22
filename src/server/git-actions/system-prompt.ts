@@ -174,6 +174,15 @@ ${content}
 </qraftbox-system-prompt>`;
 }
 
+function buildLanguageInstruction(outputLanguage: string): string {
+  const language =
+    outputLanguage.trim().length > 0 ? outputLanguage : "English";
+  return `<qraftbox-output-language>
+Write all user-facing output in ${language}.
+Do not translate code blocks, command names, file paths, or identifiers unless explicitly requested.
+</qraftbox-output-language>`;
+}
+
 /**
  * Build complete prompt with system prompt and custom context
  *
@@ -186,15 +195,21 @@ ${content}
 export async function buildPrompt(
   systemPromptName: SystemPromptName,
   customCtx?: string | undefined,
+  outputLanguage = "English",
 ): Promise<string> {
   const systemPromptContent = await loadSystemPrompt(systemPromptName);
   const wrappedSystemPrompt = wrapSystemPrompt(systemPromptContent);
+  const languageInstruction = buildLanguageInstruction(outputLanguage);
 
   if (customCtx !== undefined && customCtx.trim().length > 0) {
     return `${wrappedSystemPrompt}
 
+${languageInstruction}
+
 ${customCtx}`;
   }
 
-  return wrappedSystemPrompt;
+  return `${wrappedSystemPrompt}
+
+${languageInstruction}`;
 }

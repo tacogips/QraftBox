@@ -93,6 +93,10 @@
     message: string,
     immediate: boolean,
   ): Promise<void> {
+    if (typeof onResumeCliSession === "function") {
+      onResumeCliSession(sessionId);
+    }
+
     await onSubmitPrompt(message, immediate, {
       primaryFile: undefined,
       references: [],

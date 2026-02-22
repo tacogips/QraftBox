@@ -692,7 +692,9 @@
         {runningSessions}
         {queuedSessions}
         {recentlyCompletedSessions}
-        pendingPrompts={serverPromptQueue.filter((p) => p.status === "queued")}
+        pendingPrompts={serverPromptQueue.filter(
+          (p) => p.status === "queued" || p.status === "running",
+        )}
         {resumeDisplaySessionId}
         currentQraftAiSessionId={qraftAiSessionId}
         isFirstMessage={!sessionMessageSubmitted}

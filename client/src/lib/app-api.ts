@@ -2,6 +2,7 @@ import type { DiffFile } from "../types/diff";
 import type { QraftAiSessionId, FileReference } from "../../../src/types/ai";
 import type {
   ModelConfigState,
+  OperationLanguageSettings,
   ModelProfile,
   ModelVendor,
   OperationModelBindings,
@@ -351,6 +352,21 @@ export async function updateModelBindingsApi(
     operationBindings: OperationModelBindings;
   };
   return data.operationBindings;
+}
+
+export async function updateModelLanguagesApi(
+  operationLanguages: Partial<OperationLanguageSettings>,
+): Promise<OperationLanguageSettings> {
+  const response = await fetch("/api/model-config/languages", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(operationLanguages),
+  });
+  ensureOk(response, "Failed to update operation languages");
+  const data = (await response.json()) as {
+    operationLanguages: OperationLanguageSettings;
+  };
+  return data.operationLanguages;
 }
 
 export async function fetchPromptQueueApi(): Promise<PromptQueueItem[]> {

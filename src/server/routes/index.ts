@@ -160,6 +160,7 @@ export function getContextScopedRouteGroups(
       routes: createClaudeSessionsRoutes(
         config.sessionManager.getMappingStore(),
         config.sessionManager,
+        config.modelConfigStore,
       ),
     },
     // Prompt routes - GET /api/ctx/:contextId/prompts

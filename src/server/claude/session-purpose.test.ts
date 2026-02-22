@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptEvent } from "./session-reader.js";
 import {
+  buildPurposePrompt,
   createIntentSignature,
   extractUserIntents,
   isToolResponseLikeUserText,
@@ -64,5 +65,13 @@ describe("session-purpose", () => {
     expect(shouldRefreshPurpose(1, 4)).toBe(true);
     expect(shouldRefreshPurpose(4, 6)).toBe(false);
     expect(shouldRefreshPurpose(4, 7)).toBe(true);
+  });
+
+  test("builds purpose prompt with output language requirement", () => {
+    const prompt = buildPurposePrompt(
+      ["Summarize architecture changes", "Update tests"],
+      "Japanese",
+    );
+    expect(prompt).toContain("Write the sentence in Japanese.");
   });
 });

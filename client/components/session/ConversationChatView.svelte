@@ -16,6 +16,7 @@
    */
 
   import type { ConversationTurn } from "../../../src/types/ai";
+  import { tick } from "svelte";
   import MessageCard from "./MessageCard.svelte";
 
   interface Props {
@@ -29,20 +30,38 @@
    * Reference to scroll container
    */
   let scrollContainer: HTMLDivElement | null = $state(null);
+  let lastFocusedTurnId: string | null = $state(null);
 
   /**
    * Auto-scroll to bottom when turns change
    */
   $effect(() => {
-    // Access turns.length to create dependency
-    const _count = turns.length;
-    if (scrollContainer !== null) {
-      // Scroll to bottom smoothly
-      scrollContainer.scrollTo({
-        top: scrollContainer.scrollHeight,
-        behavior: "smooth",
-      });
+    const turnCount = turns.length;
+    const lastTurnId = turns[turnCount - 1]?.id;
+    if (
+      scrollContainer === null ||
+      lastTurnId === undefined ||
+      lastTurnId === lastFocusedTurnId
+    ) {
+      return;
     }
+
+    const container = scrollContainer;
+    lastFocusedTurnId = lastTurnId;
+
+    void tick().then(() => {
+      requestAnimationFrame(() => {
+        const target = container.querySelector<HTMLElement>(
+          "[data-last-turn='true']",
+        );
+        if (target === null) {
+          return;
+        }
+        container.scrollTop = container.scrollHeight;
+        target.scrollIntoView({ block: "end", inline: "nearest" });
+        target.focus({ preventScroll: true });
+      });
+    });
   });
 
   /**
@@ -75,7 +94,7 @@
 <div
   bind:this={scrollContainer}
   class="conversation-chat-view flex-1 overflow-y-auto
-         px-3 py-2 space-y-2"
+         px-4 py-3 space-y-3"
   role="log"
   aria-label="Conversation history"
   aria-live="polite"
@@ -86,7 +105,38 @@
     </div>
   {:else}
     {#each turns as turn, index (turn.id)}
-      <MessageCard {turn} isToolResponse={isToolResponse(index)} />
+      <div
+        data-last-turn={index === turns.length - 1 ? "true" : undefined}
+        tabindex={index === turns.length - 1 ? -1 : undefined}
+      >
+        <MessageCard {turn} isToolResponse={isToolResponse(index)} />
+      </div>
     {/each}
   {/if}
 </div>
+
+<style>
+  .conversation-chat-view {
+    scrollbar-width: auto;
+    scrollbar-color: var(--color-border-emphasis) transparent;
+  }
+
+  .conversation-chat-view::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .conversation-chat-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .conversation-chat-view::-webkit-scrollbar-thumb {
+    background-color: var(--color-border-default);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .conversation-chat-view::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-border-emphasis);
+  }
+</style>

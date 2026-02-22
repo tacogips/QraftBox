@@ -169,6 +169,7 @@ export function createGitActionsRoutes(
           "git_commit",
           body.modelProfileId,
         ),
+        modelConfigStore?.resolveLanguageForOperation("git_commit"),
       );
 
       return c.json(result);
@@ -301,6 +302,7 @@ export function createGitActionsRoutes(
         body.customCtx,
         body.actionId,
         modelConfigStore?.resolveForOperation("git_pr", body.modelProfileId),
+        modelConfigStore?.resolveLanguageForOperation("git_pr"),
       );
 
       return c.json(result);
@@ -354,6 +356,7 @@ export function createGitActionsRoutes(
         body.customCtx,
         body.actionId,
         modelConfigStore?.resolveForOperation("git_pr", body.modelProfileId),
+        modelConfigStore?.resolveLanguageForOperation("git_pr"),
       );
 
       return c.json(result);
