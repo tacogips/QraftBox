@@ -1152,6 +1152,124 @@ describe("ClaudeSessionReader", () => {
       expect(transcript?.events[1]?.content).toBe("Assistant reply");
     });
 
+    it("prefers provenance metadata over text heuristics for first prompt", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "25");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-25T10-00-00-provenance-first-prompt.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-provenance-first-prompt",
+            timestamp: "2026-02-25T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:01.000Z",
+          type: "response_item",
+          origin: "system_injected",
+          display_default: false,
+          source_tag: "agents_instructions",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:02.000Z",
+          type: "response_item",
+          origin: "user_input",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Real user request",
+              },
+            ],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const session = await reader.getSession(
+        "codex-session-codex-provenance-first-prompt",
+      );
+      expect(session).not.toBeNull();
+      expect(session?.firstPrompt).toBe("Real user request");
+    });
+
+    it("hides codex transcript events when provenance marks display_default=false", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "26");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-26T10-00-00-provenance-transcript.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-provenance-transcript",
+            timestamp: "2026-02-26T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:01.000Z",
+          type: "response_item",
+          origin: "system_injected",
+          display_default: false,
+          source_tag: "environment_context",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "<environment_context><cwd>/g/gits/tacogips/QraftBox</cwd></environment_context>",
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:02.000Z",
+          type: "response_item",
+          origin: "user_input",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Visible user input" }],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const transcript = await reader.readTranscript(
+        "codex-session-codex-provenance-transcript",
+        0,
+        100,
+      );
+      expect(transcript).not.toBeNull();
+      expect(transcript?.events).toHaveLength(1);
+      expect(transcript?.events[0]?.content).toBe("Visible user input");
+    });
+
     it("filters codex sessions by workingDirectoryPrefix", async () => {
       const inProjectDayDir = join(codexSessionsDir, "2026", "02", "23");
       const outProjectDayDir = join(codexSessionsDir, "2026", "02", "24");

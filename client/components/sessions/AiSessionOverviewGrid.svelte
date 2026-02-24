@@ -227,34 +227,60 @@
     return session.clientSessionId ?? session.id;
   }
 
+  const runningSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const runningSession of runningSessions) {
+      grouped.set(sessionGroupId(runningSession), runningSession);
+    }
+    return grouped;
+  });
+
+  const queuedSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const queuedSession of queuedSessions) {
+      grouped.set(sessionGroupId(queuedSession), queuedSession);
+    }
+    return grouped;
+  });
+
+  const activePromptMessagesBySessionId = $derived.by(() => {
+    const grouped = new Map<string, PendingPromptMessage[]>();
+    for (const pendingPrompt of pendingPrompts) {
+      if (
+        pendingPrompt.status !== "queued" &&
+        pendingPrompt.status !== "running"
+      ) {
+        continue;
+      }
+      const sessionId = pendingPrompt.qraft_ai_session_id;
+      const existing = grouped.get(sessionId);
+      const promptMessage: PendingPromptMessage = {
+        message: pendingPrompt.message,
+        status: pendingPrompt.status,
+        ai_agent: pendingPrompt.ai_agent,
+      };
+      if (existing === undefined) {
+        grouped.set(sessionId, [promptMessage]);
+        continue;
+      }
+      existing.push(promptMessage);
+    }
+    return grouped;
+  });
+
   function findSessionRuntimeByGroupId(sessionId: string): {
     runningMatch: AISession | undefined;
     queuedMatch: AISession | undefined;
   } {
-    const runningMatch = runningSessions.find(
-      (runningSession) => sessionGroupId(runningSession) === sessionId,
-    );
-    const queuedMatch = queuedSessions.find(
-      (queuedSession) => sessionGroupId(queuedSession) === sessionId,
-    );
+    const runningMatch = runningSessionByGroupId.get(sessionId);
+    const queuedMatch = queuedSessionByGroupId.get(sessionId);
     return { runningMatch, queuedMatch };
   }
 
   function activePromptMessagesForSession(
     sessionId: string,
   ): readonly PendingPromptMessage[] {
-    return pendingPrompts
-      .filter(
-        (pendingPrompt) =>
-          pendingPrompt.qraft_ai_session_id === sessionId &&
-          (pendingPrompt.status === "queued" ||
-            pendingPrompt.status === "running"),
-      )
-      .map((pendingPrompt) => ({
-        message: pendingPrompt.message,
-        status: pendingPrompt.status,
-        ai_agent: pendingPrompt.ai_agent,
-      }));
+    return activePromptMessagesBySessionId.get(sessionId) ?? [];
   }
 
   function buildCardFromSession(
@@ -560,13 +586,19 @@
     );
   });
 
+  const cardBySessionId = $derived.by(() => {
+    const grouped = new Map<string, OverviewSessionCard>();
+    for (const card of cards) {
+      grouped.set(card.qraftAiSessionId, card);
+    }
+    return grouped;
+  });
+
   const selectedCard = $derived.by(() => {
     if (selectedSessionId === null) {
       return null;
     }
-    const card = cards.find(
-      (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
-    );
+    const card = cardBySessionId.get(selectedSessionId);
     return card ?? null;
   });
 
@@ -618,9 +650,7 @@
     ] of fallbackPendingPromptBySessionId) {
       const fallbackExpired =
         nowMs - fallbackPrompt.createdAtMs > FALLBACK_PENDING_PROMPT_TTL_MS;
-      const sessionCard = cards.find(
-        (card) => card.qraftAiSessionId === sessionId,
-      );
+      const sessionCard = cardBySessionId.get(sessionId);
       const sessionIsWaitingForInput = sessionCard?.status === "awaiting_input";
 
       if (fallbackExpired || sessionIsWaitingForInput) {
@@ -658,11 +688,6 @@
         query.set("workingDirectoryPrefix", projectPath);
       }
 
-      const trimmedSearch = searchQuery.trim();
-      if (trimmedSearch.length > 0 && !searchInTranscript) {
-        query.set("search", trimmedSearch);
-      }
-
       const response = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions?${query.toString()}`,
       );
@@ -680,19 +705,6 @@
       }
 
       sessions = data.sessions;
-
-      if (trimmedSearch.length > 0 && searchInTranscript) {
-        latestTranscriptSearchToken += 1;
-        const transcriptSearchToken = latestTranscriptSearchToken;
-        void runTranscriptSearch(
-          data.sessions,
-          trimmedSearch,
-          transcriptSearchToken,
-        );
-      } else {
-        transcriptMatchedSessionIds = new Set();
-        transcriptSearchRunning = false;
-      }
     } catch (error: unknown) {
       if (fetchToken !== latestFetchToken) {
         return;
@@ -748,8 +760,10 @@
   }
 
   $effect(() => {
+    const activeSearchQueryInput = searchQueryInput;
+    void activeSearchQueryInput;
     const debounceTimer = setTimeout(() => {
-      searchQuery = searchQueryInput.trim();
+      searchQuery = activeSearchQueryInput.trim();
     }, 250);
 
     return () => {
@@ -772,12 +786,8 @@
   $effect(() => {
     const activeContextId = contextId;
     const activeProjectPath = projectPath;
-    const activeSearchQuery = searchQuery;
-    const activeSearchInTranscript = searchInTranscript;
     void activeContextId;
     void activeProjectPath;
-    void activeSearchQuery;
-    void activeSearchInTranscript;
 
     void fetchOverviewSessions();
     void fetchHiddenSessionIds();
@@ -792,6 +802,32 @@
     }, 4000);
 
     return () => clearInterval(refreshTimerId);
+  });
+
+  $effect(() => {
+    const activeContextId = contextId;
+    const sessionEntries = sessions;
+    const trimmedSearchQuery = searchQuery.trim();
+    const includeTranscript = searchInTranscript;
+    void activeContextId;
+    void sessionEntries;
+    void trimmedSearchQuery;
+    void includeTranscript;
+
+    latestTranscriptSearchToken += 1;
+    const searchToken = latestTranscriptSearchToken;
+
+    if (
+      activeContextId === null ||
+      trimmedSearchQuery.length === 0 ||
+      !includeTranscript
+    ) {
+      transcriptMatchedSessionIds = new Set();
+      transcriptSearchRunning = false;
+      return;
+    }
+
+    void runTranscriptSearch(sessionEntries, trimmedSearchQuery, searchToken);
   });
 
   $effect(() => {
@@ -833,35 +869,39 @@
   ): Promise<void> {
     if (creatingNewSession) {
       if (onStartNewSessionPrompt === undefined) {
-        return;
+        throw new Error("Unable to start a new session.");
       }
       const result = await onStartNewSessionPrompt(message, immediate);
-      if (result !== null) {
-        const stableSessionId =
-          selectedSessionId ?? newSessionSeedId ?? result.sessionId;
-        setFallbackPendingPrompt(
-          stableSessionId,
-          message,
-          immediate ? "running" : "queued",
-        );
-        openSessionById(stableSessionId, {
-          title: "New Session",
-          purpose: "New session",
-          latestResponse: message,
-          source: "qraftbox",
-          aiAgent: AIAgent.CLAUDE,
-          status: immediate ? "running" : "queued",
-        });
-        await fetchOverviewSessions();
+      if (result === null) {
+        throw new Error("Prompt submission failed. Please retry.");
       }
+      const stableSessionId =
+        selectedSessionId ?? newSessionSeedId ?? result.sessionId;
+      setFallbackPendingPrompt(
+        stableSessionId,
+        message,
+        immediate ? "running" : "queued",
+      );
+      openSessionById(stableSessionId, {
+        title: "New Session",
+        purpose: "New session",
+        latestResponse: message,
+        source: "qraftbox",
+        aiAgent: AIAgent.CLAUDE,
+        status: immediate ? "running" : "queued",
+      });
+      await fetchOverviewSessions();
       return;
     }
 
     if (selectedSessionId === null) {
-      return;
+      throw new Error("Session is not selected.");
     }
 
-    await onSubmitPrompt(selectedSessionId, message, immediate);
+    const result = await onSubmitPrompt(selectedSessionId, message, immediate);
+    if (result === null) {
+      throw new Error("Prompt submission failed. Please retry.");
+    }
     setFallbackPendingPrompt(
       selectedSessionId,
       message,

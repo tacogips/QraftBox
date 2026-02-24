@@ -48,6 +48,7 @@ function isLikelyClaudeSessionId(value: string): boolean {
 interface CodexMessageEvent {
   readonly type: "message";
   readonly content: string;
+  readonly isDelta?: boolean;
 }
 
 interface CodexToolCallEvent {
@@ -72,6 +73,19 @@ type CodexParsedEvent =
   | CodexToolResultEvent
   | CodexSessionDetectedEvent
   | null;
+
+function readFirstStringField(
+  obj: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readStringField(obj, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
 
 /**
  * Build a Codex CLI command for non-interactive JSONL execution.
@@ -104,7 +118,7 @@ export function buildCodexExecCommand(params: AgentRunParams): string[] {
   return args;
 }
 
-function parseCodexJsonLine(line: string): CodexParsedEvent {
+export function parseCodexJsonLine(line: string): CodexParsedEvent {
   const trimmed = line.trim();
   if (trimmed.length === 0) {
     return null;
@@ -123,11 +137,107 @@ function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   const lineType = readStringField(obj, "type");
+  if (lineType === "thread.started") {
+    const sessionId =
+      readFirstStringField(obj, [
+        "thread_id",
+        "threadId",
+        "session_id",
+        "sessionId",
+      ]) ??
+      (() => {
+        const thread = asRecord(obj["thread"]);
+        if (thread === undefined) return undefined;
+        return readFirstStringField(thread, ["id", "thread_id", "threadId"]);
+      })();
+    if (sessionId !== undefined) {
+      return {
+        type: "session_detected",
+        sessionId: sessionId as ClaudeSessionId,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "item.started") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    const itemType = readStringField(item, "type");
+    if (itemType === "command_execution") {
+      const toolName = readFirstStringField(item, [
+        "tool_name",
+        "toolName",
+        "name",
+      ]);
+      return {
+        type: "tool_call",
+        toolName: toolName ?? "local_shell_call",
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "item.completed") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    const itemType = readStringField(item, "type");
+
+    if (itemType === "agent_message") {
+      const text = readFirstStringField(item, ["text", "content", "message"]);
+      if (text !== undefined) {
+        return { type: "message", content: text };
+      }
+      return null;
+    }
+
+    if (itemType === "command_execution") {
+      const toolName = readFirstStringField(item, [
+        "tool_name",
+        "toolName",
+        "name",
+      ]);
+      const exitCodeRaw = item["exit_code"];
+      const isError =
+        (typeof exitCodeRaw === "number" && exitCodeRaw !== 0) ||
+        readStringField(item, "status") === "failed";
+      return {
+        type: "tool_result",
+        toolName: toolName ?? "local_shell_call",
+        isError,
+      };
+    }
+
+    return null;
+  }
+
+  if (lineType === "item.delta") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    if (readStringField(item, "type") !== "agent_message") {
+      return null;
+    }
+    const delta = asRecord(obj["delta"]);
+    const text =
+      (delta !== undefined
+        ? readFirstStringField(delta, ["text", "content"])
+        : undefined) ?? readFirstStringField(item, ["text"]);
+    if (text !== undefined) {
+      return { type: "message", content: text, isDelta: true };
+    }
+    return null;
+  }
+
   if (lineType === "session_meta") {
     const payload = asRecord(obj["payload"]);
+    const meta =
+      payload !== undefined ? asRecord(payload["meta"]) : undefined;
     const sessionId =
-      payload !== undefined ? readStringField(payload, "id") : undefined;
-    if (sessionId !== undefined && isLikelyClaudeSessionId(sessionId)) {
+      meta !== undefined
+        ? readStringField(meta, "id")
+        : payload !== undefined
+          ? readStringField(payload, "id")
+          : undefined;
+    if (sessionId !== undefined) {
       return {
         type: "session_detected",
         sessionId: sessionId as ClaudeSessionId,
@@ -141,9 +251,30 @@ function parseCodexJsonLine(line: string): CodexParsedEvent {
     if (payload === undefined) return null;
     const eventType = readStringField(payload, "type");
     if (eventType === "AgentMessage") {
-      const message = readStringField(payload, "message");
-      if (message !== undefined) {
-        return { type: "message", content: message };
+      const messageValue = payload["message"];
+      if (typeof messageValue === "string" && messageValue.trim().length > 0) {
+        return { type: "message", content: messageValue };
+      }
+      const messageObj = asRecord(messageValue);
+      const nestedContent =
+        messageObj !== undefined ? messageObj["content"] : undefined;
+      if (typeof nestedContent === "string" && nestedContent.trim().length > 0) {
+        return { type: "message", content: nestedContent };
+      }
+      if (Array.isArray(nestedContent)) {
+        const parts: string[] = [];
+        for (const item of nestedContent) {
+          const block = asRecord(item);
+          if (block === undefined) continue;
+          const text = readStringField(block, "text");
+          if (text !== undefined) {
+            parts.push(text);
+          }
+        }
+        const combined = parts.join("\n").trim();
+        if (combined.length > 0) {
+          return { type: "message", content: combined };
+        }
       }
       return null;
     }
@@ -190,6 +321,40 @@ function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   return null;
+}
+
+async function* streamUtf8Lines(
+  stream: ReadableStream<Uint8Array> | undefined,
+): AsyncGenerator<string, void, undefined> {
+  if (stream === undefined) {
+    return;
+  }
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffered += decoder.decode(value, { stream: true });
+      while (true) {
+        const newLineIndex = buffered.indexOf("\n");
+        if (newLineIndex < 0) {
+          break;
+        }
+        const line = buffered.slice(0, newLineIndex).replace(/\r$/, "");
+        buffered = buffered.slice(newLineIndex + 1);
+        yield line;
+      }
+    }
+    buffered += decoder.decode();
+    const tail = buffered.replace(/\r$/, "");
+    if (tail.length > 0) {
+      yield tail;
+    }
+  } finally {
+    reader.releaseLock();
+  }
 }
 
 async function readStreamToString(
@@ -704,6 +869,8 @@ class CodexAgentRunner implements AgentRunner {
     const channel = new EventChannel<AgentEvent>();
     let spawnedProcess: Subprocess | undefined;
     let cancelled = false;
+    let started = false;
+    let streamedAssistantContent = "";
 
     const startExecution = async (): Promise<void> => {
       try {
@@ -718,74 +885,86 @@ class CodexAgentRunner implements AgentRunner {
           stderr: "pipe",
         });
 
-        const [stdoutText, stderrText, exitCode] = await Promise.all([
-          readStreamToString(toReadableStream(spawnedProcess.stdout)),
-          readStreamToString(toReadableStream(spawnedProcess.stderr)),
-          spawnedProcess.exited,
+        let lastAssistantMessage: string | undefined;
+        let sessionDetected = params.resumeSessionId !== undefined;
+
+        const stdoutStream = toReadableStream(spawnedProcess.stdout);
+        const stderrTask = readStreamToString(toReadableStream(spawnedProcess.stderr));
+        const stdoutTask = (async (): Promise<void> => {
+          for await (const line of streamUtf8Lines(stdoutStream)) {
+            if (cancelled) {
+              return;
+            }
+            const parsed = parseCodexJsonLine(line);
+            if (parsed === null) {
+              continue;
+            }
+
+            if (parsed.type === "session_detected") {
+              if (!sessionDetected) {
+                channel.push({
+                  type: "claude_session_detected",
+                  claudeSessionId: parsed.sessionId,
+                });
+                sessionDetected = true;
+              }
+              continue;
+            }
+
+            if (parsed.type === "message") {
+              const nextContent =
+                parsed.isDelta === true && streamedAssistantContent.length > 0
+                  ? streamedAssistantContent + parsed.content
+                  : parsed.content;
+              streamedAssistantContent = nextContent;
+              lastAssistantMessage = nextContent;
+              channel.push({
+                type: "message",
+                role: "assistant",
+                content: nextContent,
+              });
+              channel.push({ type: "activity", activity: undefined });
+              continue;
+            }
+
+            if (parsed.type === "tool_call") {
+              channel.push({
+                type: "tool_call",
+                toolName: parsed.toolName,
+                input: {},
+              });
+              channel.push({
+                type: "activity",
+                activity: `Using ${parsed.toolName}...`,
+              });
+              continue;
+            }
+
+            if (parsed.type === "tool_result") {
+              channel.push({
+                type: "tool_result",
+                toolName: parsed.toolName,
+                output: undefined,
+                isError: parsed.isError,
+              });
+              channel.push({
+                type: "activity",
+                activity: `Processing ${parsed.toolName} result...`,
+              });
+            }
+          }
+        })();
+
+        const exitCodeTask = spawnedProcess.exited;
+        const [stderrText, exitCode] = await Promise.all([
+          stderrTask,
+          exitCodeTask,
+          stdoutTask,
         ]);
 
         if (cancelled) {
           channel.push({ type: "completed", success: false });
-          channel.close();
           return;
-        }
-
-        let lastAssistantMessage: string | undefined;
-        let sessionDetected = params.resumeSessionId !== undefined;
-
-        for (const line of stdoutText.split(/\r?\n/)) {
-          const parsed = parseCodexJsonLine(line);
-          if (parsed === null) {
-            continue;
-          }
-
-          if (parsed.type === "session_detected") {
-            if (!sessionDetected) {
-              channel.push({
-                type: "claude_session_detected",
-                claudeSessionId: parsed.sessionId,
-              });
-              sessionDetected = true;
-            }
-            continue;
-          }
-
-          if (parsed.type === "message") {
-            lastAssistantMessage = parsed.content;
-            channel.push({
-              type: "message",
-              role: "assistant",
-              content: parsed.content,
-            });
-            channel.push({ type: "activity", activity: undefined });
-            continue;
-          }
-
-          if (parsed.type === "tool_call") {
-            channel.push({
-              type: "tool_call",
-              toolName: parsed.toolName,
-              input: {},
-            });
-            channel.push({
-              type: "activity",
-              activity: `Using ${parsed.toolName}...`,
-            });
-            continue;
-          }
-
-          if (parsed.type === "tool_result") {
-            channel.push({
-              type: "tool_result",
-              toolName: parsed.toolName,
-              output: undefined,
-              isError: parsed.isError,
-            });
-            channel.push({
-              type: "activity",
-              activity: `Processing ${parsed.toolName} result...`,
-            });
-          }
         }
 
         if (exitCode === 0) {
@@ -828,7 +1007,10 @@ class CodexAgentRunner implements AgentRunner {
 
     return {
       events(): AsyncIterable<AgentEvent> {
-        void startExecution();
+        if (!started) {
+          started = true;
+          void startExecution();
+        }
         return channel;
       },
 

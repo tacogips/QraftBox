@@ -153,11 +153,37 @@
     if (submitting || promptText.trim().length === 0) {
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
-      void submitNextPrompt(event.shiftKey);
+    if (event.key !== "Enter") {
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    // Cmd/Ctrl+Enter submits with immediate priority.
+    if (event.ctrlKey || event.metaKey) {
+      void submitNextPrompt(true);
+      return;
+    }
+    // Enter submits queued by default for faster keyboard flow.
+    if (!event.altKey) {
+      void submitNextPrompt(false);
     }
   }
+
+  function promptShortcutLabel(): string {
+    if (typeof navigator === "undefined") {
+      return "Enter submits queued. Shift+Enter adds a newline. Ctrl/Cmd+Enter runs immediately.";
+    }
+    const isMacPlatform =
+      navigator.platform.toLowerCase().includes("mac") ||
+      navigator.userAgent.toLowerCase().includes("macintosh");
+    return isMacPlatform
+      ? "Enter submits queued. Shift+Enter adds a newline. Cmd+Enter runs immediately."
+      : "Enter submits queued. Shift+Enter adds a newline. Ctrl+Enter runs immediately.";
+  }
+
+  const promptShortcutHint = $derived(promptShortcutLabel());
 
   $effect(() => {
     const optimisticMessage = optimisticUserMessage;
@@ -454,8 +480,7 @@
           <p class="mt-2 text-[11px] text-text-tertiary">
             Default is <span class="font-medium text-text-secondary"
               >Submit (queued)</span
-            >. Shortcut: Ctrl/Cmd+Enter submits queued, Ctrl/Cmd+Shift+Enter
-            runs immediately.
+            >. {promptShortcutHint}
           </p>
         </div>
       </div>

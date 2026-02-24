@@ -10,6 +10,7 @@ import {
   buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
+  parseCodexJsonLine,
   type AgentEvent,
   type AgentRunParams,
 } from "./agent-runner.js";
@@ -130,6 +131,39 @@ describe("buildCodexExecCommand()", () => {
     expect(command.slice(0, 4)).toEqual(["codex", "exec", "resume", "--json"]);
     expect(command).toContain(resumeId);
     expect(command[command.length - 1]).toBe("Continue from previous task");
+  });
+});
+
+describe("parseCodexJsonLine()", () => {
+  test("parses session from thread.started", () => {
+    const line =
+      '{"type":"thread.started","thread_id":"019c8ded-ecd4-7db2-a89e-450cb3445c6e"}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "session_detected",
+      sessionId: "019c8ded-ecd4-7db2-a89e-450cb3445c6e",
+    });
+  });
+
+  test("parses assistant text from item.completed agent_message", () => {
+    const line =
+      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"hello from codex"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses delta assistant text from item.delta", () => {
+    const line =
+      '{"type":"item.delta","item":{"id":"item_1","type":"agent_message"},"delta":{"text":"partial"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "partial",
+      isDelta: true,
+    });
   });
 });
 

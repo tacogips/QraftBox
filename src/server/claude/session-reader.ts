@@ -371,9 +371,18 @@ export class ClaudeSessionReader {
     }
 
     const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    const normalizedTarget = sessionId.startsWith("codex-session-")
+      ? sessionId.slice("codex-session-".length)
+      : sessionId;
     for (const file of files) {
       const session = await this.readCodexSessionEntry(file);
-      if (session?.sessionId === sessionId) {
+      if (session === null) {
+        continue;
+      }
+      const normalizedSessionId = session.sessionId.startsWith("codex-session-")
+        ? session.sessionId.slice("codex-session-".length)
+        : session.sessionId;
+      if (session.sessionId === sessionId || normalizedSessionId === normalizedTarget) {
         return session;
       }
     }
@@ -417,6 +426,86 @@ export class ClaudeSessionReader {
     }
 
     return textParts.join("\n").trim();
+  }
+
+  private readCodexProvenance(raw: Record<string, unknown>): {
+    origin?: string;
+    displayDefault?: boolean;
+    sourceTag?: string;
+  } {
+    const payload =
+      typeof raw["payload"] === "object" && raw["payload"] !== null
+        ? (raw["payload"] as Record<string, unknown>)
+        : undefined;
+
+    const originCandidate =
+      typeof raw["origin"] === "string"
+        ? raw["origin"]
+        : typeof payload?.["origin"] === "string"
+          ? payload["origin"]
+          : undefined;
+    const displayDefaultCandidate =
+      typeof raw["display_default"] === "boolean"
+        ? raw["display_default"]
+        : typeof payload?.["display_default"] === "boolean"
+          ? payload["display_default"]
+          : undefined;
+    const sourceTagCandidate =
+      typeof raw["source_tag"] === "string"
+        ? raw["source_tag"]
+        : typeof payload?.["source_tag"] === "string"
+          ? payload["source_tag"]
+          : undefined;
+
+    const provenance: {
+      origin?: string;
+      displayDefault?: boolean;
+      sourceTag?: string;
+    } = {};
+    if (originCandidate !== undefined) {
+      provenance.origin = originCandidate;
+    }
+    if (displayDefaultCandidate !== undefined) {
+      provenance.displayDefault = displayDefaultCandidate;
+    }
+    if (sourceTagCandidate !== undefined) {
+      provenance.sourceTag = sourceTagCandidate;
+    }
+    return provenance;
+  }
+
+  private isInjectedCodexSourceTag(sourceTag: string | undefined): boolean {
+    if (sourceTag === undefined) {
+      return false;
+    }
+    return (
+      sourceTag === "agents_instructions" ||
+      sourceTag === "environment_context" ||
+      sourceTag === "turn_aborted"
+    );
+  }
+
+  private shouldSkipCodexUserPrompt(
+    raw: Record<string, unknown>,
+    text: string,
+  ): boolean {
+    const provenance = this.readCodexProvenance(raw);
+    if (provenance.origin === "user_input") {
+      return false;
+    }
+    if (provenance.displayDefault === false) {
+      return true;
+    }
+    if (
+      provenance.origin === "system_injected" ||
+      provenance.origin === "framework_event" ||
+      this.isInjectedCodexSourceTag(provenance.sourceTag)
+    ) {
+      return true;
+    }
+    return (
+      isInjectedSessionSystemPrompt(text) || this.isInternalSessionPrompt(text)
+    );
   }
 
   private async readCodexSessionEntry(
@@ -488,6 +577,18 @@ export class ClaudeSessionReader {
           }
         }
 
+        if (raw["type"] === "thread.started") {
+          if (typeof raw["thread_id"] === "string" && raw["thread_id"].length > 0) {
+            codexId = raw["thread_id"];
+          } else if (
+            typeof raw["thread"] === "object" &&
+            raw["thread"] !== null &&
+            typeof (raw["thread"] as Record<string, unknown>)["id"] === "string"
+          ) {
+            codexId = (raw["thread"] as Record<string, unknown>)["id"] as string;
+          }
+        }
+
         if (raw["type"] === "response_item") {
           const payload =
             typeof raw["payload"] === "object" && raw["payload"] !== null
@@ -511,13 +612,35 @@ export class ClaudeSessionReader {
             role === "user" &&
             firstPrompt.length === 0 &&
             text.length > 0 &&
-            !isInjectedSessionSystemPrompt(text) &&
-            !this.isInternalSessionPrompt(text)
+            !this.shouldSkipCodexUserPrompt(raw, text)
           ) {
             firstPrompt = stripSystemTags(text);
           }
           if (role === "assistant" && text.length > 0) {
             summary = stripSystemTags(text).slice(0, 240);
+          }
+        }
+
+        if (raw["type"] === "item.completed") {
+          const item =
+            typeof raw["item"] === "object" && raw["item"] !== null
+              ? (raw["item"] as Record<string, unknown>)
+              : undefined;
+          if (item === undefined) {
+            continue;
+          }
+          const itemType = typeof item["type"] === "string" ? item["type"] : "";
+          if (itemType === "agent_message") {
+            const text =
+              typeof item["text"] === "string"
+                ? item["text"]
+                : typeof item["content"] === "string"
+                  ? item["content"]
+                  : "";
+            if (text.length > 0) {
+              messageCount += 1;
+              summary = stripSystemTags(text).slice(0, 240);
+            }
           }
         }
       }
@@ -1231,38 +1354,68 @@ export class ClaudeSessionReader {
       }
 
       const raw = parsed as Record<string, unknown>;
-      if (raw["type"] !== "response_item") {
+      if (raw["type"] === "response_item") {
+        const payload =
+          typeof raw["payload"] === "object" && raw["payload"] !== null
+            ? (raw["payload"] as Record<string, unknown>)
+            : undefined;
+        if (payload === undefined || payload["type"] !== "message") {
+          continue;
+        }
+
+        const role =
+          typeof payload["role"] === "string"
+            ? payload["role"].toLowerCase()
+            : "unknown";
+        const text = this.extractCodexMessageText(payload);
+        if (text.length === 0) {
+          continue;
+        }
+        if (role === "user" && this.shouldSkipCodexUserPrompt(raw, text)) {
+          continue;
+        }
+
+        events.push({
+          type:
+            role === "assistant" ? "assistant" : role === "user" ? "user" : role,
+          timestamp:
+            typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+          content: text,
+          raw: parsed as object,
+        });
         continue;
       }
 
-      const payload =
-        typeof raw["payload"] === "object" && raw["payload"] !== null
-          ? (raw["payload"] as Record<string, unknown>)
-          : undefined;
-      if (payload === undefined || payload["type"] !== "message") {
-        continue;
-      }
+      if (raw["type"] === "item.completed") {
+        const item =
+          typeof raw["item"] === "object" && raw["item"] !== null
+            ? (raw["item"] as Record<string, unknown>)
+            : undefined;
+        if (item === undefined) {
+          continue;
+        }
+        const itemType = typeof item["type"] === "string" ? item["type"] : "";
+        if (itemType !== "agent_message") {
+          continue;
+        }
+        const text =
+          typeof item["text"] === "string"
+            ? item["text"]
+            : typeof item["content"] === "string"
+              ? item["content"]
+              : "";
+        if (text.length === 0) {
+          continue;
+        }
 
-      const role =
-        typeof payload["role"] === "string"
-          ? payload["role"].toLowerCase()
-          : "unknown";
-      const text = this.extractCodexMessageText(payload);
-      if (text.length === 0) {
-        continue;
+        events.push({
+          type: "assistant",
+          timestamp:
+            typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+          content: stripSystemTags(text),
+          raw: parsed as object,
+        });
       }
-      if (role === "user" && this.isInternalSessionPrompt(text)) {
-        continue;
-      }
-
-      events.push({
-        type:
-          role === "assistant" ? "assistant" : role === "user" ? "user" : role,
-        timestamp:
-          typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
-        content: text,
-        raw: parsed as object,
-      });
     }
 
     const total = events.length;

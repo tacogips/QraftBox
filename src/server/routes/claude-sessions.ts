@@ -33,6 +33,7 @@ import {
 } from "../claude/session-purpose.js";
 import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 import type { ModelConfigStore } from "../model-config/store.js";
+import type { AISessionInfo } from "../../types/ai.js";
 
 /**
  * Error response format
@@ -225,6 +226,101 @@ export function createClaudeSessionsRoutes(
       })[0];
 
     return bestMatch?.claudeSessionId;
+  }
+
+  function resolveBestQraftSessionInfo(
+    qraftAiSessionId: string,
+  ): AISessionInfo | undefined {
+    if (sessionManager === undefined) {
+      return undefined;
+    }
+
+    const direct = sessionManager.getSession(qraftAiSessionId as QraftAiSessionId);
+    if (direct !== null) {
+      return direct;
+    }
+
+    return sessionManager
+      .listSessions()
+      .filter(
+        (session) =>
+          session.clientSessionId === qraftAiSessionId ||
+          session.id === qraftAiSessionId,
+      )
+      .sort((a, b) => {
+        const aTime = Date.parse(a.completedAt ?? a.startedAt ?? a.createdAt);
+        const bTime = Date.parse(b.completedAt ?? b.startedAt ?? b.createdAt);
+        return bTime - aTime;
+      })[0];
+  }
+
+  function buildFallbackTranscriptPayload(
+    qraftAiSessionId: string,
+  ):
+    | {
+        events: readonly {
+          type: "user" | "assistant";
+          timestamp: string;
+          content: string;
+          raw: Record<string, unknown>;
+        }[];
+        qraftAiSessionId: string;
+        offset: number;
+        limit: number;
+        total: number;
+      }
+    | undefined {
+    const session = resolveBestQraftSessionInfo(qraftAiSessionId);
+    if (session === undefined) {
+      return undefined;
+    }
+
+    const events: {
+      type: "user" | "assistant";
+      timestamp: string;
+      content: string;
+      raw: Record<string, unknown>;
+    }[] = [];
+
+    const userContent = stripSystemTags(session.prompt).trim();
+    if (userContent.length > 0) {
+      events.push({
+        type: "user",
+        timestamp: session.createdAt,
+        content: userContent,
+        raw: {
+          type: "user",
+          message: { role: "user", content: userContent },
+          source: "qraftbox-fallback",
+        },
+      });
+    }
+
+    const assistantContent = stripSystemTags(session.lastAssistantMessage ?? "").trim();
+    if (assistantContent.length > 0) {
+      events.push({
+        type: "assistant",
+        timestamp: session.completedAt ?? session.startedAt ?? session.createdAt,
+        content: assistantContent,
+        raw: {
+          type: "assistant",
+          message: { role: "assistant", content: assistantContent },
+          source: "qraftbox-fallback",
+        },
+      });
+    }
+
+    if (events.length === 0) {
+      return undefined;
+    }
+
+    return {
+      events,
+      qraftAiSessionId,
+      offset: 0,
+      limit: 200,
+      total: events.length,
+    };
   }
 
   /**
@@ -618,6 +714,10 @@ export function createClaudeSessionsRoutes(
     // Resolve qraftAiSessionId to Claude UUID
     const claudeSessionId = resolveClaudeSessionId(qraftId);
     if (claudeSessionId === undefined) {
+      const fallback = buildFallbackTranscriptPayload(qraftId);
+      if (fallback !== undefined) {
+        return c.json(fallback);
+      }
       const errorResponse: ErrorResponse = {
         error: `Session not found: ${qraftId}`,
         code: 404,
@@ -670,6 +770,10 @@ export function createClaudeSessionsRoutes(
       );
 
       if (result === null) {
+        const fallback = buildFallbackTranscriptPayload(qraftId);
+        if (fallback !== undefined) {
+          return c.json(fallback);
+        }
         const errorResponse: ErrorResponse = {
           error: `Session not found: ${qraftId}`,
           code: 404,
