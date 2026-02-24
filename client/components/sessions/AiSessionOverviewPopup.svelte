@@ -11,6 +11,8 @@
     open: boolean;
     contextId: string | null;
     sessionId: string | null;
+    qraftSessionId: string | null;
+    cliSessionId: string | null;
     title: string;
     status: SessionStatus;
     purpose: string;
@@ -43,6 +45,8 @@
     open,
     contextId,
     sessionId,
+    qraftSessionId,
+    cliSessionId,
     title,
     status,
     purpose,
@@ -78,6 +82,75 @@
     }
     return trimmed;
   });
+
+  const normalizedQraftSessionId = $derived.by(() => {
+    if (typeof qraftSessionId !== "string") {
+      return null;
+    }
+    const trimmed = qraftSessionId.trim();
+    if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  });
+
+  const normalizedCliSessionId = $derived.by(() => {
+    if (typeof cliSessionId !== "string") {
+      return null;
+    }
+    const trimmed = cliSessionId.trim();
+    if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  });
+
+  const cliSessionLabel = $derived.by(() =>
+    aiAgent === "codex" || source === "codex-cli"
+      ? "Codex Session ID"
+      : "Claude Session ID",
+  );
+
+  let copiedIdType = $state<"qraft" | "cli" | null>(null);
+  let copiedFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function resetCopyFeedbackTimer(): void {
+    if (copiedFeedbackTimer !== null) {
+      clearTimeout(copiedFeedbackTimer);
+      copiedFeedbackTimer = null;
+    }
+  }
+
+  function markIdCopied(idType: "qraft" | "cli"): void {
+    copiedIdType = idType;
+    resetCopyFeedbackTimer();
+    copiedFeedbackTimer = setTimeout(() => {
+      copiedIdType = null;
+      copiedFeedbackTimer = null;
+    }, 1200);
+  }
+
+  async function copySessionId(
+    idType: "qraft" | "cli",
+    value: string | null,
+    inputId: string,
+  ): Promise<void> {
+    if (value === null || value.length === 0) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      markIdCopied(idType);
+      return;
+    } catch {
+      const input = document.getElementById(inputId) as HTMLInputElement | null;
+      if (input !== null) {
+        input.focus();
+        input.select();
+      }
+      markIdCopied(idType);
+    }
+  }
 
   let promptText = $state("");
   let submitting = $state(false);
@@ -223,6 +296,12 @@
       window.removeEventListener("keydown", onKeydown);
     };
   });
+
+  $effect(() => {
+    return () => {
+      resetCopyFeedbackTimer();
+    };
+  });
 </script>
 
 {#if open}
@@ -287,6 +366,66 @@
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
             Latest activity: {latestResponse}
           </p>
+          <div class="mt-2 space-y-1.5">
+            <div class="flex items-center gap-2">
+              <label
+                class="w-[104px] shrink-0 text-[11px] uppercase tracking-wide text-text-tertiary"
+                for="session-qraft-id"
+              >
+                Qraft ID
+              </label>
+              <input
+                id="session-qraft-id"
+                type="text"
+                class="min-w-0 flex-1 rounded border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary font-mono"
+                readonly
+                value={normalizedQraftSessionId ?? ""}
+                placeholder="Not available yet"
+                aria-label="Qraft session ID"
+              />
+              <button
+                type="button"
+                class="shrink-0 px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() =>
+                  copySessionId(
+                    "qraft",
+                    normalizedQraftSessionId,
+                    "session-qraft-id",
+                  )}
+                disabled={normalizedQraftSessionId === null}
+                aria-label="Copy Qraft session ID"
+              >
+                {copiedIdType === "qraft" ? "Copied" : "Copy"}
+              </button>
+            </div>
+            <div class="flex items-center gap-2">
+              <label
+                class="w-[104px] shrink-0 text-[11px] uppercase tracking-wide text-text-tertiary"
+                for="session-cli-id"
+              >
+                {cliSessionLabel}
+              </label>
+              <input
+                id="session-cli-id"
+                type="text"
+                class="min-w-0 flex-1 rounded border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary font-mono"
+                readonly
+                value={normalizedCliSessionId ?? ""}
+                placeholder="Not detected yet"
+                aria-label={cliSessionLabel}
+              />
+              <button
+                type="button"
+                class="shrink-0 px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() =>
+                  copySessionId("cli", normalizedCliSessionId, "session-cli-id")}
+                disabled={normalizedCliSessionId === null}
+                aria-label={`Copy ${cliSessionLabel}`}
+              >
+                {copiedIdType === "cli" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="shrink-0 flex items-center gap-2">
@@ -297,7 +436,9 @@
               onclick={() => {
                 void runDefaultPrompt("refresh-purpose");
               }}
-              disabled={submitting || runningRefreshPurpose || runningResumeSession}
+              disabled={submitting ||
+                runningRefreshPurpose ||
+                runningResumeSession}
               aria-label="Refresh purpose"
               title="Run default refresh-purpose prompt"
             >
@@ -309,7 +450,9 @@
               onclick={() => {
                 void runDefaultPrompt("resume-session");
               }}
-              disabled={submitting || runningResumeSession || runningRefreshPurpose}
+              disabled={submitting ||
+                runningResumeSession ||
+                runningRefreshPurpose}
               aria-label="Resume session"
               title="Run default resume-session prompt"
             >

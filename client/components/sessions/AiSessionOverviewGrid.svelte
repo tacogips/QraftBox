@@ -21,24 +21,27 @@
   } from "../../src/lib/app-api";
   import AiSessionOverviewPopup from "./AiSessionOverviewPopup.svelte";
 
-  interface OverviewSessionCard {
-    readonly qraftAiSessionId: string;
-    readonly purpose: string;
-    readonly latestResponse: string;
-    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
-    readonly aiAgent: AIAgent;
-    readonly status: SessionStatus;
+interface OverviewSessionCard {
+  readonly qraftAiSessionId: string;
+  readonly cliSessionId: string | null;
+  readonly purpose: string;
+  readonly latestResponse: string;
+  readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
+  readonly aiAgent: AIAgent;
+  readonly status: SessionStatus;
     readonly queuedPromptCount: number;
     readonly updatedAt: string;
   }
 
-  interface SelectedSessionMeta {
-    readonly title: string;
-    readonly purpose: string;
-    readonly latestResponse: string;
-    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
-    readonly aiAgent: AIAgent;
-    readonly status: SessionStatus;
+interface SelectedSessionMeta {
+  readonly title: string;
+  readonly qraftAiSessionId: string | null;
+  readonly cliSessionId: string | null;
+  readonly purpose: string;
+  readonly latestResponse: string;
+  readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
+  readonly aiAgent: AIAgent;
+  readonly status: SessionStatus;
     readonly queuedPromptCount: number;
   }
 
@@ -106,12 +109,15 @@
   let sessionsError = $state<string | null>(null);
   let selectedSessionId = $state<string | null>(null);
   let creatingNewSession = $state(false);
+  let hasHydratedSessionSelection = $state(false);
   let fallbackPendingPromptBySessionId = $state<
     ReadonlyMap<string, FallbackPendingPromptMessage>
   >(new Map());
   const FALLBACK_PENDING_PROMPT_TTL_MS = 20_000;
   let selectedSessionMeta = $state<SelectedSessionMeta>({
     title: "Session",
+    qraftAiSessionId: null,
+    cliSessionId: null,
     purpose: "No purpose available",
     latestResponse: "Waiting for next user input",
     source: "unknown",
@@ -146,6 +152,15 @@
       ...selectedSessionMeta,
       ...fallbackMeta,
     };
+  }
+
+  function applySessionSelectionFromUrl(sessionId: string | null): void {
+    selectedSessionId = sessionId;
+    // URL-selected sessions must always be treated as existing sessions.
+    if (sessionId !== null) {
+      creatingNewSession = false;
+    }
+    hasHydratedSessionSelection = true;
   }
 
   function setFallbackPendingPrompt(
@@ -327,6 +342,7 @@
 
     return {
       qraftAiSessionId: entry.qraftAiSessionId,
+      cliSessionId: entry.sessionId,
       purpose: truncate(purposeCandidate || "No purpose available", 90),
       latestResponse: truncate(latestResponseCandidate, 160),
       source: entry.source,
@@ -361,6 +377,7 @@
 
       fallbackCards.push({
         qraftAiSessionId: groupId,
+        cliSessionId: sessionEntry.claudeSessionId ?? null,
         purpose: truncate(
           normalizeText(sessionEntry.prompt) || "No purpose available",
           90,
@@ -773,10 +790,10 @@
 
   $effect(() => {
     const onPopState = (): void => {
-      selectedSessionId = readSelectedSessionIdFromUrl();
+      applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     };
 
-    selectedSessionId = readSelectedSessionIdFromUrl();
+    applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("popstate", onPopState);
@@ -836,6 +853,8 @@
     }
     selectedSessionMeta = {
       title: selectedCard.purpose,
+      qraftAiSessionId: selectedCard.qraftAiSessionId,
+      cliSessionId: selectedCard.cliSessionId,
       purpose: selectedCard.purpose,
       latestResponse: selectedCard.latestResponse,
       source: selectedCard.source,
@@ -860,6 +879,9 @@
   });
 
   $effect(() => {
+    if (!hasHydratedSessionSelection) {
+      return;
+    }
     writeSelectedSessionIdToUrl(selectedSessionId);
   });
 
@@ -884,6 +906,8 @@
       );
       openSessionById(stableSessionId, {
         title: "New Session",
+        qraftAiSessionId: stableSessionId,
+        cliSessionId: result.claudeSessionId ?? null,
         purpose: "New session",
         latestResponse: message,
         source: "qraftbox",
@@ -1026,6 +1050,8 @@
               creatingNewSession = true;
               selectedSessionMeta = {
                 title: "New Session",
+                qraftAiSessionId: null,
+                cliSessionId: null,
                 purpose: "New session",
                 latestResponse: "Submit the first prompt to start this session",
                 source: "qraftbox",
@@ -1053,6 +1079,8 @@
               onclick={() => {
                 openSessionById(card.qraftAiSessionId, {
                   title: card.purpose,
+                  qraftAiSessionId: card.qraftAiSessionId,
+                  cliSessionId: card.cliSessionId,
                   purpose: card.purpose,
                   latestResponse: card.latestResponse,
                   source: card.source,
@@ -1066,6 +1094,8 @@
                   event.preventDefault();
                   openSessionById(card.qraftAiSessionId, {
                     title: card.purpose,
+                    qraftAiSessionId: card.qraftAiSessionId,
+                    cliSessionId: card.cliSessionId,
                     purpose: card.purpose,
                     latestResponse: card.latestResponse,
                     source: card.source,
@@ -1183,6 +1213,10 @@
     open={true}
     {contextId}
     sessionId={selectedSessionId ?? null}
+    qraftSessionId={selectedCard?.qraftAiSessionId ??
+      selectedSessionMeta.qraftAiSessionId ??
+      selectedSessionId}
+    cliSessionId={selectedCard?.cliSessionId ?? selectedSessionMeta.cliSessionId}
     title={selectedCard?.purpose ?? selectedSessionMeta.title}
     status={selectedCard?.status ?? selectedSessionMeta.status}
     purpose={selectedCard?.purpose ?? selectedSessionMeta.purpose}
