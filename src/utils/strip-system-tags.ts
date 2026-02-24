@@ -57,6 +57,7 @@ ${normalizedContent}
 export function isInjectedSessionSystemPrompt(text: string): boolean {
   const normalized = text.trim();
   return (
+    normalized.includes("<qraftbox-system-prompt") ||
     normalized.startsWith("# AGENTS.md instructions") ||
     normalized.startsWith("<environment_context>") ||
     normalized.startsWith("<turn_aborted>") ||

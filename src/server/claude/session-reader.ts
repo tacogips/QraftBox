@@ -382,7 +382,10 @@ export class ClaudeSessionReader {
       const normalizedSessionId = session.sessionId.startsWith("codex-session-")
         ? session.sessionId.slice("codex-session-".length)
         : session.sessionId;
-      if (session.sessionId === sessionId || normalizedSessionId === normalizedTarget) {
+      if (
+        session.sessionId === sessionId ||
+        normalizedSessionId === normalizedTarget
+      ) {
         return session;
       }
     }
@@ -508,6 +511,12 @@ export class ClaudeSessionReader {
     );
   }
 
+  private shouldHideCodexTranscriptUserPrompt(text: string): boolean {
+    // Internal QraftBox prompts are never user-visible in transcript views.
+    // Codex/bootstrap prompts are returned so UI can toggle them.
+    return this.isInternalSessionPrompt(text);
+  }
+
   private async readCodexSessionEntry(
     jsonlPath: string,
   ): Promise<ExtendedSessionEntry | null> {
@@ -578,14 +587,19 @@ export class ClaudeSessionReader {
         }
 
         if (raw["type"] === "thread.started") {
-          if (typeof raw["thread_id"] === "string" && raw["thread_id"].length > 0) {
+          if (
+            typeof raw["thread_id"] === "string" &&
+            raw["thread_id"].length > 0
+          ) {
             codexId = raw["thread_id"];
           } else if (
             typeof raw["thread"] === "object" &&
             raw["thread"] !== null &&
             typeof (raw["thread"] as Record<string, unknown>)["id"] === "string"
           ) {
-            codexId = (raw["thread"] as Record<string, unknown>)["id"] as string;
+            codexId = (raw["thread"] as Record<string, unknown>)[
+              "id"
+            ] as string;
           }
         }
 
@@ -1371,13 +1385,17 @@ export class ClaudeSessionReader {
         if (text.length === 0) {
           continue;
         }
-        if (role === "user" && this.shouldSkipCodexUserPrompt(raw, text)) {
+        if (role === "user" && this.shouldHideCodexTranscriptUserPrompt(text)) {
           continue;
         }
 
         events.push({
           type:
-            role === "assistant" ? "assistant" : role === "user" ? "user" : role,
+            role === "assistant"
+              ? "assistant"
+              : role === "user"
+                ? "user"
+                : role,
           timestamp:
             typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
           content: text,
@@ -1425,9 +1443,7 @@ export class ClaudeSessionReader {
     };
   }
 
-  private extractClaudeUserMessageText(
-    event: Record<string, unknown>,
-  ): string {
+  private extractClaudeUserMessageText(event: Record<string, unknown>): string {
     const message =
       typeof event["message"] === "object" && event["message"] !== null
         ? (event["message"] as Record<string, unknown>)
@@ -1445,8 +1461,7 @@ export class ClaudeSessionReader {
         }
         const blockObj = block as Record<string, unknown>;
         if (
-          (blockObj["type"] === "text" ||
-            blockObj["type"] === "input_text") &&
+          (blockObj["type"] === "text" || blockObj["type"] === "input_text") &&
           typeof blockObj["text"] === "string"
         ) {
           textParts.push(blockObj["text"]);

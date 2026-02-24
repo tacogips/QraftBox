@@ -58,7 +58,9 @@ describe("stripSystemTags", () => {
       "session-action-v1",
     );
 
-    expect(wrapped).toContain('<qraftbox-internal-prompt label="ai-session-refresh-purpose"');
+    expect(wrapped).toContain(
+      '<qraftbox-internal-prompt label="ai-session-refresh-purpose"',
+    );
     expect(wrapped).toContain('anchor="session-action-v1"');
     expect(wrapped).toContain("Refresh this session purpose now");
     expect(hasQraftboxInternalPrompt(wrapped)).toBe(true);
@@ -86,6 +88,14 @@ describe("isInjectedSessionSystemPrompt", () => {
     expect(
       isInjectedSessionSystemPrompt(
         "<turn_aborted>\nThe user interrupted the previous turn.\n</turn_aborted>",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects qraftbox system prompt wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "<qraftbox-system-prompt>Refresh session purpose</qraftbox-system-prompt>",
       ),
     ).toBe(true);
   });

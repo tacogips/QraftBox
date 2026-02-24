@@ -1212,7 +1212,7 @@ describe("ClaudeSessionReader", () => {
       expect(session?.firstPrompt).toBe("Real user request");
     });
 
-    it("hides codex transcript events when provenance marks display_default=false", async () => {
+    it("keeps codex injected transcript events for UI-level toggling", async () => {
       const dayDir = join(codexSessionsDir, "2026", "02", "26");
       await mkdir(dayDir, { recursive: true });
 
@@ -1266,8 +1266,11 @@ describe("ClaudeSessionReader", () => {
         100,
       );
       expect(transcript).not.toBeNull();
-      expect(transcript?.events).toHaveLength(1);
-      expect(transcript?.events[0]?.content).toBe("Visible user input");
+      expect(transcript?.events).toHaveLength(2);
+      expect(transcript?.events[0]?.content).toBe(
+        "<environment_context><cwd>/g/gits/tacogips/QraftBox</cwd></environment_context>",
+      );
+      expect(transcript?.events[1]?.content).toBe("Visible user input");
     });
 
     it("filters codex sessions by workingDirectoryPrefix", async () => {

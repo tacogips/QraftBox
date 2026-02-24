@@ -1,5 +1,8 @@
 import type { TranscriptEvent } from "./session-reader.js";
-import { stripSystemTags } from "../../utils/strip-system-tags";
+import {
+  isInjectedSessionSystemPrompt,
+  stripSystemTags,
+} from "../../utils/strip-system-tags";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -57,7 +60,9 @@ export function getAISessionPromptPath(name: AISessionPromptName): string {
   return join(getPurposePromptDir(), SESSION_PROMPT_FILES[name]);
 }
 
-export async function loadAISessionPromptTemplate(name: AISessionPromptName): Promise<{
+export async function loadAISessionPromptTemplate(
+  name: AISessionPromptName,
+): Promise<{
   readonly template: string;
   readonly source: PurposePromptSource;
 }> {
@@ -219,6 +224,9 @@ export function extractUserIntents(
 
   for (const event of events) {
     const rawText = extractUserMessageText(event);
+    if (isInjectedSessionSystemPrompt(rawText)) {
+      continue;
+    }
     const normalized = normalizeWhitespace(stripSystemTags(rawText));
     if (normalized.length < 3) {
       continue;
