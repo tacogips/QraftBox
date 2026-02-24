@@ -133,7 +133,6 @@
   async function copySessionId(
     idType: "qraft" | "cli",
     value: string | null,
-    inputId: string,
   ): Promise<void> {
     if (value === null || value.length === 0) {
       return;
@@ -143,11 +142,15 @@
       markIdCopied(idType);
       return;
     } catch {
-      const input = document.getElementById(inputId) as HTMLInputElement | null;
-      if (input !== null) {
-        input.focus();
-        input.select();
-      }
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
       markIdCopied(idType);
     }
   }
@@ -366,63 +369,117 @@
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
             Latest activity: {latestResponse}
           </p>
-          <div class="mt-2 space-y-1.5">
-            <div class="flex items-center gap-2">
-              <label
-                class="w-[104px] shrink-0 text-[11px] uppercase tracking-wide text-text-tertiary"
-                for="session-qraft-id"
+          <div class="mt-1 space-y-0.5">
+            <div class="flex items-center gap-1.5">
+              <span
+                class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
               >
-                Qraft ID
-              </label>
-              <input
-                id="session-qraft-id"
-                type="text"
-                class="min-w-0 flex-1 rounded border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary font-mono"
-                readonly
-                value={normalizedQraftSessionId ?? ""}
-                placeholder="Not available yet"
-                aria-label="Qraft session ID"
-              />
+                Qraft Session ID
+              </span>
+              <span class="min-w-0 truncate text-[11px] text-text-secondary font-mono">
+                {normalizedQraftSessionId ?? "-"}
+              </span>
               <button
                 type="button"
-                class="shrink-0 px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                onclick={() =>
-                  copySessionId(
-                    "qraft",
-                    normalizedQraftSessionId,
-                    "session-qraft-id",
-                  )}
+                class="shrink-0 p-0.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover
+                       focus:outline-none focus:ring-1 focus:ring-accent-emphasis
+                       disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() => copySessionId("qraft", normalizedQraftSessionId)}
                 disabled={normalizedQraftSessionId === null}
                 aria-label="Copy Qraft session ID"
+                title="Copy Qraft session ID"
               >
-                {copiedIdType === "qraft" ? "Copied" : "Copy"}
+                {#if copiedIdType === "qraft"}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-success-fg"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                {:else}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path
+                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    />
+                  </svg>
+                {/if}
               </button>
             </div>
-            <div class="flex items-center gap-2">
-              <label
-                class="w-[104px] shrink-0 text-[11px] uppercase tracking-wide text-text-tertiary"
-                for="session-cli-id"
+            <div class="flex items-center gap-1.5">
+              <span
+                class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
               >
                 {cliSessionLabel}
-              </label>
-              <input
-                id="session-cli-id"
-                type="text"
-                class="min-w-0 flex-1 rounded border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary font-mono"
-                readonly
-                value={normalizedCliSessionId ?? ""}
-                placeholder="Not detected yet"
-                aria-label={cliSessionLabel}
-              />
+              </span>
+              <span class="min-w-0 truncate text-[11px] text-text-secondary font-mono">
+                {normalizedCliSessionId ?? "-"}
+              </span>
               <button
                 type="button"
-                class="shrink-0 px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
-                onclick={() =>
-                  copySessionId("cli", normalizedCliSessionId, "session-cli-id")}
+                class="shrink-0 p-0.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover
+                       focus:outline-none focus:ring-1 focus:ring-accent-emphasis
+                       disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() => copySessionId("cli", normalizedCliSessionId)}
                 disabled={normalizedCliSessionId === null}
                 aria-label={`Copy ${cliSessionLabel}`}
+                title={`Copy ${cliSessionLabel}`}
               >
-                {copiedIdType === "cli" ? "Copied" : "Copy"}
+                {#if copiedIdType === "cli"}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-success-fg"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                {:else}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path
+                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    />
+                  </svg>
+                {/if}
               </button>
             </div>
           </div>
