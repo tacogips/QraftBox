@@ -1068,21 +1068,6 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0 bg-bg-primary">
-  <div
-    class="px-4 py-2 border-b border-border-default bg-bg-secondary
-           flex items-center justify-between gap-4"
-  >
-    <div class="min-w-0">
-      <h2 class="text-sm font-semibold text-text-primary">Session Overview</h2>
-      <p class="text-xs text-text-tertiary truncate">
-        Monitor and search sessions across parallel terminals
-      </p>
-    </div>
-    <div class="text-xs text-text-secondary shrink-0">
-      {filteredCards.length} sessions
-    </div>
-  </div>
-
   <div class="px-4 py-2 border-b border-border-default bg-bg-primary">
     <div class="flex flex-col md:flex-row gap-2 md:items-center">
       <input

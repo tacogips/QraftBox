@@ -8,7 +8,7 @@ import {
   createInMemorySessionMappingStore,
   type SessionMappingStore,
 } from "../ai/session-mapping-store";
-import { mkdir, writeFile, rm } from "fs/promises";
+import { mkdir, writeFile, rm, utimes } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import type {
@@ -636,6 +636,206 @@ describe("ClaudeSessionReader", () => {
       expect(result.sessions).toHaveLength(0);
       expect(result.total).toBe(3);
       expect(result.offset).toBe(10);
+    });
+
+    it("should skip JSONL firstPrompt recovery when explicitly disabled", async () => {
+      const projectDir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      await mkdir(projectDir, { recursive: true });
+
+      const jsonlPath = join(projectDir, "session-only-tags.jsonl");
+      const jsonlContent = [
+        JSON.stringify({
+          type: "user",
+          message: {
+            content:
+              "<local-command-caveat>System command</local-command-caveat>",
+          },
+          timestamp: "2026-02-05T10:00:00Z",
+        }),
+        JSON.stringify({
+          type: "user",
+          message: {
+            content: "Recovered prompt should only appear in full recovery mode",
+          },
+          timestamp: "2026-02-05T10:01:00Z",
+        }),
+      ].join("\n");
+      await writeFile(jsonlPath, jsonlContent);
+
+      const entryWithSystemOnlyPrompt = createMockSessionEntry(
+        "session-only-tags",
+        "2026-02-05T10:00:00Z",
+        "2026-02-05T11:00:00Z",
+        "fast-path-test-branch",
+        "<local-command-caveat>System-only index prompt</local-command-caveat>",
+      );
+      entryWithSystemOnlyPrompt.fullPath = jsonlPath;
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [entryWithSystemOnlyPrompt],
+      };
+      await writeFile(
+        join(projectDir, "sessions-index.json"),
+        JSON.stringify(index, null, 2),
+      );
+
+      const listFastPath = await reader.listSessions({
+        branch: "fast-path-test-branch",
+        recoverFirstPromptFromJsonl: false,
+      });
+      expect(listFastPath.sessions).toHaveLength(1);
+      expect(listFastPath.sessions[0]?.firstPrompt).toBe("");
+
+      const listWithRecovery = await reader.listSessions({
+        branch: "fast-path-test-branch",
+      });
+      expect(listWithRecovery.sessions).toHaveLength(1);
+      expect(listWithRecovery.sessions[0]?.firstPrompt).toBe(
+        "Recovered prompt should only appear in full recovery mode",
+      );
+    });
+
+    it("should use fast JSONL fallback candidate window in default list mode", async () => {
+      const isolatedProjectsDir = join(tempDir, "isolated-projects-fast");
+      await mkdir(isolatedProjectsDir, { recursive: true });
+      const isolatedReader = new ClaudeSessionReader(
+        isolatedProjectsDir,
+        mappingStore,
+        codexSessionsDir,
+      );
+      const projectDir = join(isolatedProjectsDir, "-perf-no-index");
+      await mkdir(projectDir, { recursive: true });
+
+      const oldestPath = join(projectDir, "session-oldest.jsonl");
+      const newerPath = join(projectDir, "session-newer.jsonl");
+      const newestPath = join(projectDir, "session-newest.jsonl");
+
+      const makeJsonlContent = (firstPrompt: string, timestamp: string) =>
+        [
+          JSON.stringify({
+            type: "user",
+            message: { content: firstPrompt },
+            timestamp,
+            gitBranch: "main",
+            isSidechain: false,
+          }),
+          JSON.stringify({
+            type: "summary",
+            summary: `${firstPrompt} summary`,
+            timestamp,
+          }),
+        ].join("\n");
+
+      await writeFile(
+        oldestPath,
+        makeJsonlContent("oldest prompt", "2026-02-01T10:00:00Z"),
+      );
+      await writeFile(
+        newerPath,
+        makeJsonlContent("newer prompt", "2026-02-02T10:00:00Z"),
+      );
+      await writeFile(
+        newestPath,
+        makeJsonlContent("newest prompt", "2026-02-03T10:00:00Z"),
+      );
+
+      await utimes(
+        oldestPath,
+        new Date("2026-02-01T10:00:00Z"),
+        new Date("2026-02-01T10:00:00Z"),
+      );
+      await utimes(
+        newerPath,
+        new Date("2026-02-02T10:00:00Z"),
+        new Date("2026-02-02T10:00:00Z"),
+      );
+      await utimes(
+        newestPath,
+        new Date("2026-02-03T10:00:00Z"),
+        new Date("2026-02-03T10:00:00Z"),
+      );
+
+      const result = await isolatedReader.listSessions({ offset: 0, limit: 1 });
+
+      // Fast fallback candidate count = (offset + limit) * 2 = 2,
+      // so only the two newest files are scanned for default list mode.
+      expect(result.total).toBe(2);
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.sessionId).toBe("session-newest");
+    });
+
+    it("should use full JSONL fallback when search filter is provided", async () => {
+      const isolatedProjectsDir = join(tempDir, "isolated-projects-search");
+      await mkdir(isolatedProjectsDir, { recursive: true });
+      const isolatedReader = new ClaudeSessionReader(
+        isolatedProjectsDir,
+        mappingStore,
+        codexSessionsDir,
+      );
+      const projectDir = join(isolatedProjectsDir, "-perf-no-index-search");
+      await mkdir(projectDir, { recursive: true });
+
+      const oldestPath = join(projectDir, "session-oldest-search.jsonl");
+      const newerPath = join(projectDir, "session-newer-search.jsonl");
+      const newestPath = join(projectDir, "session-newest-search.jsonl");
+
+      const makeJsonlContent = (firstPrompt: string, timestamp: string) =>
+        [
+          JSON.stringify({
+            type: "user",
+            message: { content: firstPrompt },
+            timestamp,
+            gitBranch: "main",
+            isSidechain: false,
+          }),
+          JSON.stringify({
+            type: "summary",
+            summary: `${firstPrompt} summary`,
+            timestamp,
+          }),
+        ].join("\n");
+
+      await writeFile(
+        oldestPath,
+        makeJsonlContent("special old prompt", "2026-02-01T10:00:00Z"),
+      );
+      await writeFile(
+        newerPath,
+        makeJsonlContent("generic newer prompt", "2026-02-02T10:00:00Z"),
+      );
+      await writeFile(
+        newestPath,
+        makeJsonlContent("generic newest prompt", "2026-02-03T10:00:00Z"),
+      );
+
+      await utimes(
+        oldestPath,
+        new Date("2026-02-01T10:00:00Z"),
+        new Date("2026-02-01T10:00:00Z"),
+      );
+      await utimes(
+        newerPath,
+        new Date("2026-02-02T10:00:00Z"),
+        new Date("2026-02-02T10:00:00Z"),
+      );
+      await utimes(
+        newestPath,
+        new Date("2026-02-03T10:00:00Z"),
+        new Date("2026-02-03T10:00:00Z"),
+      );
+
+      const result = await isolatedReader.listSessions({
+        search: "special old prompt",
+        offset: 0,
+        limit: 1,
+      });
+
+      // Search disables fast fallback; full scan should still find oldest file.
+      expect(result.total).toBe(1);
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.sessionId).toBe("session-oldest-search");
     });
   });
 

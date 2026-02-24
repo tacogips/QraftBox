@@ -41,6 +41,7 @@ const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
 const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
 const LEGACY_INTERNAL_PURPOSE_PREFIX =
   "You summarize a coding session's current objective.";
+const FAST_JSONL_FALLBACK_MULTIPLIER = 2;
 
 /**
  * Options for listing sessions
@@ -67,6 +68,11 @@ export interface ListSessionsOptions {
   sortBy?: "modified" | "created";
   /** Sort order */
   sortOrder?: "asc" | "desc";
+  /**
+   * Whether to recover firstPrompt by scanning JSONL when index prompt is empty/system-only.
+   * Enabled by default for compatibility, but can be disabled for faster list rendering.
+   */
+  recoverFirstPromptFromJsonl?: boolean;
 }
 
 /**
@@ -194,6 +200,18 @@ export class ClaudeSessionReader {
     // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
     const projects = await this.listProjects(options.workingDirectoryPrefix);
 
+    const effectiveOffset = options.offset ?? 0;
+    const effectiveLimit = options.limit ?? 50;
+    const fastJsonlFallbackCandidateCount =
+      (effectiveOffset + effectiveLimit) * FAST_JSONL_FALLBACK_MULTIPLIER;
+    const canUseFastJsonlFallback =
+      options.search === undefined &&
+      options.branch === undefined &&
+      options.dateRange === undefined &&
+      options.source === undefined &&
+      (options.sortBy === undefined || options.sortBy === "modified") &&
+      (options.sortOrder === undefined || options.sortOrder === "desc");
+
     // Read sessions from projects (filtering already done in listProjects)
     for (const project of projects) {
       const projectDir = join(this.projectsDir, project.encoded);
@@ -227,10 +245,16 @@ export class ClaudeSessionReader {
       } catch (error: unknown) {
         // If index doesn't exist, build entries from JSONL files
         try {
-          const entries = await this.buildEntriesFromJsonlFiles(
-            projectDir,
-            project.encoded,
-          );
+          const entries = canUseFastJsonlFallback
+            ? await this.buildEntriesFromJsonlFilesFast(
+                projectDir,
+                project.encoded,
+                fastJsonlFallbackCandidateCount,
+              )
+            : await this.buildEntriesFromJsonlFiles(
+                projectDir,
+                project.encoded,
+              );
 
           for (const entry of entries) {
             const normalizedEntry = this.normalizeSessionEntryForList(entry);
@@ -273,11 +297,15 @@ export class ClaudeSessionReader {
     });
 
     // Paginate
-    const offset = options.offset ?? 0;
-    const limit = options.limit ?? 50;
+    const offset = effectiveOffset;
+    const limit = effectiveLimit;
     const paginated = allSessions.slice(offset, offset + limit);
-    for (const session of paginated) {
-      await this.fixSystemTagFirstPrompt(session);
+    const shouldRecoverFirstPromptFromJsonl =
+      options.recoverFirstPromptFromJsonl ?? true;
+    if (shouldRecoverFirstPromptFromJsonl) {
+      for (const session of paginated) {
+        await this.fixSystemTagFirstPrompt(session);
+      }
     }
     if (!requiresSourceFiltering) {
       for (const session of paginated) {
@@ -1010,6 +1038,62 @@ export class ClaudeSessionReader {
     }
 
     return entries;
+  }
+
+  /**
+   * Fast fallback when sessions-index.json is missing.
+   * Reads only the newest JSONL candidates needed for the requested page.
+   */
+  private async buildEntriesFromJsonlFilesFast(
+    projectDir: string,
+    encodedName: string,
+    candidateCount: number,
+  ): Promise<ClaudeSessionEntry[]> {
+    const dirEntries = await readdir(projectDir, { withFileTypes: true });
+    const jsonlFiles = dirEntries.filter(
+      (e) => e.isFile() && e.name.endsWith(".jsonl"),
+    );
+    if (jsonlFiles.length === 0) {
+      return [];
+    }
+
+    const decodedPath = this.decodeProjectPath(encodedName);
+    const candidatesWithMtime = await Promise.all(
+      jsonlFiles.map(async (file) => {
+        const fullPath = join(projectDir, file.name);
+        const fileStat = await stat(fullPath);
+        return {
+          name: file.name,
+          fullPath,
+          mtimeMs: fileStat.mtimeMs,
+        };
+      }),
+    );
+
+    candidatesWithMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const selectedCandidates = candidatesWithMtime.slice(
+      0,
+      Math.max(1, candidateCount),
+    );
+
+    const parsedEntries = await Promise.all(
+      selectedCandidates.map(async (candidate) => {
+        const sessionId = candidate.name.replace(".jsonl", "");
+        try {
+          return await this.buildEntryFromJsonl(
+            candidate.fullPath,
+            sessionId,
+            decodedPath,
+          );
+        } catch {
+          return null;
+        }
+      }),
+    );
+
+    return parsedEntries.filter((entry): entry is ClaudeSessionEntry => {
+      return entry !== null;
+    });
   }
 
   /**

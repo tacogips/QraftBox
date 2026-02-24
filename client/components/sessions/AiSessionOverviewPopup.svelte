@@ -397,8 +397,8 @@
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
             Latest activity: {latestResponse}
           </p>
-          <div class="mt-1 space-y-0.5">
-            <div class="flex items-center gap-1.5">
+          <div class="mt-1 flex flex-wrap items-start gap-x-4 gap-y-1">
+            <div class="flex min-w-[320px] flex-1 items-center gap-1.5">
               <span
                 class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
               >
@@ -456,7 +456,7 @@
                 {/if}
               </button>
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex min-w-[320px] flex-1 items-center gap-1.5">
               <span
                 class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
               >

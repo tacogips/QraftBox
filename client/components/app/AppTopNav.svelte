@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ScreenType } from "../../src/lib/app-routing";
   import type { ServerTab, RecentProject } from "../../src/lib/app-api";
-  import GitPushButton from "../git-actions/GitPushButton.svelte";
   import HeaderStatusBadges from "../HeaderStatusBadges.svelte";
   import WorktreeButton from "../worktree/WorktreeButton.svelte";
 
@@ -11,7 +10,6 @@
     contextId,
     projectPath,
     activeTabIsGitRepo,
-    hasChanges,
     availableRecentProjects,
     newProjectPath,
     newProjectError,
@@ -34,7 +32,6 @@
     contextId: string | null;
     projectPath: string;
     activeTabIsGitRepo: boolean;
-    hasChanges: boolean;
     availableRecentProjects: RecentProject[];
     newProjectPath: string;
     newProjectError: string | null;
@@ -59,6 +56,8 @@
   let addProjectMenuOpen = $state(false);
   let projectPanelOpen = $state(false);
   let projectTreeExpanded = $state(true);
+  let initializingRepo = $state(false);
+  let initRepoError = $state<string | null>(null);
 
   const activeProjectTab = $derived(
     workspaceTabs.find((tab) => tab.id === contextId) ?? null,
@@ -72,85 +71,48 @@
     }
     return "..." + path.slice(-maxLength);
   }
+
+  async function handleInitRepositoryFromMenu(): Promise<void> {
+    if (contextId === null || activeTabIsGitRepo || initializingRepo) {
+      return;
+    }
+
+    initializingRepo = true;
+    initRepoError = null;
+    try {
+      const resp = await fetch("/api/git-actions/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+
+      if (!resp.ok) {
+        const errData = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          errData.error ?? `Git init failed with status ${resp.status}`,
+        );
+      }
+
+      await onPushSuccess("init");
+      headerMenuOpen = false;
+    } catch (e) {
+      initRepoError = e instanceof Error ? e.message : "Git init failed";
+    } finally {
+      initializingRepo = false;
+    }
+  }
 </script>
 
 <header
   class="h-12 border-b border-border-default flex items-center px-4 bg-bg-secondary gap-4"
 >
-  <h1 class="text-lg font-semibold">QraftBox</h1>
-  <div class="flex items-center min-w-0 flex-1 gap-2 overflow-hidden">
-    {#if contextId !== null}
-      <WorktreeButton
-        {contextId}
-        {projectPath}
-        {onWorktreeSwitch}
-        disabled={!activeTabIsGitRepo}
-      />
-    {/if}
-
-    {#if contextId !== null && activeTabIsGitRepo}
-      <HeaderStatusBadges {contextId} {projectPath} />
-      <span class="text-border-default mx-1 shrink-0">|</span>
-    {/if}
-
-    <nav class="flex items-center gap-0 h-full overflow-x-auto">
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'files'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("files")}
-      >
-        Files
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'ai-session'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("ai-session")}
-      >
-        AI Session
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'commits'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("commits")}
-      >
-        Commits
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'terminal'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("terminal")}
-      >
-        Terminal
-      </button>
-    </nav>
-  </div>
-
-  <div class="ml-auto flex items-center gap-2">
-    {#if contextId !== null}
-      <GitPushButton
-        {contextId}
-        {projectPath}
-        {hasChanges}
-        onSuccess={onPushSuccess}
-        isGitRepo={activeTabIsGitRepo}
-      />
-    {/if}
-
+  <div class="flex items-center gap-2 shrink-0">
+    <h1 class="text-lg font-semibold">QraftBox</h1>
     <button
       type="button"
-      class="h-9 max-w-[280px] px-3 rounded border border-border-default bg-bg-primary text-sm
+      class="h-9 max-w-[240px] px-3 rounded border border-border-default bg-bg-primary text-sm
              text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors
              flex items-center gap-2"
       onclick={() => {
@@ -180,6 +142,66 @@
       <span class="truncate">{activeProjectLabel}</span>
       <span class="text-xs text-text-tertiary">({workspaceTabs.length})</span>
     </button>
+  </div>
+  <div class="flex items-center min-w-0 flex-1 gap-2 overflow-hidden">
+    <nav class="flex items-center gap-0 h-full overflow-x-auto">
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'files'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("files")}
+      >
+        Files
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'ai-session'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("ai-session")}
+      >
+        Sessions
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'commits'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("commits")}
+      >
+        Commits
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'terminal'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("terminal")}
+      >
+        Terminal
+      </button>
+    </nav>
+  </div>
+
+  <div class="ml-auto flex items-center gap-2">
+    {#if contextId !== null}
+      <WorktreeButton
+        {contextId}
+        {projectPath}
+        {onWorktreeSwitch}
+        disabled={!activeTabIsGitRepo}
+      />
+    {/if}
+
+    {#if contextId !== null && activeTabIsGitRepo}
+      <HeaderStatusBadges {contextId} {projectPath} />
+      <span class="text-border-default mx-1 shrink-0">|</span>
+    {/if}
 
     <div class="relative">
       <button
@@ -257,6 +279,21 @@
           >
             Action Defaults
           </button>
+          {#if contextId !== null && !activeTabIsGitRepo}
+            <div class="border-t border-border-default my-1"></div>
+            <button
+              type="button"
+              class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary
+                     hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={() => void handleInitRepositoryFromMenu()}
+              disabled={initializingRepo}
+            >
+              {initializingRepo ? "Initializing Git Repository..." : "Initialize Git Repository"}
+            </button>
+            {#if initRepoError !== null}
+              <p class="px-4 py-2 text-xs text-danger-fg">{initRepoError}</p>
+            {/if}
+          {/if}
         </div>
       {/if}
     </div>
@@ -277,7 +314,7 @@
 
 {#if projectPanelOpen}
   <aside
-    class="fixed top-12 right-0 bottom-0 z-50 w-[22rem] max-w-[92vw] border-l border-border-default bg-bg-secondary shadow-xl flex flex-col"
+    class="fixed top-12 left-0 bottom-0 z-50 w-[22rem] max-w-[92vw] border-r border-border-default bg-bg-secondary shadow-xl flex flex-col"
   >
     <div
       class="h-10 px-3 border-b border-border-default flex items-center justify-between"

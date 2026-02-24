@@ -14,7 +14,9 @@ import type {
 import { isSessionSource } from "../../types/claude-session";
 import {
   ClaudeSessionReader,
+  type ListSessionsOptions,
   type SessionSummary,
+  type TranscriptEvent,
 } from "../claude/session-reader";
 import {
   stripSystemTags,
@@ -37,6 +39,22 @@ import {
 import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 import type { ModelConfigStore } from "../model-config/store.js";
 import type { AISessionInfo } from "../../types/ai.js";
+
+interface ClaudeSessionReaderLike {
+  listProjects(pathFilter?: string): Promise<ProjectInfo[]>;
+  listSessions(options?: ListSessionsOptions): Promise<SessionListResponse>;
+  getSession(sessionId: string): Promise<ExtendedSessionEntry | null>;
+  readTranscript(
+    sessionId: string,
+    offset?: number,
+    limit?: number,
+  ): Promise<{ events: TranscriptEvent[]; total: number } | null>;
+  getSessionSummary(sessionId: string): Promise<SessionSummary | null>;
+}
+
+interface ClaudeSessionsRouteDependencies {
+  readonly sessionReader?: ClaudeSessionReaderLike;
+}
 
 /**
  * Error response format
@@ -88,9 +106,12 @@ export function createClaudeSessionsRoutes(
   mappingStore?: SessionMappingStore | undefined,
   sessionManager?: SessionManager | undefined,
   modelConfigStore?: ModelConfigStore | undefined,
+  dependencies?: ClaudeSessionsRouteDependencies,
 ): Hono {
   const app = new Hono();
-  const sessionReader = new ClaudeSessionReader(undefined, mappingStore);
+  const sessionReader: ClaudeSessionReaderLike =
+    dependencies?.sessionReader ??
+    new ClaudeSessionReader(undefined, mappingStore);
   const enrichmentService =
     mappingStore !== undefined
       ? new SessionEnrichmentService(mappingStore)
@@ -457,17 +478,7 @@ export function createClaudeSessionsRoutes(
       }
 
       // Build options object with only defined values
-      const options: {
-        workingDirectoryPrefix?: string;
-        source?: SessionSource;
-        branch?: string;
-        search?: string;
-        dateRange?: { from?: string; to?: string };
-        offset?: number;
-        limit?: number;
-        sortBy?: "modified" | "created";
-        sortOrder?: "asc" | "desc";
-      } = {};
+      const options: ListSessionsOptions = {};
 
       if (workingDirectoryPrefix !== undefined) {
         options.workingDirectoryPrefix = workingDirectoryPrefix;
@@ -496,6 +507,9 @@ export function createClaudeSessionsRoutes(
       if (sortOrder !== undefined) {
         options.sortOrder = sortOrder;
       }
+      // Keep list endpoint responsive: avoid per-session JSONL scans when
+      // recovering firstPrompt from system-only index content.
+      options.recoverFirstPromptFromJsonl = false;
 
       // List sessions with filters
       const response: SessionListResponse =

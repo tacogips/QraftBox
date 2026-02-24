@@ -7,6 +7,7 @@
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
+  import GitPushButton from "../git-actions/GitPushButton.svelte";
 
   let mobileBottomDockRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockHeight = $state(0);
@@ -163,6 +164,7 @@
     selectedPath,
     diffFiles,
     contextId,
+    isGitRepo,
     selectedFile,
     effectiveViewMode,
     selectedHasDiff,
@@ -189,6 +191,7 @@
     onSetViewMode,
     onSubmitPrompt,
     onReloadFileTree,
+    onGitActionSuccess,
   }: {
     loading: boolean;
     error: string | null;
@@ -201,6 +204,7 @@
     selectedPath: string | null;
     diffFiles: DiffFile[];
     contextId: string | null;
+    isGitRepo: boolean;
     selectedFile: DiffFile | null;
     effectiveViewMode: ViewMode;
     selectedHasDiff: boolean;
@@ -235,6 +239,9 @@
       context: AIPromptContext,
     ) => Promise<void>;
     onReloadFileTree: () => void;
+    onGitActionSuccess: (
+      action: "commit" | "push" | "pull" | "pr" | "init",
+    ) => Promise<void>;
   } = $props();
 
   function handleInlineCommentSubmit(
@@ -335,6 +342,18 @@
       ? `translateX(${sidebarWidth}px)`
       : undefined}
   >
+    {#if contextId !== null}
+      <div class="h-10 border-b border-border-default bg-bg-secondary px-2 flex items-center justify-end">
+        <GitPushButton
+          {contextId}
+          {projectPath}
+          hasChanges={diffFiles.length > 0}
+          onSuccess={onGitActionSuccess}
+          {isGitRepo}
+        />
+      </div>
+    {/if}
+
     <main
       class="flex-1 min-h-0 overflow-auto bg-bg-primary"
       style:padding-bottom={isPhoneViewport

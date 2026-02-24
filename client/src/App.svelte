@@ -408,6 +408,18 @@
     saveSidebarWidth("qraftbox-sidebar-width", sidebarWidth);
   }
 
+  async function handleGitActionSuccess(
+    action: "commit" | "push" | "pull" | "pr" | "init",
+  ): Promise<void> {
+    if (action === "init") {
+      await init();
+      return;
+    }
+    if (contextId !== null) {
+      await fetchDiff(contextId);
+    }
+  }
+
   const aiFeatureController = createAIFeatureController({
     getContextId: () => contextId,
     getProjectPath: () => projectPath,
@@ -586,7 +598,6 @@
     {contextId}
     {projectPath}
     {activeTabIsGitRepo}
-    hasChanges={diffFiles.length > 0}
     {availableRecentProjects}
     {newProjectPath}
     {newProjectError}
@@ -605,15 +616,7 @@
     onRemoveRecentProject={removeRecentProject}
     onPickDirectory={pickDirectory}
     onWorktreeSwitch={init}
-    onPushSuccess={async (action) => {
-      if (action === "init") {
-        await init();
-        return;
-      }
-      if (contextId !== null) {
-        await fetchDiff(contextId);
-      }
-    }}
+    onPushSuccess={handleGitActionSuccess}
   />
 
   <!-- Main Area -->
@@ -631,6 +634,7 @@
         {selectedPath}
         {diffFiles}
         {contextId}
+        isGitRepo={activeTabIsGitRepo}
         {selectedFile}
         {effectiveViewMode}
         {selectedHasDiff}
@@ -685,6 +689,7 @@
         onWidenSidebar={widenSidebar}
         onSetViewMode={setViewMode}
         onSubmitPrompt={submitPrompt}
+        onGitActionSuccess={handleGitActionSuccess}
       />
     {:else if currentScreen === "ai-session"}
       <AiSessionScreen
