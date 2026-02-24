@@ -36,7 +36,10 @@
       | undefined;
   }
 
-  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+  import {
+    isInjectedSessionSystemPrompt,
+    stripSystemTags,
+  } from "../../../src/utils/strip-system-tags";
 
   const {
     sessionId,
@@ -88,6 +91,8 @@
   type ViewMode = "chat" | "carousel";
 
   const VIEW_MODE_STORAGE_KEY = "qraftbox:session-transcript-view-mode";
+  const SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
+    "qraftbox:session-transcript-show-system-prompts";
 
   function loadViewMode(): ViewMode {
     try {
@@ -99,8 +104,17 @@
     return "chat";
   }
 
+  function loadShowSystemPrompts(): boolean {
+    try {
+      return localStorage.getItem(SHOW_SYSTEM_PROMPTS_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
   let loadingState: LoadingState = $state({ status: "idle" });
   let viewMode: ViewMode = $state(loadViewMode());
+  let showSystemPrompts = $state(loadShowSystemPrompts());
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
@@ -133,10 +147,33 @@
           if (event.type !== "user" && event.type !== "assistant") return false;
           const text = extractTextContent(event);
           if (text.trim().length === 0) return false;
+          if (
+            !showSystemPrompts &&
+            event.type === "user" &&
+            isInjectedSessionSystemPrompt(extractTextContentRaw(event))
+          ) {
+            return false;
+          }
           return true;
         })
       : [],
   );
+
+  const hiddenSystemPromptCount = $derived.by(() => {
+    if (loadingState.status !== "success" || showSystemPrompts) {
+      return 0;
+    }
+    let count = 0;
+    for (const event of loadingState.data) {
+      if (event.type !== "user") {
+        continue;
+      }
+      if (isInjectedSessionSystemPrompt(extractTextContentRaw(event))) {
+        count += 1;
+      }
+    }
+    return count;
+  });
 
   /** When maxMessages is set, only show the last N messages */
   const chatEvents = $derived(
@@ -146,6 +183,17 @@
   );
 
   const isCompact = $derived(maxMessages !== undefined);
+
+  $effect(() => {
+    try {
+      localStorage.setItem(
+        SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
+        showSystemPrompts ? "true" : "false",
+      );
+    } catch {
+      // localStorage unavailable
+    }
+  });
 
   function normalizeMessageText(rawText: string): string {
     return stripSystemTags(rawText).replace(/\s+/g, " ").trim();
@@ -775,6 +823,27 @@
           Carousel
         </button>
       </div>
+
+      <button
+        type="button"
+        class="px-2 py-1 text-xs font-medium rounded border transition-colors
+               {showSystemPrompts
+          ? 'border-accent-emphasis/50 bg-accent-muted text-accent-fg'
+          : 'border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
+        onclick={() => {
+          showSystemPrompts = !showSystemPrompts;
+        }}
+        aria-pressed={showSystemPrompts}
+        title={showSystemPrompts
+          ? "Hide injected system prompts"
+          : "Show injected system prompts"}
+      >
+        {showSystemPrompts
+          ? "System Prompts: Shown"
+          : `System Prompts: Hidden${hiddenSystemPromptCount > 0
+            ? ` (${hiddenSystemPromptCount})`
+            : ""}`}
+      </button>
 
       <!-- Navigation buttons: previous/next + jump to first/last -->
       {#if chatEvents.length > 0}

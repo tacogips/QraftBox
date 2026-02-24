@@ -13,10 +13,7 @@ import type {
   PromptId,
   WorktreeId,
 } from "../../types/ai";
-import {
-  isAIAgent,
-  resolveAIAgentFromVendor,
-} from "../../types/ai-agent";
+import { isAIAgent, resolveAIAgentFromVendor } from "../../types/ai-agent";
 import type { SessionManager } from "../ai/session-manager";
 import { createLogger } from "../logger.js";
 import type { ModelConfigStore } from "../model-config/store.js";
@@ -127,10 +124,9 @@ export function createAIRoutes(context: AIServerContext): Hono {
         ai_agent: undefined,
       };
 
-      const selectedAgent =
-        isAIAgent(body.ai_agent)
-          ? body.ai_agent
-          : resolveAIAgentFromVendor(msg.model_vendor);
+      const selectedAgent = isAIAgent(body.ai_agent)
+        ? body.ai_agent
+        : resolveAIAgentFromVendor(msg.model_vendor);
 
       const resolvedMsg: AIPromptMessage = {
         ...msg,

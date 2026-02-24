@@ -35,7 +35,8 @@
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
   import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
-  import ModelConfigScreen from "../components/model-config/ModelConfigScreen.svelte";
+  import ModelProfilesScreen from "../components/model-config/ModelProfilesScreen.svelte";
+  import ActionDefaultsScreen from "../components/model-config/ActionDefaultsScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   function shouldDefaultToCollapsedSidebar(): boolean {
@@ -172,6 +173,14 @@
   );
 
   /**
+   * Active file path for content loading and view-mode decisions.
+   * Falls back to the currently selected diff file when selectedPath is null.
+   */
+  const activePath = $derived(
+    selectedPath ?? (selectedFile !== null ? selectedFile.path : null),
+  );
+
+  /**
    * Index of the currently selected file in diffFiles
    */
   const selectedFileIndex = $derived(
@@ -276,7 +285,7 @@
    * Whether the selected path has a diff entry
    */
   const selectedHasDiff = $derived(
-    selectedPath !== null && diffFiles.some((f) => f.path === selectedPath),
+    activePath !== null && diffFiles.some((f) => f.path === activePath),
   );
 
   /**
@@ -546,11 +555,11 @@
 
   // Fetch file content when selecting a non-diff file OR when full-file mode is active
   $effect(() => {
-    if (selectedPath !== null && contextId !== null) {
+    if (activePath !== null && contextId !== null) {
       if (effectiveViewMode === "full-file") {
-        void fetchFileContent(contextId, selectedPath);
+        void fetchFileContent(contextId, activePath);
       } else if (!selectedHasDiff && fileTreeMode === "all") {
-        void fetchFileContent(contextId, selectedPath);
+        void fetchFileContent(contextId, activePath);
       } else {
         fileContent = null;
       }
@@ -596,7 +605,11 @@
     onRemoveRecentProject={removeRecentProject}
     onPickDirectory={pickDirectory}
     onWorktreeSwitch={init}
-    onPushSuccess={async () => {
+    onPushSuccess={async (action) => {
+      if (action === "init") {
+        await init();
+        return;
+      }
       if (contextId !== null) {
         await fetchDiff(contextId);
       }
@@ -612,6 +625,7 @@
         {sidebarCollapsed}
         {sidebarWidth}
         {allFilesLoading}
+        {projectPath}
         {fileTree}
         {fileTreeMode}
         {selectedPath}
@@ -788,10 +802,15 @@
       <main class="flex-1 overflow-hidden">
         <SystemInfoScreen />
       </main>
-    {:else if currentScreen === "model-config"}
-      <!-- Model Config Screen -->
+    {:else if currentScreen === "model-profiles"}
+      <!-- Model Profiles Screen -->
       <main class="flex-1 overflow-hidden">
-        <ModelConfigScreen />
+        <ModelProfilesScreen />
+      </main>
+    {:else if currentScreen === "action-defaults"}
+      <!-- Action Defaults Screen -->
+      <main class="flex-1 overflow-hidden">
+        <ActionDefaultsScreen {contextId} />
       </main>
     {/if}
   </div>

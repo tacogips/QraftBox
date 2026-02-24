@@ -59,7 +59,7 @@
 
   function suggestModel(vendor: ModelVendor): void {
     draftVendor = vendor;
-    draftModel = vendor === "anthropics" ? "claude-opus-4-6" : "codex5.3";
+    draftModel = vendor === "anthropics" ? "claude-opus-4-6" : "gpt-5.3-codex";
   }
 
   async function createProfile(): Promise<void> {
@@ -130,8 +130,21 @@
     }
   }
 
-  function profileLabel(profile: ModelProfile): string {
-    return `${profile.name} (${profile.vendor} / ${profile.model})`;
+  function profileOptionLabel(profile: ModelProfile): string {
+    return profile.name;
+  }
+
+  function profileSummary(profileId: string | null): string {
+    if (profileId === null) {
+      return "No profile selected";
+    }
+    const profile = profiles.find((item) => item.id === profileId);
+    if (profile === undefined) {
+      return "Selected profile is unavailable";
+    }
+    const args =
+      profile.arguments.length > 0 ? ` | ${profile.arguments.join(" ")}` : "";
+    return `${profile.vendor} / ${profile.model}${args}`;
   }
 
   $effect(() => {
@@ -174,9 +187,12 @@
             bind:value={bindings.gitCommitProfileId}
           >
             {#each profiles as profile (profile.id)}
-              <option value={profile.id}>{profileLabel(profile)}</option>
+              <option value={profile.id}>{profileOptionLabel(profile)}</option>
             {/each}
           </select>
+          <p class="mt-1 text-xs text-text-tertiary break-all">
+            {profileSummary(bindings.gitCommitProfileId)}
+          </p>
         </label>
 
         <label class="block text-sm">
@@ -186,9 +202,12 @@
             bind:value={bindings.gitPrProfileId}
           >
             {#each profiles as profile (profile.id)}
-              <option value={profile.id}>{profileLabel(profile)}</option>
+              <option value={profile.id}>{profileOptionLabel(profile)}</option>
             {/each}
           </select>
+          <p class="mt-1 text-xs text-text-tertiary break-all">
+            {profileSummary(bindings.gitPrProfileId)}
+          </p>
         </label>
 
         <label class="block text-sm">
@@ -198,9 +217,12 @@
             bind:value={bindings.aiDefaultProfileId}
           >
             {#each profiles as profile (profile.id)}
-              <option value={profile.id}>{profileLabel(profile)}</option>
+              <option value={profile.id}>{profileOptionLabel(profile)}</option>
             {/each}
           </select>
+          <p class="mt-1 text-xs text-text-tertiary break-all">
+            {profileSummary(bindings.aiDefaultProfileId)}
+          </p>
         </label>
 
         <button
@@ -302,7 +324,7 @@
           <input
             class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
             bind:value={draftModel}
-            placeholder="claude-opus-4-6 / codex5.3"
+            placeholder="claude-opus-4-6 / gpt-5.3-codex"
           />
         </label>
 

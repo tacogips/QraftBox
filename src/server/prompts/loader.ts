@@ -33,6 +33,12 @@ interface DefaultPromptsConfig {
   readonly pr?: string | undefined;
 }
 
+const HARDCODED_DEFAULT_PROMPT_IDS: Readonly<Record<PromptCategory, string>> = {
+  commit: "commit",
+  push: "push",
+  pr: "pr",
+};
+
 /**
  * Get the defaults config file path
  * Can be overridden for testing via environment variable
@@ -379,6 +385,33 @@ async function saveDefaultsConfig(config: DefaultPromptsConfig): Promise<void> {
 }
 
 /**
+ * Ensure default prompt config exists with hardcoded defaults.
+ *
+ * When defaults.json is missing or partially configured, missing categories are
+ * written with built-in defaults (commit/push/pr).
+ */
+export async function ensureDefaultPromptConfig(): Promise<
+  Readonly<Record<PromptCategory, string>>
+> {
+  const current = await loadDefaultsConfig();
+  const next: Record<PromptCategory, string> = {
+    commit: current.commit ?? HARDCODED_DEFAULT_PROMPT_IDS.commit,
+    push: current.push ?? HARDCODED_DEFAULT_PROMPT_IDS.push,
+    pr: current.pr ?? HARDCODED_DEFAULT_PROMPT_IDS.pr,
+  };
+
+  if (
+    current.commit !== next.commit ||
+    current.push !== next.push ||
+    current.pr !== next.pr
+  ) {
+    await saveDefaultsConfig(next);
+  }
+
+  return next;
+}
+
+/**
  * Load all prompt templates from a directory
  *
  * @param configDir - Directory path to load templates from (defaults to ~/.config/qraftbox/prompts/)
@@ -506,7 +539,7 @@ export async function loadPromptContent(
 export async function getDefaultPromptId(
   category: PromptCategory,
 ): Promise<string | null> {
-  const config = await loadDefaultsConfig();
+  const config = await ensureDefaultPromptConfig();
   return config[category] ?? null;
 }
 
@@ -520,7 +553,7 @@ export async function setDefaultPromptId(
   category: PromptCategory,
   id: string,
 ): Promise<void> {
-  const config = await loadDefaultsConfig();
+  const config = await ensureDefaultPromptConfig();
 
   const newConfig: DefaultPromptsConfig = {
     ...config,

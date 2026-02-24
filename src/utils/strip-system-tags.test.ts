@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   hasQraftboxInternalPrompt,
+  isInjectedSessionSystemPrompt,
   stripSystemTags,
+  wrapQraftboxInternalPrompt,
 } from "./strip-system-tags";
 
 describe("stripSystemTags", () => {
@@ -47,5 +49,50 @@ describe("stripSystemTags", () => {
     expect(stripSystemTags(input)).toBe("Visible text");
     expect(hasQraftboxInternalPrompt(input)).toBe(true);
     expect(hasQraftboxInternalPrompt("Visible text")).toBe(false);
+  });
+
+  it("wraps qraftbox internal prompt blocks", () => {
+    const wrapped = wrapQraftboxInternalPrompt(
+      "ai-session-refresh-purpose",
+      "Refresh this session purpose now",
+      "session-action-v1",
+    );
+
+    expect(wrapped).toContain('<qraftbox-internal-prompt label="ai-session-refresh-purpose"');
+    expect(wrapped).toContain('anchor="session-action-v1"');
+    expect(wrapped).toContain("Refresh this session purpose now");
+    expect(hasQraftboxInternalPrompt(wrapped)).toBe(true);
+  });
+});
+
+describe("isInjectedSessionSystemPrompt", () => {
+  it("detects AGENTS bootstrap wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects environment context wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "<environment_context>\n  <cwd>/repo</cwd>\n</environment_context>",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects turn aborted wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "<turn_aborted>\nThe user interrupted the previous turn.\n</turn_aborted>",
+      ),
+    ).toBe(true);
+  });
+
+  it("returns false for regular user message", () => {
+    expect(
+      isInjectedSessionSystemPrompt("Please update the tests for this module."),
+    ).toBe(false);
   });
 });

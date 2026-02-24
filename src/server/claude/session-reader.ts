@@ -24,6 +24,7 @@ import {
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import {
   hasQraftboxInternalPrompt,
+  isInjectedSessionSystemPrompt,
   stripSystemTags,
 } from "../../utils/strip-system-tags";
 import {
@@ -418,23 +419,15 @@ export class ClaudeSessionReader {
     return textParts.join("\n").trim();
   }
 
-  private isCodexBootstrapPrompt(text: string): boolean {
-    const normalized = text.trim();
-    return (
-      normalized.startsWith("# AGENTS.md instructions") ||
-      normalized.startsWith("<environment_context>") ||
-      normalized.includes("## Rule of the Responses") ||
-      normalized.includes("## Autonomous Operation Policy")
-    );
-  }
-
   private async readCodexSessionEntry(
     jsonlPath: string,
   ): Promise<ExtendedSessionEntry | null> {
     try {
       const fileStat = await stat(jsonlPath);
       const content = await readFile(jsonlPath, "utf-8");
-      const lines = content.split("\n").filter((line) => line.trim().length > 0);
+      const lines = content
+        .split("\n")
+        .filter((line) => line.trim().length > 0);
       if (lines.length === 0) {
         return null;
       }
@@ -518,7 +511,7 @@ export class ClaudeSessionReader {
             role === "user" &&
             firstPrompt.length === 0 &&
             text.length > 0 &&
-            !this.isCodexBootstrapPrompt(text) &&
+            !isInjectedSessionSystemPrompt(text) &&
             !this.isInternalSessionPrompt(text)
           ) {
             firstPrompt = stripSystemTags(text);
@@ -1110,6 +1103,13 @@ export class ClaudeSessionReader {
       return false;
     }
 
+    // Working directory prefix filter
+    if (options.workingDirectoryPrefix !== undefined) {
+      if (!session.projectPath.startsWith(options.workingDirectoryPrefix)) {
+        return false;
+      }
+    }
+
     // Search filter (case-insensitive, using stripped text)
     if (options.search !== undefined) {
       const searchLower = options.search.toLowerCase();
@@ -1183,6 +1183,9 @@ export class ClaudeSessionReader {
         const parsed: unknown = JSON.parse(line);
         if (typeof parsed === "object" && parsed !== null) {
           const obj = parsed as Record<string, unknown>;
+          if (this.shouldHideClaudeTranscriptEvent(obj)) {
+            continue;
+          }
           events.push({
             type: typeof obj["type"] === "string" ? obj["type"] : "unknown",
             uuid: typeof obj["uuid"] === "string" ? obj["uuid"] : undefined,
@@ -1248,10 +1251,15 @@ export class ClaudeSessionReader {
       if (text.length === 0) {
         continue;
       }
+      if (role === "user" && this.isInternalSessionPrompt(text)) {
+        continue;
+      }
 
       events.push({
-        type: role === "assistant" ? "assistant" : role === "user" ? "user" : role,
-        timestamp: typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+        type:
+          role === "assistant" ? "assistant" : role === "user" ? "user" : role,
+        timestamp:
+          typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
         content: text,
         raw: parsed as object,
       });
@@ -1262,6 +1270,52 @@ export class ClaudeSessionReader {
       events: events.slice(offset, offset + limit),
       total,
     };
+  }
+
+  private extractClaudeUserMessageText(
+    event: Record<string, unknown>,
+  ): string {
+    const message =
+      typeof event["message"] === "object" && event["message"] !== null
+        ? (event["message"] as Record<string, unknown>)
+        : undefined;
+
+    const content = message?.["content"];
+    if (typeof content === "string") {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      const textParts: string[] = [];
+      for (const block of content) {
+        if (typeof block !== "object" || block === null) {
+          continue;
+        }
+        const blockObj = block as Record<string, unknown>;
+        if (
+          (blockObj["type"] === "text" ||
+            blockObj["type"] === "input_text") &&
+          typeof blockObj["text"] === "string"
+        ) {
+          textParts.push(blockObj["text"]);
+        }
+      }
+      return textParts.join(" ").trim();
+    }
+
+    if (typeof event["content"] === "string") {
+      return event["content"];
+    }
+    return "";
+  }
+
+  private shouldHideClaudeTranscriptEvent(
+    event: Record<string, unknown>,
+  ): boolean {
+    if (event["type"] !== "user") {
+      return false;
+    }
+    const text = this.extractClaudeUserMessageText(event);
+    return text.length > 0 && this.isInternalSessionPrompt(text);
   }
 
   /**

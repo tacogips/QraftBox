@@ -15,6 +15,7 @@ import { createStaticMiddleware, createSPAFallback } from "./static";
 import { mountAllRoutes } from "./routes/index";
 import { createSessionManager } from "./ai/session-manager";
 import { createPromptStore } from "./prompts/prompt-store";
+import { ensureDefaultPromptConfig } from "./prompts/loader";
 import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
 import { join } from "path";
 import { createQraftBoxToolRegistry } from "./tools/registry";
@@ -181,6 +182,9 @@ export function createServer(options: ServerOptions): Hono {
   });
   void ensurePurposePromptFile().catch((e) => {
     logger.error("Failed to initialize session purpose prompt file", e);
+  });
+  void ensureDefaultPromptConfig().catch((e) => {
+    logger.error("Failed to initialize default prompt config", e);
   });
 
   mountAllRoutes(app, {

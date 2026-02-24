@@ -34,7 +34,11 @@ describe("ClaudeSessionReader", () => {
     await mkdir(codexSessionsDir, { recursive: true });
 
     mappingStore = createInMemorySessionMappingStore();
-    reader = new ClaudeSessionReader(projectsDir, mappingStore, codexSessionsDir);
+    reader = new ClaudeSessionReader(
+      projectsDir,
+      mappingStore,
+      codexSessionsDir,
+    );
   });
 
   afterEach(async () => {
@@ -1106,6 +1110,20 @@ describe("ClaudeSessionReader", () => {
           },
         }),
         JSON.stringify({
+          timestamp: "2026-02-22T10:00:01.500Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: '<qraftbox-internal-prompt label="ai-session-resume" anchor="session-action-v1">resume this session</qraftbox-internal-prompt>',
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
           timestamp: "2026-02-22T10:00:02.000Z",
           type: "response_item",
           payload: {
@@ -1117,7 +1135,9 @@ describe("ClaudeSessionReader", () => {
       ].join("\n");
       await writeFile(codexPath, codexJsonl);
 
-      const session = await reader.getSession("codex-session-codex-transcript-id");
+      const session = await reader.getSession(
+        "codex-session-codex-transcript-id",
+      );
       expect(session).not.toBeNull();
 
       const transcript = await reader.readTranscript(
@@ -1130,6 +1150,83 @@ describe("ClaudeSessionReader", () => {
       expect(transcript?.events[0]?.type).toBe("user");
       expect(transcript?.events[1]?.type).toBe("assistant");
       expect(transcript?.events[1]?.content).toBe("Assistant reply");
+    });
+
+    it("filters codex sessions by workingDirectoryPrefix", async () => {
+      const inProjectDayDir = join(codexSessionsDir, "2026", "02", "23");
+      const outProjectDayDir = join(codexSessionsDir, "2026", "02", "24");
+      await mkdir(inProjectDayDir, { recursive: true });
+      await mkdir(outProjectDayDir, { recursive: true });
+
+      const inProjectPath = join(
+        inProjectDayDir,
+        "rollout-2026-02-23T10-00-00-in-project.jsonl",
+      );
+      const outProjectPath = join(
+        outProjectDayDir,
+        "rollout-2026-02-24T10-00-00-out-project.jsonl",
+      );
+
+      const inProjectJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-23T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-in-project",
+            timestamp: "2026-02-23T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-23T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Inside project" }],
+          },
+        }),
+      ].join("\n");
+
+      const outProjectJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-24T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-out-project",
+            timestamp: "2026-02-24T10:00:00.000Z",
+            cwd: "/tmp/another-repo",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-24T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Outside project" }],
+          },
+        }),
+      ].join("\n");
+
+      await writeFile(inProjectPath, inProjectJsonl);
+      await writeFile(outProjectPath, outProjectJsonl);
+
+      const result = await reader.listSessions({
+        source: "codex-cli",
+        workingDirectoryPrefix: "/g/gits/tacogips/QraftBox",
+      });
+
+      expect(
+        result.sessions.some(
+          (session) => session.sessionId === "codex-session-codex-in-project",
+        ),
+      ).toBe(true);
+      expect(
+        result.sessions.some(
+          (session) => session.sessionId === "codex-session-codex-out-project",
+        ),
+      ).toBe(false);
     });
   });
 });

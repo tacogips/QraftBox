@@ -760,7 +760,8 @@ export function createSessionManager(
         resumeSessionId: session.currentClaudeSessionId,
         attachments: handle.attachments,
         aiAgent:
-          session.aiAgent ?? resolveAIAgentFromVendor(handle.modelOverride?.vendor),
+          session.aiAgent ??
+          resolveAIAgentFromVendor(handle.modelOverride?.vendor),
         vendor: handle.modelOverride?.vendor,
         model: handle.modelOverride?.model,
         additionalArgs:
@@ -1168,8 +1169,7 @@ export function createSessionManager(
         message: messageForDisplay,
         clientSessionId,
         modelProfileId: msg.model_profile_id,
-        aiAgent:
-          msg.ai_agent ?? resolveAIAgentFromVendor(msg.model_vendor),
+        aiAgent: msg.ai_agent ?? resolveAIAgentFromVendor(msg.model_vendor),
         modelVendor: msg.model_vendor,
         modelName: msg.model_name,
         modelArguments: msg.model_arguments,

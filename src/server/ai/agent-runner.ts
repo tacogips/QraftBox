@@ -16,6 +16,7 @@ import {
   type RunningSession,
   type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
+import type { Subprocess } from "bun";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
@@ -42,6 +43,171 @@ function readStringField(
 
 function isLikelyClaudeSessionId(value: string): boolean {
   return UUID_PATTERN.test(value);
+}
+
+interface CodexMessageEvent {
+  readonly type: "message";
+  readonly content: string;
+}
+
+interface CodexToolCallEvent {
+  readonly type: "tool_call";
+  readonly toolName: string;
+}
+
+interface CodexToolResultEvent {
+  readonly type: "tool_result";
+  readonly toolName: string;
+  readonly isError: boolean;
+}
+
+interface CodexSessionDetectedEvent {
+  readonly type: "session_detected";
+  readonly sessionId: ClaudeSessionId;
+}
+
+type CodexParsedEvent =
+  | CodexMessageEvent
+  | CodexToolCallEvent
+  | CodexToolResultEvent
+  | CodexSessionDetectedEvent
+  | null;
+
+/**
+ * Build a Codex CLI command for non-interactive JSONL execution.
+ *
+ * - New session: codex exec --json [opts...] <prompt>
+ * - Resume session: codex exec resume --json [opts...] <sessionId> <prompt>
+ */
+export function buildCodexExecCommand(params: AgentRunParams): string[] {
+  const args: string[] = ["codex", "exec"];
+
+  if (params.resumeSessionId !== undefined) {
+    args.push("resume");
+  }
+
+  args.push("--json");
+
+  if (params.model !== undefined && params.model.length > 0) {
+    args.push("--model", params.model);
+  }
+
+  if (params.additionalArgs !== undefined && params.additionalArgs.length > 0) {
+    args.push(...params.additionalArgs);
+  }
+
+  if (params.resumeSessionId !== undefined) {
+    args.push(params.resumeSessionId);
+  }
+
+  args.push(params.prompt);
+  return args;
+}
+
+function parseCodexJsonLine(line: string): CodexParsedEvent {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const obj = asRecord(parsed);
+  if (obj === undefined) {
+    return null;
+  }
+
+  const lineType = readStringField(obj, "type");
+  if (lineType === "session_meta") {
+    const payload = asRecord(obj["payload"]);
+    const sessionId =
+      payload !== undefined ? readStringField(payload, "id") : undefined;
+    if (sessionId !== undefined && isLikelyClaudeSessionId(sessionId)) {
+      return {
+        type: "session_detected",
+        sessionId: sessionId as ClaudeSessionId,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "event_msg") {
+    const payload = asRecord(obj["payload"]);
+    if (payload === undefined) return null;
+    const eventType = readStringField(payload, "type");
+    if (eventType === "AgentMessage") {
+      const message = readStringField(payload, "message");
+      if (message !== undefined) {
+        return { type: "message", content: message };
+      }
+      return null;
+    }
+    if (eventType === "ExecCommandBegin") {
+      return { type: "tool_call", toolName: "local_shell_call" };
+    }
+    if (eventType === "ExecCommandEnd") {
+      const exitCodeRaw = payload["exit_code"];
+      const isError =
+        typeof exitCodeRaw === "number" ? exitCodeRaw !== 0 : false;
+      return {
+        type: "tool_result",
+        toolName: "local_shell_call",
+        isError,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "response_item") {
+    const payload = asRecord(obj["payload"]);
+    if (payload === undefined) return null;
+    const responseType = readStringField(payload, "type");
+    if (
+      responseType === "message" &&
+      readStringField(payload, "role") === "assistant"
+    ) {
+      const content = payload["content"];
+      if (!Array.isArray(content)) return null;
+      const parts: string[] = [];
+      for (const item of content) {
+        const block = asRecord(item);
+        if (block === undefined) continue;
+        const blockType = readStringField(block, "type");
+        if (blockType !== "output_text" && blockType !== "input_text") continue;
+        const text = readStringField(block, "text");
+        if (text !== undefined) parts.push(text);
+      }
+      const combined = parts.join("\n").trim();
+      if (combined.length > 0) {
+        return { type: "message", content: combined };
+      }
+    }
+  }
+
+  return null;
+}
+
+async function readStreamToString(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+): Promise<string> {
+  if (stream === null || stream === undefined) {
+    return "";
+  }
+  return await new Response(stream).text();
+}
+
+function toReadableStream(
+  stream: number | ReadableStream<Uint8Array> | null | undefined,
+): ReadableStream<Uint8Array> | undefined {
+  if (stream === null || stream === undefined || typeof stream === "number") {
+    return undefined;
+  }
+  return stream;
 }
 
 /**
@@ -533,6 +699,175 @@ class ClaudeAgentRunner implements AgentRunner {
   }
 }
 
+class CodexAgentRunner implements AgentRunner {
+  execute(params: AgentRunParams): AgentExecution {
+    const channel = new EventChannel<AgentEvent>();
+    let spawnedProcess: Subprocess | undefined;
+    let cancelled = false;
+
+    const startExecution = async (): Promise<void> => {
+      try {
+        const command = buildCodexExecCommand(params);
+        spawnedProcess = Bun.spawn(command, {
+          cwd: params.projectPath,
+          env: {
+            ...globalThis.process.env,
+          },
+          stdin: "ignore",
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+
+        const [stdoutText, stderrText, exitCode] = await Promise.all([
+          readStreamToString(toReadableStream(spawnedProcess.stdout)),
+          readStreamToString(toReadableStream(spawnedProcess.stderr)),
+          spawnedProcess.exited,
+        ]);
+
+        if (cancelled) {
+          channel.push({ type: "completed", success: false });
+          channel.close();
+          return;
+        }
+
+        let lastAssistantMessage: string | undefined;
+        let sessionDetected = params.resumeSessionId !== undefined;
+
+        for (const line of stdoutText.split(/\r?\n/)) {
+          const parsed = parseCodexJsonLine(line);
+          if (parsed === null) {
+            continue;
+          }
+
+          if (parsed.type === "session_detected") {
+            if (!sessionDetected) {
+              channel.push({
+                type: "claude_session_detected",
+                claudeSessionId: parsed.sessionId,
+              });
+              sessionDetected = true;
+            }
+            continue;
+          }
+
+          if (parsed.type === "message") {
+            lastAssistantMessage = parsed.content;
+            channel.push({
+              type: "message",
+              role: "assistant",
+              content: parsed.content,
+            });
+            channel.push({ type: "activity", activity: undefined });
+            continue;
+          }
+
+          if (parsed.type === "tool_call") {
+            channel.push({
+              type: "tool_call",
+              toolName: parsed.toolName,
+              input: {},
+            });
+            channel.push({
+              type: "activity",
+              activity: `Using ${parsed.toolName}...`,
+            });
+            continue;
+          }
+
+          if (parsed.type === "tool_result") {
+            channel.push({
+              type: "tool_result",
+              toolName: parsed.toolName,
+              output: undefined,
+              isError: parsed.isError,
+            });
+            channel.push({
+              type: "activity",
+              activity: `Processing ${parsed.toolName} result...`,
+            });
+          }
+        }
+
+        if (exitCode === 0) {
+          channel.push({
+            type: "completed",
+            success: true,
+            lastAssistantMessage,
+          });
+        } else {
+          const stderrTrimmed = stderrText.trim();
+          const errorMessage =
+            stderrTrimmed.length > 0
+              ? (stderrTrimmed.split("\n")[0] ?? "Codex execution failed")
+              : "Codex execution failed";
+          channel.push({ type: "error", message: errorMessage });
+          channel.push({
+            type: "completed",
+            success: false,
+            error: errorMessage,
+            lastAssistantMessage,
+          });
+        }
+      } catch (error) {
+        if (cancelled) {
+          channel.push({ type: "completed", success: false });
+        } else {
+          const errorMessage =
+            error instanceof Error ? error.message : "Codex execution failed";
+          channel.push({ type: "error", message: errorMessage });
+          channel.push({
+            type: "completed",
+            success: false,
+            error: errorMessage,
+          });
+        }
+      } finally {
+        channel.close();
+      }
+    };
+
+    return {
+      events(): AsyncIterable<AgentEvent> {
+        void startExecution();
+        return channel;
+      },
+
+      async cancel(): Promise<void> {
+        cancelled = true;
+        if (spawnedProcess !== undefined) {
+          spawnedProcess.kill();
+        }
+      },
+
+      async abort(): Promise<void> {
+        cancelled = true;
+        if (spawnedProcess !== undefined) {
+          spawnedProcess.kill("SIGKILL");
+        }
+      },
+    };
+  }
+}
+
+class HybridAgentRunner implements AgentRunner {
+  private readonly claudeRunner: ClaudeAgentRunner;
+  private readonly codexRunner: CodexAgentRunner;
+
+  constructor(config: AIConfig, toolRegistry: QraftBoxToolRegistry) {
+    this.claudeRunner = new ClaudeAgentRunner(config, toolRegistry);
+    this.codexRunner = new CodexAgentRunner();
+  }
+
+  execute(params: AgentRunParams): AgentExecution {
+    const isCodex =
+      params.aiAgent === AIAgent.CODEX ||
+      (params.aiAgent === undefined && params.vendor === "openai");
+    return isCodex
+      ? this.codexRunner.execute(params)
+      : this.claudeRunner.execute(params);
+  }
+}
+
 /**
  * StubbedAgentRunner - Fallback implementation when no toolRegistry is available
  */
@@ -597,7 +932,7 @@ export function createAgentRunner(
   toolRegistry?: QraftBoxToolRegistry | undefined,
 ): AgentRunner {
   if (toolRegistry !== undefined) {
-    return new ClaudeAgentRunner(config, toolRegistry);
+    return new HybridAgentRunner(config, toolRegistry);
   }
   return new StubbedAgentRunner();
 }

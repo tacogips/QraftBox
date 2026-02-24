@@ -50,7 +50,9 @@
     onRemoveRecentProject: (path: string) => Promise<void>;
     onPickDirectory: () => Promise<void>;
     onWorktreeSwitch: () => Promise<void>;
-    onPushSuccess: () => Promise<void>;
+    onPushSuccess: (
+      action: "commit" | "push" | "pull" | "pr" | "init",
+    ) => Promise<void>;
   } = $props();
 
   let headerMenuOpen = $state(false);
@@ -232,15 +234,28 @@
           <button
             type="button"
             class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                 {currentScreen === 'model-config'
+                 {currentScreen === 'model-profiles'
               ? 'text-text-primary font-semibold'
               : 'text-text-secondary'}"
             onclick={() => {
-              onNavigateToScreen("model-config");
+              onNavigateToScreen("model-profiles");
               headerMenuOpen = false;
             }}
           >
-            Model Config
+            Model Profiles
+          </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                 {currentScreen === 'action-defaults'
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("action-defaults");
+              headerMenuOpen = false;
+            }}
+          >
+            Action Defaults
           </button>
         </div>
       {/if}
@@ -290,7 +305,9 @@
             height="12"
             viewBox="0 0 16 16"
             fill="currentColor"
-            class="transition-transform {projectTreeExpanded ? 'rotate-90' : ''}"
+            class="transition-transform {projectTreeExpanded
+              ? 'rotate-90'
+              : ''}"
           >
             <path
               d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
@@ -435,7 +452,9 @@
             type="text"
             value={newProjectPath}
             oninput={(e) =>
-              onNewProjectPathChange((e.currentTarget as HTMLInputElement).value)}
+              onNewProjectPathChange(
+                (e.currentTarget as HTMLInputElement).value,
+              )}
             class="flex-1 px-2 py-1.5 text-sm rounded border border-border-default
                    bg-bg-primary text-text-primary font-mono
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis
@@ -483,7 +502,9 @@
           </div>
           <div class="max-h-60 overflow-y-auto">
             {#each availableRecentProjects as recent (recent.path)}
-              <div class="flex items-center hover:bg-bg-tertiary transition-colors">
+              <div
+                class="flex items-center hover:bg-bg-tertiary transition-colors"
+              >
                 <button
                   type="button"
                   class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
@@ -508,7 +529,8 @@
                     />
                   </svg>
                   <span class="truncate flex-1">{recent.name}</span>
-                  <span class="text-xs text-text-tertiary truncate max-w-[120px]"
+                  <span
+                    class="text-xs text-text-tertiary truncate max-w-[120px]"
                     >{truncatePath(recent.path, 20)}</span
                   >
                 </button>
@@ -521,7 +543,12 @@
                     void onRemoveRecentProject(recent.path);
                   }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                  >
                     <path
                       d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
                     />

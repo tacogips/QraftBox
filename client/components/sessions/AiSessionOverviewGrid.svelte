@@ -4,7 +4,10 @@
   import type { ModelProfile } from "../../../src/types/model-config";
   import type { PromptQueueItem } from "../../src/lib/app-api";
   import type { ExtendedSessionEntry } from "../../../src/types/claude-session";
-  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+  import {
+    stripSystemTags,
+    wrapQraftboxInternalPrompt,
+  } from "../../../src/utils/strip-system-tags";
   import {
     defaultLatestActivity,
     deriveSessionStatus,
@@ -12,6 +15,7 @@
     type SessionStatus,
   } from "../../src/lib/session-status";
   import {
+    fetchGitActionPromptApi,
     fetchHiddenAISessionIdsApi,
     setAISessionHiddenApi,
   } from "../../src/lib/app-api";
@@ -866,6 +870,21 @@
     await fetchOverviewSessions();
   }
 
+  async function runSessionDefaultPrompt(
+    promptName: "ai-session-refresh-purpose" | "ai-session-resume",
+  ): Promise<void> {
+    if (creatingNewSession || selectedSessionId === null) {
+      return;
+    }
+    const prompt = await fetchGitActionPromptApi(promptName);
+    const internalPrompt = wrapQraftboxInternalPrompt(
+      promptName,
+      prompt.content,
+      "session-action-v1",
+    );
+    await handlePopupSubmit(internalPrompt, true);
+  }
+
   const canCancelSelectedPrompt = $derived.by(() => {
     if (creatingNewSession || selectedSessionId === null) {
       return false;
@@ -1032,7 +1051,7 @@
                         ? 'bg-accent-muted text-accent-fg'
                         : card.source === 'codex-cli'
                           ? 'bg-attention-emphasis/20 text-attention-fg'
-                        : 'bg-bg-tertiary text-text-secondary'}"
+                          : 'bg-bg-tertiary text-text-secondary'}"
                   >
                     {card.source}
                   </span>
@@ -1158,6 +1177,12 @@
     cancelPromptInProgress={cancellingPrompt}
     {cancelPromptError}
     onCancelPrompt={handleCancelSelectedPrompt}
+    canRunSessionDefaultPrompts={!creatingNewSession &&
+      selectedSessionId !== null}
+    onRunRefreshPurposePrompt={() =>
+      runSessionDefaultPrompt("ai-session-refresh-purpose")}
+    onRunResumeSessionPrompt={() =>
+      runSessionDefaultPrompt("ai-session-resume")}
   />
 {/if}
 

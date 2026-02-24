@@ -6,7 +6,8 @@ export type ScreenType =
   | "project"
   | "tools"
   | "system-info"
-  | "model-config";
+  | "model-profiles"
+  | "action-defaults";
 
 export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "files",
@@ -16,7 +17,8 @@ export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "project",
   "tools",
   "system-info",
-  "model-config",
+  "model-profiles",
+  "action-defaults",
 ]);
 
 export function parseHash(hashValue: string): {
@@ -30,7 +32,12 @@ export function parseHash(hashValue: string): {
     const slug = parts[0] ?? null;
     const page = parts[1] ?? "files";
     // Backward compatibility for old URLs.
-    const normalizedPage = page === "sessions" ? "ai-session" : page;
+    const normalizedPage =
+      page === "sessions"
+        ? "ai-session"
+        : page === "model-config"
+          ? "model-profiles"
+          : page;
     return {
       slug,
       screen: VALID_SCREENS.has(normalizedPage)
@@ -41,7 +48,12 @@ export function parseHash(hashValue: string): {
 
   if (parts.length === 1) {
     const single = parts[0] ?? "";
-    const normalizedSingle = single === "sessions" ? "ai-session" : single;
+    const normalizedSingle =
+      single === "sessions"
+        ? "ai-session"
+        : single === "model-config"
+          ? "model-profiles"
+          : single;
     if (VALID_SCREENS.has(normalizedSingle)) {
       return { slug: null, screen: normalizedSingle as ScreenType };
     }

@@ -29,9 +29,12 @@
     canCancelPrompt: boolean;
     cancelPromptInProgress: boolean;
     cancelPromptError: string | null;
+    canRunSessionDefaultPrompts: boolean;
     isHidden: boolean;
     onToggleHidden: () => Promise<void>;
     onCancelPrompt: () => Promise<void>;
+    onRunRefreshPurposePrompt: () => Promise<void>;
+    onRunResumeSessionPrompt: () => Promise<void>;
     onClose: () => void;
     onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
   }
@@ -55,9 +58,12 @@
     canCancelPrompt,
     cancelPromptInProgress,
     cancelPromptError,
+    canRunSessionDefaultPrompts,
     isHidden,
     onToggleHidden,
     onCancelPrompt,
+    onRunRefreshPurposePrompt,
+    onRunResumeSessionPrompt,
     onClose,
     onSubmitPrompt,
   }: Props = $props();
@@ -80,6 +86,8 @@
   let optimisticUserStatus = $state<"queued" | "running">("queued");
   let focusTailNonce = $state(0);
   let showSubmitOptions = $state(false);
+  let runningRefreshPurpose = $state(false);
+  let runningResumeSession = $state(false);
 
   function normalizePromptText(message: string): string {
     return message.replace(/\s+/g, " ").trim();
@@ -106,6 +114,38 @@
       optimisticUserStatus = "queued";
     } finally {
       submitting = false;
+    }
+  }
+
+  async function runDefaultPrompt(
+    kind: "refresh-purpose" | "resume-session",
+  ): Promise<void> {
+    if (!canRunSessionDefaultPrompts || submitting) {
+      return;
+    }
+
+    const assignRunningState = (value: boolean): void => {
+      if (kind === "refresh-purpose") {
+        runningRefreshPurpose = value;
+      } else {
+        runningResumeSession = value;
+      }
+    };
+
+    assignRunningState(true);
+    submitError = null;
+    try {
+      if (kind === "refresh-purpose") {
+        await onRunRefreshPurposePrompt();
+      } else {
+        await onRunResumeSessionPrompt();
+      }
+      focusTailNonce += 1;
+    } catch (error: unknown) {
+      submitError =
+        error instanceof Error ? error.message : "Failed to run default prompt";
+    } finally {
+      assignRunningState(false);
     }
   }
 
@@ -197,7 +237,7 @@
                   ? 'bg-accent-muted text-accent-fg'
                   : source === 'codex-cli'
                     ? 'bg-attention-emphasis/20 text-attention-fg'
-                  : 'bg-bg-tertiary text-text-secondary'}"
+                    : 'bg-bg-tertiary text-text-secondary'}"
             >
               {source}
             </span>
@@ -224,6 +264,32 @@
         </div>
 
         <div class="shrink-0 flex items-center gap-2">
+          {#if canRunSessionDefaultPrompts}
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => {
+                void runDefaultPrompt("refresh-purpose");
+              }}
+              disabled={submitting || runningRefreshPurpose || runningResumeSession}
+              aria-label="Refresh purpose"
+              title="Run default refresh-purpose prompt"
+            >
+              {runningRefreshPurpose ? "Refreshing..." : "Refresh Purpose"}
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => {
+                void runDefaultPrompt("resume-session");
+              }}
+              disabled={submitting || runningResumeSession || runningRefreshPurpose}
+              aria-label="Resume session"
+              title="Run default resume-session prompt"
+            >
+              {runningResumeSession ? "Resuming..." : "Resume Session"}
+            </button>
+          {/if}
           {#if canCancelPrompt}
             <button
               type="button"

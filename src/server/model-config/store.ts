@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { CLIConfig } from "../../types/index.js";
@@ -77,6 +77,171 @@ function nowIso(): string {
 }
 
 const DEFAULT_OPERATION_LANGUAGE = "English";
+const OPENAI_DEFAULT_MODEL = "gpt-5.3-codex";
+const OPENAI_DEFAULT_ARGUMENTS = ["--dangerously-bypass-approvals-and-sandbox"];
+const OPENAI_LIGHT_MODEL = "gpt-5-mini-codex";
+const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-6";
+const ANTHROPIC_SONNET_MODEL = "claude-sonnet-4-5";
+
+interface DefaultModelProfileTemplate {
+  readonly fileName: string;
+  readonly name: string;
+  readonly vendor: ModelVendor;
+  readonly model: string;
+  readonly arguments: readonly string[];
+}
+
+interface StoredDefaultModelProfileConfig {
+  readonly name?: unknown;
+  readonly vendor?: unknown;
+  readonly model?: unknown;
+  readonly arguments?: unknown;
+}
+
+function defaultModelProfilesConfigDir(): string {
+  return join(homedir(), ".config", "qraftbox", "model-profiles", "defaults");
+}
+
+function defaultModelProfileTemplates(
+  seedFromCliConfig:
+    | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
+    | undefined,
+): readonly DefaultModelProfileTemplate[] {
+  const anthropicArgs =
+    (seedFromCliConfig?.assistantAdditionalArgs.length ?? 0) !== 0
+      ? [...(seedFromCliConfig?.assistantAdditionalArgs ?? [])]
+      : [];
+
+  return [
+    {
+      fileName: "anthropic-default.json",
+      name: "Anthropic Default",
+      vendor: "anthropics",
+      model: seedFromCliConfig?.assistantModel ?? ANTHROPIC_DEFAULT_MODEL,
+      arguments: anthropicArgs,
+    },
+    {
+      fileName: "anthropic-sonnet.json",
+      name: "Anthropic Sonnet",
+      vendor: "anthropics",
+      model: ANTHROPIC_SONNET_MODEL,
+      arguments: [],
+    },
+    {
+      fileName: "openai-default.json",
+      name: "OpenAI Default",
+      vendor: "openai",
+      model: OPENAI_DEFAULT_MODEL,
+      arguments: OPENAI_DEFAULT_ARGUMENTS,
+    },
+    {
+      fileName: "openai-light.json",
+      name: "OpenAI Light",
+      vendor: "openai",
+      model: OPENAI_LIGHT_MODEL,
+      arguments: OPENAI_DEFAULT_ARGUMENTS,
+    },
+  ];
+}
+
+function parseDefaultProfileConfig(
+  raw: string,
+): Omit<DefaultModelProfileTemplate, "fileName"> | null {
+  let parsed: StoredDefaultModelProfileConfig;
+  try {
+    parsed = JSON.parse(raw) as StoredDefaultModelProfileConfig;
+  } catch {
+    return null;
+  }
+
+  const vendorCandidate =
+    typeof parsed.vendor === "string" ? parsed.vendor : "";
+
+  if (
+    typeof parsed.name !== "string" ||
+    !validateVendor(vendorCandidate) ||
+    typeof parsed.model !== "string"
+  ) {
+    return null;
+  }
+
+  const args = Array.isArray(parsed.arguments)
+    ? parsed.arguments.filter((arg): arg is string => typeof arg === "string")
+    : [];
+
+  return {
+    name: parsed.name.trim(),
+    vendor: vendorCandidate,
+    model: parsed.model.trim(),
+    arguments: normalizeArguments(args),
+  };
+}
+
+function ensureDefaultModelProfileConfigFiles(
+  templates: readonly DefaultModelProfileTemplate[],
+): readonly Omit<DefaultModelProfileTemplate, "fileName">[] {
+  const configDir = defaultModelProfilesConfigDir();
+  mkdirSync(configDir, { recursive: true });
+
+  const resolved: Omit<DefaultModelProfileTemplate, "fileName">[] = [];
+
+  for (const template of templates) {
+    const path = join(configDir, template.fileName);
+
+    if (!existsSync(path)) {
+      writeFileSync(
+        path,
+        JSON.stringify(
+          {
+            name: template.name,
+            vendor: template.vendor,
+            model: template.model,
+            arguments: [...template.arguments],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf-8",
+      );
+      resolved.push({
+        name: template.name,
+        vendor: template.vendor,
+        model: template.model,
+        arguments: [...template.arguments],
+      });
+      continue;
+    }
+
+    const parsed = parseDefaultProfileConfig(readFileSync(path, "utf-8"));
+    if (parsed === null) {
+      writeFileSync(
+        path,
+        JSON.stringify(
+          {
+            name: template.name,
+            vendor: template.vendor,
+            model: template.model,
+            arguments: [...template.arguments],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf-8",
+      );
+      resolved.push({
+        name: template.name,
+        vendor: template.vendor,
+        model: template.model,
+        arguments: [...template.arguments],
+      });
+      continue;
+    }
+
+    resolved.push(parsed);
+  }
+
+  return resolved;
+}
 
 function normalizeLanguage(input: string | null | undefined): string {
   const trimmed = (input ?? "").trim();
@@ -237,31 +402,50 @@ class ModelConfigStoreImpl implements ModelConfigStore {
       | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
       | undefined,
   ): void {
+    const defaultProfiles = ensureDefaultModelProfileConfigFiles(
+      defaultModelProfileTemplates(seedFromCliConfig),
+    );
+
+    const currentProfiles = this.listProfiles();
+    for (const defaultProfile of defaultProfiles) {
+      const existing = currentProfiles.find(
+        (profile) =>
+          profile.vendor === defaultProfile.vendor &&
+          profile.name === defaultProfile.name,
+      );
+      if (existing === undefined) {
+        this.createProfile({
+          name: defaultProfile.name,
+          vendor: defaultProfile.vendor,
+          model: defaultProfile.model,
+          arguments: defaultProfile.arguments,
+        });
+      }
+    }
+
+    const refreshedProfiles = this.listProfiles();
+    const legacyOpenAiDefault = refreshedProfiles.find(
+      (profile) =>
+        profile.vendor === "openai" &&
+        profile.name === "OpenAI Default" &&
+        profile.model === "codex5.3" &&
+        profile.arguments.length === 0,
+    );
+    if (legacyOpenAiDefault !== undefined) {
+      this.updateProfile(legacyOpenAiDefault.id, {
+        model: OPENAI_DEFAULT_MODEL,
+        arguments: OPENAI_DEFAULT_ARGUMENTS,
+      });
+    }
+
     const profiles = this.listProfiles();
     const currentBindings = this.getOperationBindings();
 
-    if (profiles.length === 0) {
-      const args =
-        (seedFromCliConfig?.assistantAdditionalArgs.length ?? 0) !== 0
-          ? [...(seedFromCliConfig?.assistantAdditionalArgs ?? [])]
-          : [];
-
-      const created = this.createProfile({
-        name: "Anthropic Default",
-        vendor: "anthropics",
-        model: seedFromCliConfig?.assistantModel ?? "claude-opus-4-6",
-        arguments: args,
-      });
-
-      this.updateOperationBindings({
-        gitCommitProfileId: created.id,
-        gitPrProfileId: created.id,
-        aiDefaultProfileId: created.id,
-      });
-      return;
-    }
-
-    const fallbackProfileId = profiles[0]?.id ?? null;
+    const preferredFallbackProfileId =
+      profiles.find((profile) => profile.vendor === "anthropics")?.id ??
+      profiles[0]?.id ??
+      null;
+    const fallbackProfileId = preferredFallbackProfileId;
     if (fallbackProfileId === null) {
       return;
     }

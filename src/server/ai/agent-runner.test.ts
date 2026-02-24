@@ -7,6 +7,7 @@
 
 import { describe, test, expect } from "vitest";
 import {
+  buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
   type AgentEvent,
@@ -14,6 +15,7 @@ import {
 } from "./agent-runner.js";
 import type { ClaudeSessionId } from "../../types/ai.js";
 import { DEFAULT_AI_CONFIG } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 
 /**
  * Create test agent run parameters
@@ -91,6 +93,43 @@ describe("extractClaudeSessionIdFromMessage()", () => {
       sessionId: "sdk-session-1",
     });
     expect(result).toBeUndefined();
+  });
+});
+
+describe("buildCodexExecCommand()", () => {
+  test("builds codex exec --json command for new sessions", () => {
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Investigate latency",
+        aiAgent: AIAgent.CODEX,
+        model: "gpt-5.3-codex",
+        additionalArgs: ["--dangerously-bypass-approvals-and-sandbox"],
+      }),
+    );
+
+    expect(command.slice(0, 3)).toEqual(["codex", "exec", "--json"]);
+    expect(command).toContain("--model");
+    expect(command).toContain("gpt-5.3-codex");
+    expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(command).not.toContain("--print");
+    expect(command).not.toContain("--output-format");
+    expect(command[command.length - 1]).toBe("Investigate latency");
+  });
+
+  test("builds codex exec resume --json command for resumed sessions", () => {
+    const resumeId = "0dc4ee1f-2e78-462f-a400-16d14ab6a418" as ClaudeSessionId;
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Continue from previous task",
+        aiAgent: AIAgent.CODEX,
+        resumeSessionId: resumeId,
+        model: "gpt-5.3-codex",
+      }),
+    );
+
+    expect(command.slice(0, 4)).toEqual(["codex", "exec", "resume", "--json"]);
+    expect(command).toContain(resumeId);
+    expect(command[command.length - 1]).toBe("Continue from previous task");
   });
 });
 

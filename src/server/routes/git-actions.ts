@@ -15,6 +15,7 @@ import {
   executeCommit,
   executePush,
   executePull,
+  executeInit,
   executeCreatePR,
   executeUpdatePR,
   cancelGitAction,
@@ -28,12 +29,15 @@ import {
   ensureSystemPromptFiles,
   loadSystemPrompt,
   resolveSystemPromptPath,
+  saveSystemPrompt,
   type SystemPromptName,
 } from "../git-actions/system-prompt.js";
 import {
-  ensurePurposePromptFile,
-  getPurposePromptPath,
-  loadPurposePromptTemplate,
+  ensureAISessionPromptFile,
+  getAISessionPromptPath,
+  loadAISessionPromptTemplate,
+  saveAISessionPromptTemplate,
+  type AISessionPromptName,
 } from "../claude/session-purpose.js";
 
 /**
@@ -69,6 +73,13 @@ interface PullRequest {
 }
 
 /**
+ * Request body for POST /init
+ */
+interface InitRequest {
+  readonly projectPath: string;
+}
+
+/**
  * Request body for POST /create-pr
  */
 interface CreatePRRequest {
@@ -86,13 +97,17 @@ interface CancelRequest {
   readonly actionId: string;
 }
 
-type EffectivePromptName = SystemPromptName | "ai-session-purpose";
+type EffectivePromptName = SystemPromptName | AISessionPromptName;
 
 interface EffectivePromptResponse {
   readonly name: EffectivePromptName;
   readonly path: string;
   readonly content: string;
   readonly source: "file" | "fallback";
+}
+
+interface UpdateEffectivePromptRequest {
+  readonly content: string;
 }
 
 /**
@@ -103,6 +118,14 @@ interface EffectivePromptResponse {
  */
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isAISessionPromptName(name: string): name is AISessionPromptName {
+  return (
+    name === "ai-session-purpose" ||
+    name === "ai-session-refresh-purpose" ||
+    name === "ai-session-resume"
+  );
 }
 
 /**
@@ -132,6 +155,7 @@ async function validateGitRepo(
  * - POST /commit - Execute AI-powered commit
  * - POST /push - Execute git push (direct, no AI)
  * - POST /pull - Execute git pull (direct, no AI)
+ * - POST /init - Initialize git repository in current directory
  * - POST /create-pr - Execute AI-powered PR creation
  * - POST /update-pr - Execute AI-powered PR update
  * - POST /cancel - Cancel running AI commit/PR action
@@ -149,23 +173,23 @@ export function createGitActionsRoutes(
     if (
       name !== "commit" &&
       name !== "create-pr" &&
-      name !== "ai-session-purpose"
+      !isAISessionPromptName(name)
     ) {
       const errorResponse: ErrorResponse = {
         error:
-          "Invalid prompt name: must be commit, create-pr, or ai-session-purpose",
+          "Invalid prompt name: must be commit, create-pr, ai-session-purpose, ai-session-refresh-purpose, or ai-session-resume",
         code: 400,
       };
       return c.json(errorResponse, 400);
     }
 
     try {
-      if (name === "ai-session-purpose") {
-        await ensurePurposePromptFile();
-        const template = await loadPurposePromptTemplate();
+      if (isAISessionPromptName(name)) {
+        await ensureAISessionPromptFile(name);
+        const template = await loadAISessionPromptTemplate(name);
         const response: EffectivePromptResponse = {
           name,
-          path: getPurposePromptPath(),
+          path: getAISessionPromptPath(name),
           content: template.template,
           source: template.source,
         };
@@ -196,6 +220,72 @@ export function createGitActionsRoutes(
         code: 500,
       };
       return c.json(errorResponse, 500);
+    }
+  });
+
+  app.put("/prompts/:name", async (c) => {
+    const name = c.req.param("name") as EffectivePromptName;
+    if (
+      name !== "commit" &&
+      name !== "create-pr" &&
+      !isAISessionPromptName(name)
+    ) {
+      const errorResponse: ErrorResponse = {
+        error:
+          "Invalid prompt name: must be commit, create-pr, ai-session-purpose, ai-session-refresh-purpose, or ai-session-resume",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    try {
+      const body = await c.req.json<UpdateEffectivePromptRequest>();
+      if (!isNonEmptyString(body.content)) {
+        return c.json(
+          {
+            error: "content must be a non-empty string",
+            code: 400,
+          },
+          400,
+        );
+      }
+
+      if (isAISessionPromptName(name)) {
+        await saveAISessionPromptTemplate(name, body.content);
+        const saved = await loadAISessionPromptTemplate(name);
+        const response: EffectivePromptResponse = {
+          name,
+          path: getAISessionPromptPath(name),
+          content: saved.template,
+          source: "file",
+        };
+        return c.json(response);
+      }
+
+      await saveSystemPrompt(name, body.content);
+      const content = await loadSystemPrompt(name);
+      const resolvedPath = resolveSystemPromptPath(name);
+      if (resolvedPath === null) {
+        throw new Error("System prompt path was not resolved");
+      }
+      const response: EffectivePromptResponse = {
+        name,
+        path: resolvedPath,
+        content,
+        source: "file",
+      };
+      return c.json(response);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to update effective prompt";
+      const status = errorMessage.includes("non-empty string") ? 400 : 500;
+      return c.json(
+        {
+          error: errorMessage,
+          code: status,
+        },
+        status,
+      );
     }
   });
 
@@ -329,6 +419,47 @@ export function createGitActionsRoutes(
     } catch (e) {
       const errorMessage =
         e instanceof Error ? e.message : "Failed to execute pull";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
+   * POST /init
+   *
+   * Execute git init for non-repository directories.
+   */
+  app.post("/init", async (c) => {
+    try {
+      const body = await c.req.json<InitRequest>();
+
+      // Validate projectPath
+      if (!isNonEmptyString(body.projectPath)) {
+        const errorResponse: ErrorResponse = {
+          error: "projectPath must be a non-empty string",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      // Only allow init for non-git directories
+      const isRepo = await isGitRepository(body.projectPath);
+      if (isRepo) {
+        const errorResponse: ErrorResponse = {
+          error: "Directory is already a git repository",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
+      const result: GitActionResult = await executeInit(body.projectPath);
+      return c.json(result);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to execute git init";
       const errorResponse: ErrorResponse = {
         error: errorMessage,
         code: 500,

@@ -58,11 +58,7 @@ export interface ClaudeSessionEntry {
  * - codex-cli: Created by Codex CLI directly
  * - unknown: Cannot determine source
  */
-export type SessionSource =
-  | "qraftbox"
-  | "claude-cli"
-  | "codex-cli"
-  | "unknown";
+export type SessionSource = "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
 
 /**
  * Extended session entry with source tracking

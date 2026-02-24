@@ -157,6 +157,7 @@
     sidebarCollapsed,
     sidebarWidth,
     allFilesLoading,
+    projectPath,
     fileTree,
     fileTreeMode,
     selectedPath,
@@ -194,6 +195,7 @@
     sidebarCollapsed: boolean;
     sidebarWidth: number;
     allFilesLoading: boolean;
+    projectPath: string;
     fileTree: FileNode;
     fileTreeMode: "diff" | "all";
     selectedPath: string | null;
@@ -281,6 +283,7 @@
         {:else}
           <FileTree
             tree={fileTree}
+            currentDirectory={projectPath}
             mode={fileTreeMode}
             {selectedPath}
             onFileSelect={handleTreeFileSelect}

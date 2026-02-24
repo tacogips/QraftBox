@@ -97,6 +97,11 @@
      * Callback to reload/refresh the file tree data
      */
     onReload?: () => void;
+
+    /**
+     * Current project directory path shown above file tree
+     */
+    currentDirectory?: string;
   }
 
   const {
@@ -118,7 +123,78 @@
     onDirectoryExpand = undefined,
     onLoadFullTree = undefined,
     onReload = undefined,
+    currentDirectory = "",
   }: Props = $props();
+
+  const MAX_TRUNCATED_DIRECTORY_CHARS = 52;
+
+  let showFullCurrentDirectory = $state(false);
+  let copyStatus = $state<"idle" | "copied" | "failed">("idle");
+  let copyStatusResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function truncateFromLeft(value: string, maxChars: number): string {
+    if (value.length <= maxChars) {
+      return value;
+    }
+    return `...${value.slice(-(maxChars - 3))}`;
+  }
+
+  const hasCurrentDirectory = $derived(currentDirectory.trim().length > 0);
+  const isDirectoryLong = $derived(
+    currentDirectory.length > MAX_TRUNCATED_DIRECTORY_CHARS,
+  );
+  const truncatedCurrentDirectory = $derived.by(() =>
+    truncateFromLeft(currentDirectory, MAX_TRUNCATED_DIRECTORY_CHARS),
+  );
+
+  async function copyCurrentDirectory(): Promise<void> {
+    if (!hasCurrentDirectory) {
+      return;
+    }
+
+    try {
+      if (
+        typeof navigator.clipboard !== "undefined" &&
+        window.isSecureContext
+      ) {
+        await navigator.clipboard.writeText(currentDirectory);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = currentDirectory;
+        textArea.setAttribute("readonly", "");
+        textArea.style.position = "absolute";
+        textArea.style.left = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        const copied = document.execCommand("copy");
+        document.body.removeChild(textArea);
+        if (!copied) {
+          throw new Error("Copy command failed");
+        }
+      }
+
+      copyStatus = "copied";
+    } catch {
+      copyStatus = "failed";
+    }
+
+    if (copyStatusResetTimer !== null) {
+      clearTimeout(copyStatusResetTimer);
+    }
+
+    copyStatusResetTimer = setTimeout(() => {
+      copyStatus = "idle";
+      copyStatusResetTimer = null;
+    }, 1200);
+  }
+
+  $effect(() => {
+    return () => {
+      if (copyStatusResetTimer !== null) {
+        clearTimeout(copyStatusResetTimer);
+      }
+    };
+  });
 
   /**
    * Track expanded directories (path -> expanded state)
@@ -595,6 +671,87 @@
 
 <!-- File Tree Container -->
 <div class="file-tree flex flex-col h-full bg-bg-secondary" role="tree">
+  {#if hasCurrentDirectory}
+    <div
+      class="px-2 py-1.5 border-b border-border-default flex items-start gap-1.5"
+    >
+      <div class="min-w-0 flex-1">
+        <div
+          class="text-xs text-text-secondary font-mono leading-4"
+          class:truncate={!showFullCurrentDirectory}
+          class:break-all={showFullCurrentDirectory}
+          title={currentDirectory}
+        >
+          {showFullCurrentDirectory
+            ? currentDirectory
+            : truncatedCurrentDirectory}
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0 pt-0.5">
+        <button
+          type="button"
+          class="w-5 h-5 flex items-center justify-center rounded transition-colors text-text-tertiary hover:text-text-primary"
+          onclick={copyCurrentDirectory}
+          aria-label="Copy current directory"
+          title={copyStatus === "copied"
+            ? "Copied"
+            : copyStatus === "failed"
+              ? "Copy failed"
+              : "Copy current directory"}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M0 4.75C0 3.784.784 3 1.75 3h7.5c.966 0 1.75.784 1.75 1.75v7.5A1.75 1.75 0 019.25 14h-7.5A1.75 1.75 0 010 12.25v-7.5zM1.75 4.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"
+            />
+            <path
+              d="M4.75 1A1.75 1.75 0 003 2.75V3h1.5v-.25a.25.25 0 01.25-.25h7.5a.25.25 0 01.25.25v7.5a.25.25 0 01-.25.25H12V12h.25A1.75 1.75 0 0014 10.25v-7.5A1.75 1.75 0 0012.25 1h-7.5z"
+            />
+          </svg>
+        </button>
+        {#if isDirectoryLong}
+          <button
+            type="button"
+            class="w-5 h-5 flex items-center justify-center rounded transition-colors text-text-tertiary hover:text-text-primary"
+            onclick={() => {
+              showFullCurrentDirectory = !showFullCurrentDirectory;
+            }}
+            aria-label={showFullCurrentDirectory
+              ? "Collapse directory path"
+              : "Show full directory path"}
+            title={showFullCurrentDirectory
+              ? "Collapse path"
+              : "Show full path"}
+            aria-pressed={showFullCurrentDirectory}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              {#if showFullCurrentDirectory}
+                <path
+                  d="M8.5 3.5a.75.75 0 00-1.5 0v2.75A.75.75 0 007.75 7h2.75a.75.75 0 000-1.5H9.56l2.22-2.22a.75.75 0 00-1.06-1.06L8.5 4.44V3.5zM7.5 12.5a.75.75 0 001.5 0V9.75A.75.75 0 008.25 9H5.5a.75.75 0 000 1.5h.94l-2.22 2.22a.75.75 0 101.06 1.06l2.22-2.22v.94z"
+                />
+              {:else}
+                <path
+                  d="M6.44 4.44L4.22 2.22a.75.75 0 10-1.06 1.06L5.38 5.5H4.5a.75.75 0 000 1.5h2.75A.75.75 0 008 6.25V3.5a.75.75 0 00-1.5 0v.94zM9.56 11.56l2.22 2.22a.75.75 0 001.06-1.06L10.62 10.5h.88a.75.75 0 000-1.5H8.75a.75.75 0 00-.75.75v2.75a.75.75 0 001.5 0v-.94z"
+                />
+              {/if}
+            </svg>
+          </button>
+        {/if}
+      </div>
+    </div>
+  {/if}
+
   <!-- Filter Bar with Mode Toggle -->
   <div
     class="px-2 py-1.5 border-b border-border-default flex items-center gap-1.5"

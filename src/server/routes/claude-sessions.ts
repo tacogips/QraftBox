@@ -16,7 +16,7 @@ import {
   ClaudeSessionReader,
   type SessionSummary,
 } from "../claude/session-reader";
-import { stripSystemTags } from "../../utils/strip-system-tags";
+import { stripSystemTags, wrapQraftboxInternalPrompt } from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import type { QraftAiSessionId } from "../../types/ai.js";
 import { AIAgent } from "../../types/ai-agent.js";
@@ -63,12 +63,6 @@ interface PurposeCacheEntry {
   readonly purpose: string;
   readonly updatedAt: string;
   readonly source: "llm" | "fallback";
-}
-
-function wrapInternalPurposePrompt(content: string): string {
-  return `<qraftbox-internal-prompt label="ai-session-purpose" anchor="session-purpose-v1">
-${content}
-</qraftbox-internal-prompt>`;
 }
 
 /**
@@ -154,8 +148,10 @@ export function createClaudeSessionsRoutes(
 
     let assistantText = "";
     try {
-      const prompt = wrapInternalPurposePrompt(
+      const prompt = wrapQraftboxInternalPrompt(
+        "ai-session-purpose",
         await buildPurposePrompt(intents, outputLanguage),
+        "session-purpose-v1",
       );
       const session = await runner.startSession({ prompt });
       session.on("message", (msg: unknown) => {

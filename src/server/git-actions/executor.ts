@@ -56,7 +56,8 @@ let currentOperationPhase:
   | "committing"
   | "pushing"
   | "pulling"
-  | "creating-pr" = "idle";
+  | "creating-pr"
+  | "initializing" = "idle";
 
 /**
  * Returns the current operation phase.
@@ -66,7 +67,8 @@ export function getOperationPhase():
   | "committing"
   | "pushing"
   | "pulling"
-  | "creating-pr" {
+  | "creating-pr"
+  | "initializing" {
   return currentOperationPhase;
 }
 
@@ -546,6 +548,65 @@ export async function executePull(
       success: false,
       output: "",
       error: `Failed to execute pull: ${errorMessage}`,
+    };
+  } finally {
+    currentOperationPhase = "idle";
+  }
+}
+
+/**
+ * Execute git init
+ *
+ * Initializes a new git repository in the target directory.
+ *
+ * @param projectPath - Absolute path to directory
+ * @returns Init execution result
+ */
+export async function executeInit(
+  projectPath: string,
+): Promise<GitActionResult> {
+  currentOperationPhase = "initializing";
+  try {
+    const proc = Bun.spawn(["git", "init"], {
+      cwd: projectPath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const timeoutMs = 30 * 1000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Git init timeout")), timeoutMs),
+    );
+
+    const [stdout, stderr, exitCode] = await Promise.race([
+      Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]),
+      timeoutPromise,
+    ]);
+
+    if (exitCode === 0) {
+      const output = stdout.length > 0 ? stdout : stderr;
+      return {
+        success: true,
+        output,
+      };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `Git init exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to execute git init: ${errorMessage}`,
     };
   } finally {
     currentOperationPhase = "idle";
