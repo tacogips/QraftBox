@@ -42,6 +42,7 @@ const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
 const LEGACY_INTERNAL_PURPOSE_PREFIX =
   "You summarize a coding session's current objective.";
 const FAST_JSONL_FALLBACK_MULTIPLIER = 2;
+const SESSION_PARSE_CONCURRENCY = 8;
 
 /**
  * Options for listing sessions
@@ -73,6 +74,11 @@ export interface ListSessionsOptions {
    * Enabled by default for compatibility, but can be disabled for faster list rendering.
    */
   recoverFirstPromptFromJsonl?: boolean;
+  /**
+   * Whether to prioritize low-latency list rendering over rich metadata when
+   * sessions-index.json is missing (overview/list screens).
+   */
+  fastListMode?: boolean;
 }
 
 /**
@@ -205,6 +211,7 @@ export class ClaudeSessionReader {
     const fastJsonlFallbackCandidateCount =
       (effectiveOffset + effectiveLimit) * FAST_JSONL_FALLBACK_MULTIPLIER;
     const canUseFastJsonlFallback =
+      options.fastListMode === true &&
       options.search === undefined &&
       options.branch === undefined &&
       options.dateRange === undefined &&
@@ -430,17 +437,15 @@ export class ClaudeSessionReader {
     }
 
     const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
-    const sessions: ExtendedSessionEntry[] = [];
-    for (const file of files) {
-      const session = await this.readCodexSessionEntry(file);
-      if (session === null) {
-        continue;
-      }
-      if (this.matchesFilters(session, options)) {
-        sessions.push(session);
-      }
-    }
-    return sessions;
+    const sessions = await this.mapWithConcurrency(
+      files,
+      SESSION_PARSE_CONCURRENCY,
+      async (file) => this.readCodexSessionEntry(file),
+    );
+    return sessions.filter(
+      (session): session is ExtendedSessionEntry =>
+        session !== null && this.matchesFilters(session, options),
+    );
   }
 
   private async getCodexSessionById(
@@ -1015,29 +1020,54 @@ export class ClaudeSessionReader {
       (e) => e.isFile() && e.name.endsWith(".jsonl"),
     );
 
-    const entries: ClaudeSessionEntry[] = [];
     const decodedPath = this.decodeProjectPath(encodedName);
-
-    for (const file of jsonlFiles) {
-      const sessionId = file.name.replace(".jsonl", "");
-      const fullPath = join(projectDir, file.name);
-
-      try {
-        const entry = await this.buildEntryFromJsonl(
-          fullPath,
-          sessionId,
-          decodedPath,
-        );
-        if (entry !== null) {
-          entries.push(entry);
+    const entries = await this.mapWithConcurrency(
+      jsonlFiles,
+      SESSION_PARSE_CONCURRENCY,
+      async (file) => {
+        const sessionId = file.name.replace(".jsonl", "");
+        const fullPath = join(projectDir, file.name);
+        try {
+          return await this.buildEntryFromJsonl(
+            fullPath,
+            sessionId,
+            decodedPath,
+          );
+        } catch {
+          return null;
         }
-      } catch (error: unknown) {
-        // Skip files that can't be parsed
-        continue;
-      }
+      },
+    );
+    return entries.filter((entry): entry is ClaudeSessionEntry => entry !== null);
+  }
+
+  private async mapWithConcurrency<TInput, TOutput>(
+    items: readonly TInput[],
+    concurrency: number,
+    mapper: (item: TInput) => Promise<TOutput>,
+  ): Promise<TOutput[]> {
+    if (items.length === 0) {
+      return [];
     }
 
-    return entries;
+    const results: TOutput[] = new Array(items.length);
+    let cursor = 0;
+    const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        const item = items[index];
+        if (item === undefined) {
+          continue;
+        }
+        results[index] = await mapper(item);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
   }
 
   /**
@@ -1079,21 +1109,41 @@ export class ClaudeSessionReader {
     const parsedEntries = await Promise.all(
       selectedCandidates.map(async (candidate) => {
         const sessionId = candidate.name.replace(".jsonl", "");
-        try {
-          return await this.buildEntryFromJsonl(
-            candidate.fullPath,
-            sessionId,
-            decodedPath,
-          );
-        } catch {
-          return null;
-        }
+        return this.buildEntryFromJsonlStatOnly(
+          candidate.fullPath,
+          sessionId,
+          decodedPath,
+          candidate.mtimeMs,
+        );
       }),
     );
 
     return parsedEntries.filter((entry): entry is ClaudeSessionEntry => {
       return entry !== null;
     });
+  }
+
+  private buildEntryFromJsonlStatOnly(
+    jsonlPath: string,
+    sessionId: string,
+    projectPath: string,
+    mtimeMs: number,
+  ): ClaudeSessionEntry {
+    const modifiedIso = new Date(mtimeMs).toISOString();
+    return {
+      sessionId,
+      fullPath: jsonlPath,
+      fileMtime: mtimeMs,
+      firstPrompt: "(Session metadata pending index)",
+      summary: "",
+      messageCount: 0,
+      created: modifiedIso,
+      modified: modifiedIso,
+      gitBranch: "",
+      projectPath,
+      isSidechain: false,
+      hasUserPrompt: true,
+    };
   }
 
   /**

@@ -4,6 +4,7 @@
     AISession,
     AISessionSubmitResult,
     QraftAiSessionId,
+    FileReference,
   } from "../../../src/types/ai";
   import type { ModelProfile } from "../../../src/types/model-config";
   import {
@@ -102,6 +103,7 @@
     sessionId: string,
     message: string,
     immediate: boolean,
+    references: readonly FileReference[],
   ): Promise<AISessionSubmitResult | null> {
     if (typeof onResumeCliSession === "function") {
       onResumeCliSession(sessionId);
@@ -109,7 +111,7 @@
 
     return onSubmitPrompt(message, immediate, {
       primaryFile: undefined,
-      references: [],
+      references,
       diffSummary: undefined,
       resumeSessionId: sessionId,
       // Existing sessions keep their already resolved profile.
@@ -120,10 +122,11 @@
   async function handleOverviewNewSessionPromptSubmit(
     message: string,
     immediate: boolean,
+    references: readonly FileReference[],
   ): Promise<AISessionSubmitResult | null> {
     return onSubmitPrompt(message, immediate, {
       primaryFile: undefined,
-      references: [],
+      references,
       diffSummary: undefined,
       resumeSessionId: currentQraftAiSessionId as QraftAiSessionId | undefined,
       modelProfileId: selectedAiModelProfileId,

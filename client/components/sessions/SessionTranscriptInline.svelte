@@ -36,6 +36,13 @@
           status: "queued" | "running";
         }[]
       | undefined;
+    optimisticUserImageAttachments?:
+      | readonly {
+          fileName: string;
+          mimeType: string;
+          dataUrl: string;
+        }[]
+      | undefined;
   }
 
   import {
@@ -57,6 +64,7 @@
     optimisticAssistantMessage = undefined,
     showAssistantThinking = false,
     pendingUserMessages = [],
+    optimisticUserImageAttachments = [],
   }: Props = $props();
 
   /**
@@ -243,6 +251,30 @@
     readonly status: "queued" | "running";
   }
 
+  interface DisplayImageAttachment {
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly dataUrl: string;
+  }
+
+  function normalizeImageAttachments(
+    attachments: readonly {
+      fileName: string;
+      mimeType: string;
+      dataUrl: string;
+    }[],
+  ): readonly DisplayImageAttachment[] {
+    return attachments.filter(
+      (attachment) =>
+        typeof attachment.dataUrl === "string" &&
+        attachment.dataUrl.startsWith("data:image/"),
+    );
+  }
+
+  const normalizedOptimisticUserImages = $derived(
+    normalizeImageAttachments(optimisticUserImageAttachments),
+  );
+
   const pendingQueuedUserMessages = $derived.by(() => {
     const items: PendingUserMessage[] = [];
     const seenNormalized = new Set<string>();
@@ -275,6 +307,18 @@
     }
     return normalizedSet;
   });
+
+  function attachmentsForPendingMessage(
+    pendingMessage: PendingUserMessage,
+  ): readonly DisplayImageAttachment[] {
+    if (
+      normalizedOptimisticUser.length > 0 &&
+      pendingMessage.normalized === normalizedOptimisticUser
+    ) {
+      return normalizedOptimisticUserImages;
+    }
+    return [];
+  }
 
   const showOptimisticUser = $derived(
     normalizedOptimisticUser.length > 0 &&
@@ -577,6 +621,82 @@
       }
     }
     return textParts.join("\n\n");
+  }
+
+  function extractImageSourceFromBlock(block: Record<string, unknown>): string | null {
+    const imageUrl = block["image_url"];
+    if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      return imageUrl;
+    }
+    if (typeof imageUrl === "object" && imageUrl !== null) {
+      const url = (imageUrl as { url?: unknown }).url;
+      if (typeof url === "string" && url.length > 0) {
+        return url;
+      }
+    }
+
+    const source = block["source"];
+    if (typeof source === "object" && source !== null) {
+      const sourceObj = source as {
+        data?: unknown;
+        media_type?: unknown;
+        mime_type?: unknown;
+      };
+      const data =
+        typeof sourceObj.data === "string" ? sourceObj.data : undefined;
+      const mimeType =
+        typeof sourceObj.media_type === "string"
+          ? sourceObj.media_type
+          : typeof sourceObj.mime_type === "string"
+            ? sourceObj.mime_type
+            : undefined;
+      if (data !== undefined && mimeType !== undefined) {
+        return `data:${mimeType};base64,${data}`;
+      }
+    }
+
+    return null;
+  }
+
+  function extractImageAttachments(event: TranscriptEvent): readonly DisplayImageAttachment[] {
+    if (event.type !== "user" && event.type !== "assistant") {
+      return [];
+    }
+    const raw = event.raw as Record<string, unknown>;
+    const message = raw["message"] as Record<string, unknown> | undefined;
+    const content = message?.["content"];
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const images: DisplayImageAttachment[] = [];
+    for (const blockValue of content) {
+      if (typeof blockValue !== "object" || blockValue === null) {
+        continue;
+      }
+      const block = blockValue as Record<string, unknown>;
+      const src = extractImageSourceFromBlock(block);
+      if (src === null) {
+        continue;
+      }
+      if (!src.startsWith("data:image/") && !src.startsWith("http")) {
+        continue;
+      }
+      const fileName =
+        typeof block["file_name"] === "string"
+          ? block["file_name"]
+          : "image";
+      const mimeType =
+        src.startsWith("data:image/")
+          ? src.slice("data:".length, src.indexOf(";"))
+          : "image/*";
+      images.push({
+        fileName,
+        mimeType,
+        dataUrl: src,
+      });
+    }
+    return images;
   }
 
   /**
@@ -1047,6 +1167,7 @@
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
           {@const textContent = extractTextContent(event)}
+          {@const imageAttachments = extractImageAttachments(event)}
           {@const isLong = isLongContent(textContent)}
           {@const isExpanded = expandedMessages.has(eventId)}
 
@@ -1146,6 +1267,17 @@
                 >
                   {@html renderMarkdown(textContent)}
                 </div>
+                {#if imageAttachments.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each imageAttachments as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
 
                 {#if isLong}
                   <button
@@ -1162,6 +1294,7 @@
         {/each}
 
         {#each pendingQueuedUserMessages as pendingMessage}
+          {@const pendingImages = attachmentsForPendingMessage(pendingMessage)}
           <div
             class="flex w-full justify-end"
             data-chat-tail-anchor="true"
@@ -1189,6 +1322,17 @@
                 >
                   {@html renderMarkdown(pendingMessage.raw)}
                 </div>
+                {#if pendingImages.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each pendingImages as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -1224,6 +1368,17 @@
                     stripSystemTags(optimisticUserMessage ?? ""),
                   )}
                 </div>
+                {#if normalizedOptimisticUserImages.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each normalizedOptimisticUserImages as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>

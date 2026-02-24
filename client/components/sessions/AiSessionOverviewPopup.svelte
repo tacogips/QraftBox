@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AIAgent } from "../../../src/types/ai-agent";
+  import type { FileReference } from "../../../src/types/ai";
   import type { ModelProfile } from "../../../src/types/model-config";
   import {
     getSessionStatusMeta,
@@ -39,7 +40,11 @@
     onRunRefreshPurposePrompt: () => Promise<void>;
     onRunResumeSessionPrompt: () => Promise<void>;
     onClose: () => void;
-    onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
+    onSubmitPrompt: (
+      message: string,
+      immediate: boolean,
+      references: readonly FileReference[],
+    ) => Promise<void>;
   }
 
   const {
@@ -158,8 +163,10 @@
   }
 
   let promptText = $state("");
+  let attachmentInput: HTMLInputElement | null = $state(null);
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+  let attachmentError = $state<string | null>(null);
   let optimisticUserMessage = $state<string | undefined>(undefined);
   let optimisticUserStatus = $state<"queued" | "running">("queued");
   let optimisticAssistantMessageSticky = $state<string | undefined>(undefined);
@@ -167,6 +174,163 @@
   let showSubmitOptions = $state(false);
   let runningRefreshPurpose = $state(false);
   let runningResumeSession = $state(false);
+  const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+
+  interface ImageAttachment {
+    readonly id: string;
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly sizeBytes: number;
+    readonly base64: string;
+    readonly previewUrl: string;
+  }
+  let imageAttachments = $state<ImageAttachment[]>([]);
+  interface OptimisticImageAttachment {
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly dataUrl: string;
+  }
+  let optimisticUserImageAttachments = $state<
+    readonly OptimisticImageAttachment[]
+  >([]);
+
+  function sanitizeAttachmentFileName(fileName: string): string {
+    return fileName.replace(/[\\/]/g, "_");
+  }
+
+  function attachmentKey(
+    fileName: string,
+    sizeBytes: number,
+    mimeType: string,
+  ): string {
+    return `${fileName}:${sizeBytes}:${mimeType}`;
+  }
+
+  function toAttachmentRefs(): readonly FileReference[] {
+    return imageAttachments.map((attachment) => ({
+      path: `upload/${sanitizeAttachmentFileName(attachment.fileName)}`,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      encoding: "base64",
+      content: attachment.base64,
+      attachmentKind: "image",
+    }));
+  }
+
+  function toOptimisticImageAttachments(): readonly OptimisticImageAttachment[] {
+    return imageAttachments.map((attachment) => ({
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      dataUrl: `data:${attachment.mimeType};base64,${attachment.base64}`,
+    }));
+  }
+
+  function clearImageAttachments(): void {
+    for (const attachment of imageAttachments) {
+      URL.revokeObjectURL(attachment.previewUrl);
+    }
+    imageAttachments = [];
+  }
+
+  function removeImageAttachment(id: string): void {
+    const found = imageAttachments.find((attachment) => attachment.id === id);
+    if (found !== undefined) {
+      URL.revokeObjectURL(found.previewUrl);
+    }
+    imageAttachments = imageAttachments.filter(
+      (attachment) => attachment.id !== id,
+    );
+  }
+
+  function formatBytes(sizeBytes: number): string {
+    if (sizeBytes < 1024) {
+      return `${sizeBytes} B`;
+    }
+    if (sizeBytes < 1024 * 1024) {
+      return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function readImageAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error("Failed to read image file."));
+      };
+      reader.onerror = () => reject(new Error("Failed to read image file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageAttachmentInput(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files;
+    if (files === null || files.length === 0) {
+      return;
+    }
+
+    attachmentError = null;
+    const skippedMessages: string[] = [];
+    const existingKeys = new Set(
+      imageAttachments.map((attachment) =>
+        attachmentKey(
+          attachment.fileName,
+          attachment.sizeBytes,
+          attachment.mimeType,
+        ),
+      ),
+    );
+    const nextAttachments = [...imageAttachments];
+
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) {
+        skippedMessages.push(`${file.name}: only image files are supported.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+        skippedMessages.push(
+          `${file.name}: exceeds ${formatBytes(MAX_IMAGE_ATTACHMENT_BYTES)} limit.`,
+        );
+        continue;
+      }
+
+      const candidateKey = attachmentKey(file.name, file.size, file.type);
+      if (existingKeys.has(candidateKey)) {
+        continue;
+      }
+
+      try {
+        const dataUrl = await readImageAsDataUrl(file);
+        const base64 = dataUrl.split(",", 2)[1];
+        if (base64 === undefined || base64.length === 0) {
+          skippedMessages.push(`${file.name}: failed to encode image.`);
+          continue;
+        }
+
+        nextAttachments.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          base64,
+          previewUrl: URL.createObjectURL(file),
+        });
+        existingKeys.add(candidateKey);
+      } catch {
+        skippedMessages.push(`${file.name}: failed to read image.`);
+      }
+    }
+
+    imageAttachments = nextAttachments;
+    attachmentError =
+      skippedMessages.length > 0 ? skippedMessages.join(" ") : null;
+    input.value = "";
+  }
 
   function normalizePromptText(message: string): string {
     return message.replace(/\s+/g, " ").trim();
@@ -182,15 +346,19 @@
     submitError = null;
     optimisticUserMessage = trimmedPrompt;
     optimisticUserStatus = immediate ? "running" : "queued";
+    optimisticUserImageAttachments = toOptimisticImageAttachments();
     focusTailNonce += 1;
     try {
-      await onSubmitPrompt(trimmedPrompt, immediate);
+      await onSubmitPrompt(trimmedPrompt, immediate, toAttachmentRefs());
       promptText = "";
+      attachmentError = null;
+      clearImageAttachments();
     } catch (error: unknown) {
       submitError =
         error instanceof Error ? error.message : "Failed to submit prompt";
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
     } finally {
       submitting = false;
     }
@@ -292,6 +460,7 @@
     if (status === "awaiting_input") {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
     }
   });
 
@@ -313,8 +482,11 @@
     if (!open) {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
       optimisticAssistantMessageSticky = undefined;
       showSubmitOptions = false;
+      attachmentError = null;
+      clearImageAttachments();
       return;
     }
     const onKeydown = (event: KeyboardEvent): void => {
@@ -331,6 +503,8 @@
   $effect(() => {
     return () => {
       resetCopyFeedbackTimer();
+      optimisticUserImageAttachments = [];
+      clearImageAttachments();
     };
   });
 </script>
@@ -598,6 +772,7 @@
               showAssistantThinking={shouldShowAssistantThinking}
               {optimisticUserMessage}
               {optimisticUserStatus}
+              {optimisticUserImageAttachments}
               optimisticAssistantMessage={optimisticAssistantMessageSticky}
               pendingUserMessages={pendingPromptMessages}
             />
@@ -662,9 +837,83 @@
             bind:value={promptText}
             onkeydown={handlePromptComposerKeydown}
           ></textarea>
+          <input
+            bind:this={attachmentInput}
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden"
+            onchange={handleImageAttachmentInput}
+          />
+          <div class="mt-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+              onclick={() => attachmentInput?.click()}
+              disabled={submitting}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M21.44 11.05l-8.49 8.49a6 6 0 01-8.49-8.49l8.49-8.49a4 4 0 015.66 5.66l-8.49 8.49a2 2 0 01-2.83-2.83l7.78-7.78"
+                />
+              </svg>
+            </button>
+            <p class="text-[11px] text-text-tertiary">
+              Images only (PDF later).
+            </p>
+          </div>
+          {#if imageAttachments.length > 0}
+            <div class="mt-2 space-y-2">
+              {#each imageAttachments as attachment (attachment.id)}
+                <div
+                  class="flex items-center gap-2 rounded border border-border-default bg-bg-primary p-2"
+                >
+                  <img
+                    src={attachment.previewUrl}
+                    alt={attachment.fileName}
+                    class="h-14 w-14 rounded object-cover border border-border-default/70"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-xs text-text-primary">
+                      {attachment.fileName}
+                    </p>
+                    <p class="text-[11px] text-text-tertiary">
+                      {attachment.mimeType} - {formatBytes(
+                        attachment.sizeBytes,
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded border border-border-default px-2 py-1 text-[11px] text-text-secondary hover:bg-bg-hover"
+                    onclick={() => removeImageAttachment(attachment.id)}
+                    disabled={submitting}
+                  >
+                    Remove
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
 
           {#if submitError !== null}
             <p class="mt-2 text-xs text-danger-fg">{submitError}</p>
+          {/if}
+          {#if attachmentError !== null}
+            <p class="mt-2 text-xs text-danger-fg">{attachmentError}</p>
           {/if}
           {#if cancelPromptError !== null}
             <p class="mt-2 text-xs text-danger-fg">{cancelPromptError}</p>
@@ -714,9 +963,7 @@
             {/if}
           </div>
           <p class="mt-2 text-[11px] text-text-tertiary">
-            Default is <span class="font-medium text-text-secondary"
-              >Submit (queued)</span
-            >. {promptShortcutHint}
+            Queue by default. {promptShortcutHint}
           </p>
         </div>
       </div>

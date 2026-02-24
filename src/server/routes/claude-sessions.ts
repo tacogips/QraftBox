@@ -87,6 +87,11 @@ interface PurposeCacheEntry {
   readonly source: "llm" | "fallback";
 }
 
+interface SessionListCacheEntry {
+  readonly cachedAtMs: number;
+  readonly payload: SessionListResponse;
+}
+
 /**
  * Create Claude sessions routes
  *
@@ -118,6 +123,8 @@ export function createClaudeSessionsRoutes(
       : undefined;
   const purposeCache = new Map<string, PurposeCacheEntry>();
   const inFlightPurpose = new Map<string, Promise<SessionPurposeResponse>>();
+  const sessionListCache = new Map<string, SessionListCacheEntry>();
+  const SESSION_LIST_CACHE_TTL_MS = 1500;
 
   function extractAssistantTextFromMessage(msg: unknown): string | undefined {
     if (typeof msg !== "object" || msg === null || !("type" in msg)) {
@@ -510,6 +517,30 @@ export function createClaudeSessionsRoutes(
       // Keep list endpoint responsive: avoid per-session JSONL scans when
       // recovering firstPrompt from system-only index content.
       options.recoverFirstPromptFromJsonl = false;
+      // Favor low-latency overview list rendering when index files are absent.
+      options.fastListMode = true;
+
+      const cacheKey = JSON.stringify({
+        workingDirectoryPrefix: options.workingDirectoryPrefix ?? null,
+        source: options.source ?? null,
+        branch: options.branch ?? null,
+        search: options.search ?? null,
+        dateRange: options.dateRange ?? null,
+        offset: options.offset ?? 0,
+        limit: options.limit ?? 50,
+        sortBy: options.sortBy ?? "modified",
+        sortOrder: options.sortOrder ?? "desc",
+        recoverFirstPromptFromJsonl: options.recoverFirstPromptFromJsonl,
+        fastListMode: options.fastListMode,
+      });
+      const nowMs = Date.now();
+      const cached = sessionListCache.get(cacheKey);
+      if (cached !== undefined) {
+        const cacheAgeMs = nowMs - cached.cachedAtMs;
+        if (cacheAgeMs < SESSION_LIST_CACHE_TTL_MS) {
+          return c.json(cached.payload);
+        }
+      }
 
       // List sessions with filters
       const response: SessionListResponse =
@@ -650,6 +681,11 @@ export function createClaudeSessionsRoutes(
           session.firstPrompt = computedPurpose;
         }
       }
+
+      sessionListCache.set(cacheKey, {
+        cachedAtMs: nowMs,
+        payload: response,
+      });
 
       return c.json(response);
     } catch (e) {

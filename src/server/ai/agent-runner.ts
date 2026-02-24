@@ -17,6 +17,9 @@ import {
   type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
 import type { Subprocess } from "bun";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
@@ -93,7 +96,10 @@ function readFirstStringField(
  * - New session: codex exec --json [opts...] <prompt>
  * - Resume session: codex exec resume --json [opts...] <sessionId> <prompt>
  */
-export function buildCodexExecCommand(params: AgentRunParams): string[] {
+export function buildCodexExecCommand(
+  params: AgentRunParams,
+  imagePaths?: readonly string[],
+): string[] {
   const args: string[] = ["codex", "exec"];
 
   if (params.resumeSessionId !== undefined) {
@@ -110,12 +116,72 @@ export function buildCodexExecCommand(params: AgentRunParams): string[] {
     args.push(...params.additionalArgs);
   }
 
+  if (imagePaths !== undefined && imagePaths.length > 0) {
+    for (const imagePath of imagePaths) {
+      args.push("--image", imagePath);
+    }
+  }
+
   if (params.resumeSessionId !== undefined) {
     args.push(params.resumeSessionId);
   }
 
   args.push(params.prompt);
   return args;
+}
+
+function sanitizeAttachmentFileName(fileName: string): string {
+  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+async function prepareCodexImageAttachments(
+  attachments: readonly AgentSessionAttachment[] | undefined,
+): Promise<{ imagePaths: readonly string[]; cleanup: () => Promise<void> }> {
+  if (attachments === undefined || attachments.length === 0) {
+    return {
+      imagePaths: [],
+      cleanup: async () => {},
+    };
+  }
+
+  const imageAttachments = attachments.filter((attachment) =>
+    typeof attachment.mimeType === "string"
+      ? attachment.mimeType.startsWith("image/")
+      : false,
+  );
+  if (imageAttachments.length === 0) {
+    return {
+      imagePaths: [],
+      cleanup: async () => {},
+    };
+  }
+
+  const dir = await mkdtemp(join(tmpdir(), "qraftbox-codex-images-"));
+  const imagePaths: string[] = [];
+
+  for (const [index, attachment] of imageAttachments.entries()) {
+    const fallbackName = `image-${index + 1}.png`;
+    const fileName = sanitizeAttachmentFileName(
+      attachment.fileName ?? fallbackName,
+    );
+    const filePath = join(dir, fileName);
+
+    if (attachment.encoding === "base64" && typeof attachment.content === "string") {
+      await Bun.write(filePath, Buffer.from(attachment.content, "base64"));
+      imagePaths.push(filePath);
+      continue;
+    }
+    if (typeof attachment.path === "string" && attachment.path.length > 0) {
+      imagePaths.push(attachment.path);
+    }
+  }
+
+  return {
+    imagePaths,
+    cleanup: async () => {
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
 }
 
 export function parseCodexJsonLine(line: string): CodexParsedEvent {
@@ -928,13 +994,22 @@ class CodexAgentRunner implements AgentRunner {
   execute(params: AgentRunParams): AgentExecution {
     const channel = new EventChannel<AgentEvent>();
     let spawnedProcess: Subprocess | undefined;
+    let cleanupImageAttachments: (() => Promise<void>) | undefined;
     let cancelled = false;
     let started = false;
     let streamedAssistantContent = "";
 
     const startExecution = async (): Promise<void> => {
       try {
-        const command = buildCodexExecCommand(params);
+        const preparedAttachments = await prepareCodexImageAttachments(
+          params.attachments,
+        );
+        cleanupImageAttachments = preparedAttachments.cleanup;
+
+        const command = buildCodexExecCommand(
+          params,
+          preparedAttachments.imagePaths,
+        );
         spawnedProcess = Bun.spawn(command, {
           cwd: params.projectPath,
           env: {
@@ -1072,6 +1147,9 @@ class CodexAgentRunner implements AgentRunner {
           });
         }
       } finally {
+        if (cleanupImageAttachments !== undefined) {
+          await cleanupImageAttachments();
+        }
         channel.close();
       }
     };

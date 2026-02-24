@@ -699,11 +699,13 @@ describe("ClaudeSessionReader", () => {
 
     it("should use fast JSONL fallback candidate window in default list mode", async () => {
       const isolatedProjectsDir = join(tempDir, "isolated-projects-fast");
+      const isolatedCodexDir = join(tempDir, "isolated-codex-fast");
       await mkdir(isolatedProjectsDir, { recursive: true });
+      await mkdir(isolatedCodexDir, { recursive: true });
       const isolatedReader = new ClaudeSessionReader(
         isolatedProjectsDir,
         mappingStore,
-        codexSessionsDir,
+        isolatedCodexDir,
       );
       const projectDir = join(isolatedProjectsDir, "-perf-no-index");
       await mkdir(projectDir, { recursive: true });
@@ -757,7 +759,11 @@ describe("ClaudeSessionReader", () => {
         new Date("2026-02-03T10:00:00Z"),
       );
 
-      const result = await isolatedReader.listSessions({ offset: 0, limit: 1 });
+      const result = await isolatedReader.listSessions({
+        offset: 0,
+        limit: 1,
+        fastListMode: true,
+      });
 
       // Fast fallback candidate count = (offset + limit) * 2 = 2,
       // so only the two newest files are scanned for default list mode.
@@ -768,11 +774,13 @@ describe("ClaudeSessionReader", () => {
 
     it("should use full JSONL fallback when search filter is provided", async () => {
       const isolatedProjectsDir = join(tempDir, "isolated-projects-search");
+      const isolatedCodexDir = join(tempDir, "isolated-codex-search");
       await mkdir(isolatedProjectsDir, { recursive: true });
+      await mkdir(isolatedCodexDir, { recursive: true });
       const isolatedReader = new ClaudeSessionReader(
         isolatedProjectsDir,
         mappingStore,
-        codexSessionsDir,
+        isolatedCodexDir,
       );
       const projectDir = join(isolatedProjectsDir, "-perf-no-index-search");
       await mkdir(projectDir, { recursive: true });

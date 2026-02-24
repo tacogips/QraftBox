@@ -134,6 +134,20 @@ describe("buildCodexExecCommand()", () => {
     expect(command).toContain(resumeId);
     expect(command[command.length - 1]).toBe("Continue from previous task");
   });
+
+  test("adds --image args when image paths are provided", () => {
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Inspect screenshot",
+        aiAgent: AIAgent.CODEX,
+      }),
+      ["/tmp/one.png", "/tmp/two.jpg"],
+    );
+
+    expect(command).toContain("--image");
+    expect(command).toContain("/tmp/one.png");
+    expect(command).toContain("/tmp/two.jpg");
+  });
 });
 
 describe("parseCodexJsonLine()", () => {

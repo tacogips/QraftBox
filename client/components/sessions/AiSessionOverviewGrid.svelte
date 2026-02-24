@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AISession, AISessionSubmitResult } from "../../../src/types/ai";
+  import type { FileReference } from "../../../src/types/ai";
   import { AIAgent } from "../../../src/types/ai-agent";
   import type { ModelProfile } from "../../../src/types/model-config";
   import type { PromptQueueItem } from "../../src/lib/app-api";
@@ -69,12 +70,14 @@
     onStartNewSessionPrompt?: (
       message: string,
       immediate: boolean,
+      references: readonly FileReference[],
     ) => Promise<AISessionSubmitResult | null>;
     onCancelActiveSession?: (sessionId: string) => Promise<void>;
     onSubmitPrompt: (
       sessionId: string,
       message: string,
       immediate: boolean,
+      references: readonly FileReference[],
     ) => Promise<AISessionSubmitResult | null>;
   }
 
@@ -104,7 +107,9 @@
     onSubmitPrompt,
   }: Props = $props();
 
-  const SESSIONS_PAGE_SIZE = 50;
+  const SESSIONS_PAGE_SIZE = 20;
+  const ACTIVE_REFRESH_INTERVAL_MS = 4000;
+  const IDLE_REFRESH_INTERVAL_MS = 20000;
   let sessions = $state<readonly ExtendedSessionEntry[]>([]);
   let sessionsLoading = $state(false);
   let sessionsLoadingMore = $state(false);
@@ -700,7 +705,12 @@
     }
   });
 
-  async function fetchOverviewSessions(): Promise<void> {
+  async function fetchOverviewSessions(options?: {
+    readonly bypassCache?: boolean;
+  }): Promise<void> {
+    if (sessionsLoading && options?.bypassCache !== true) {
+      return;
+    }
     const fetchToken = ++latestFetchToken;
 
     if (contextId === null || contextId.length === 0) {
@@ -720,6 +730,9 @@
         sortBy: "modified",
         sortOrder: "desc",
       });
+      if (options?.bypassCache === true) {
+        query.set("_", String(Date.now()));
+      }
 
       if (projectPath.length > 0) {
         query.set("workingDirectoryPrefix", projectPath);
@@ -884,8 +897,14 @@
   $effect(() => {
     const activeContextId = contextId;
     const activeProjectPath = projectPath;
+    const runningCount = runningSessions.length;
+    const queuedCount = queuedSessions.length;
+    const activePromptCount = pendingPrompts.length;
     void activeContextId;
     void activeProjectPath;
+    void runningCount;
+    void queuedCount;
+    void activePromptCount;
 
     requestedSessionLimit = SESSIONS_PAGE_SIZE;
     hasMoreSessions = true;
@@ -896,10 +915,16 @@
       return;
     }
 
+    const hasActiveWork =
+      runningCount > 0 || queuedCount > 0 || activePromptCount > 0;
+    const refreshIntervalMs = hasActiveWork
+      ? ACTIVE_REFRESH_INTERVAL_MS
+      : IDLE_REFRESH_INTERVAL_MS;
+
     const refreshTimerId = setInterval(() => {
       void fetchOverviewSessions();
       void fetchHiddenSessionIds();
-    }, 4000);
+    }, refreshIntervalMs);
 
     return () => clearInterval(refreshTimerId);
   });
@@ -971,12 +996,17 @@
   async function handlePopupSubmit(
     message: string,
     immediate: boolean,
+    references: readonly FileReference[],
   ): Promise<void> {
     if (creatingNewSession) {
       if (onStartNewSessionPrompt === undefined) {
         throw new Error("Unable to start a new session.");
       }
-      const result = await onStartNewSessionPrompt(message, immediate);
+      const result = await onStartNewSessionPrompt(
+        message,
+        immediate,
+        references,
+      );
       if (result === null) {
         throw new Error("Prompt submission failed. Please retry.");
       }
@@ -997,7 +1027,7 @@
         aiAgent: AIAgent.CLAUDE,
         status: immediate ? "running" : "queued",
       });
-      await fetchOverviewSessions();
+      await fetchOverviewSessions({ bypassCache: true });
       return;
     }
 
@@ -1005,7 +1035,12 @@
       throw new Error("Session is not selected.");
     }
 
-    const result = await onSubmitPrompt(selectedSessionId, message, immediate);
+    const result = await onSubmitPrompt(
+      selectedSessionId,
+      message,
+      immediate,
+      references,
+    );
     if (result === null) {
       throw new Error("Prompt submission failed. Please retry.");
     }
@@ -1014,7 +1049,7 @@
       message,
       immediate ? "running" : "queued",
     );
-    await fetchOverviewSessions();
+    await fetchOverviewSessions({ bypassCache: true });
   }
 
   async function runSessionDefaultPrompt(
@@ -1057,7 +1092,7 @@
     cancelPromptError = null;
     try {
       await onCancelActiveSession(selectedSessionId);
-      await fetchOverviewSessions();
+      await fetchOverviewSessions({ bypassCache: true });
     } catch (error: unknown) {
       cancelPromptError =
         error instanceof Error ? error.message : "Failed to cancel prompt";
@@ -1273,7 +1308,9 @@
               onclick={() => void loadMoreSessions()}
               disabled={sessionsLoadingMore}
             >
-              {sessionsLoadingMore ? "Loading more..." : "Load 50 more"}
+              {sessionsLoadingMore
+                ? "Loading more..."
+                : `Load ${SESSIONS_PAGE_SIZE} more`}
             </button>
           </div>
         {/if}
@@ -1325,8 +1362,8 @@
       cancellingPrompt = false;
       cancelPromptError = null;
     }}
-    onSubmitPrompt={(message, immediate) =>
-      handlePopupSubmit(message, immediate)}
+    onSubmitPrompt={(message, immediate, references) =>
+      handlePopupSubmit(message, immediate, references)}
     showModelProfileSelector={creatingNewSession}
     modelProfiles={newSessionModelProfiles}
     selectedModelProfileId={selectedNewSessionModelProfileId}
