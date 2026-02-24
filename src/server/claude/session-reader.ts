@@ -43,6 +43,8 @@ const LEGACY_INTERNAL_PURPOSE_PREFIX =
   "You summarize a coding session's current objective.";
 const FAST_JSONL_FALLBACK_MULTIPLIER = 2;
 const SESSION_PARSE_CONCURRENCY = 8;
+const SESSION_ENTRY_CACHE_TTL_MS = 15000;
+const CODEX_FILE_INDEX_CACHE_TTL_MS = 10000;
 
 /**
  * Options for listing sessions
@@ -89,6 +91,13 @@ export class ClaudeSessionReader {
   private readonly codexSessionsDir: string;
   private readonly mappingStore: SessionMappingStore | undefined;
   private readonly agentSessionReader: AgentSessionReader;
+  private readonly sessionEntryCache = new Map<
+    string,
+    { cachedAtMs: number; entry: ExtendedSessionEntry }
+  >();
+  private codexJsonlFilesCache:
+    | { cachedAtMs: number; files: readonly string[] }
+    | undefined;
 
   constructor(
     projectsDir?: string,
@@ -100,6 +109,33 @@ export class ClaudeSessionReader {
     this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
+  }
+
+  private getCachedSessionEntry(
+    sessionId: string,
+  ): ExtendedSessionEntry | undefined {
+    const cached = this.sessionEntryCache.get(sessionId);
+    if (cached === undefined) {
+      return undefined;
+    }
+    if (Date.now() - cached.cachedAtMs > SESSION_ENTRY_CACHE_TTL_MS) {
+      this.sessionEntryCache.delete(sessionId);
+      return undefined;
+    }
+    if (!existsSync(cached.entry.fullPath)) {
+      this.sessionEntryCache.delete(sessionId);
+      return undefined;
+    }
+    return { ...cached.entry };
+  }
+
+  private cacheSessionEntry(entry: ExtendedSessionEntry): void {
+    const nowMs = Date.now();
+    this.sessionEntryCache.set(entry.sessionId, { cachedAtMs: nowMs, entry });
+    if (entry.sessionId.startsWith("codex-session-")) {
+      const normalizedId = entry.sessionId.slice("codex-session-".length);
+      this.sessionEntryCache.set(normalizedId, { cachedAtMs: nowMs, entry });
+    }
   }
 
   private isInternalSessionPrompt(text: string): boolean {
@@ -369,9 +405,20 @@ export class ClaudeSessionReader {
    * Get a specific session by ID
    */
   async getSession(sessionId: string): Promise<ExtendedSessionEntry | null> {
-    const codexSession = await this.getCodexSessionById(sessionId);
-    if (codexSession !== null) {
-      return codexSession;
+    const cached = this.getCachedSessionEntry(sessionId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const looksLikeCodexSessionId =
+      sessionId.startsWith("codex-session-") ||
+      sessionId.startsWith("pending-");
+    if (looksLikeCodexSessionId) {
+      const codexSession = await this.getCodexSessionById(sessionId);
+      if (codexSession !== null) {
+        this.cacheSessionEntry(codexSession);
+        return codexSession;
+      }
     }
 
     const projects = await this.listProjects();
@@ -389,7 +436,7 @@ export class ClaudeSessionReader {
           // Strip system tags and fix empty firstPrompt
           await this.fixSystemTagFirstPrompt(entry);
 
-          return {
+          const built: ExtendedSessionEntry = {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
@@ -398,6 +445,8 @@ export class ClaudeSessionReader {
             ),
             aiAgent: AIAgent.CLAUDE,
           };
+          this.cacheSessionEntry(built);
+          return built;
         }
       } catch (error: unknown) {
         // If index doesn't exist, build entries from JSONL files
@@ -409,7 +458,7 @@ export class ClaudeSessionReader {
           const entry = entries.find((e) => e.sessionId === sessionId);
 
           if (entry) {
-            return {
+            const built: ExtendedSessionEntry = {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
@@ -418,12 +467,20 @@ export class ClaudeSessionReader {
               ),
               aiAgent: AIAgent.CLAUDE,
             };
+            this.cacheSessionEntry(built);
+            return built;
           }
         } catch (buildError: unknown) {
           // Skip projects that can't be processed
           continue;
         }
       }
+    }
+
+    const codexSession = await this.getCodexSessionById(sessionId);
+    if (codexSession !== null) {
+      this.cacheSessionEntry(codexSession);
+      return codexSession;
     }
 
     return null;
@@ -436,7 +493,7 @@ export class ClaudeSessionReader {
       return [];
     }
 
-    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    const files = await this.listCodexJsonlFilesCached();
     const sessions = await this.mapWithConcurrency(
       files,
       SESSION_PARSE_CONCURRENCY,
@@ -455,10 +512,23 @@ export class ClaudeSessionReader {
       return null;
     }
 
-    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
     const normalizedTarget = sessionId.startsWith("codex-session-")
       ? sessionId.slice("codex-session-".length)
       : sessionId;
+
+    // Fast path: resolve rollout file by filename suffix and parse that one file.
+    const directPath = await this.findCodexRolloutPathBySessionId(
+      this.codexSessionsDir,
+      normalizedTarget,
+    );
+    if (directPath !== undefined) {
+      const parsed = await this.readCodexSessionEntry(directPath);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+
+    const files = await this.listCodexJsonlFilesCached();
     for (const file of files) {
       const session = await this.readCodexSessionEntry(file);
       if (session === null) {
@@ -475,6 +545,33 @@ export class ClaudeSessionReader {
       }
     }
     return null;
+  }
+
+  private async findCodexRolloutPathBySessionId(
+    dir: string,
+    sessionId: string,
+  ): Promise<string | undefined> {
+    void dir;
+    const files = await this.listCodexJsonlFilesCached();
+    for (const fullPath of files) {
+      if (fullPath.includes(sessionId)) {
+        return fullPath;
+      }
+    }
+    return undefined;
+  }
+
+  private async listCodexJsonlFilesCached(): Promise<readonly string[]> {
+    if (
+      this.codexJsonlFilesCache !== undefined &&
+      Date.now() - this.codexJsonlFilesCache.cachedAtMs <
+        CODEX_FILE_INDEX_CACHE_TTL_MS
+    ) {
+      return this.codexJsonlFilesCache.files;
+    }
+    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    this.codexJsonlFilesCache = { cachedAtMs: Date.now(), files };
+    return files;
   }
 
   private async listCodexJsonlFiles(dir: string): Promise<string[]> {

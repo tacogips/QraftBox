@@ -16,10 +16,9 @@ import {
   type RunningSession,
   type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
-import type { Subprocess } from "bun";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import {
+  runAgent as runCodexAgent,
+} from "codex-agent";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
@@ -46,6 +45,10 @@ function readStringField(
 
 function isLikelyClaudeSessionId(value: string): boolean {
   return UUID_PATTERN.test(value);
+}
+
+function isPendingSessionId(value: string): boolean {
+  return value.startsWith("pending-");
 }
 
 interface CodexMessageEvent {
@@ -76,6 +79,68 @@ type CodexParsedEvent =
   | CodexToolResultEvent
   | CodexSessionDetectedEvent
   | null;
+
+type CodexAgentAttachment =
+  | {
+      readonly type: "path";
+      readonly path: string;
+    }
+  | {
+      readonly type: "base64";
+      readonly data: string;
+      readonly mediaType?: string | undefined;
+      readonly filename?: string | undefined;
+    };
+
+type CodexAgentRequest =
+  | {
+      readonly prompt: string;
+      readonly cwd?: string | undefined;
+      readonly model?: string | undefined;
+      readonly attachments?: readonly CodexAgentAttachment[] | undefined;
+    }
+  | {
+      readonly sessionId: string;
+      readonly prompt?: string | undefined;
+      readonly cwd?: string | undefined;
+      readonly model?: string | undefined;
+      readonly attachments?: readonly CodexAgentAttachment[] | undefined;
+    };
+
+interface CodexSdkAgentSessionStartedEvent {
+  readonly type: "session.started";
+  readonly sessionId: string;
+}
+
+interface CodexSdkAgentSessionMessageEvent {
+  readonly type: "session.message";
+  readonly sessionId: string;
+  readonly chunk: {
+    readonly type: string;
+    readonly payload: unknown;
+  };
+}
+
+interface CodexSdkAgentSessionCompletedEvent {
+  readonly type: "session.completed";
+  readonly sessionId: string;
+  readonly result: {
+    readonly success: boolean;
+    readonly exitCode: number;
+  };
+}
+
+interface CodexSdkAgentSessionErrorEvent {
+  readonly type: "session.error";
+  readonly sessionId?: string | undefined;
+  readonly error: Error;
+}
+
+type CodexSdkAgentEvent =
+  | CodexSdkAgentSessionStartedEvent
+  | CodexSdkAgentSessionMessageEvent
+  | CodexSdkAgentSessionCompletedEvent
+  | CodexSdkAgentSessionErrorEvent;
 
 function readFirstStringField(
   obj: Record<string, unknown>,
@@ -128,60 +193,6 @@ export function buildCodexExecCommand(
 
   args.push(params.prompt);
   return args;
-}
-
-function sanitizeAttachmentFileName(fileName: string): string {
-  return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-async function prepareCodexImageAttachments(
-  attachments: readonly AgentSessionAttachment[] | undefined,
-): Promise<{ imagePaths: readonly string[]; cleanup: () => Promise<void> }> {
-  if (attachments === undefined || attachments.length === 0) {
-    return {
-      imagePaths: [],
-      cleanup: async () => {},
-    };
-  }
-
-  const imageAttachments = attachments.filter((attachment) =>
-    typeof attachment.mimeType === "string"
-      ? attachment.mimeType.startsWith("image/")
-      : false,
-  );
-  if (imageAttachments.length === 0) {
-    return {
-      imagePaths: [],
-      cleanup: async () => {},
-    };
-  }
-
-  const dir = await mkdtemp(join(tmpdir(), "qraftbox-codex-images-"));
-  const imagePaths: string[] = [];
-
-  for (const [index, attachment] of imageAttachments.entries()) {
-    const fallbackName = `image-${index + 1}.png`;
-    const fileName = sanitizeAttachmentFileName(
-      attachment.fileName ?? fallbackName,
-    );
-    const filePath = join(dir, fileName);
-
-    if (attachment.encoding === "base64" && typeof attachment.content === "string") {
-      await Bun.write(filePath, Buffer.from(attachment.content, "base64"));
-      imagePaths.push(filePath);
-      continue;
-    }
-    if (typeof attachment.path === "string" && attachment.path.length > 0) {
-      imagePaths.push(attachment.path);
-    }
-  }
-
-  return {
-    imagePaths,
-    cleanup: async () => {
-      await rm(dir, { recursive: true, force: true });
-    },
-  };
 }
 
 export function parseCodexJsonLine(line: string): CodexParsedEvent {
@@ -447,58 +458,6 @@ export function buildCodexMessageSnapshots(
   }
 
   return [incomingContent];
-}
-
-async function* streamUtf8Lines(
-  stream: ReadableStream<Uint8Array> | undefined,
-): AsyncGenerator<string, void, undefined> {
-  if (stream === undefined) {
-    return;
-  }
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffered = "";
-  try {
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffered += decoder.decode(value, { stream: true });
-      while (true) {
-        const newLineIndex = buffered.indexOf("\n");
-        if (newLineIndex < 0) {
-          break;
-        }
-        const line = buffered.slice(0, newLineIndex).replace(/\r$/, "");
-        buffered = buffered.slice(newLineIndex + 1);
-        yield line;
-      }
-    }
-    buffered += decoder.decode();
-    const tail = buffered.replace(/\r$/, "");
-    if (tail.length > 0) {
-      yield tail;
-    }
-  } finally {
-    reader.releaseLock();
-  }
-}
-
-async function readStreamToString(
-  stream: ReadableStream<Uint8Array> | null | undefined,
-): Promise<string> {
-  if (stream === null || stream === undefined) {
-    return "";
-  }
-  return await new Response(stream).text();
-}
-
-function toReadableStream(
-  stream: number | ReadableStream<Uint8Array> | null | undefined,
-): ReadableStream<Uint8Array> | undefined {
-  if (stream === null || stream === undefined || typeof stream === "number") {
-    return undefined;
-  }
-  return stream;
 }
 
 /**
@@ -993,146 +952,287 @@ class ClaudeAgentRunner implements AgentRunner {
 class CodexAgentRunner implements AgentRunner {
   execute(params: AgentRunParams): AgentExecution {
     const channel = new EventChannel<AgentEvent>();
-    let spawnedProcess: Subprocess | undefined;
-    let cleanupImageAttachments: (() => Promise<void>) | undefined;
-    let cancelled = false;
     let started = false;
+    let cancelled = false;
+    let codexEventsIterator:
+      | AsyncGenerator<CodexSdkAgentEvent, void, undefined>
+      | undefined;
     let streamedAssistantContent = "";
+
+    const toCodexAttachments = (
+      attachments: readonly AgentSessionAttachment[] | undefined,
+    ): readonly CodexAgentAttachment[] | undefined => {
+      if (attachments === undefined || attachments.length === 0) {
+        return undefined;
+      }
+      const mapped: CodexAgentAttachment[] = [];
+      for (const attachment of attachments) {
+        const isImageMime =
+          typeof attachment.mimeType === "string" &&
+          attachment.mimeType.startsWith("image/");
+        if (!isImageMime) {
+          continue;
+        }
+        if (
+          typeof attachment.content === "string" &&
+          attachment.encoding === "base64"
+        ) {
+          mapped.push({
+            type: "base64",
+            data: attachment.content,
+            mediaType: attachment.mimeType,
+            filename: attachment.fileName,
+          });
+          continue;
+        }
+        if (typeof attachment.path === "string" && attachment.path.length > 0) {
+          mapped.push({
+            type: "path",
+            path: attachment.path,
+          });
+        }
+      }
+      return mapped.length > 0 ? mapped : undefined;
+    };
 
     const startExecution = async (): Promise<void> => {
       try {
-        const preparedAttachments = await prepareCodexImageAttachments(
-          params.attachments,
-        );
-        cleanupImageAttachments = preparedAttachments.cleanup;
-
-        const command = buildCodexExecCommand(
-          params,
-          preparedAttachments.imagePaths,
-        );
-        spawnedProcess = Bun.spawn(command, {
-          cwd: params.projectPath,
-          env: {
-            ...globalThis.process.env,
-          },
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-
-        let lastAssistantMessage: string | undefined;
         let detectedSessionId: ClaudeSessionId | undefined =
           params.resumeSessionId;
 
-        const stdoutStream = toReadableStream(spawnedProcess.stdout);
-        const stderrTask = readStreamToString(
-          toReadableStream(spawnedProcess.stderr),
-        );
-        const stdoutTask = (async (): Promise<void> => {
-          for await (const line of streamUtf8Lines(stdoutStream)) {
-            if (cancelled) {
-              return;
+        const emitParsedEvent = (parsed: CodexParsedEvent): void => {
+          if (parsed === null) {
+            return;
+          }
+          if (parsed.type === "session_detected") {
+            if (
+              shouldEmitCodexSessionDetected(detectedSessionId, parsed.sessionId)
+            ) {
+              channel.push({
+                type: "claude_session_detected",
+                claudeSessionId: parsed.sessionId,
+              });
             }
-            const parsed = parseCodexJsonLine(line);
-            if (parsed === null) {
-              continue;
+            detectedSessionId = parsed.sessionId;
+            return;
+          }
+          if (parsed.type === "message") {
+            const snapshots = buildCodexMessageSnapshots(
+              streamedAssistantContent,
+              parsed.content,
+              parsed.isDelta,
+            );
+            for (const snapshot of snapshots) {
+              streamedAssistantContent = snapshot;
+              channel.push({
+                type: "message",
+                role: "assistant",
+                content: snapshot,
+              });
+              channel.push({ type: "activity", activity: undefined });
+            }
+            return;
+          }
+          if (parsed.type === "tool_call") {
+            channel.push({
+              type: "tool_call",
+              toolName: parsed.toolName,
+              input: {},
+            });
+            channel.push({
+              type: "activity",
+              activity: `Using ${parsed.toolName}...`,
+            });
+            return;
+          }
+          if (parsed.type === "tool_result") {
+            channel.push({
+              type: "tool_result",
+              toolName: parsed.toolName,
+              output: undefined,
+              isError: parsed.isError,
+            });
+            channel.push({
+              type: "activity",
+              activity: `Processing ${parsed.toolName} result...`,
+            });
+          }
+        };
+
+        const codexRequest: CodexAgentRequest =
+          params.resumeSessionId !== undefined
+            ? {
+                sessionId: params.resumeSessionId,
+                prompt: params.prompt,
+                cwd: params.projectPath,
+                model: params.model,
+                attachments: toCodexAttachments(params.attachments),
+              }
+            : {
+                prompt: params.prompt,
+                cwd: params.projectPath,
+                model: params.model,
+                attachments: toCodexAttachments(params.attachments),
+              };
+
+        const iterator = runCodexAgent(codexRequest, {
+          codexBinary: "codex",
+        });
+        codexEventsIterator = iterator;
+
+        for await (const event of iterator) {
+            if (cancelled) {
+              break;
             }
 
-            if (parsed.type === "session_detected") {
+            if (event.type === "session.started") {
+              const nextSessionId = event.sessionId as ClaudeSessionId;
               if (
-                shouldEmitCodexSessionDetected(
-                  detectedSessionId,
-                  parsed.sessionId,
-                )
+                !isPendingSessionId(nextSessionId) &&
+                shouldEmitCodexSessionDetected(detectedSessionId, nextSessionId)
               ) {
                 channel.push({
                   type: "claude_session_detected",
-                  claudeSessionId: parsed.sessionId,
+                  claudeSessionId: nextSessionId,
                 });
               }
-              detectedSessionId = parsed.sessionId;
+              detectedSessionId = nextSessionId;
               continue;
             }
 
-            if (parsed.type === "message") {
-              const snapshots = buildCodexMessageSnapshots(
-                streamedAssistantContent,
-                parsed.content,
-                parsed.isDelta,
-              );
-              for (const snapshot of snapshots) {
-                streamedAssistantContent = snapshot;
-                lastAssistantMessage = snapshot;
-                channel.push({
-                  type: "message",
-                  role: "assistant",
-                  content: snapshot,
-                });
+            if (event.type === "session.message") {
+              const chunk = event.chunk;
+              const parsedChunk = parseCodexJsonLine(JSON.stringify(chunk));
+              if (parsedChunk !== null) {
+                emitParsedEvent(parsedChunk);
+                continue;
+              }
+              if (chunk.type === "event_msg") {
+                const payload = asRecord(chunk.payload);
+                if (payload !== undefined) {
+                  const payloadType = readStringField(payload, "type");
+                  if (payloadType === "AgentMessage") {
+                    const message = readStringField(payload, "message");
+                    if (message !== undefined) {
+                      emitParsedEvent({
+                        type: "message",
+                        content: message,
+                      });
+                    }
+                    continue;
+                  }
+                  if (payloadType === "ExecCommandBegin") {
+                    emitParsedEvent({
+                      type: "tool_call",
+                      toolName: "local_shell_call",
+                    });
+                    continue;
+                  }
+                  if (payloadType === "ExecCommandEnd") {
+                    const exitCodeRaw = payload["exit_code"];
+                    emitParsedEvent({
+                      type: "tool_result",
+                      toolName: "local_shell_call",
+                      isError:
+                        typeof exitCodeRaw === "number"
+                          ? exitCodeRaw !== 0
+                          : false,
+                    });
+                    continue;
+                  }
+                  if (payloadType === "Error") {
+                    const message =
+                      readStringField(payload, "message") ??
+                      "Codex execution failed";
+                    channel.push({ type: "error", message });
+                    channel.push({ type: "activity", activity: undefined });
+                    continue;
+                  }
+                }
+              }
+
+              if (chunk.type === "response_item") {
+                const payload = asRecord(chunk.payload);
+                if (payload !== undefined) {
+                  const payloadType = readStringField(payload, "type");
+                  const role = readStringField(payload, "role");
+                  if (payloadType === "message" && role === "assistant") {
+                    const contentValue = payload["content"];
+                    if (Array.isArray(contentValue)) {
+                      const parts: string[] = [];
+                      for (const item of contentValue) {
+                        const block = asRecord(item);
+                        if (block === undefined) {
+                          continue;
+                        }
+                        const blockType = readStringField(block, "type");
+                        if (
+                          blockType !== "output_text" &&
+                          blockType !== "input_text"
+                        ) {
+                          continue;
+                        }
+                        const text = readStringField(block, "text");
+                        if (text !== undefined) {
+                          parts.push(text);
+                        }
+                      }
+                      const content = parts.join("\n").trim();
+                      if (content.length > 0) {
+                        emitParsedEvent({ type: "message", content });
+                        continue;
+                      }
+                    }
+                  }
+                }
+              }
+              continue;
+            }
+
+            if (event.type === "session.completed") {
+              if (cancelled) {
+                channel.push({ type: "completed", success: false });
+                return;
+              }
+              if (event.result.success) {
                 channel.push({ type: "activity", activity: undefined });
+                channel.push({
+                  type: "completed",
+                  success: true,
+                  lastAssistantMessage: streamedAssistantContent,
+                });
+              } else {
+                const errorMessage = `Codex execution failed (exit ${event.result.exitCode})`;
+                channel.push({ type: "error", message: errorMessage });
+                channel.push({ type: "activity", activity: undefined });
+                channel.push({
+                  type: "completed",
+                  success: false,
+                  error: errorMessage,
+                  lastAssistantMessage: streamedAssistantContent,
+                });
               }
-              continue;
+              return;
             }
 
-            if (parsed.type === "tool_call") {
+            if (event.type === "session.error") {
+              const errorMessage = event.error.message;
+              channel.push({ type: "error", message: errorMessage });
+              channel.push({ type: "activity", activity: undefined });
               channel.push({
-                type: "tool_call",
-                toolName: parsed.toolName,
-                input: {},
+                type: "completed",
+                success: false,
+                error: errorMessage,
+                lastAssistantMessage: streamedAssistantContent,
               });
-              channel.push({
-                type: "activity",
-                activity: `Using ${parsed.toolName}...`,
-              });
-              continue;
-            }
-
-            if (parsed.type === "tool_result") {
-              channel.push({
-                type: "tool_result",
-                toolName: parsed.toolName,
-                output: undefined,
-                isError: parsed.isError,
-              });
-              channel.push({
-                type: "activity",
-                activity: `Processing ${parsed.toolName} result...`,
-              });
+              return;
             }
           }
-        })();
-
-        const exitCodeTask = spawnedProcess.exited;
-        const [stderrText, exitCode] = await Promise.all([
-          stderrTask,
-          exitCodeTask,
-          stdoutTask,
-        ]);
 
         if (cancelled) {
           channel.push({ type: "completed", success: false });
-          return;
         }
-
-        if (exitCode === 0) {
-          channel.push({
-            type: "completed",
-            success: true,
-            lastAssistantMessage,
-          });
-        } else {
-          const stderrTrimmed = stderrText.trim();
-          const errorMessage =
-            stderrTrimmed.length > 0
-              ? (stderrTrimmed.split("\n")[0] ?? "Codex execution failed")
-              : "Codex execution failed";
-          channel.push({ type: "error", message: errorMessage });
-          channel.push({
-            type: "completed",
-            success: false,
-            error: errorMessage,
-            lastAssistantMessage,
-          });
-        }
+        return;
       } catch (error) {
         if (cancelled) {
           channel.push({ type: "completed", success: false });
@@ -1147,9 +1247,6 @@ class CodexAgentRunner implements AgentRunner {
           });
         }
       } finally {
-        if (cleanupImageAttachments !== undefined) {
-          await cleanupImageAttachments();
-        }
         channel.close();
       }
     };
@@ -1165,15 +1262,15 @@ class CodexAgentRunner implements AgentRunner {
 
       async cancel(): Promise<void> {
         cancelled = true;
-        if (spawnedProcess !== undefined) {
-          spawnedProcess.kill();
+        if (codexEventsIterator !== undefined) {
+          await codexEventsIterator.return(undefined);
         }
       },
 
       async abort(): Promise<void> {
         cancelled = true;
-        if (spawnedProcess !== undefined) {
-          spawnedProcess.kill("SIGKILL");
+        if (codexEventsIterator !== undefined) {
+          await codexEventsIterator.return(undefined);
         }
       },
     };

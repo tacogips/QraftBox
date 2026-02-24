@@ -21,6 +21,12 @@ import { generateWorktreeId } from "../ai/session-manager";
 export class SessionEnrichmentService {
   constructor(private readonly mappingStore: SessionMappingStore) {}
 
+  private normalizeClaudeSessionId(sessionId: string): string {
+    return sessionId.startsWith("codex-session-")
+      ? sessionId.slice("codex-session-".length)
+      : sessionId;
+  }
+
   /**
    * Enrich sessions with qraftAiSessionId via batch lookup and auto-registration.
    *
@@ -35,20 +41,50 @@ export class SessionEnrichmentService {
     }
 
     // Batch lookup existing mappings
-    const claudeIds = sessions.map((s) => s.sessionId as ClaudeSessionId);
+    const claudeIds = Array.from(
+      new Set(
+        sessions.flatMap((session) => {
+          const rawId = session.sessionId;
+          const normalizedId = this.normalizeClaudeSessionId(rawId);
+          return normalizedId === rawId
+            ? [rawId as ClaudeSessionId]
+            : [rawId as ClaudeSessionId, normalizedId as ClaudeSessionId];
+        }),
+      ),
+    );
     const mappings = this.mappingStore.batchLookupByClaudeIds(claudeIds);
 
     // Enrich each session, auto-registering missing mappings
     for (const session of sessions) {
-      let qraftId = mappings.get(session.sessionId as ClaudeSessionId);
+      const rawId = session.sessionId as ClaudeSessionId;
+      const normalizedId = this.normalizeClaudeSessionId(
+        session.sessionId,
+      ) as ClaudeSessionId;
+      const isNormalizedDifferent = normalizedId !== rawId;
+
+      let qraftId =
+        mappings.get(normalizedId) ?? mappings.get(rawId);
 
       if (qraftId === undefined) {
         // Auto-register missing mapping
         const worktreeId = generateWorktreeId(session.projectPath);
         qraftId = this.mappingStore.upsert(
-          session.sessionId as ClaudeSessionId,
+          rawId,
           session.projectPath,
           worktreeId,
+        );
+      } else if (isNormalizedDifferent) {
+        // Keep prefixed codex-session IDs consistent with canonical mapping.
+        const worktreeId = generateWorktreeId(session.projectPath);
+        const canonicalIsQraftBox = this.mappingStore.isQraftBoxSession(
+          normalizedId,
+        );
+        this.mappingStore.upsert(
+          rawId,
+          session.projectPath,
+          worktreeId,
+          canonicalIsQraftBox ? "qraftbox" : "auto",
+          qraftId,
         );
       }
 

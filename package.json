@@ -53,7 +53,7 @@
   "dependencies": {
     "@octokit/rest": "22.0.1",
     "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
-    "codex-agent": "github:tacogips/codex-agent#338d1279de30f12c1536610dab4f8fbae63fd22a",
+    "codex-agent": "github:tacogips/codex-agent#956d841134ef59bf91c838470d93f6366b7131ed",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

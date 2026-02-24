@@ -165,6 +165,30 @@ export async function createWorkspaceTab(path: string): Promise<{
   return { tab: data.tab, tabs: data.workspace.tabs };
 }
 
+export async function createWorkspaceTabBySlug(slug: string): Promise<{
+  tab: ServerTab;
+  tabs: ServerTab[];
+}> {
+  const response = await fetch(
+    `/api/workspace/tabs/by-slug/${encodeURIComponent(slug)}`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    const errData = (await response.json()) as { error?: string };
+    throw new Error(errData.error ?? `Failed to open by slug (${response.status})`);
+  }
+
+  const data = (await response.json()) as {
+    tab: ServerTab;
+    workspace: { tabs: ServerTab[] };
+  };
+
+  return { tab: data.tab, tabs: data.workspace.tabs };
+}
+
 export async function fetchRecentWorkspaceProjects(): Promise<RecentProject[]> {
   const response = await fetch("/api/workspace/recent");
   ensureOk(response, "Failed to fetch recent projects");

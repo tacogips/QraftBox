@@ -145,6 +145,12 @@
   let chatScrollContainer: HTMLDivElement | null = $state(null);
   let copiedEventId: string | null = $state(null);
   let lastInitializedSessionId: string | null = $state(null);
+  let optimisticUserMessageSticky: string | undefined = $state(undefined);
+  let optimisticUserStatusSticky: "queued" | "running" = $state("queued");
+  let optimisticUserImagesSticky: readonly DisplayImageAttachment[] = $state(
+    [],
+  );
+  let lastStickySessionId: string | null = $state(null);
 
   /**
    * Copy event content to clipboard
@@ -225,7 +231,7 @@
   }
 
   const normalizedOptimisticUser = $derived(
-    normalizeMessageText(optimisticUserMessage ?? ""),
+    normalizeMessageText(optimisticUserMessageSticky ?? ""),
   );
 
   const normalizedOptimisticAssistant = $derived(
@@ -271,9 +277,7 @@
     );
   }
 
-  const normalizedOptimisticUserImages = $derived(
-    normalizeImageAttachments(optimisticUserImageAttachments),
-  );
+  const normalizedOptimisticUserImages = $derived(optimisticUserImagesSticky);
 
   const pendingQueuedUserMessages = $derived.by(() => {
     const items: PendingUserMessage[] = [];
@@ -331,12 +335,20 @@
       !normalizedChatTextSet.has(normalizedOptimisticAssistant),
   );
 
+  const latestChatEventType = $derived.by(() => {
+    if (chatEvents.length === 0) {
+      return undefined;
+    }
+    const latestEvent = chatEvents[chatEvents.length - 1];
+    return latestEvent?.type;
+  });
+
   const showAssistantThinkingPlaceholder = $derived(
     showAssistantThinking &&
       !showOptimisticAssistant &&
-      (chatEvents.length > 0 ||
-        showOptimisticUser ||
-        pendingQueuedUserMessages.length > 0),
+      (showOptimisticUser ||
+        pendingQueuedUserMessages.length > 0 ||
+        (chatEvents.length > 0 && latestChatEventType !== "assistant")),
   );
 
   const optimisticTailCount = $derived(
@@ -351,11 +363,47 @@
    * been created yet).
    */
   const hasOptimisticContent = $derived(
-    (optimisticUserMessage ?? "").length > 0 ||
+    (optimisticUserMessageSticky ?? "").length > 0 ||
       (optimisticAssistantMessage ?? "").length > 0 ||
       pendingQueuedUserMessages.length > 0 ||
       showAssistantThinkingPlaceholder,
   );
+
+  $effect(() => {
+    if (lastStickySessionId !== sessionId) {
+      lastStickySessionId = sessionId;
+      optimisticUserMessageSticky = undefined;
+      optimisticUserStatusSticky = "queued";
+      optimisticUserImagesSticky = [];
+    }
+  });
+
+  $effect(() => {
+    if (
+      typeof optimisticUserMessage === "string" &&
+      normalizeMessageText(optimisticUserMessage).length > 0
+    ) {
+      optimisticUserMessageSticky = optimisticUserMessage;
+      optimisticUserStatusSticky = optimisticUserStatus;
+      optimisticUserImagesSticky = normalizeImageAttachments(
+        optimisticUserImageAttachments,
+      );
+    }
+  });
+
+  $effect(() => {
+    if (
+      optimisticUserMessageSticky === undefined ||
+      normalizeMessageText(optimisticUserMessageSticky).length === 0
+    ) {
+      return;
+    }
+    if (normalizedChatTextSet.has(normalizedOptimisticUser)) {
+      optimisticUserMessageSticky = undefined;
+      optimisticUserStatusSticky = "queued";
+      optimisticUserImagesSticky = [];
+    }
+  });
 
   /**
    * Fetch transcript events from API
@@ -1346,18 +1394,18 @@
           >
             <div
               class="w-fit max-w-[92%] md:max-w-[85%] border-r-4 border-l-0 rounded-l
-                     {optimisticUserStatus === 'running'
+                     {optimisticUserStatusSticky === 'running'
                 ? 'border-accent-emphasis'
                 : 'border-attention-emphasis'} bg-bg-secondary"
             >
               <div class="px-3 py-1.5 flex items-center justify-between">
                 <span
-                  class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatus ===
+                  class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatusSticky ===
                   'running'
                     ? 'bg-accent-muted text-accent-fg'
                     : 'bg-attention-muted text-attention-fg'}"
                 >
-                  user ({optimisticUserStatus})
+                  user ({optimisticUserStatusSticky})
                 </span>
               </div>
               <div class="px-3 py-2">
@@ -1365,7 +1413,7 @@
                   class="transcript-markdown text-sm leading-6 break-words text-text-primary"
                 >
                   {@html renderMarkdown(
-                    stripSystemTags(optimisticUserMessage ?? ""),
+                    stripSystemTags(optimisticUserMessageSticky ?? ""),
                   )}
                 </div>
                 {#if normalizedOptimisticUserImages.length > 0}
@@ -1512,6 +1560,7 @@
           >
             {#each chatEvents as event, index (getEventId(event, index))}
               {@const textContent = extractTextContent(event)}
+              {@const imageAttachments = extractImageAttachments(event)}
               {@const isCurrent = index === currentIndex}
 
               <!-- Each card: 45% width, neighbors peek from sides -->
@@ -1623,6 +1672,17 @@
                   >
                     {@html renderMarkdown(textContent)}
                   </div>
+                  {#if imageAttachments.length > 0}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      {#each imageAttachments as attachment}
+                        <img
+                          src={attachment.dataUrl}
+                          alt={attachment.fileName}
+                          class="h-16 w-16 rounded border border-border-default object-cover"
+                        />
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
               </button>
             {/each}

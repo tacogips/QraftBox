@@ -65,6 +65,14 @@ export interface SessionMappingStore {
   ): ClaudeSessionId | undefined;
 
   /**
+   * Fast lookup without directory scan fallback.
+   * Returns undefined when not present in SQLite.
+   */
+  findClaudeSessionIdSqlOnly(
+    qraftAiSessionId: QraftAiSessionId,
+  ): ClaudeSessionId | undefined;
+
+  /**
    * Batch lookup: given an array of claude_session_ids, return a Map
    * from claude_session_id -> QraftAiSessionId.
    * Used to enrich session list responses with qraft IDs.
@@ -194,6 +202,19 @@ class SessionMappingStoreImpl implements SessionMappingStore {
 
     // Fallback: scan ~/.claude/projects/ directory
     return this.scanClaudeDirectoryForMatch(qraftAiSessionId);
+  }
+
+  findClaudeSessionIdSqlOnly(
+    qraftAiSessionId: QraftAiSessionId,
+  ): ClaudeSessionId | undefined {
+    const row = this.stmtFindByQraftId.get(qraftAiSessionId) as
+      | { claude_session_id: ClaudeSessionId }
+      | undefined
+      | null;
+    if (row === undefined || row === null) {
+      return undefined;
+    }
+    return row.claude_session_id;
   }
 
   /**

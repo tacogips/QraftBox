@@ -3,6 +3,7 @@ import {
   activateWorkspaceTab,
   closeWorkspaceTab,
   createWorkspaceTab,
+  createWorkspaceTabBySlug,
   fetchDiffFiles,
   fetchRecentWorkspaceProjects,
   fetchWorkspace,
@@ -97,6 +98,17 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
     deps.setDiffFiles(files);
     if (files.length > 0 && files[0] !== undefined) {
       deps.setSelectedPath(files[0].path);
+    }
+  }
+
+  async function openProjectBySlug(slug: string): Promise<boolean> {
+    try {
+      const result = await createWorkspaceTabBySlug(slug);
+      deps.setWorkspaceTabs(result.tabs);
+      await switchProject(result.tab.id);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -374,6 +386,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
         .find((tab) => tab.projectSlug === parsed.slug);
       if (targetTab !== undefined && targetTab.id !== deps.getContextId()) {
         void switchProject(targetTab.id);
+        return;
+      }
+      if (targetTab === undefined) {
+        void openProjectBySlug(parsed.slug);
       }
     }
   }
@@ -389,6 +405,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
       const contextId = await fetchContext();
 
       if (contextId === "") {
+        if (parsed.slug !== null) {
+          const opened = await openProjectBySlug(parsed.slug);
+          if (opened) {
+            void fetchRecentProjects();
+            return;
+          }
+        }
         void fetchRecentProjects();
         deps.setLoading(false);
         return;
@@ -404,6 +427,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
           deps.setContextId(targetTab.id);
           deps.setProjectPath(targetTab.path);
           await activateWorkspaceTab(targetTab.id);
+        } else if (targetTab === undefined) {
+          const opened = await openProjectBySlug(parsed.slug);
+          if (opened) {
+            void fetchRecentProjects();
+            return;
+          }
         }
       }
 
