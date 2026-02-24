@@ -718,7 +718,7 @@
    */
   function handlePrevious(): void {
     if (viewMode === "chat") {
-      focusChatIndex(currentIndex - 1, "smooth");
+      focusChatIndex(currentIndex - 1, "auto");
     } else if (currentIndex > 0) {
       currentIndex = currentIndex - 1;
     }
@@ -729,7 +729,7 @@
    */
   function handleNext(): void {
     if (viewMode === "chat") {
-      focusChatIndex(currentIndex + 1, "smooth");
+      focusChatIndex(currentIndex + 1, "auto");
     } else if (currentIndex < chatEvents.length - 1) {
       currentIndex = currentIndex + 1;
     }
@@ -749,7 +749,7 @@
     if (viewMode === "carousel") {
       currentIndex = 0;
     } else if (chatScrollContainer !== null) {
-      focusChatIndex(0, "smooth");
+      focusChatIndex(0, "auto");
     }
   }
 
@@ -760,7 +760,7 @@
     if (viewMode === "carousel") {
       currentIndex = chatEvents.length - 1;
     } else if (chatScrollContainer !== null) {
-      focusChatIndex(chatEvents.length - 1, "smooth");
+      focusChatIndex(chatEvents.length - 1, "auto");
     }
   }
 
@@ -1351,7 +1351,7 @@
           onpointerleave={handlePointerUp}
         >
           <div
-            class="flex gap-3 transition-transform duration-300 ease-in-out"
+            class="flex gap-3 transition-transform duration-150 ease-in-out"
             style="transform: translateX(calc(27.5% - {currentIndex *
               45}% - {currentIndex * 12}px))"
           >
@@ -1363,7 +1363,7 @@
               <button
                 type="button"
                 onclick={() => handleGoToIndex(index)}
-                class="w-[45%] shrink-0 text-left transition-all duration-300
+                class="w-[45%] shrink-0 text-left transition-all duration-150
                        {isCurrent
                   ? 'opacity-100 scale-100'
                   : 'opacity-40 scale-95'}"
