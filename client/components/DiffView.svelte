@@ -20,6 +20,10 @@
   interface Props {
     file: DiffFile;
     mode: "side-by-side" | "inline";
+    viewMode?: ViewMode;
+    selectedHasDiff?: boolean;
+    isIphone?: boolean;
+    onSetViewMode?: (mode: ViewMode) => void;
     onLineSelect?: (line: number) => void;
     onCommentSubmit?: (
       startLine: number,
@@ -37,6 +41,10 @@
   let {
     file,
     mode,
+    viewMode = "inline",
+    selectedHasDiff = true,
+    isIphone = false,
+    onSetViewMode = undefined,
     onLineSelect = undefined,
     onCommentSubmit = undefined,
     highlightedLines = undefined,
@@ -238,7 +246,161 @@
         +{file.additions} -{file.deletions}
       </span>
     </div>
-    <div class="flex items-center gap-0.5">
+    <div class="flex items-center gap-1">
+      <div
+        class="flex items-center border border-border-default rounded-md overflow-hidden"
+      >
+        <button
+          type="button"
+          class="p-1 transition-colors
+                 {viewMode === 'full-file'
+            ? 'bg-bg-emphasis text-text-on-emphasis'
+            : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => onSetViewMode?.("full-file")}
+          title="Full File"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <line
+              x1="5.5"
+              y1="6"
+              x2="11"
+              y2="6"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="5.5"
+              y1="8.5"
+              x2="11"
+              y2="8.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="5.5"
+              y1="11"
+              x2="9"
+              y2="11"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+          </svg>
+        </button>
+        {#if !isIphone}
+          <button
+            type="button"
+            class="p-1 border-l border-border-default transition-colors
+                   {!selectedHasDiff
+              ? 'text-text-disabled cursor-not-allowed opacity-40'
+              : viewMode === 'side-by-side'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => {
+              if (selectedHasDiff) onSetViewMode?.("side-by-side");
+            }}
+            disabled={!selectedHasDiff}
+            title="Side by Side"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect
+                x="1"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <rect
+                x="9"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+            </svg>
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="p-1 border-l border-border-default transition-colors
+                 {!selectedHasDiff
+            ? 'text-text-disabled cursor-not-allowed opacity-40'
+            : viewMode === 'inline'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => {
+            if (selectedHasDiff) onSetViewMode?.("inline");
+          }}
+          disabled={!selectedHasDiff}
+          title={isIphone ? "Stack" : "Inline"}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect
+              x="1"
+              y="2"
+              width="14"
+              height="12"
+              rx="1"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <line
+              x1="4"
+              y1="5.5"
+              x2="12"
+              y2="5.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="4"
+              y1="8"
+              x2="12"
+              y2="8"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="4"
+              y1="10.5"
+              x2="10"
+              y2="10.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="p-1 border-l border-border-default transition-colors
+                 {!selectedHasDiff
+            ? 'text-text-disabled cursor-not-allowed opacity-40'
+            : viewMode === 'current-state'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => {
+            if (selectedHasDiff) onSetViewMode?.("current-state");
+          }}
+          disabled={!selectedHasDiff}
+          title="Current"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+          </svg>
+        </button>
+      </div>
       <button
         type="button"
         class="p-1 rounded transition-colors {onNavigatePrev !== undefined
