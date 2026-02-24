@@ -9,14 +9,21 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   format-check:
     name: Format Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       - run: bun install --frozen-lockfile
       - run: bun run format:check
@@ -24,10 +31,13 @@ jobs:
   typecheck:
     name: TypeScript Type Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       - run: bun install --frozen-lockfile
       - run: bun run typecheck
@@ -35,10 +45,13 @@ jobs:
   test:
     name: Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       - run: bun install --frozen-lockfile
       - name: Configure git for tests
@@ -52,15 +65,38 @@ jobs:
           rm -f src/server/tools/builtin/builtin.test.ts
       - name: Run unit tests
         run: bun test src/
-        timeout-minutes: 3
 
-  build:
-    name: Build
+  e2e:
+    name: Playwright E2E Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
+      - run: bun install --frozen-lockfile
+      - name: Install client dependencies
+        run: cd client && bun install --frozen-lockfile
+      - name: Build client
+        run: cd client && bun run build
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+      - name: Run Playwright tests
+        run: bun run test:e2e
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@3d267786b128fe76c2f16a390aa2448b815359f3 # v2.1.2
       - run: bun install --frozen-lockfile
       - name: Build server

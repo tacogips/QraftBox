@@ -1,4 +1,4 @@
-const { expect, test } = require('@playwright/test');
+import { expect, test } from '@playwright/test';
 
 test('second prompt continues current claude session', async ({ page }) => {
   const contextId = 'ctx-1';
