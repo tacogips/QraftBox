@@ -21,27 +21,27 @@
   } from "../../src/lib/app-api";
   import AiSessionOverviewPopup from "./AiSessionOverviewPopup.svelte";
 
-interface OverviewSessionCard {
-  readonly qraftAiSessionId: string;
-  readonly cliSessionId: string | null;
-  readonly purpose: string;
-  readonly latestResponse: string;
-  readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
-  readonly aiAgent: AIAgent;
-  readonly status: SessionStatus;
+  interface OverviewSessionCard {
+    readonly qraftAiSessionId: string;
+    readonly cliSessionId: string | null;
+    readonly purpose: string;
+    readonly latestResponse: string;
+    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
+    readonly aiAgent: AIAgent;
+    readonly status: SessionStatus;
     readonly queuedPromptCount: number;
     readonly updatedAt: string;
   }
 
-interface SelectedSessionMeta {
-  readonly title: string;
-  readonly qraftAiSessionId: string | null;
-  readonly cliSessionId: string | null;
-  readonly purpose: string;
-  readonly latestResponse: string;
-  readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
-  readonly aiAgent: AIAgent;
-  readonly status: SessionStatus;
+  interface SelectedSessionMeta {
+    readonly title: string;
+    readonly qraftAiSessionId: string | null;
+    readonly cliSessionId: string | null;
+    readonly purpose: string;
+    readonly latestResponse: string;
+    readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
+    readonly aiAgent: AIAgent;
+    readonly status: SessionStatus;
     readonly queuedPromptCount: number;
   }
 
@@ -104,8 +104,12 @@ interface SelectedSessionMeta {
     onSubmitPrompt,
   }: Props = $props();
 
+  const SESSIONS_PAGE_SIZE = 50;
   let sessions = $state<readonly ExtendedSessionEntry[]>([]);
   let sessionsLoading = $state(false);
+  let sessionsLoadingMore = $state(false);
+  let hasMoreSessions = $state(true);
+  let requestedSessionLimit = $state(SESSIONS_PAGE_SIZE);
   let sessionsError = $state<string | null>(null);
   let selectedSessionId = $state<string | null>(null);
   let creatingNewSession = $state(false);
@@ -656,6 +660,21 @@ interface SelectedSessionMeta {
     return [fallbackPendingPrompt, ...activePromptMessages];
   });
 
+  const selectedSessionOptimisticAssistantMessage = $derived.by(() => {
+    if (selectedSessionId === null) {
+      return undefined;
+    }
+    const runningSession = runningSessionByGroupId.get(selectedSessionId);
+    if (runningSession === undefined) {
+      return undefined;
+    }
+    const message = runningSession.lastAssistantMessage;
+    if (typeof message !== "string" || message.trim().length === 0) {
+      return undefined;
+    }
+    return message;
+  });
+
   $effect(() => {
     const nowMs = Date.now();
     const nextFallbackMap = new Map(fallbackPendingPromptBySessionId);
@@ -686,6 +705,7 @@ interface SelectedSessionMeta {
 
     if (contextId === null || contextId.length === 0) {
       sessions = [];
+      hasMoreSessions = false;
       sessionsError = null;
       return;
     }
@@ -696,7 +716,7 @@ interface SelectedSessionMeta {
     try {
       const query = new URLSearchParams({
         offset: "0",
-        limit: "200",
+        limit: String(requestedSessionLimit),
         sortBy: "modified",
         sortOrder: "desc",
       });
@@ -722,11 +742,13 @@ interface SelectedSessionMeta {
       }
 
       sessions = data.sessions;
+      hasMoreSessions = data.sessions.length === requestedSessionLimit;
     } catch (error: unknown) {
       if (fetchToken !== latestFetchToken) {
         return;
       }
       sessions = [];
+      hasMoreSessions = false;
       sessionsError =
         error instanceof Error ? error.message : "Failed to load sessions";
       transcriptMatchedSessionIds = new Set();
@@ -734,6 +756,65 @@ interface SelectedSessionMeta {
     } finally {
       if (fetchToken === latestFetchToken) {
         sessionsLoading = false;
+      }
+    }
+  }
+
+  async function loadMoreSessions(): Promise<void> {
+    if (
+      contextId === null ||
+      contextId.length === 0 ||
+      sessionsLoading ||
+      sessionsLoadingMore ||
+      !hasMoreSessions
+    ) {
+      return;
+    }
+
+    const fetchToken = ++latestFetchToken;
+    sessionsLoadingMore = true;
+    sessionsError = null;
+
+    try {
+      const query = new URLSearchParams({
+        offset: String(sessions.length),
+        limit: String(SESSIONS_PAGE_SIZE),
+        sortBy: "modified",
+        sortOrder: "desc",
+      });
+
+      if (projectPath.length > 0) {
+        query.set("workingDirectoryPrefix", projectPath);
+      }
+
+      const response = await fetch(
+        `/api/ctx/${contextId}/claude-sessions/sessions?${query.toString()}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to load sessions (${response.status})`);
+      }
+
+      const data = (await response.json()) as {
+        sessions: ExtendedSessionEntry[];
+      };
+
+      if (fetchToken !== latestFetchToken) {
+        return;
+      }
+
+      sessions = [...sessions, ...data.sessions];
+      requestedSessionLimit += SESSIONS_PAGE_SIZE;
+      hasMoreSessions = data.sessions.length === SESSIONS_PAGE_SIZE;
+    } catch (error: unknown) {
+      if (fetchToken !== latestFetchToken) {
+        return;
+      }
+      sessionsError =
+        error instanceof Error ? error.message : "Failed to load more sessions";
+    } finally {
+      if (fetchToken === latestFetchToken) {
+        sessionsLoadingMore = false;
       }
     }
   }
@@ -806,6 +887,8 @@ interface SelectedSessionMeta {
     void activeContextId;
     void activeProjectPath;
 
+    requestedSessionLimit = SESSIONS_PAGE_SIZE;
+    hasMoreSessions = true;
     void fetchOverviewSessions();
     void fetchHiddenSessionIds();
 
@@ -996,7 +1079,7 @@ interface SelectedSessionMeta {
       </p>
     </div>
     <div class="text-xs text-text-secondary shrink-0">
-      {filteredCards.length} / {visibleCards.length} sessions
+      {filteredCards.length} sessions
     </div>
   </div>
 
@@ -1196,6 +1279,20 @@ interface SelectedSessionMeta {
           {/each}
         </div>
 
+        {#if hasMoreSessions}
+          <div class="pt-2 flex justify-center">
+            <button
+              type="button"
+              class="px-4 py-2 rounded border border-border-default text-sm text-text-primary
+                     bg-bg-secondary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => void loadMoreSessions()}
+              disabled={sessionsLoadingMore}
+            >
+              {sessionsLoadingMore ? "Loading more..." : "Load 50 more"}
+            </button>
+          </div>
+        {/if}
+
         {#if filteredCards.length === 0}
           <div class="text-sm text-text-secondary">
             {searchQuery.length > 0
@@ -1216,7 +1313,8 @@ interface SelectedSessionMeta {
     qraftSessionId={selectedCard?.qraftAiSessionId ??
       selectedSessionMeta.qraftAiSessionId ??
       selectedSessionId}
-    cliSessionId={selectedCard?.cliSessionId ?? selectedSessionMeta.cliSessionId}
+    cliSessionId={selectedCard?.cliSessionId ??
+      selectedSessionMeta.cliSessionId}
     title={selectedCard?.purpose ?? selectedSessionMeta.title}
     status={selectedCard?.status ?? selectedSessionMeta.status}
     purpose={selectedCard?.purpose ?? selectedSessionMeta.purpose}
@@ -1227,6 +1325,7 @@ interface SelectedSessionMeta {
     queuedPromptCount={selectedCard?.queuedPromptCount ??
       selectedSessionMeta.queuedPromptCount}
     pendingPromptMessages={selectedSessionPendingPromptMessages}
+    optimisticAssistantMessage={selectedSessionOptimisticAssistantMessage}
     isHidden={selectedSessionId !== null &&
       hiddenSessionIds.has(selectedSessionId)}
     onToggleHidden={async () => {

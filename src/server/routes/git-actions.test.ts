@@ -172,7 +172,9 @@ describe("git-actions routes", () => {
         source: string;
       };
       expect(body.name).toBe("ai-session-resume");
-      expect(body.path).toContain(".config/qraftbox/prompt/ai-session-resume.md");
+      expect(body.path).toContain(
+        ".config/qraftbox/prompt/ai-session-resume.md",
+      );
       expect(body.content).toContain(
         "resume this session and continue from latest context",
       );

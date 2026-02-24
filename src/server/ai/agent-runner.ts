@@ -229,8 +229,7 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
 
   if (lineType === "session_meta") {
     const payload = asRecord(obj["payload"]);
-    const meta =
-      payload !== undefined ? asRecord(payload["meta"]) : undefined;
+    const meta = payload !== undefined ? asRecord(payload["meta"]) : undefined;
     const sessionId =
       meta !== undefined
         ? readStringField(meta, "id")
@@ -258,7 +257,10 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
       const messageObj = asRecord(messageValue);
       const nestedContent =
         messageObj !== undefined ? messageObj["content"] : undefined;
-      if (typeof nestedContent === "string" && nestedContent.trim().length > 0) {
+      if (
+        typeof nestedContent === "string" &&
+        nestedContent.trim().length > 0
+      ) {
         return { type: "message", content: nestedContent };
       }
       if (Array.isArray(nestedContent)) {
@@ -321,6 +323,64 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   return null;
+}
+
+export function shouldEmitCodexSessionDetected(
+  previouslyDetectedSessionId: ClaudeSessionId | undefined,
+  nextSessionId: ClaudeSessionId,
+): boolean {
+  return (
+    previouslyDetectedSessionId === undefined ||
+    previouslyDetectedSessionId !== nextSessionId
+  );
+}
+
+export function buildCodexMessageSnapshots(
+  previousContent: string,
+  incomingContent: string,
+  isDelta: boolean | undefined,
+): readonly string[] {
+  if (incomingContent.length === 0) {
+    return [];
+  }
+
+  if (isDelta === true) {
+    const snapshots: string[] = [];
+    let acc = previousContent;
+    for (const char of Array.from(incomingContent)) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  if (previousContent.length === 0) {
+    const snapshots: string[] = [];
+    let acc = "";
+    for (const char of Array.from(incomingContent)) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  if (
+    previousContent.length > 0 &&
+    incomingContent.startsWith(previousContent) &&
+    incomingContent.length > previousContent.length
+  ) {
+    const snapshots: string[] = [];
+    let acc = previousContent;
+    for (const char of Array.from(
+      incomingContent.slice(previousContent.length),
+    )) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  return [incomingContent];
 }
 
 async function* streamUtf8Lines(
@@ -886,10 +946,13 @@ class CodexAgentRunner implements AgentRunner {
         });
 
         let lastAssistantMessage: string | undefined;
-        let sessionDetected = params.resumeSessionId !== undefined;
+        let detectedSessionId: ClaudeSessionId | undefined =
+          params.resumeSessionId;
 
         const stdoutStream = toReadableStream(spawnedProcess.stdout);
-        const stderrTask = readStreamToString(toReadableStream(spawnedProcess.stderr));
+        const stderrTask = readStreamToString(
+          toReadableStream(spawnedProcess.stderr),
+        );
         const stdoutTask = (async (): Promise<void> => {
           for await (const line of streamUtf8Lines(stdoutStream)) {
             if (cancelled) {
@@ -901,29 +964,37 @@ class CodexAgentRunner implements AgentRunner {
             }
 
             if (parsed.type === "session_detected") {
-              if (!sessionDetected) {
+              if (
+                shouldEmitCodexSessionDetected(
+                  detectedSessionId,
+                  parsed.sessionId,
+                )
+              ) {
                 channel.push({
                   type: "claude_session_detected",
                   claudeSessionId: parsed.sessionId,
                 });
-                sessionDetected = true;
               }
+              detectedSessionId = parsed.sessionId;
               continue;
             }
 
             if (parsed.type === "message") {
-              const nextContent =
-                parsed.isDelta === true && streamedAssistantContent.length > 0
-                  ? streamedAssistantContent + parsed.content
-                  : parsed.content;
-              streamedAssistantContent = nextContent;
-              lastAssistantMessage = nextContent;
-              channel.push({
-                type: "message",
-                role: "assistant",
-                content: nextContent,
-              });
-              channel.push({ type: "activity", activity: undefined });
+              const snapshots = buildCodexMessageSnapshots(
+                streamedAssistantContent,
+                parsed.content,
+                parsed.isDelta,
+              );
+              for (const snapshot of snapshots) {
+                streamedAssistantContent = snapshot;
+                lastAssistantMessage = snapshot;
+                channel.push({
+                  type: "message",
+                  role: "assistant",
+                  content: snapshot,
+                });
+                channel.push({ type: "activity", activity: undefined });
+              }
               continue;
             }
 

@@ -106,10 +106,15 @@
   {:else}
     {#each turns as turn, index (turn.id)}
       <div
+        class="flex w-full {turn.role === 'user'
+          ? 'justify-end'
+          : 'justify-start'}"
         data-last-turn={index === turns.length - 1 ? "true" : undefined}
         tabindex={index === turns.length - 1 ? -1 : undefined}
       >
-        <MessageCard {turn} isToolResponse={isToolResponse(index)} />
+        <div class="w-fit max-w-[85%] lg:max-w-3xl">
+          <MessageCard {turn} isToolResponse={isToolResponse(index)} />
+        </div>
       </div>
     {/each}
   {/if}

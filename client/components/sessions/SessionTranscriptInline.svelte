@@ -27,6 +27,8 @@
     optimisticUserStatus?: "queued" | "running" | undefined;
     /** Optimistic assistant message shown before transcript persistence */
     optimisticAssistantMessage?: string | undefined;
+    /** Show assistant thinking placeholder while waiting for first response */
+    showAssistantThinking?: boolean | undefined;
     /** Queued user prompts not yet persisted to transcript */
     pendingUserMessages?:
       | readonly {
@@ -40,6 +42,8 @@
     isInjectedSessionSystemPrompt,
     stripSystemTags,
   } from "../../../src/utils/strip-system-tags";
+  import DOMPurify from "dompurify";
+  import { marked } from "marked";
 
   const {
     sessionId,
@@ -51,6 +55,7 @@
     optimisticUserMessage = undefined,
     optimisticUserStatus = "queued",
     optimisticAssistantMessage = undefined,
+    showAssistantThinking = false,
     pendingUserMessages = [],
   }: Props = $props();
 
@@ -93,6 +98,18 @@
   const VIEW_MODE_STORAGE_KEY = "qraftbox:session-transcript-view-mode";
   const SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
     "qraftbox:session-transcript-show-system-prompts";
+
+  function renderMarkdown(text: string): string {
+    const parsed = marked.parse(text, {
+      async: false,
+      breaks: true,
+      gfm: true,
+    });
+    const html = typeof parsed === "string" ? parsed : "";
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+    });
+  }
 
   function loadViewMode(): ViewMode {
     try {
@@ -270,8 +287,18 @@
       !normalizedChatTextSet.has(normalizedOptimisticAssistant),
   );
 
+  const showAssistantThinkingPlaceholder = $derived(
+    showAssistantThinking &&
+      !showOptimisticAssistant &&
+      (chatEvents.length > 0 ||
+        showOptimisticUser ||
+        pendingQueuedUserMessages.length > 0),
+  );
+
   const optimisticTailCount = $derived(
-    (showOptimisticUser ? 1 : 0) + (showOptimisticAssistant ? 1 : 0),
+    (showOptimisticUser ? 1 : 0) +
+      (showOptimisticAssistant ? 1 : 0) +
+      (showAssistantThinkingPlaceholder ? 1 : 0),
   );
 
   /**
@@ -282,7 +309,8 @@
   const hasOptimisticContent = $derived(
     (optimisticUserMessage ?? "").length > 0 ||
       (optimisticAssistantMessage ?? "").length > 0 ||
-      pendingQueuedUserMessages.length > 0,
+      pendingQueuedUserMessages.length > 0 ||
+      showAssistantThinkingPlaceholder,
   );
 
   /**
@@ -419,10 +447,7 @@
       loadingState.status === "success" &&
       chatScrollContainer !== null
     ) {
-      if (chatEvents.length === 0) return;
-
-      const _liveTail = optimisticTailCount;
-      void _liveTail;
+      const liveTailCount = optimisticTailCount;
 
       const targetIndex = chatEvents.length - 1;
       const isSessionSwitch = lastInitializedSessionId !== sessionId;
@@ -432,6 +457,17 @@
       }
 
       lastInitializedSessionId = sessionId;
+      if (liveTailCount > 0) {
+        requestAnimationFrame(() => {
+          focusLatestRenderedMessage("auto");
+        });
+        return;
+      }
+
+      if (chatEvents.length === 0) {
+        return;
+      }
+
       focusChatIndex(targetIndex, "auto");
     }
   });
@@ -555,6 +591,16 @@
       default:
         return "border-border-muted";
     }
+  }
+
+  function getMessageRowAlignment(eventType: string): string {
+    return eventType === "user" ? "justify-end" : "justify-start";
+  }
+
+  function getMessageBubbleShape(eventType: string): string {
+    return eventType === "user"
+      ? "border-r-4 border-l-0 rounded-l"
+      : "border-l-4 border-r-0 rounded-r";
   }
 
   /**
@@ -840,9 +886,9 @@
       >
         {showSystemPrompts
           ? "System Prompts: Shown"
-          : `System Prompts: Hidden${hiddenSystemPromptCount > 0
-            ? ` (${hiddenSystemPromptCount})`
-            : ""}`}
+          : `System Prompts: Hidden${
+              hiddenSystemPromptCount > 0 ? ` (${hiddenSystemPromptCount})` : ""
+            }`}
       </button>
 
       <!-- Navigation buttons: previous/next + jump to first/last -->
@@ -1005,129 +1051,144 @@
           {@const isExpanded = expandedMessages.has(eventId)}
 
           <div
-            class="border-l-4 {getBorderColor(
-              event.type,
-            )} bg-bg-secondary rounded-r
-                   {currentIndex === index
-              ? 'ring-1 ring-accent-emphasis/55'
-              : ''}"
+            class="flex w-full {getMessageRowAlignment(event.type)}"
             data-chat-index={index}
             data-chat-tail-anchor="true"
             tabindex={currentIndex === index ? 0 : -1}
           >
-            <!-- Message header -->
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
-                  event.type,
-                )}"
-              >
-                {event.type}
-              </span>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-text-tertiary">
-                  {formatTimestamp(event.timestamp)}
-                </span>
-                <!-- Copy to clipboard button -->
-                <button
-                  type="button"
-                  onclick={(e: MouseEvent) => {
-                    e.stopPropagation();
-                    copyToClipboard(textContent, eventId);
-                  }}
-                  class="p-0.5 hover:bg-bg-hover rounded transition-colors
-                         focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                  aria-label="Copy message to clipboard"
-                  title="Copy to clipboard"
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] {getMessageBubbleShape(
+                event.type,
+              )} {getBorderColor(event.type)} bg-bg-secondary
+                     {currentIndex === index
+                ? 'ring-1 ring-accent-emphasis/55'
+                : ''}"
+            >
+              <!-- Message header -->
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
+                    event.type,
+                  )}"
                 >
-                  {#if copiedEventId === eventId}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="text-success-fg"
-                      aria-hidden="true"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  {:else}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="text-text-tertiary"
-                      aria-hidden="true"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path
-                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                      />
-                    </svg>
-                  {/if}
-                </button>
+                  {event.type}
+                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-text-tertiary">
+                    {formatTimestamp(event.timestamp)}
+                  </span>
+                  <!-- Copy to clipboard button -->
+                  <button
+                    type="button"
+                    onclick={(e: MouseEvent) => {
+                      e.stopPropagation();
+                      copyToClipboard(textContent, eventId);
+                    }}
+                    class="p-0.5 hover:bg-bg-hover rounded transition-colors
+                           focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                    aria-label="Copy message to clipboard"
+                    title="Copy to clipboard"
+                  >
+                    {#if copiedEventId === eventId}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="text-success-fg"
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    {:else}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="text-text-tertiary"
+                        aria-hidden="true"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Message content -->
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {#if isLong && !isExpanded}
-                  {textContent.slice(0, 500)}...
-                {:else}
-                  {textContent}
+              <!-- Message content -->
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary {isLong &&
+                  !isExpanded
+                    ? 'transcript-markdown-collapsed'
+                    : ''}"
+                >
+                  {@html renderMarkdown(textContent)}
+                </div>
+
+                {#if isLong}
+                  <button
+                    type="button"
+                    onclick={() => toggleExpanded(eventId)}
+                    class="mt-2 text-xs text-accent-fg hover:underline"
+                  >
+                    {isExpanded ? "Show less" : "Show more"}
+                  </button>
                 {/if}
               </div>
-
-              {#if isLong}
-                <button
-                  type="button"
-                  onclick={() => toggleExpanded(eventId)}
-                  class="mt-2 text-xs text-accent-fg hover:underline"
-                >
-                  {isExpanded ? "Show less" : "Show more"}
-                </button>
-              {/if}
             </div>
           </div>
         {/each}
 
         {#each pendingQueuedUserMessages as pendingMessage}
           <div
-            class="border-l-4 {pendingMessage.status === 'running'
-              ? 'border-accent-emphasis'
-              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            class="flex w-full justify-end"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {pendingMessage.status ===
-                'running'
-                  ? 'bg-accent-muted text-accent-fg'
-                  : 'bg-attention-muted text-attention-fg'}"
-              >
-                user ({pendingMessage.status})
-              </span>
-            </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {pendingMessage.raw}
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-r-4 border-l-0 rounded-l
+                     {pendingMessage.status === 'running'
+                ? 'border-accent-emphasis'
+                : 'border-attention-emphasis'} bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {pendingMessage.status ===
+                  'running'
+                    ? 'bg-accent-muted text-accent-fg'
+                    : 'bg-attention-muted text-attention-fg'}"
+                >
+                  user ({pendingMessage.status})
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html renderMarkdown(pendingMessage.raw)}
+                </div>
               </div>
             </div>
           </div>
@@ -1135,27 +1196,34 @@
 
         {#if showOptimisticUser}
           <div
-            class="border-l-4 {optimisticUserStatus === 'running'
-              ? 'border-accent-emphasis'
-              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            class="flex w-full justify-end"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatus ===
-                'running'
-                  ? 'bg-accent-muted text-accent-fg'
-                  : 'bg-attention-muted text-attention-fg'}"
-              >
-                user ({optimisticUserStatus})
-              </span>
-            </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {stripSystemTags(optimisticUserMessage ?? "")}
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-r-4 border-l-0 rounded-l
+                     {optimisticUserStatus === 'running'
+                ? 'border-accent-emphasis'
+                : 'border-attention-emphasis'} bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatus ===
+                  'running'
+                    ? 'bg-accent-muted text-accent-fg'
+                    : 'bg-attention-muted text-attention-fg'}"
+                >
+                  user ({optimisticUserStatus})
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html renderMarkdown(
+                    stripSystemTags(optimisticUserMessage ?? ""),
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1163,22 +1231,53 @@
 
         {#if showOptimisticAssistant}
           <div
-            class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
+            class="flex w-full justify-start"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
-              >
-                assistant (live)
-              </span>
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-l-4 border-r-0 rounded-r border-success-emphasis bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+                >
+                  assistant (live)
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html renderMarkdown(
+                    stripSystemTags(optimisticAssistantMessage ?? ""),
+                  )}
+                </div>
+              </div>
             </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {stripSystemTags(optimisticAssistantMessage ?? "")}
+          </div>
+        {/if}
+
+        {#if showAssistantThinkingPlaceholder}
+          <div
+            class="flex w-full justify-start"
+            data-chat-tail-anchor="true"
+            tabindex="-1"
+          >
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-l-4 border-r-0 rounded-r border-success-emphasis bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+                >
+                  assistant (thinking)
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div class="text-sm leading-6 font-mono text-text-secondary">
+                  Thinking...
+                </div>
               </div>
             </div>
           </div>
@@ -1365,9 +1464,9 @@
 
                   <!-- Card content -->
                   <div
-                    class="max-h-[300px] overflow-y-auto text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                    class="transcript-markdown max-h-[300px] overflow-y-auto text-xs leading-5 break-words text-text-primary"
                   >
-                    {textContent}
+                    {@html renderMarkdown(textContent)}
                   </div>
                 </div>
               </button>
@@ -1407,5 +1506,75 @@
 
   .chat-scroll::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-border-emphasis);
+  }
+
+  .transcript-markdown :global(p) {
+    margin: 0.4rem 0;
+  }
+
+  .transcript-markdown :global(ul),
+  .transcript-markdown :global(ol) {
+    margin: 0.4rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .transcript-markdown :global(li + li) {
+    margin-top: 0.15rem;
+  }
+
+  .transcript-markdown :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9em;
+    background: var(--color-bg-tertiary);
+    padding: 0.12rem 0.35rem;
+    border-radius: 0.25rem;
+  }
+
+  .transcript-markdown :global(pre) {
+    margin: 0.5rem 0;
+    padding: 0.55rem 0.65rem;
+    overflow-x: auto;
+    border-radius: 0.35rem;
+    background: var(--color-bg-tertiary);
+  }
+
+  .transcript-markdown :global(pre code) {
+    background: transparent;
+    padding: 0;
+  }
+
+  .transcript-markdown :global(blockquote) {
+    margin: 0.45rem 0;
+    padding-left: 0.7rem;
+    border-left: 3px solid var(--color-border-emphasis);
+    color: var(--color-text-secondary);
+  }
+
+  .transcript-markdown :global(a) {
+    color: var(--color-accent-fg);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .transcript-markdown-collapsed {
+    max-height: 12rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .transcript-markdown-collapsed::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2.5rem;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0%,
+      var(--color-bg-secondary) 100%
+    );
+    pointer-events: none;
   }
 </style>

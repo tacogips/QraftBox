@@ -352,7 +352,7 @@
             viewMode={effectiveViewMode}
             {selectedHasDiff}
             {isIphone}
-            onSetViewMode={onSetViewMode}
+            {onSetViewMode}
             onCommentSubmit={handleInlineCommentSubmit}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
@@ -368,7 +368,7 @@
             viewMode={effectiveViewMode}
             {selectedHasDiff}
             {isIphone}
-            onSetViewMode={onSetViewMode}
+            {onSetViewMode}
             onCommentSubmit={handleInlineCommentSubmit}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
@@ -392,7 +392,7 @@
           viewMode={effectiveViewMode}
           {selectedHasDiff}
           {isIphone}
-          onSetViewMode={onSetViewMode}
+          {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}
@@ -415,7 +415,7 @@
           viewMode={effectiveViewMode}
           {selectedHasDiff}
           {isIphone}
-          onSetViewMode={onSetViewMode}
+          {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}

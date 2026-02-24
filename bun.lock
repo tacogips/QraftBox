@@ -7,7 +7,7 @@
       "dependencies": {
         "@octokit/rest": "22.0.1",
         "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
-        "codex-agent": "github:tacogips/codex-agent#fe657220b00bf1605fa4d13688b36439ba2b2d6a",
+        "codex-agent": "github:tacogips/codex-agent#338d1279de30f12c1536610dab4f8fbae63fd22a",
         "commander": "14.0.3",
         "hono": "4.11.7",
       },
@@ -227,7 +227,7 @@
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#fe65722", {}, "tacogips-codex-agent-fe65722"],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#338d127", {}, "tacogips-codex-agent-338d127"],
 
     "commander": ["commander@14.0.3", "", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 

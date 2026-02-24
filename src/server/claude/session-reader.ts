@@ -189,6 +189,7 @@ export class ClaudeSessionReader {
     options: ListSessionsOptions = {},
   ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
+    const requiresSourceFiltering = options.source !== undefined;
 
     // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
     const projects = await this.listProjects(options.workingDirectoryPrefix);
@@ -203,18 +204,20 @@ export class ClaudeSessionReader {
         const index = await this.readSessionIndex(indexPath);
 
         for (const entry of index.entries) {
-          // Strip system tags and fix empty firstPrompt
-          await this.fixSystemTagFirstPrompt(entry);
+          const normalizedEntry = this.normalizeSessionEntryForList(entry);
 
           const extended: ExtendedSessionEntry = {
-            ...entry,
-            source: await this.detectSource(entry),
+            ...normalizedEntry,
+            source: "claude-cli",
             projectEncoded: project.encoded,
             qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
-              entry.sessionId as ClaudeSessionId,
+              normalizedEntry.sessionId as ClaudeSessionId,
             ),
             aiAgent: AIAgent.CLAUDE,
           };
+          if (requiresSourceFiltering) {
+            extended.source = await this.detectSource(normalizedEntry);
+          }
 
           // Apply additional filters
           if (this.matchesFilters(extended, options)) {
@@ -230,15 +233,19 @@ export class ClaudeSessionReader {
           );
 
           for (const entry of entries) {
+            const normalizedEntry = this.normalizeSessionEntryForList(entry);
             const extended: ExtendedSessionEntry = {
-              ...entry,
-              source: await this.detectSource(entry),
+              ...normalizedEntry,
+              source: "claude-cli",
               projectEncoded: project.encoded,
               qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
-                entry.sessionId as ClaudeSessionId,
+                normalizedEntry.sessionId as ClaudeSessionId,
               ),
               aiAgent: AIAgent.CLAUDE,
             };
+            if (requiresSourceFiltering) {
+              extended.source = await this.detectSource(normalizedEntry);
+            }
 
             // Apply additional filters
             if (this.matchesFilters(extended, options)) {
@@ -269,12 +276,57 @@ export class ClaudeSessionReader {
     const offset = options.offset ?? 0;
     const limit = options.limit ?? 50;
     const paginated = allSessions.slice(offset, offset + limit);
+    for (const session of paginated) {
+      await this.fixSystemTagFirstPrompt(session);
+    }
+    if (!requiresSourceFiltering) {
+      for (const session of paginated) {
+        session.source = await this.detectSource(session);
+      }
+    }
 
     return {
       sessions: paginated,
       total: allSessions.length,
       offset,
       limit,
+    };
+  }
+
+  /**
+   * Lightweight normalization for list views.
+   * Avoids JSONL reads so large session lists remain responsive.
+   */
+  private normalizeSessionEntryForList(
+    entry: ClaudeSessionEntry,
+  ): ClaudeSessionEntry {
+    if (this.isInternalSessionPrompt(entry.firstPrompt)) {
+      return {
+        ...entry,
+        firstPrompt: "",
+        summary: "",
+        hasUserPrompt: false,
+      };
+    }
+
+    const strippedFirstPrompt = stripSystemTags(entry.firstPrompt);
+    if (strippedFirstPrompt.length > 0) {
+      return {
+        ...entry,
+        firstPrompt: strippedFirstPrompt,
+      };
+    }
+
+    const strippedSummary = stripSystemTags(entry.summary);
+    const hasUserPrompt =
+      strippedFirstPrompt.length > 0 || strippedSummary.length > 0
+        ? entry.hasUserPrompt
+        : false;
+    return {
+      ...entry,
+      firstPrompt: strippedFirstPrompt,
+      summary: strippedSummary,
+      ...(hasUserPrompt !== undefined ? { hasUserPrompt } : {}),
     };
   }
 

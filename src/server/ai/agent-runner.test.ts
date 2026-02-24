@@ -7,10 +7,12 @@
 
 import { describe, test, expect } from "vitest";
 import {
+  buildCodexMessageSnapshots,
   buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
   parseCodexJsonLine,
+  shouldEmitCodexSessionDetected,
   type AgentEvent,
   type AgentRunParams,
 } from "./agent-runner.js";
@@ -164,6 +166,55 @@ describe("parseCodexJsonLine()", () => {
       content: "partial",
       isDelta: true,
     });
+  });
+});
+
+describe("shouldEmitCodexSessionDetected()", () => {
+  test("emits when no session was previously detected", () => {
+    const nextSessionId = "codex-session-1" as ClaudeSessionId;
+    expect(shouldEmitCodexSessionDetected(undefined, nextSessionId)).toBe(true);
+  });
+
+  test("does not emit duplicate detection for same session ID", () => {
+    const sessionId = "codex-session-1" as ClaudeSessionId;
+    expect(shouldEmitCodexSessionDetected(sessionId, sessionId)).toBe(false);
+  });
+
+  test("emits when resumed session resolves to a different session ID", () => {
+    const resumeSessionId = "codex-session-old" as ClaudeSessionId;
+    const detectedSessionId = "codex-session-new" as ClaudeSessionId;
+    expect(
+      shouldEmitCodexSessionDetected(resumeSessionId, detectedSessionId),
+    ).toBe(true);
+  });
+});
+
+describe("buildCodexMessageSnapshots()", () => {
+  test("builds character-by-character snapshots for an initial full message", () => {
+    const snapshots = buildCodexMessageSnapshots("", "hi", false);
+    expect(snapshots).toEqual(["h", "hi"]);
+  });
+
+  test("builds character-by-character snapshots for delta content", () => {
+    const snapshots = buildCodexMessageSnapshots("hel", "lo", true);
+    expect(snapshots).toEqual(["hell", "hello"]);
+  });
+
+  test("builds character-by-character suffix snapshots for full content updates", () => {
+    const snapshots = buildCodexMessageSnapshots("hello", "hello world", false);
+    expect(snapshots).toEqual([
+      "hello ",
+      "hello w",
+      "hello wo",
+      "hello wor",
+      "hello worl",
+      "hello world",
+    ]);
+  });
+
+  test("falls back to a single snapshot when content is not a monotonic extension", () => {
+    const snapshots = buildCodexMessageSnapshots("hello world", "hi", false);
+    expect(snapshots).toEqual(["hi"]);
   });
 });
 

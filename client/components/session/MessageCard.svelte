@@ -64,6 +64,21 @@
   );
 
   /**
+   * Get border side and corner radius based on role
+   */
+  const borderSideClass = $derived(
+    turn.role === "user" ? "border-r-4 border-l-0" : "border-l-4 border-r-0",
+  );
+
+  const collapsedBorderSideClass = $derived(
+    turn.role === "user" ? "border-r-2 border-l-0" : "border-l-2 border-r-0",
+  );
+
+  const bubbleCornerClass = $derived(
+    turn.role === "user" ? "rounded-l-lg" : "rounded-r-lg",
+  );
+
+  /**
    * Get role display text
    */
   const roleText = $derived(turn.role === "user" ? "USER" : "ASSISTANT");
@@ -115,7 +130,7 @@
   <button
     type="button"
     onclick={toggleToolResponse}
-    class="message-card border-l-2 {borderColor} bg-bg-secondary/50 rounded-r-lg
+    class="message-card {collapsedBorderSideClass} {borderColor} bg-bg-secondary/50 {bubbleCornerClass}
            py-1 px-3 flex items-center justify-between gap-2
            hover:bg-bg-hover transition-colors
            focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent-emphasis"
@@ -149,7 +164,7 @@
 {:else}
   <!-- Full message card view (normal or expanded tool response) -->
   <div
-    class="message-card border-l-4 {borderColor} bg-bg-secondary rounded-r-lg
+    class="message-card {borderSideClass} {borderColor} bg-bg-secondary {bubbleCornerClass}
            overflow-hidden"
     role="article"
     aria-label="{roleText} message"

@@ -16,7 +16,10 @@ import {
   ClaudeSessionReader,
   type SessionSummary,
 } from "../claude/session-reader";
-import { stripSystemTags, wrapQraftboxInternalPrompt } from "../../utils/strip-system-tags";
+import {
+  stripSystemTags,
+  wrapQraftboxInternalPrompt,
+} from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import type { QraftAiSessionId } from "../../types/ai.js";
 import { AIAgent } from "../../types/ai-agent.js";
@@ -235,7 +238,9 @@ export function createClaudeSessionsRoutes(
       return undefined;
     }
 
-    const direct = sessionManager.getSession(qraftAiSessionId as QraftAiSessionId);
+    const direct = sessionManager.getSession(
+      qraftAiSessionId as QraftAiSessionId,
+    );
     if (direct !== null) {
       return direct;
     }
@@ -254,9 +259,7 @@ export function createClaudeSessionsRoutes(
       })[0];
   }
 
-  function buildFallbackTranscriptPayload(
-    qraftAiSessionId: string,
-  ):
+  function buildFallbackTranscriptPayload(qraftAiSessionId: string):
     | {
         events: readonly {
           type: "user" | "assistant";
@@ -296,11 +299,14 @@ export function createClaudeSessionsRoutes(
       });
     }
 
-    const assistantContent = stripSystemTags(session.lastAssistantMessage ?? "").trim();
+    const assistantContent = stripSystemTags(
+      session.lastAssistantMessage ?? "",
+    ).trim();
     if (assistantContent.length > 0) {
       events.push({
         type: "assistant",
-        timestamp: session.completedAt ?? session.startedAt ?? session.createdAt,
+        timestamp:
+          session.completedAt ?? session.startedAt ?? session.createdAt,
         content: assistantContent,
         raw: {
           type: "assistant",
@@ -507,13 +513,18 @@ export function createClaudeSessionsRoutes(
         enrichmentService.enrichSessionsWithQraftIds(response.sessions);
       }
 
-      // Merge QraftBox-only sessions (completed sessions without CLI counterpart)
-      if (sessionManager !== undefined) {
+      const effectiveOffset = options.offset ?? 0;
+      const effectiveLimit = options.limit ?? 50;
+
+      // Merge QraftBox-only sessions (completed sessions without CLI counterpart).
+      // For paginated follow-up pages (offset > 0), keep reader pagination intact.
+      if (sessionManager !== undefined && effectiveOffset === 0) {
         const cliQraftIds = new Set(
           response.sessions.map((session) => session.qraftAiSessionId),
         );
 
         const completedRows = sessionManager.listCompletedRows();
+        let addedQraftOnlyCount = 0;
 
         // Group by clientSessionId, keeping newest per group
         const latestByGroup = new Map<string, AiSessionRow>();
@@ -591,6 +602,7 @@ export function createClaudeSessionsRoutes(
           };
 
           response.sessions.push(extended);
+          addedQraftOnlyCount += 1;
         }
 
         // Re-sort the combined list
@@ -601,8 +613,11 @@ export function createClaudeSessionsRoutes(
           );
         });
 
-        // Update total
-        response.total = response.sessions.length;
+        // Respect requested page size after merge.
+        response.sessions = response.sessions.slice(0, effectiveLimit);
+        response.total += addedQraftOnlyCount;
+        response.offset = 0;
+        response.limit = effectiveLimit;
       }
 
       // Apply purpose override only for QraftBox-originated sessions.

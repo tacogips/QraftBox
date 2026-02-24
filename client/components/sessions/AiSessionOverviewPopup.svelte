@@ -24,6 +24,7 @@
       message: string;
       status: "queued" | "running";
     }[];
+    optimisticAssistantMessage?: string | undefined;
     showModelProfileSelector?: boolean;
     modelProfiles?: readonly ModelProfile[];
     selectedModelProfileId?: string | undefined;
@@ -55,6 +56,7 @@
     aiAgent,
     queuedPromptCount,
     pendingPromptMessages,
+    optimisticAssistantMessage = undefined,
     showModelProfileSelector = false,
     modelProfiles = [],
     selectedModelProfileId = undefined,
@@ -160,6 +162,7 @@
   let submitError = $state<string | null>(null);
   let optimisticUserMessage = $state<string | undefined>(undefined);
   let optimisticUserStatus = $state<"queued" | "running">("queued");
+  let optimisticAssistantMessageSticky = $state<string | undefined>(undefined);
   let focusTailNonce = $state(0);
   let showSubmitOptions = $state(false);
   let runningRefreshPurpose = $state(false);
@@ -260,6 +263,16 @@
   }
 
   const promptShortcutHint = $derived(promptShortcutLabel());
+  const shouldLiveRefreshTranscript = $derived(
+    status === "running" || source === "codex-cli",
+  );
+  const hasRunningPendingPrompt = $derived(
+    optimisticUserStatus === "running" ||
+      pendingPromptMessages.some((pending) => pending.status === "running"),
+  );
+  const shouldShowAssistantThinking = $derived(
+    status === "running" || submitting || hasRunningPendingPrompt,
+  );
 
   $effect(() => {
     const optimisticMessage = optimisticUserMessage;
@@ -283,9 +296,24 @@
   });
 
   $effect(() => {
+    const assistantMessage = optimisticAssistantMessage;
+    if (
+      typeof assistantMessage === "string" &&
+      assistantMessage.trim().length > 0
+    ) {
+      optimisticAssistantMessageSticky = assistantMessage;
+      return;
+    }
+    if (!open) {
+      optimisticAssistantMessageSticky = undefined;
+    }
+  });
+
+  $effect(() => {
     if (!open) {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticAssistantMessageSticky = undefined;
       showSubmitOptions = false;
       return;
     }
@@ -376,7 +404,9 @@
               >
                 Qraft Session ID
               </span>
-              <span class="min-w-0 truncate text-[11px] text-text-secondary font-mono">
+              <span
+                class="min-w-0 truncate text-[11px] text-text-secondary font-mono"
+              >
                 {normalizedQraftSessionId ?? "-"}
               </span>
               <button
@@ -432,7 +462,9 @@
               >
                 {cliSessionLabel}
               </span>
-              <span class="min-w-0 truncate text-[11px] text-text-secondary font-mono">
+              <span
+                class="min-w-0 truncate text-[11px] text-text-secondary font-mono"
+              >
                 {normalizedCliSessionId ?? "-"}
               </span>
               <button
@@ -558,11 +590,15 @@
             <SessionTranscriptInline
               sessionId={normalizedSessionId}
               {contextId}
-              autoRefreshMs={status === "running" || submitting ? 1500 : 0}
-              followLatest={status === "running"}
+              autoRefreshMs={shouldLiveRefreshTranscript || submitting
+                ? 1500
+                : 0}
+              followLatest={shouldLiveRefreshTranscript}
               {focusTailNonce}
+              showAssistantThinking={shouldShowAssistantThinking}
               {optimisticUserMessage}
               {optimisticUserStatus}
+              optimisticAssistantMessage={optimisticAssistantMessageSticky}
               pendingUserMessages={pendingPromptMessages}
             />
           {:else if normalizedSessionId === null}
