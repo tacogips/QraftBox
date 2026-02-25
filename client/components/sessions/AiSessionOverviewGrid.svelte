@@ -123,6 +123,7 @@
     ReadonlyMap<string, FallbackPendingPromptMessage>
   >(new Map());
   const FALLBACK_PENDING_PROMPT_TTL_MS = 20_000;
+  let fallbackPendingPromptNowMs = $state(Date.now());
   let selectedSessionMeta = $state<SelectedSessionMeta>({
     title: "Session",
     qraftAiSessionId: null,
@@ -629,6 +630,8 @@
   });
 
   const selectedSessionPendingPromptMessages = $derived.by(() => {
+    const nowMs = fallbackPendingPromptNowMs;
+    void nowMs;
     if (selectedSessionId === null) {
       return [] as readonly PendingPromptMessage[];
     }
@@ -642,7 +645,7 @@
     }
 
     const isFallbackExpired =
-      Date.now() - fallbackPendingPrompt.createdAtMs >
+      nowMs - fallbackPendingPrompt.createdAtMs >
       FALLBACK_PENDING_PROMPT_TTL_MS;
     if (isFallbackExpired) {
       return activePromptMessages;
@@ -681,7 +684,8 @@
   });
 
   $effect(() => {
-    const nowMs = Date.now();
+    const nowMs = fallbackPendingPromptNowMs;
+    void nowMs;
     const nextFallbackMap = new Map(fallbackPendingPromptBySessionId);
     let hasUpdates = false;
 
@@ -703,6 +707,13 @@
     if (hasUpdates) {
       fallbackPendingPromptBySessionId = nextFallbackMap;
     }
+  });
+
+  $effect(() => {
+    const timerId = setInterval(() => {
+      fallbackPendingPromptNowMs = Date.now();
+    }, 1000);
+    return () => clearInterval(timerId);
   });
 
   async function fetchOverviewSessions(options?: {

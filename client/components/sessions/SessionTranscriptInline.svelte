@@ -150,6 +150,7 @@
   let optimisticUserImagesSticky: readonly DisplayImageAttachment[] = $state(
     [],
   );
+  let optimisticUserImageMatchKeySticky: string | undefined = $state(undefined);
   let lastStickySessionId: string | null = $state(null);
 
   /**
@@ -176,8 +177,9 @@
     loadingState.status === "success"
       ? loadingState.data.filter((event) => {
           if (event.type !== "user" && event.type !== "assistant") return false;
-          const text = extractTextContent(event);
-          if (text.trim().length === 0) return false;
+          const text = extractTextContent(event).trim();
+          const hasImages = extractImageAttachments(event).length > 0;
+          if (text.length === 0 && !hasImages) return false;
           if (
             !showSystemPrompts &&
             event.type === "user" &&
@@ -375,6 +377,7 @@
       optimisticUserMessageSticky = undefined;
       optimisticUserStatusSticky = "queued";
       optimisticUserImagesSticky = [];
+      optimisticUserImageMatchKeySticky = undefined;
     }
   });
 
@@ -387,6 +390,9 @@
       optimisticUserStatusSticky = optimisticUserStatus;
       optimisticUserImagesSticky = normalizeImageAttachments(
         optimisticUserImageAttachments,
+      );
+      optimisticUserImageMatchKeySticky = normalizeMessageText(
+        optimisticUserMessage,
       );
     }
   });
@@ -401,9 +407,28 @@
     if (normalizedChatTextSet.has(normalizedOptimisticUser)) {
       optimisticUserMessageSticky = undefined;
       optimisticUserStatusSticky = "queued";
-      optimisticUserImagesSticky = [];
     }
   });
+
+  function resolveImageAttachments(
+    event: TranscriptEvent,
+  ): readonly DisplayImageAttachment[] {
+    const transcriptImages = extractImageAttachments(event);
+    if (transcriptImages.length > 0) {
+      return transcriptImages;
+    }
+    if (
+      event.type !== "user" ||
+      optimisticUserImagesSticky.length === 0 ||
+      optimisticUserImageMatchKeySticky === undefined
+    ) {
+      return [];
+    }
+    const normalizedEventText = normalizeMessageText(extractTextContent(event));
+    return normalizedEventText === optimisticUserImageMatchKeySticky
+      ? optimisticUserImagesSticky
+      : [];
+  }
 
   /**
    * Fetch transcript events from API
@@ -590,15 +615,12 @@
 
     // User/assistant: content is at raw.message.content
     if (event.type === "user" || event.type === "assistant") {
-      const message = raw["message"] as Record<string, unknown> | undefined;
-      if (message !== undefined) {
-        const msgContent = message["content"];
-        if (typeof msgContent === "string") {
-          return msgContent;
-        }
-        if (Array.isArray(msgContent)) {
-          return extractContentBlocks(msgContent);
-        }
+      const msgContent = extractMessageContent(raw);
+      if (typeof msgContent === "string") {
+        return msgContent;
+      }
+      if (Array.isArray(msgContent)) {
+        return extractContentBlocks(msgContent);
       }
     }
 
@@ -654,7 +676,16 @@
         "type" in block
       ) {
         const obj = block as Record<string, unknown>;
-        if (obj["type"] === "text" && typeof obj["text"] === "string") {
+        if (
+          (obj["type"] === "text" ||
+            obj["type"] === "input_text" ||
+            obj["type"] === "output_text") &&
+          typeof obj["text"] === "string"
+        ) {
+          const textValue = obj["text"].trim();
+          if (textValue.startsWith("<image") || textValue === "</image>") {
+            continue;
+          }
           textParts.push(obj["text"]);
         } else if (obj["type"] === "tool_use") {
           const toolName =
@@ -671,7 +702,29 @@
     return textParts.join("\n\n");
   }
 
-  function extractImageSourceFromBlock(block: Record<string, unknown>): string | null {
+  function extractMessageContent(raw: Record<string, unknown>): unknown {
+    const message = raw["message"];
+    if (typeof message === "object" && message !== null) {
+      const messageContent = (message as { content?: unknown }).content;
+      if (messageContent !== undefined) {
+        return messageContent;
+      }
+    }
+
+    const payload = raw["payload"];
+    if (typeof payload === "object" && payload !== null) {
+      const payloadContent = (payload as { content?: unknown }).content;
+      if (payloadContent !== undefined) {
+        return payloadContent;
+      }
+    }
+
+    return undefined;
+  }
+
+  function extractImageSourceFromBlock(
+    block: Record<string, unknown>,
+  ): string | null {
     const imageUrl = block["image_url"];
     if (typeof imageUrl === "string" && imageUrl.length > 0) {
       return imageUrl;
@@ -706,43 +759,61 @@
     return null;
   }
 
-  function extractImageAttachments(event: TranscriptEvent): readonly DisplayImageAttachment[] {
+  function extractImageAttachments(
+    event: TranscriptEvent,
+  ): readonly DisplayImageAttachment[] {
     if (event.type !== "user" && event.type !== "assistant") {
       return [];
     }
     const raw = event.raw as Record<string, unknown>;
-    const message = raw["message"] as Record<string, unknown> | undefined;
-    const content = message?.["content"];
+    const content = extractMessageContent(raw);
     if (!Array.isArray(content)) {
       return [];
     }
 
     const images: DisplayImageAttachment[] = [];
-    for (const blockValue of content) {
-      if (typeof blockValue !== "object" || blockValue === null) {
-        continue;
-      }
-      const block = blockValue as Record<string, unknown>;
+
+    function pushImageFromBlock(block: Record<string, unknown>): void {
       const src = extractImageSourceFromBlock(block);
       if (src === null) {
-        continue;
+        return;
       }
       if (!src.startsWith("data:image/") && !src.startsWith("http")) {
-        continue;
+        return;
       }
       const fileName =
-        typeof block["file_name"] === "string"
-          ? block["file_name"]
-          : "image";
-      const mimeType =
-        src.startsWith("data:image/")
-          ? src.slice("data:".length, src.indexOf(";"))
-          : "image/*";
+        typeof block["file_name"] === "string" ? block["file_name"] : "image";
+      const mimeType = src.startsWith("data:image/")
+        ? src.slice("data:".length, src.indexOf(";"))
+        : "image/*";
       images.push({
         fileName,
         mimeType,
         dataUrl: src,
       });
+    }
+
+    for (const blockValue of content) {
+      if (typeof blockValue !== "object" || blockValue === null) {
+        continue;
+      }
+      const block = blockValue as Record<string, unknown>;
+      pushImageFromBlock(block);
+
+      // Claude Code tool_result blocks can nest image blocks in content[].
+      if (block["type"] !== "tool_result") {
+        continue;
+      }
+      const nestedContent = block["content"];
+      if (!Array.isArray(nestedContent)) {
+        continue;
+      }
+      for (const nestedBlockValue of nestedContent) {
+        if (typeof nestedBlockValue !== "object" || nestedBlockValue === null) {
+          continue;
+        }
+        pushImageFromBlock(nestedBlockValue as Record<string, unknown>);
+      }
     }
     return images;
   }
@@ -1215,7 +1286,7 @@
         {#each chatEvents as event, index (getEventId(event, index))}
           {@const eventId = getEventId(event, index)}
           {@const textContent = extractTextContent(event)}
-          {@const imageAttachments = extractImageAttachments(event)}
+          {@const imageAttachments = resolveImageAttachments(event)}
           {@const isLong = isLongContent(textContent)}
           {@const isExpanded = expandedMessages.has(eventId)}
 
@@ -1560,7 +1631,7 @@
           >
             {#each chatEvents as event, index (getEventId(event, index))}
               {@const textContent = extractTextContent(event)}
-              {@const imageAttachments = extractImageAttachments(event)}
+              {@const imageAttachments = resolveImageAttachments(event)}
               {@const isCurrent = index === currentIndex}
 
               <!-- Each card: 45% width, neighbors peek from sides -->
