@@ -86,6 +86,7 @@ export type AISessionInfo = {
   context: unknown;
   lastAssistantMessage?: string | undefined;
   currentActivity?: string | undefined;
+  error?: string | undefined;
   clientSessionId?: QraftAiSessionId | undefined;
   aiAgent?: AIAgent | undefined;
 };

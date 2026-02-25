@@ -72,6 +72,12 @@ export interface ExtendedSessionEntry extends ClaudeSessionEntry {
   qraftAiSessionId: QraftAiSessionId;
   /** AI agent used by this session */
   aiAgent?: AIAgent | undefined;
+  /** Selected model profile ID snapshot if available */
+  modelProfileId?: string | undefined;
+  /** Model vendor snapshot if available */
+  modelVendor?: "anthropics" | "openai" | undefined;
+  /** Model name snapshot if available */
+  modelName?: string | undefined;
 }
 
 /**

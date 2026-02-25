@@ -343,7 +343,9 @@
       : undefined}
   >
     {#if contextId !== null}
-      <div class="h-10 border-b border-border-default bg-bg-secondary px-2 flex items-center justify-end">
+      <div
+        class="h-10 border-b border-border-default bg-bg-secondary px-2 flex items-center justify-end"
+      >
         <GitPushButton
           {contextId}
           {projectPath}

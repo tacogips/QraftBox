@@ -347,7 +347,9 @@ export function createWorkspaceRoutes(
       return c.json(errorResponse, 400);
     }
 
-    const resolvedPath = await contextManager.getProjectRegistry().resolveSlug(slug);
+    const resolvedPath = await contextManager
+      .getProjectRegistry()
+      .resolveSlug(slug);
     if (resolvedPath === undefined) {
       const errorResponse: ErrorResponse = {
         error: `Unknown project slug: ${slug}`,
@@ -387,7 +389,8 @@ export function createWorkspaceRoutes(
     }
 
     try {
-      const tab: WorkspaceTab = await contextManager.createContext(resolvedPath);
+      const tab: WorkspaceTab =
+        await contextManager.createContext(resolvedPath);
       currentWorkspace = {
         ...currentWorkspace,
         tabs: [...currentWorkspace.tabs, tab],

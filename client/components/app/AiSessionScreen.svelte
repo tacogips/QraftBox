@@ -19,6 +19,7 @@
     projectPath,
     runningSessions,
     queuedSessions,
+    recentlyCompletedSessions = [],
     pendingPrompts,
     currentQraftAiSessionId,
     onSubmitPrompt,
@@ -104,6 +105,7 @@
     message: string,
     immediate: boolean,
     references: readonly FileReference[],
+    modelProfileId?: string | undefined,
   ): Promise<AISessionSubmitResult | null> {
     if (typeof onResumeCliSession === "function") {
       onResumeCliSession(sessionId);
@@ -114,8 +116,7 @@
       references,
       diffSummary: undefined,
       resumeSessionId: sessionId,
-      // Existing sessions keep their already resolved profile.
-      modelProfileId: undefined,
+      modelProfileId,
     });
   }
 
@@ -140,6 +141,7 @@
     {projectPath}
     {runningSessions}
     {queuedSessions}
+    recentTerminalSessions={recentlyCompletedSessions}
     {pendingPrompts}
     newSessionSeedId={currentQraftAiSessionId ?? null}
     newSessionModelProfiles={aiModelProfiles}

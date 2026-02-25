@@ -826,8 +826,9 @@ export function createClaudeSessionsRoutes(
           ) {
             const normalizedPrompt = normalizeText(row.message ?? "");
             const rowBucketMinute = Math.floor(
-              new Date(row.completedAt ?? row.startedAt ?? row.createdAt).getTime() /
-                60000,
+              new Date(
+                row.completedAt ?? row.startedAt ?? row.createdAt,
+              ).getTime() / 60000,
             );
             const matchKey = `${normalizedPrompt}::${rowBucketMinute}`;
             if (cliPromptTimeKeys.has(matchKey)) {
@@ -931,6 +932,39 @@ export function createClaudeSessionsRoutes(
             continue;
           }
           session.firstPrompt = computedPurpose;
+        }
+      }
+
+      // Enrich list rows with model/profile metadata from runtime session store.
+      // This allows UI to display which profile/model was used per session.
+      if (sessionManager !== undefined) {
+        const latestRuntimeByGroupId = new Map<string, AISessionInfo>();
+        const runtimeTimestampMs = (session: AISessionInfo): number =>
+          new Date(
+            session.completedAt ?? session.startedAt ?? session.createdAt,
+          ).getTime();
+
+        for (const runtimeSession of allRuntimeSessions) {
+          const groupId = runtimeSession.clientSessionId ?? runtimeSession.id;
+          const existing = latestRuntimeByGroupId.get(groupId);
+          if (
+            existing === undefined ||
+            runtimeTimestampMs(runtimeSession) > runtimeTimestampMs(existing)
+          ) {
+            latestRuntimeByGroupId.set(groupId, runtimeSession);
+          }
+        }
+
+        for (const listedSession of response.sessions) {
+          const runtime = latestRuntimeByGroupId.get(
+            listedSession.qraftAiSessionId,
+          );
+          if (runtime === undefined) {
+            continue;
+          }
+          listedSession.modelProfileId = runtime.modelProfileId;
+          listedSession.modelVendor = runtime.modelVendor;
+          listedSession.modelName = runtime.modelName;
         }
       }
 

@@ -255,6 +255,10 @@ export interface AISessionInfo {
   readonly lastAssistantMessage?: string | undefined;
   readonly currentActivity?: string | undefined;
   /**
+   * Terminal failure/cancellation message when available.
+   */
+  readonly error?: string | undefined;
+  /**
    * Claude CLI session ID currently bound to this execution
    */
   readonly claudeSessionId?: ClaudeSessionId | undefined;

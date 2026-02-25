@@ -349,7 +349,9 @@
     showAssistantThinking &&
       !showOptimisticAssistant &&
       (showOptimisticUser ||
-        pendingQueuedUserMessages.length > 0 ||
+        pendingQueuedUserMessages.some(
+          (pendingMessage) => pendingMessage.status === "running",
+        ) ||
         (chatEvents.length > 0 && latestChatEventType !== "assistant")),
   );
 
@@ -576,7 +578,7 @@
       lastInitializedSessionId = sessionId;
       if (liveTailCount > 0) {
         requestAnimationFrame(() => {
-          focusLatestRenderedMessage("auto");
+          focusLatestRenderedMessage("auto", false);
         });
         return;
       }
@@ -585,7 +587,7 @@
         return;
       }
 
-      focusChatIndex(targetIndex, "auto");
+      focusChatIndex(targetIndex, "auto", false);
     }
   });
 
@@ -595,7 +597,7 @@
       return;
     }
     requestAnimationFrame(() => {
-      focusLatestRenderedMessage("auto");
+      focusLatestRenderedMessage("auto", false);
     });
   });
 
@@ -909,7 +911,11 @@
     );
   }
 
-  function focusChatIndex(index: number, behavior: ScrollBehavior): void {
+  function focusChatIndex(
+    index: number,
+    behavior: ScrollBehavior,
+    shouldFocus = true,
+  ): void {
     if (chatEvents.length === 0) {
       return;
     }
@@ -920,7 +926,9 @@
     const targetElement = getChatItemElement(boundedIndex);
     if (targetElement !== null) {
       targetElement.scrollIntoView({ block: "nearest", behavior });
-      targetElement.focus({ preventScroll: true });
+      if (shouldFocus) {
+        targetElement.focus({ preventScroll: true });
+      }
       return;
     }
 
@@ -930,11 +938,16 @@
         return;
       }
       deferredTargetElement.scrollIntoView({ block: "nearest", behavior });
-      deferredTargetElement.focus({ preventScroll: true });
+      if (shouldFocus) {
+        deferredTargetElement.focus({ preventScroll: true });
+      }
     });
   }
 
-  function focusLatestRenderedMessage(behavior: ScrollBehavior): void {
+  function focusLatestRenderedMessage(
+    behavior: ScrollBehavior,
+    shouldFocus = true,
+  ): void {
     if (chatScrollContainer === null) {
       return;
     }
@@ -949,7 +962,9 @@
       return;
     }
     latest.scrollIntoView({ block: "nearest", behavior });
-    latest.focus({ preventScroll: true });
+    if (shouldFocus) {
+      latest.focus({ preventScroll: true });
+    }
   }
 
   /**

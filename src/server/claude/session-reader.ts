@@ -1135,7 +1135,9 @@ export class ClaudeSessionReader {
         }
       },
     );
-    return entries.filter((entry): entry is ClaudeSessionEntry => entry !== null);
+    return entries.filter(
+      (entry): entry is ClaudeSessionEntry => entry !== null,
+    );
   }
 
   private async mapWithConcurrency<TInput, TOutput>(

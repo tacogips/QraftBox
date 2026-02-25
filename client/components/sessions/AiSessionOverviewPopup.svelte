@@ -21,6 +21,7 @@
     source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     aiAgent: AIAgent;
     queuedPromptCount: number;
+    failureMessage?: string | undefined;
     pendingPromptMessages: readonly {
       message: string;
       status: "queued" | "running";
@@ -30,6 +31,7 @@
     modelProfiles?: readonly ModelProfile[];
     selectedModelProfileId?: string | undefined;
     onModelProfileChange?: (profileId: string | undefined) => void;
+    activeModelLabel?: string | undefined;
     canCancelPrompt: boolean;
     cancelPromptInProgress: boolean;
     cancelPromptError: string | null;
@@ -60,12 +62,14 @@
     source,
     aiAgent,
     queuedPromptCount,
+    failureMessage = undefined,
     pendingPromptMessages,
     optimisticAssistantMessage = undefined,
     showModelProfileSelector = false,
     modelProfiles = [],
     selectedModelProfileId = undefined,
     onModelProfileChange,
+    activeModelLabel = undefined,
     canCancelPrompt,
     cancelPromptInProgress,
     cancelPromptError,
@@ -439,7 +443,7 @@
       pendingPromptMessages.some((pending) => pending.status === "running"),
   );
   const shouldShowAssistantThinking = $derived(
-    status === "running" || submitting || hasRunningPendingPrompt,
+    status === "running" || hasRunningPendingPrompt,
   );
 
   $effect(() => {
@@ -457,7 +461,7 @@
     }
     // Clear stale optimistic message when no matching pending prompt exists
     // and the session is no longer actively processing (e.g. after cancel).
-    if (status === "awaiting_input") {
+    if (status === "awaiting_input" || status === "failed") {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
       optimisticUserImageAttachments = [];
@@ -571,6 +575,13 @@
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
             Latest activity: {latestResponse}
           </p>
+          {#if status === "failed" && failureMessage !== undefined}
+            <p
+              class="mt-1 rounded border border-danger-emphasis/40 bg-danger-emphasis/10 px-2 py-1 text-xs text-danger-fg"
+            >
+              Failure: {failureMessage}
+            </p>
+          {/if}
           <div class="mt-1 flex flex-wrap items-start gap-x-4 gap-y-1">
             <div class="flex min-w-[320px] flex-1 items-center gap-1.5">
               <span
@@ -792,11 +803,6 @@
         </div>
 
         <div class="min-h-0 overflow-y-auto p-4 bg-bg-secondary/40">
-          <h3
-            class="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2"
-          >
-            Next Prompt
-          </h3>
           {#if showModelProfileSelector}
             <div class="mb-3 space-y-1">
               <label
@@ -829,7 +835,23 @@
                 {/if}
               </select>
             </div>
+          {:else}
+            <div class="mb-3 space-y-1">
+              <p
+                class="text-[11px] font-semibold uppercase tracking-wide text-text-secondary"
+              >
+                Profile (session)
+              </p>
+              <p class="text-[11px] text-text-tertiary">
+                {activeModelLabel ?? "-"}
+              </p>
+            </div>
           {/if}
+          <h3
+            class="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2"
+          >
+            Next Prompt
+          </h3>
           <textarea
             class="w-full h-40 resize-y min-h-28 rounded border border-border-default bg-bg-primary
                    px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"

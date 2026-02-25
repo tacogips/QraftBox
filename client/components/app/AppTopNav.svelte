@@ -288,7 +288,9 @@
               onclick={() => void handleInitRepositoryFromMenu()}
               disabled={initializingRepo}
             >
-              {initializingRepo ? "Initializing Git Repository..." : "Initialize Git Repository"}
+              {initializingRepo
+                ? "Initializing Git Repository..."
+                : "Initialize Git Repository"}
             </button>
             {#if initRepoError !== null}
               <p class="px-4 py-2 text-xs text-danger-fg">{initRepoError}</p>

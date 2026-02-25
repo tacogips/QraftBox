@@ -62,8 +62,7 @@ export class SessionEnrichmentService {
       ) as ClaudeSessionId;
       const isNormalizedDifferent = normalizedId !== rawId;
 
-      let qraftId =
-        mappings.get(normalizedId) ?? mappings.get(rawId);
+      let qraftId = mappings.get(normalizedId) ?? mappings.get(rawId);
 
       if (qraftId === undefined) {
         // Auto-register missing mapping
@@ -76,9 +75,8 @@ export class SessionEnrichmentService {
       } else if (isNormalizedDifferent) {
         // Keep prefixed codex-session IDs consistent with canonical mapping.
         const worktreeId = generateWorktreeId(session.projectPath);
-        const canonicalIsQraftBox = this.mappingStore.isQraftBoxSession(
-          normalizedId,
-        );
+        const canonicalIsQraftBox =
+          this.mappingStore.isQraftBoxSession(normalizedId);
         this.mappingStore.upsert(
           rawId,
           session.projectPath,

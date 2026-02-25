@@ -29,8 +29,12 @@
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
+    readonly modelProfileId?: string | undefined;
+    readonly modelVendor?: "anthropics" | "openai" | undefined;
+    readonly modelName?: string | undefined;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
+    readonly failureMessage?: string | undefined;
     readonly updatedAt: string;
   }
 
@@ -42,8 +46,12 @@
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
+    readonly modelProfileId?: string | undefined;
+    readonly modelVendor?: "anthropics" | "openai" | undefined;
+    readonly modelName?: string | undefined;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
+    readonly failureMessage?: string | undefined;
   }
 
   interface TranscriptEvent {
@@ -62,6 +70,7 @@
     newSessionSeedId?: string | null;
     runningSessions: readonly AISession[];
     queuedSessions: readonly AISession[];
+    recentTerminalSessions?: readonly AISession[];
     pendingPrompts: readonly PromptQueueItem[];
     newSessionModelProfiles?: readonly ModelProfile[];
     selectedNewSessionModelProfileId?: string | undefined;
@@ -78,6 +87,7 @@
       message: string,
       immediate: boolean,
       references: readonly FileReference[],
+      modelProfileId?: string | undefined,
     ) => Promise<AISessionSubmitResult | null>;
   }
 
@@ -97,6 +107,7 @@
     newSessionSeedId = null,
     runningSessions,
     queuedSessions,
+    recentTerminalSessions = [],
     pendingPrompts,
     newSessionModelProfiles = [],
     selectedNewSessionModelProfileId = undefined,
@@ -132,8 +143,12 @@
     latestResponse: "Waiting for next user input",
     source: "unknown",
     aiAgent: AIAgent.CLAUDE,
+    modelProfileId: undefined,
+    modelVendor: undefined,
+    modelName: undefined,
     status: "awaiting_input",
     queuedPromptCount: 0,
+    failureMessage: undefined,
   });
 
   let searchQueryInput = $state("");
@@ -268,6 +283,17 @@
     return grouped;
   });
 
+  const failedSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const terminalSession of recentTerminalSessions) {
+      if (terminalSession.state !== "failed") {
+        continue;
+      }
+      grouped.set(sessionGroupId(terminalSession), terminalSession);
+    }
+    return grouped;
+  });
+
   const activePromptMessagesBySessionId = $derived.by(() => {
     const grouped = new Map<string, PendingPromptMessage[]>();
     for (const pendingPrompt of pendingPrompts) {
@@ -296,10 +322,12 @@
   function findSessionRuntimeByGroupId(sessionId: string): {
     runningMatch: AISession | undefined;
     queuedMatch: AISession | undefined;
+    failedMatch: AISession | undefined;
   } {
     const runningMatch = runningSessionByGroupId.get(sessionId);
     const queuedMatch = queuedSessionByGroupId.get(sessionId);
-    return { runningMatch, queuedMatch };
+    const failedMatch = failedSessionByGroupId.get(sessionId);
+    return { runningMatch, queuedMatch, failedMatch };
   }
 
   function activePromptMessagesForSession(
@@ -311,9 +339,8 @@
   function buildCardFromSession(
     entry: ExtendedSessionEntry,
   ): OverviewSessionCard {
-    const { runningMatch, queuedMatch } = findSessionRuntimeByGroupId(
-      entry.qraftAiSessionId,
-    );
+    const { runningMatch, queuedMatch, failedMatch } =
+      findSessionRuntimeByGroupId(entry.qraftAiSessionId);
 
     const activePromptMessages = activePromptMessagesForSession(
       entry.qraftAiSessionId,
@@ -323,6 +350,7 @@
       hasRunningTask: runningMatch !== undefined,
       hasQueuedTask:
         queuedMatch !== undefined || activePromptMessages.length > 0,
+      hasFailedTask: failedMatch !== undefined,
     });
 
     const normalizedSummary = normalizeText(entry.summary);
@@ -339,8 +367,11 @@
         runningMatch?.lastAssistantMessage ??
         queuedMatch?.currentActivity ??
         queuedMatch?.lastAssistantMessage ??
+        failedMatch?.error ??
         "",
     );
+
+    const failureMessage = failedMatch?.error;
 
     const queuedHead = normalizeText(activePromptMessages[0]?.message ?? "");
 
@@ -361,8 +392,19 @@
         runningMatch?.aiAgent ??
         queuedMatch?.aiAgent ??
         AIAgent.CLAUDE,
+      modelProfileId:
+        entry.modelProfileId ??
+        runningMatch?.modelProfileId ??
+        queuedMatch?.modelProfileId,
+      modelVendor:
+        entry.modelVendor ??
+        runningMatch?.modelVendor ??
+        queuedMatch?.modelVendor,
+      modelName:
+        entry.modelName ?? runningMatch?.modelName ?? queuedMatch?.modelName,
       status,
       queuedPromptCount: activePromptMessages.length,
+      failureMessage,
       updatedAt: entry.modified,
     };
   }
@@ -383,6 +425,7 @@
         hasRunningTask: sessionEntry.state === "running",
         hasQueuedTask:
           activePromptMessages.length > 0 || sessionEntry.state === "queued",
+        hasFailedTask: sessionEntry.state === "failed",
       });
 
       fallbackCards.push({
@@ -396,6 +439,7 @@
           normalizeText(
             sessionEntry.currentActivity ??
               sessionEntry.lastAssistantMessage ??
+              sessionEntry.error ??
               activePromptMessages[0]?.message ??
               defaultLatestActivity(status),
           ),
@@ -406,8 +450,12 @@
           sessionEntry.aiAgent ??
           activePromptMessages[0]?.ai_agent ??
           AIAgent.CLAUDE,
+        modelProfileId: sessionEntry.modelProfileId,
+        modelVendor: sessionEntry.modelVendor,
+        modelName: sessionEntry.modelName,
         status,
         queuedPromptCount: activePromptMessages.length,
+        failureMessage: sessionEntry.error,
         updatedAt:
           sessionEntry.completedAt ??
           sessionEntry.startedAt ??
@@ -629,6 +677,28 @@
     return card ?? null;
   });
 
+  const selectedModelLabel = $derived.by(() => {
+    const modelProfileId =
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId;
+    const modelVendor =
+      selectedCard?.modelVendor ?? selectedSessionMeta.modelVendor;
+    const modelName = selectedCard?.modelName ?? selectedSessionMeta.modelName;
+
+    if (modelProfileId !== undefined) {
+      const profile = newSessionModelProfiles.find(
+        (p) => p.id === modelProfileId,
+      );
+      if (profile !== undefined) {
+        return `${profile.name} (${profile.vendor} / ${profile.model})`;
+      }
+      return modelProfileId;
+    }
+    if (modelVendor !== undefined && modelName !== undefined) {
+      return `${modelVendor} / ${modelName}`;
+    }
+    return undefined;
+  });
+
   const selectedSessionPendingPromptMessages = $derived.by(() => {
     const nowMs = fallbackPendingPromptNowMs;
     void nowMs;
@@ -651,7 +721,10 @@
       return activePromptMessages;
     }
 
-    if (selectedCard?.status === "awaiting_input") {
+    if (
+      selectedCard?.status === "awaiting_input" ||
+      selectedCard?.status === "failed"
+    ) {
       return activePromptMessages;
     }
 
@@ -696,9 +769,11 @@
       const fallbackExpired =
         nowMs - fallbackPrompt.createdAtMs > FALLBACK_PENDING_PROMPT_TTL_MS;
       const sessionCard = cardBySessionId.get(sessionId);
-      const sessionIsWaitingForInput = sessionCard?.status === "awaiting_input";
+      const sessionIsTerminal =
+        sessionCard?.status === "awaiting_input" ||
+        sessionCard?.status === "failed";
 
-      if (fallbackExpired || sessionIsWaitingForInput) {
+      if (fallbackExpired || sessionIsTerminal) {
         nextFallbackMap.delete(sessionId);
         hasUpdates = true;
       }
@@ -979,7 +1054,11 @@
       source: selectedCard.source,
       status: selectedCard.status,
       aiAgent: selectedCard.aiAgent,
+      modelProfileId: selectedCard.modelProfileId,
+      modelVendor: selectedCard.modelVendor,
+      modelName: selectedCard.modelName,
       queuedPromptCount: selectedCard.queuedPromptCount,
+      failureMessage: selectedCard.failureMessage,
     };
   });
 
@@ -1036,6 +1115,9 @@
         latestResponse: message,
         source: "qraftbox",
         aiAgent: AIAgent.CLAUDE,
+        modelProfileId: selectedNewSessionModelProfileId,
+        modelVendor: undefined,
+        modelName: undefined,
         status: immediate ? "running" : "queued",
       });
       await fetchOverviewSessions({ bypassCache: true });
@@ -1051,6 +1133,7 @@
       message,
       immediate,
       references,
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
     );
     if (result === null) {
       throw new Error("Prompt submission failed. Please retry.");
@@ -1172,6 +1255,7 @@
                 aiAgent: AIAgent.CLAUDE,
                 status: "awaiting_input",
                 queuedPromptCount: 0,
+                failureMessage: undefined,
               };
               onNewSession?.();
             }}
@@ -1201,6 +1285,7 @@
                   aiAgent: card.aiAgent,
                   status: card.status,
                   queuedPromptCount: card.queuedPromptCount,
+                  failureMessage: card.failureMessage,
                 });
               }}
               onkeydown={(event) => {
@@ -1216,6 +1301,7 @@
                     aiAgent: card.aiAgent,
                     status: card.status,
                     queuedPromptCount: card.queuedPromptCount,
+                    failureMessage: card.failureMessage,
                   });
                 }
               }}
@@ -1357,6 +1443,8 @@
     aiAgent={selectedCard?.aiAgent ?? selectedSessionMeta.aiAgent}
     queuedPromptCount={selectedCard?.queuedPromptCount ??
       selectedSessionMeta.queuedPromptCount}
+    failureMessage={selectedCard?.failureMessage ??
+      selectedSessionMeta.failureMessage}
     pendingPromptMessages={selectedSessionPendingPromptMessages}
     optimisticAssistantMessage={selectedSessionOptimisticAssistantMessage}
     isHidden={selectedSessionId !== null &&
@@ -1379,6 +1467,7 @@
     modelProfiles={newSessionModelProfiles}
     selectedModelProfileId={selectedNewSessionModelProfileId}
     onModelProfileChange={onSelectNewSessionModelProfile}
+    activeModelLabel={selectedModelLabel}
     canCancelPrompt={canCancelSelectedPrompt}
     cancelPromptInProgress={cancellingPrompt}
     {cancelPromptError}

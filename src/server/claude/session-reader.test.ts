@@ -655,7 +655,8 @@ describe("ClaudeSessionReader", () => {
         JSON.stringify({
           type: "user",
           message: {
-            content: "Recovered prompt should only appear in full recovery mode",
+            content:
+              "Recovered prompt should only appear in full recovery mode",
           },
           timestamp: "2026-02-05T10:01:00Z",
         }),
