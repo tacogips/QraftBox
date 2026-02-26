@@ -40,7 +40,7 @@ export interface ServerOptions {
   readonly config: CLIConfig;
   readonly contextManager: ContextManager;
   readonly recentStore: RecentDirectoryStore;
-  readonly openTabsStore: OpenTabsStore;
+  readonly openTabsStore?: OpenTabsStore | undefined;
   readonly activeTabPath?: string | undefined;
   readonly initialTabs?:
     | readonly import("../types/workspace").WorkspaceTab[]
@@ -51,6 +51,7 @@ export interface ServerOptions {
   readonly watcherManager?: ProjectWatcherManager | undefined;
   /** Optional terminal session manager for browser terminal feature */
   readonly terminalSessionManager?: TerminalSessionManager | undefined;
+  readonly temporaryProjectMode?: boolean | undefined;
 }
 
 /**
@@ -203,6 +204,8 @@ export function createServer(options: ServerOptions): Hono {
     initialTabs: options.initialTabs,
     watcherManager: options.watcherManager,
     terminalSessionManager: options.terminalSessionManager,
+    temporaryProjectMode:
+      options.temporaryProjectMode ?? options.config.temporaryProjectMode,
   });
 
   // Static file serving and SPA fallback

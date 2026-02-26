@@ -34,6 +34,8 @@ interface WorkspaceControllerDeps {
   setNewProjectLoading: SetState<boolean>;
   setPickingDirectory: SetState<boolean>;
   setDirectoryPickerOpen: SetState<boolean>;
+  getCanManageProjects: GetState<boolean>;
+  setCanManageProjects: SetState<boolean>;
   isMobileDirectoryPickerClient: GetState<boolean>;
   setLoading: SetState<boolean>;
   getFileTreeMode: GetState<"diff" | "all">;
@@ -150,6 +152,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
 
   async function fetchContext(): Promise<string> {
     const workspace = await fetchWorkspace();
+    deps.setCanManageProjects(workspace.metadata.canManageProjects);
     const tabs = workspace.tabs;
     if (tabs.length > 0) {
       deps.setWorkspaceTabs(tabs);
@@ -170,7 +173,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function switchProject(tabId: string): Promise<void> {
-    if (tabId === deps.getContextId()) return;
+    if (!deps.getCanManageProjects()) return;
 
     const tab = deps.getWorkspaceTabs().find((item) => item.id === tabId);
     if (tab === undefined) return;
@@ -216,6 +219,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
     tabId: string,
     event: MouseEvent,
   ): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
     event.stopPropagation();
     const closingTab = deps.getWorkspaceTabs().find((tab) => tab.id === tabId);
 
@@ -299,6 +303,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function openProjectByPath(path: string): Promise<void> {
+    if (!deps.getCanManageProjects()) {
+      deps.setNewProjectError(
+        "Project management is disabled in temporary project mode",
+      );
+      return;
+    }
+
     const trimmed = path.trim();
     if (trimmed.length === 0) return;
 
@@ -331,6 +342,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function removeRecentProject(path: string): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
+
     try {
       await removeRecentWorkspaceProject(path);
     } catch {
@@ -345,6 +358,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function pickDirectory(): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
+
     deps.setNewProjectError(null);
 
     if (deps.isMobileDirectoryPickerClient()) {
@@ -389,7 +404,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
         return;
       }
       if (targetTab === undefined) {
-        void openProjectBySlug(parsed.slug);
+        if (deps.getCanManageProjects()) {
+          void openProjectBySlug(parsed.slug);
+        }
       }
     }
   }

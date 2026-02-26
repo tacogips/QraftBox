@@ -84,6 +84,7 @@
   let workspaceTabs = $state<ServerTab[]>([]);
   let currentScreen = $state<ScreenType>(screenFromHash(window.location.hash));
   let recentProjects = $state<RecentProject[]>([]);
+  let canManageProjects = $state(true);
   // Add-project state
   let newProjectPath = $state("");
   let newProjectError = $state<string | null>(null);
@@ -330,6 +331,8 @@
     setNewProjectLoading: (value) => (newProjectLoading = value),
     setPickingDirectory: (value) => (pickingDirectory = value),
     setDirectoryPickerOpen: (value) => (directoryPickerOpen = value),
+    getCanManageProjects: () => canManageProjects,
+    setCanManageProjects: (value) => (canManageProjects = value),
     isMobileDirectoryPickerClient: () => shouldUseBrowserDirectoryPicker(),
     setLoading: (value) => (loading = value),
     getFileTreeMode: () => fileTreeMode,
@@ -603,6 +606,7 @@
     {newProjectError}
     {newProjectLoading}
     {pickingDirectory}
+    {canManageProjects}
     onNavigateToScreen={navigateToScreen}
     onSwitchProject={switchProject}
     onCloseProjectTab={closeProjectTab}
@@ -788,6 +792,7 @@
           {newProjectError}
           {chooseDirectoryLabel}
           {availableRecentProjects}
+          {canManageProjects}
           onPickDirectory={pickDirectory}
           onNewProjectPathChange={(value) => {
             newProjectPath = value;

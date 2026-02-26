@@ -41,6 +41,10 @@ interface ErrorResponse {
  */
 interface WorkspaceResponse {
   readonly workspace: Workspace;
+  readonly metadata?: {
+    readonly temporaryProjectMode: boolean;
+    readonly canManageProjects: boolean;
+  };
 }
 
 /**
@@ -148,6 +152,7 @@ export function createWorkspaceRoutes(
   openTabsStore?: OpenTabsStore | undefined,
   activeTabPath?: string | undefined,
   watcherManager?: ProjectWatcherManager | undefined,
+  temporaryProjectMode = false,
 ): Hono {
   // Initialize workspace with initial tabs if provided
   if (initialTabs !== undefined && initialTabs.length > 0) {
@@ -180,9 +185,24 @@ export function createWorkspaceRoutes(
   app.get("/", (c) => {
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
+      metadata: {
+        temporaryProjectMode,
+        canManageProjects: !temporaryProjectMode,
+      },
     };
     return c.json(response);
   });
+
+  const ensureProjectManagementEnabled = (): ErrorResponse | null => {
+    if (!temporaryProjectMode) {
+      return null;
+    }
+    return {
+      error:
+        "Project management is disabled in temporary project mode (qraftbox <path>)",
+      code: 403,
+    };
+  };
 
   /**
    * POST /api/workspace/tabs
@@ -202,6 +222,11 @@ export function createWorkspaceRoutes(
    * - 500: Failed to create context (directory inaccessible, not a directory, etc.)
    */
   app.post("/tabs", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     let requestBody: unknown;
     try {
       requestBody = await c.req.json();
@@ -338,6 +363,11 @@ export function createWorkspaceRoutes(
    * - 500: Failed to create context
    */
   app.post("/tabs/by-slug/:slug", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     const slug = c.req.param("slug").trim();
     if (slug.length === 0) {
       const errorResponse: ErrorResponse = {
@@ -436,6 +466,11 @@ export function createWorkspaceRoutes(
    * - 404: Tab not found
    */
   app.delete("/tabs/:id", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -513,6 +548,11 @@ export function createWorkspaceRoutes(
    * - 404: Tab not found
    */
   app.post("/tabs/:id/activate", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -580,6 +620,11 @@ export function createWorkspaceRoutes(
    * - path (required): Absolute path to remove
    */
   app.delete("/recent", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     let requestBody: unknown;
     try {
       requestBody = await c.req.json();

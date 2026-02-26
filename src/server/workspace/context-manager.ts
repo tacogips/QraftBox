@@ -19,7 +19,10 @@ import {
 } from "../../types/workspace";
 import { detectRepositoryType } from "../git/worktree";
 import type { ProjectRegistry } from "./project-registry";
-import { createProjectRegistry } from "./project-registry";
+import {
+  createInMemoryProjectRegistry,
+  createProjectRegistry,
+} from "./project-registry";
 
 /**
  * Server context for existing route handlers
@@ -53,7 +56,10 @@ export interface ContextManager {
    * @returns Workspace tab for the new context
    * @throws Error if path is invalid or inaccessible
    */
-  createContext(path: string): Promise<WorkspaceTab>;
+  createContext(
+    path: string,
+    options?: ContextCreationOptions | undefined,
+  ): Promise<WorkspaceTab>;
 
   /**
    * Get context by ID
@@ -100,6 +106,18 @@ export interface ContextManager {
    * @returns Project registry instance
    */
   getProjectRegistry(): ProjectRegistry;
+}
+
+export interface ContextCreationOptions {
+  /**
+   * Persist project path->slug mapping in project registry.
+   * When false, generates an ephemeral slug without storing it.
+   */
+  readonly persistInRegistry?: boolean;
+}
+
+export interface ContextManagerOptions {
+  readonly projectRegistry?: ProjectRegistry;
 }
 
 /**
@@ -166,16 +184,19 @@ class ContextManagerImpl implements ContextManager {
   private readonly contexts: Map<ContextId, WorkspaceTab>;
   private readonly registry: ProjectRegistry;
 
-  constructor() {
+  constructor(registry?: ProjectRegistry) {
     this.contexts = new Map();
-    this.registry = createProjectRegistry();
+    this.registry = registry ?? createProjectRegistry();
   }
 
   getProjectRegistry(): ProjectRegistry {
     return this.registry;
   }
 
-  async createContext(path: string): Promise<WorkspaceTab> {
+  async createContext(
+    path: string,
+    options?: ContextCreationOptions | undefined,
+  ): Promise<WorkspaceTab> {
     // Validate path format
     const pathValidation: ValidationResult = validateDirectoryPath(path);
     if (!pathValidation.valid) {
@@ -234,8 +255,10 @@ class ContextManagerImpl implements ContextManager {
         ? `${basename(mainRepoPath)}:${worktreeName}`
         : defaultName;
 
-    // Get or create a persistent URL-safe slug for this project
-    const projectSlug = await this.registry.getOrCreateSlug(absolutePath);
+    const persistInRegistry = options?.persistInRegistry ?? true;
+    const projectSlug = persistInRegistry
+      ? await this.registry.getOrCreateSlug(absolutePath)
+      : `tmp-${Bun.hash(absolutePath).toString(16).slice(0, 8)}`;
 
     // Create workspace tab with worktree information
     const tab = createWorkspaceTab(
@@ -366,6 +389,18 @@ class ContextManagerImpl implements ContextManager {
  *
  * @returns Context manager instance
  */
-export function createContextManager(): ContextManager {
+export function createContextManager(
+  options?: ContextManagerOptions | undefined,
+): ContextManager {
+  if (options?.projectRegistry !== undefined) {
+    return new ContextManagerImpl(options.projectRegistry);
+  }
+
+  const isTestMode =
+    Bun.env["NODE_ENV"] === "test" || Bun.env["BUN_ENV"] === "test";
+  if (isTestMode) {
+    return new ContextManagerImpl(createInMemoryProjectRegistry());
+  }
+
   return new ContextManagerImpl();
 }

@@ -72,6 +72,7 @@ export interface MountRoutesConfig {
   readonly watcherManager?: ProjectWatcherManager | undefined;
   readonly terminalSessionManager?: TerminalSessionManager | undefined;
   readonly modelConfigStore?: ModelConfigStore | undefined;
+  readonly temporaryProjectMode?: boolean | undefined;
 }
 
 /**
@@ -213,6 +214,7 @@ export function getNonContextRouteGroups(
         config.openTabsStore,
         config.activeTabPath,
         config.watcherManager,
+        config.temporaryProjectMode,
       ),
     },
     // Directory browsing routes - GET /api/browse

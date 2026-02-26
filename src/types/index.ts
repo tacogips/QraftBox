@@ -33,6 +33,11 @@ export interface CLIConfig {
   readonly assistantAdditionalArgs: readonly string[];
   /** Optional project directories to open at startup (from --project-dir) */
   readonly projectDirs: readonly string[];
+  /**
+   * True when started with positional projectPath (`qraftbox <path>`),
+   * which opens the project as a temporary workspace session.
+   */
+  readonly temporaryProjectMode?: boolean;
 }
 
 /**

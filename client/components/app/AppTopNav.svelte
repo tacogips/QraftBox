@@ -15,6 +15,7 @@
     newProjectError,
     newProjectLoading,
     pickingDirectory,
+    canManageProjects,
     onNavigateToScreen,
     onSwitchProject,
     onCloseProjectTab,
@@ -37,6 +38,7 @@
     newProjectError: string | null;
     newProjectLoading: boolean;
     pickingDirectory: boolean;
+    canManageProjects: boolean;
     onNavigateToScreen: (screen: ScreenType) => void;
     onSwitchProject: (tabId: string) => Promise<void>;
     onCloseProjectTab: (tabId: string, event: MouseEvent) => Promise<void>;
@@ -361,8 +363,10 @@
         </button>
         <button
           type="button"
-          class="h-8 w-8 rounded border border-border-default text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+          class="h-8 w-8 rounded border border-border-default text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!canManageProjects}
           onclick={() => {
+            if (!canManageProjects) return;
             addProjectMenuOpen = true;
             onNewProjectPathChange("");
             void onFetchRecentProjects();
@@ -382,14 +386,23 @@
             </div>
           {:else}
             {#each workspaceTabs as tab (tab.id)}
-              <div class="group flex items-center rounded">
+              <div
+                class="group flex items-center rounded"
+                onclick={() => {
+                  if (!canManageProjects) return;
+                  projectPanelOpen = false;
+                  void onSwitchProject(tab.id);
+                }}
+              >
                 <button
                   type="button"
                   class="flex-1 min-w-0 px-2 py-1.5 text-sm rounded text-left flex items-center gap-2 transition-colors
                          {tab.id === contextId
                     ? 'bg-bg-tertiary text-text-primary font-semibold'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'}"
-                  onclick={() => {
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    if (!canManageProjects) return;
                     projectPanelOpen = false;
                     void onSwitchProject(tab.id);
                   }}
@@ -404,7 +417,10 @@
                          {tab.id === contextId
                     ? 'project-tab-close-active'
                     : ''}"
-                  onclick={(e) => void onCloseProjectTab(tab.id, e)}
+                  onclick={(e) => {
+                    if (!canManageProjects) return;
+                    void onCloseProjectTab(tab.id, e);
+                  }}
                   title="Close {tab.name}"
                 >
                   <svg
@@ -471,6 +487,11 @@
       </div>
 
       <div class="p-3">
+        {#if !canManageProjects}
+          <p class="mb-2 text-xs text-text-tertiary">
+            Temporary project mode is active. Project add/change is disabled.
+          </p>
+        {/if}
         <label
           for="project-popup-open-directory-input"
           class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block"
@@ -499,11 +520,11 @@
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                    placeholder:text-text-tertiary"
             placeholder="/path/to/project"
-            disabled={newProjectLoading || pickingDirectory}
+            disabled={!canManageProjects || newProjectLoading || pickingDirectory}
           />
           <button
             type="button"
-            disabled={pickingDirectory || newProjectLoading}
+            disabled={!canManageProjects || pickingDirectory || newProjectLoading}
             onclick={() => void onPickDirectory()}
             class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
                    disabled:opacity-50 disabled:cursor-not-allowed
@@ -518,7 +539,11 @@
           </button>
           <button
             type="submit"
-            disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+            disabled={
+              !canManageProjects ||
+              newProjectPath.trim().length === 0 ||
+              newProjectLoading
+            }
             class="px-2 py-1.5 rounded text-sm font-medium
                    bg-bg-tertiary text-text-primary hover:bg-border-default
                    disabled:opacity-50 disabled:cursor-not-allowed
@@ -546,8 +571,10 @@
               >
                 <button
                   type="button"
+                  disabled={!canManageProjects}
                   class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
                   onclick={async () => {
+                    if (!canManageProjects) return;
                     await onOpenRecentProject(recent.path);
                     addProjectMenuOpen = false;
                     projectPanelOpen = false;
@@ -575,10 +602,12 @@
                 </button>
                 <button
                   type="button"
+                  disabled={!canManageProjects}
                   class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
                   title="Remove from history"
                   onclick={(e) => {
                     e.stopPropagation();
+                    if (!canManageProjects) return;
                     void onRemoveRecentProject(recent.path);
                   }}
                 >
