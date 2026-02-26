@@ -21,8 +21,8 @@ const E2E_RUN_DIR = `e2e-result/${E2E_RUN_ID}`;
 process.env['E2E_RUN_DIR'] = E2E_RUN_DIR;
 
 module.exports = defineConfig({
-  testDir: '.',
-  testMatch: ['e2e/**/*.e2e.js', 'e2e/**/*.e2e.ts'],
+  testDir: 'e2e',
+  testMatch: ['**/*.e2e.js', '**/*.e2e.ts'],
   fullyParallel: false,
   forbidOnly: !!process.env['CI'],
   retries: process.env['CI'] ? 2 : 0,

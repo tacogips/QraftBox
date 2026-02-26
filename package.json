@@ -21,7 +21,7 @@
     "build": "bun build src/main.ts --outdir dist --target bun",
     "start": "bun run src/main.ts",
     "test": "vitest run",
-    "test:e2e": "bunx playwright test -c playwright.config.cjs",
+    "test:e2e": "playwright test -c playwright.config.cjs",
     "test:all": "bun run test && bun run test:e2e",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",

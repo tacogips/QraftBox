@@ -1,11 +1,9 @@
 import { expect, test } from '@playwright/test';
 
-test('second prompt continues current claude session', async ({ page }) => {
+test('second prompt continues current session id', async ({ page }) => {
   const contextId = 'ctx-1';
   const projectPath = '/tmp/project';
-  let promptCounter = 0;
-  const dispatchBodies = [];
-  let aiSessions = [];
+  const submitBodies = [];
 
   await page.route('**/api/**', async (route) => {
     const req = route.request();
@@ -39,6 +37,11 @@ test('second prompt continues current claude session', async ({ page }) => {
       return;
     }
 
+    if (path === '/api/workspace/recent' && method === 'GET') {
+      await route.fulfill({ status: 200, json: { recent: [] } });
+      return;
+    }
+
     if (path === `/api/ctx/${contextId}/diff` && method === 'GET') {
       await route.fulfill({
         status: 200,
@@ -57,85 +60,45 @@ test('second prompt continues current claude session', async ({ page }) => {
       return;
     }
 
-    if (path === '/api/workspace/recent' && method === 'GET') {
-      await route.fulfill({ status: 200, json: { recent: [] } });
-      return;
-    }
-
-    if (path === '/api/ai/queue/status' && method === 'GET') {
+    if (path === '/api/model-config' && method === 'GET') {
       await route.fulfill({
         status: 200,
         json: {
-          runningCount: 0,
-          queuedCount: aiSessions.filter((s) => s.state === 'queued').length,
-          runningSessionIds: [],
-          totalCount: aiSessions.length,
+          profiles: [],
+          operationBindings: {},
+          operationLanguages: {},
+          promptOverrides: {},
         },
       });
+      return;
+    }
+
+    if (path === '/api/ai/prompt-queue' && method === 'GET') {
+      await route.fulfill({ status: 200, json: { prompts: [] } });
       return;
     }
 
     if (path === '/api/ai/sessions' && method === 'GET') {
-      await route.fulfill({ status: 200, json: { sessions: aiSessions } });
+      await route.fulfill({ status: 200, json: { sessions: [] } });
       return;
     }
 
-    if (path === '/api/prompts' && method === 'POST') {
-      promptCounter += 1;
-      await route.fulfill({
-        status: 200,
-        json: {
-          prompt: {
-            id: `prompt-${promptCounter}`,
-            prompt: 'x',
-            description: '',
-            context: { references: [] },
-            projectPath,
-            status: 'pending',
-            sessionId: null,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            error: null,
-          },
-        },
-      });
+    if (path === '/api/ai/sessions/hidden' && method === 'GET') {
+      await route.fulfill({ status: 200, json: { sessionIds: [] } });
       return;
     }
 
-    if (path.startsWith('/api/prompts/') && path.endsWith('/dispatch') && method === 'POST') {
+    if (path === '/api/ai/submit' && method === 'POST') {
       const body = req.postDataJSON();
-      dispatchBodies.push(body);
-
-      if (dispatchBodies.length === 1) {
-        aiSessions = [
-          {
-            id: 'session-qb-1',
-            state: 'queued',
-            prompt: 'hello',
-            createdAt: new Date().toISOString(),
-            context: { references: [] },
-            claudeSessionId: 'claude-1',
-          },
-        ];
-      }
+      submitBodies.push(body);
 
       await route.fulfill({
         status: 200,
         json: {
-          prompt: { id: `prompt-${dispatchBodies.length}` },
-          session: { sessionId: `session-qb-${dispatchBodies.length}` },
+          sessionId: body.qraft_ai_session_id,
+          immediate: false,
         },
       });
-      return;
-    }
-
-    if (path === '/api/prompts' && method === 'GET') {
-      await route.fulfill({ status: 200, json: { prompts: [], total: 0 } });
-      return;
-    }
-
-    if (path.startsWith(`/api/ctx/${contextId}/claude-sessions/sessions`) && method === 'GET') {
-      await route.fulfill({ status: 200, json: { sessions: [], total: 0, offset: 0, limit: 20 } });
       return;
     }
 
@@ -143,17 +106,23 @@ test('second prompt continues current claude session', async ({ page }) => {
   });
 
   await page.goto('/');
+  await page.getByRole('button', { name: 'Sessions' }).click();
+  await page.getByRole('button', { name: 'Create new session' }).click();
 
-  const promptInput = page.getByLabel('AI prompt (single-line)');
+  const promptInput = page.getByPlaceholder('Add the next instruction for this session');
   await expect(promptInput).toBeVisible();
 
   await promptInput.fill('say hello');
-  await page.keyboard.press('Enter');
-  await expect.poll(() => dispatchBodies.length).toBe(1);
-  expect(dispatchBodies[0].resumeSessionId).toBeUndefined();
+  await page.getByRole('button', { name: 'Submit', exact: true }).click();
+  await expect.poll(() => submitBodies.length).toBe(1);
 
   await promptInput.fill('say hello again');
-  await page.keyboard.press('Enter');
-  await expect.poll(() => dispatchBodies.length).toBe(2);
-  expect(dispatchBodies[1].resumeSessionId).toBe('claude-1');
+  await page.getByRole('button', { name: 'Submit', exact: true }).click();
+  await expect.poll(() => submitBodies.length).toBe(2);
+
+  expect(typeof submitBodies[0]?.qraft_ai_session_id).toBe('string');
+  expect(submitBodies[0]?.qraft_ai_session_id?.length ?? 0).toBeGreaterThan(0);
+  expect(submitBodies[1]?.qraft_ai_session_id).toBe(
+    submitBodies[0]?.qraft_ai_session_id,
+  );
 });
