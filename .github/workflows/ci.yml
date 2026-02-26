@@ -83,9 +83,9 @@ jobs:
       - name: Build client
         run: cd client && bun run build
       - name: Install Playwright browser
-        run: node node_modules/playwright/cli.js install --with-deps chromium
+        run: node node_modules/@playwright/test/cli.js install --with-deps chromium
       - name: Run Playwright tests
-        run: node node_modules/playwright/cli.js test -c playwright.config.cjs
+        run: node node_modules/@playwright/test/cli.js test -c playwright.config.cjs
 
   build:
     name: Build
