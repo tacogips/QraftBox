@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { AISession, AISessionSubmitResult } from "../../../src/types/ai";
+  import {
+    generateQraftAiSessionId,
+    type AISession,
+    type AISessionSubmitResult,
+  } from "../../../src/types/ai";
   import type { FileReference } from "../../../src/types/ai";
   import { AIAgent } from "../../../src/types/ai-agent";
   import type { ModelProfile } from "../../../src/types/model-config";
@@ -80,6 +84,7 @@
       message: string,
       immediate: boolean,
       references: readonly FileReference[],
+      sessionIdOverride?: string | undefined,
     ) => Promise<AISessionSubmitResult | null>;
     onCancelActiveSession?: (sessionId: string) => Promise<void>;
     onSubmitPrompt: (
@@ -88,6 +93,7 @@
       immediate: boolean,
       references: readonly FileReference[],
       modelProfileId?: string | undefined,
+      forceNewSession?: boolean | undefined,
     ) => Promise<AISessionSubmitResult | null>;
   }
 
@@ -162,10 +168,18 @@
   let latestTranscriptSearchToken = 0;
   let latestHiddenFetchToken = 0;
   const SESSION_QUERY_KEY = "ai_session_id";
+  let lastSessionScopeKey = $state<string | null>(null);
+  let lastPollingMode = $state<"active" | "idle" | null>(null);
   let hiddenSessionIds = $state<ReadonlySet<string>>(new Set());
   let includeHiddenSessions = $state(false);
   let cancellingPrompt = $state(false);
   let cancelPromptError = $state<string | null>(null);
+  const runningSessionCount = $derived(runningSessions.length);
+  const queuedSessionCount = $derived(queuedSessions.length);
+  const pendingPromptCount = $derived(pendingPrompts.length);
+  const hasActiveWork = $derived(
+    runningSessionCount > 0 || queuedSessionCount > 0 || pendingPromptCount > 0,
+  );
 
   function openSessionById(
     sessionId: string,
@@ -879,58 +893,23 @@
     if (
       contextId === null ||
       contextId.length === 0 ||
-      sessionsLoading ||
       sessionsLoadingMore ||
       !hasMoreSessions
     ) {
       return;
     }
 
-    const fetchToken = ++latestFetchToken;
     sessionsLoadingMore = true;
     sessionsError = null;
 
     try {
-      const query = new URLSearchParams({
-        offset: String(sessions.length),
-        limit: String(SESSIONS_PAGE_SIZE),
-        sortBy: "modified",
-        sortOrder: "desc",
-      });
-
-      if (projectPath.length > 0) {
-        query.set("workingDirectoryPrefix", projectPath);
-      }
-
-      const response = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions?${query.toString()}`,
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to load sessions (${response.status})`);
-      }
-
-      const data = (await response.json()) as {
-        sessions: ExtendedSessionEntry[];
-      };
-
-      if (fetchToken !== latestFetchToken) {
-        return;
-      }
-
-      sessions = [...sessions, ...data.sessions];
       requestedSessionLimit += SESSIONS_PAGE_SIZE;
-      hasMoreSessions = data.sessions.length === SESSIONS_PAGE_SIZE;
+      await fetchOverviewSessions({ bypassCache: true });
     } catch (error: unknown) {
-      if (fetchToken !== latestFetchToken) {
-        return;
-      }
       sessionsError =
         error instanceof Error ? error.message : "Failed to load more sessions";
     } finally {
-      if (fetchToken === latestFetchToken) {
-        sessionsLoadingMore = false;
-      }
+      sessionsLoadingMore = false;
     }
   }
 
@@ -999,33 +978,52 @@
   $effect(() => {
     const activeContextId = contextId;
     const activeProjectPath = projectPath;
-    const runningCount = runningSessions.length;
-    const queuedCount = queuedSessions.length;
-    const activePromptCount = pendingPrompts.length;
-    void activeContextId;
-    void activeProjectPath;
-    void runningCount;
-    void queuedCount;
-    void activePromptCount;
+    const scopeKey = `${activeContextId ?? ""}::${activeProjectPath}`;
+
+    if (scopeKey === lastSessionScopeKey) {
+      return;
+    }
+    lastSessionScopeKey = scopeKey;
+    lastPollingMode = null;
 
     requestedSessionLimit = SESSIONS_PAGE_SIZE;
     hasMoreSessions = true;
-    void fetchOverviewSessions();
+    void fetchOverviewSessions({ bypassCache: true });
     void fetchHiddenSessionIds();
+  });
+
+  $effect(() => {
+    const activeContextId = contextId;
+    const hasActiveSessionWork = hasActiveWork;
+    void activeContextId;
+    void hasActiveSessionWork;
 
     if (activeContextId === null) {
       return;
     }
 
-    const hasActiveWork =
-      runningCount > 0 || queuedCount > 0 || activePromptCount > 0;
-    const refreshIntervalMs = hasActiveWork
+    const refreshIntervalMs = hasActiveSessionWork
       ? ACTIVE_REFRESH_INTERVAL_MS
       : IDLE_REFRESH_INTERVAL_MS;
+    const pollingMode: "active" | "idle" = hasActiveSessionWork
+      ? "active"
+      : "idle";
+    const pollingModeChanged = pollingMode !== lastPollingMode;
+    lastPollingMode = pollingMode;
+
+    // Refresh once when polling mode changes (idle<->active) so list state
+    // updates immediately without waiting for the next interval tick.
+    if (pollingModeChanged) {
+      void fetchOverviewSessions();
+    }
 
     const refreshTimerId = setInterval(() => {
       void fetchOverviewSessions();
-      void fetchHiddenSessionIds();
+      // Hidden session state changes only on explicit hide/unhide actions.
+      // Poll it only in idle mode to reduce extra network traffic.
+      if (!hasActiveSessionWork) {
+        void fetchHiddenSessionIds();
+      }
     }, refreshIntervalMs);
 
     return () => clearInterval(refreshTimerId);
@@ -1159,6 +1157,71 @@
       message,
       immediate ? "running" : "queued",
     );
+    await fetchOverviewSessions({ bypassCache: true });
+  }
+
+  async function handlePopupSubmitAsNewSession(
+    message: string,
+    immediate: boolean,
+    references: readonly FileReference[],
+  ): Promise<void> {
+    if (onStartNewSessionPrompt === undefined) {
+      throw new Error("Unable to start a new session.");
+    }
+
+    const newSessionId = generateQraftAiSessionId();
+    const result = await onStartNewSessionPrompt(
+      message,
+      immediate,
+      references,
+      newSessionId,
+    );
+    if (result === null) {
+      throw new Error("Prompt submission failed. Please retry.");
+    }
+
+    setFallbackPendingPrompt(
+      newSessionId,
+      message,
+      immediate ? "running" : "queued",
+    );
+    openSessionById(newSessionId, {
+      title: "New Session",
+      qraftAiSessionId: newSessionId,
+      cliSessionId: result.claudeSessionId ?? null,
+      purpose: "New session",
+      latestResponse: message,
+      source: "qraftbox",
+      aiAgent: AIAgent.CLAUDE,
+      modelProfileId:
+        selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
+      modelVendor: undefined,
+      modelName: undefined,
+      status: immediate ? "running" : "queued",
+    });
+    await fetchOverviewSessions({ bypassCache: true });
+  }
+
+  async function handleRestartSessionFromBeginning(
+    message: string,
+  ): Promise<void> {
+    const editedMessage = message.trim();
+    if (selectedSessionId === null || editedMessage.length === 0) {
+      throw new Error("Session is not selected.");
+    }
+
+    const result = await onSubmitPrompt(
+      selectedSessionId,
+      editedMessage,
+      true,
+      [],
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
+      true,
+    );
+    if (result === null) {
+      throw new Error("Restart failed. Please retry.");
+    }
+    setFallbackPendingPrompt(selectedSessionId, editedMessage, "running");
     await fetchOverviewSessions({ bypassCache: true });
   }
 
@@ -1479,6 +1542,8 @@
     }}
     onSubmitPrompt={(message, immediate, references) =>
       handlePopupSubmit(message, immediate, references)}
+    onSubmitPromptAsNewSession={(message, immediate, references) =>
+      handlePopupSubmitAsNewSession(message, immediate, references)}
     showModelProfileSelector={creatingNewSession}
     modelProfiles={newSessionModelProfiles}
     selectedModelProfileId={selectedNewSessionModelProfileId}
@@ -1494,6 +1559,7 @@
       runSessionDefaultPrompt("ai-session-refresh-purpose")}
     onRunResumeSessionPrompt={() =>
       runSessionDefaultPrompt("ai-session-resume")}
+    onRestartSessionFromBeginning={handleRestartSessionFromBeginning}
   />
 {/if}
 

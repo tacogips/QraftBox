@@ -46,6 +46,7 @@ import {
 import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 import type { ModelConfigStore } from "../model-config/store.js";
 import type { AISessionInfo } from "../../types/ai.js";
+import { buildAgentAuthEnv } from "../ai/claude-env.js";
 
 interface ClaudeSessionReaderLike {
   listProjects(pathFilter?: string): Promise<ProjectInfo[]>;
@@ -183,6 +184,7 @@ export function createClaudeSessionsRoutes(
       cwd: projectPath,
       allowedTools: [],
       mcpServers: {},
+      env: buildAgentAuthEnv("anthropics", "cli_auth"),
     });
 
     let assistantText = "";

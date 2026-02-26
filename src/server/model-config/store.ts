@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import type { CLIConfig } from "../../types/index.js";
 import type {
+  ModelAuthMode,
   ModelConfigState,
   ModelOperation,
   ModelProfile,
@@ -57,6 +58,7 @@ interface ProfileRow {
   readonly id: string;
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly auth_mode: ModelAuthMode;
   readonly model: string;
   readonly arguments_json: string;
   readonly created_at: string;
@@ -78,7 +80,10 @@ function nowIso(): string {
 
 const DEFAULT_OPERATION_LANGUAGE = "English";
 const OPENAI_DEFAULT_MODEL = "gpt-5.3-codex";
-const OPENAI_DEFAULT_ARGUMENTS = ["--dangerously-bypass-approvals-and-sandbox"];
+const OPENAI_DEFAULT_ARGUMENTS = [
+  "--dangerously-bypass-approvals-and-sandbox",
+  "--skip-git-repo-check",
+];
 const OPENAI_LIGHT_MODEL = "gpt-5-mini-codex";
 const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-6";
 const ANTHROPIC_SONNET_MODEL = "claude-sonnet-4-5";
@@ -87,6 +92,7 @@ interface DefaultModelProfileTemplate {
   readonly fileName: string;
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly authMode: ModelAuthMode;
   readonly model: string;
   readonly arguments: readonly string[];
 }
@@ -94,6 +100,7 @@ interface DefaultModelProfileTemplate {
 interface StoredDefaultModelProfileConfig {
   readonly name?: unknown;
   readonly vendor?: unknown;
+  readonly authMode?: unknown;
   readonly model?: unknown;
   readonly arguments?: unknown;
 }
@@ -117,6 +124,7 @@ function defaultModelProfileTemplates(
       fileName: "anthropic-default.json",
       name: "Anthropic Default",
       vendor: "anthropics",
+      authMode: "cli_auth",
       model: seedFromCliConfig?.assistantModel ?? ANTHROPIC_DEFAULT_MODEL,
       arguments: anthropicArgs,
     },
@@ -124,6 +132,7 @@ function defaultModelProfileTemplates(
       fileName: "anthropic-sonnet.json",
       name: "Anthropic Sonnet",
       vendor: "anthropics",
+      authMode: "cli_auth",
       model: ANTHROPIC_SONNET_MODEL,
       arguments: [],
     },
@@ -131,6 +140,7 @@ function defaultModelProfileTemplates(
       fileName: "openai-default.json",
       name: "OpenAI Default",
       vendor: "openai",
+      authMode: "cli_auth",
       model: OPENAI_DEFAULT_MODEL,
       arguments: OPENAI_DEFAULT_ARGUMENTS,
     },
@@ -138,6 +148,7 @@ function defaultModelProfileTemplates(
       fileName: "openai-light.json",
       name: "OpenAI Light",
       vendor: "openai",
+      authMode: "cli_auth",
       model: OPENAI_LIGHT_MODEL,
       arguments: OPENAI_DEFAULT_ARGUMENTS,
     },
@@ -172,6 +183,10 @@ function parseDefaultProfileConfig(
   return {
     name: parsed.name.trim(),
     vendor: vendorCandidate,
+    authMode:
+      typeof parsed.authMode === "string" && validateAuthMode(parsed.authMode)
+        ? parsed.authMode
+        : "cli_auth",
     model: parsed.model.trim(),
     arguments: normalizeArguments(args),
   };
@@ -195,6 +210,7 @@ function ensureDefaultModelProfileConfigFiles(
           {
             name: template.name,
             vendor: template.vendor,
+            authMode: template.authMode,
             model: template.model,
             arguments: [...template.arguments],
           },
@@ -206,6 +222,7 @@ function ensureDefaultModelProfileConfigFiles(
       resolved.push({
         name: template.name,
         vendor: template.vendor,
+        authMode: template.authMode,
         model: template.model,
         arguments: [...template.arguments],
       });
@@ -220,6 +237,7 @@ function ensureDefaultModelProfileConfigFiles(
           {
             name: template.name,
             vendor: template.vendor,
+            authMode: template.authMode,
             model: template.model,
             arguments: [...template.arguments],
           },
@@ -231,6 +249,7 @@ function ensureDefaultModelProfileConfigFiles(
       resolved.push({
         name: template.name,
         vendor: template.vendor,
+        authMode: template.authMode,
         model: template.model,
         arguments: [...template.arguments],
       });
@@ -271,6 +290,19 @@ function ensureModelOperationBindingsLanguageColumns(db: Database): void {
   }
 }
 
+function ensureModelProfilesAuthModeColumn(db: Database): void {
+  const rows = db.prepare("PRAGMA table_info(model_profiles)").all() as Array<{
+    readonly name: string;
+  }>;
+  const existing = new Set(rows.map((row) => row.name));
+
+  if (!existing.has("auth_mode")) {
+    db.exec(
+      "ALTER TABLE model_profiles ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'cli_auth'",
+    );
+  }
+}
+
 function toProfile(row: ProfileRow): ModelProfile {
   let parsedArgs: string[] = [];
   try {
@@ -286,6 +318,7 @@ function toProfile(row: ProfileRow): ModelProfile {
     id: row.id,
     name: row.name,
     vendor: row.vendor,
+    authMode: normalizeAuthMode(row.auth_mode),
     model: row.model,
     arguments: parsedArgs,
     createdAt: row.created_at,
@@ -297,12 +330,40 @@ function normalizeArguments(args: readonly string[]): string[] {
   return args.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
 }
 
+function mergeArguments(
+  currentArgs: readonly string[],
+  requiredArgs: readonly string[],
+): string[] {
+  const merged = [...normalizeArguments(currentArgs)];
+  for (const requiredArg of requiredArgs) {
+    if (!merged.includes(requiredArg)) {
+      merged.push(requiredArg);
+    }
+  }
+  return merged;
+}
+
 function generateProfileId(): string {
   return `mp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function validateVendor(vendor: string): vendor is ModelVendor {
   return vendor === "anthropics" || vendor === "openai";
+}
+
+function validateAuthMode(authMode: string): authMode is ModelAuthMode {
+  return authMode === "cli_auth" || authMode === "api_key";
+}
+
+function normalizeAuthMode(authMode: string | null | undefined): ModelAuthMode {
+  if (
+    authMode !== undefined &&
+    authMode !== null &&
+    validateAuthMode(authMode)
+  ) {
+    return authMode;
+  }
+  return "cli_auth";
 }
 
 class ModelConfigStoreImpl implements ModelConfigStore {
@@ -322,26 +383,26 @@ class ModelConfigStoreImpl implements ModelConfigStore {
       | undefined,
   ) {
     this.stmtListProfiles = db.prepare(`
-      SELECT id, name, vendor, model, arguments_json, created_at, updated_at
+      SELECT id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at
       FROM model_profiles
       ORDER BY name COLLATE NOCASE ASC
     `);
 
     this.stmtGetProfile = db.prepare(`
-      SELECT id, name, vendor, model, arguments_json, created_at, updated_at
+      SELECT id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at
       FROM model_profiles
       WHERE id = ?
       LIMIT 1
     `);
 
     this.stmtInsertProfile = db.prepare(`
-      INSERT INTO model_profiles (id, name, vendor, model, arguments_json, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO model_profiles (id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtUpdateProfile = db.prepare(`
       UPDATE model_profiles
-      SET name = ?, vendor = ?, model = ?, arguments_json = ?, updated_at = ?
+      SET name = ?, vendor = ?, auth_mode = ?, model = ?, arguments_json = ?, updated_at = ?
       WHERE id = ?
     `);
 
@@ -417,6 +478,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
         this.createProfile({
           name: defaultProfile.name,
           vendor: defaultProfile.vendor,
+          authMode: defaultProfile.authMode,
           model: defaultProfile.model,
           arguments: defaultProfile.arguments,
         });
@@ -436,6 +498,25 @@ class ModelConfigStoreImpl implements ModelConfigStore {
         model: OPENAI_DEFAULT_MODEL,
         arguments: OPENAI_DEFAULT_ARGUMENTS,
       });
+    }
+
+    for (const profile of refreshedProfiles) {
+      if (
+        profile.vendor !== "openai" ||
+        (profile.name !== "OpenAI Default" && profile.name !== "OpenAI Light")
+      ) {
+        continue;
+      }
+
+      const mergedArgs = mergeArguments(
+        profile.arguments,
+        OPENAI_DEFAULT_ARGUMENTS,
+      );
+      if (mergedArgs.length !== profile.arguments.length) {
+        this.updateProfile(profile.id, {
+          arguments: mergedArgs,
+        });
+      }
     }
 
     const profiles = this.listProfiles();
@@ -505,6 +586,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
     const name = input.name.trim();
     const model = input.model.trim();
     const args = normalizeArguments(input.arguments);
+    const authMode = normalizeAuthMode(input.authMode);
 
     if (name.length === 0) {
       throw new Error("Profile name is required");
@@ -522,6 +604,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
       id,
       name,
       input.vendor,
+      authMode,
       model,
       JSON.stringify(args),
       ts,
@@ -536,6 +619,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
 
     const name = (input.name ?? current.name).trim();
     const vendor = input.vendor ?? current.vendor;
+    const authMode = normalizeAuthMode(input.authMode ?? current.authMode);
     const model = (input.model ?? current.model).trim();
     const args = normalizeArguments(input.arguments ?? current.arguments);
 
@@ -552,6 +636,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
     this.stmtUpdateProfile.run(
       name,
       vendor,
+      authMode,
       model,
       JSON.stringify(args),
       nowIso(),
@@ -761,6 +846,7 @@ class ModelConfigStoreImpl implements ModelConfigStore {
       profileId: profile.id,
       name: profile.name,
       vendor: profile.vendor,
+      authMode: profile.authMode,
       model: profile.model,
       arguments: [...profile.arguments],
     };
@@ -782,6 +868,7 @@ export function createModelConfigStore(
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       vendor TEXT NOT NULL,
+      auth_mode TEXT NOT NULL DEFAULT 'cli_auth',
       model TEXT NOT NULL,
       arguments_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
@@ -803,6 +890,7 @@ export function createModelConfigStore(
   `);
 
   ensureModelOperationBindingsLanguageColumns(db);
+  ensureModelProfilesAuthModeColumn(db);
 
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_model_profiles_name

@@ -37,6 +37,9 @@
       message: string,
       immediate: boolean,
       context: AIPromptContext,
+      options?: {
+        forceNewSession?: boolean | undefined;
+      },
     ) => Promise<AISessionSubmitResult | null>;
     onNewSession?: () => void;
     onResumeCliSession?: (resumeQraftId: string) => void;
@@ -106,30 +109,41 @@
     immediate: boolean,
     references: readonly FileReference[],
     modelProfileId?: string | undefined,
+    forceNewSession = false,
   ): Promise<AISessionSubmitResult | null> {
     if (typeof onResumeCliSession === "function") {
       onResumeCliSession(sessionId);
     }
 
-    return onSubmitPrompt(message, immediate, {
-      primaryFile: undefined,
-      references,
-      diffSummary: undefined,
-      resumeSessionId: sessionId,
-      modelProfileId,
-    });
+    return onSubmitPrompt(
+      message,
+      immediate,
+      {
+        primaryFile: undefined,
+        references,
+        diffSummary: undefined,
+        resumeSessionId: sessionId,
+        modelProfileId,
+      },
+      {
+        forceNewSession,
+      },
+    );
   }
 
   async function handleOverviewNewSessionPromptSubmit(
     message: string,
     immediate: boolean,
     references: readonly FileReference[],
+    sessionIdOverride?: QraftAiSessionId | undefined,
   ): Promise<AISessionSubmitResult | null> {
     return onSubmitPrompt(message, immediate, {
       primaryFile: undefined,
       references,
       diffSummary: undefined,
-      resumeSessionId: currentQraftAiSessionId as QraftAiSessionId | undefined,
+      resumeSessionId:
+        sessionIdOverride ??
+        (currentQraftAiSessionId as QraftAiSessionId | undefined),
       modelProfileId: selectedAiModelProfileId,
     });
   }

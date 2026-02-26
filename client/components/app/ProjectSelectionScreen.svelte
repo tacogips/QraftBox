@@ -125,11 +125,9 @@
       />
       <button
         type="submit"
-        disabled={
-          !canManageProjects ||
+        disabled={!canManageProjects ||
           newProjectPath.trim().length === 0 ||
-          newProjectLoading
-        }
+          newProjectLoading}
         class="px-4 py-2 rounded-lg text-sm font-medium
                bg-bg-tertiary hover:bg-border-default text-text-primary
                border border-border-default
@@ -217,11 +215,11 @@
         {/each}
       </div>
     </div>
-    {/if}
+  {/if}
 
-    {#if !canManageProjects}
-      <p class="text-xs text-text-tertiary">
-        Temporary project mode is active. Project add/change is disabled.
-      </p>
-    {/if}
-  </div>
+  {#if !canManageProjects}
+    <p class="text-xs text-text-tertiary">
+      Temporary project mode is active. Project add/change is disabled.
+    </p>
+  {/if}
+</div>

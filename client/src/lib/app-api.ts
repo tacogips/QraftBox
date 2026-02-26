@@ -10,6 +10,7 @@ import type {
   OperationLanguageSettings,
   ModelProfile,
   ModelVendor,
+  ModelAuthMode,
   OperationModelBindings,
 } from "../../../src/types/model-config";
 import type {
@@ -369,6 +370,7 @@ export async function fetchModelConfigState(): Promise<ModelConfigState> {
 export async function createModelProfileApi(input: {
   name: string;
   vendor: ModelVendor;
+  authMode?: ModelAuthMode;
   model: string;
   arguments: readonly string[];
 }): Promise<ModelProfile> {
@@ -387,6 +389,7 @@ export async function updateModelProfileApi(
   input: {
     name?: string;
     vendor?: ModelVendor;
+    authMode?: ModelAuthMode;
     model?: string;
     arguments?: readonly string[];
   },

@@ -33,7 +33,6 @@
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
-  import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
   import ModelProfilesScreen from "../components/model-config/ModelProfilesScreen.svelte";
   import ActionDefaultsScreen from "../components/model-config/ActionDefaultsScreen.svelte";
@@ -801,11 +800,6 @@
           onOpenRecentProject={openRecentProject}
           onRemoveRecentProject={removeRecentProject}
         />
-      </main>
-    {:else if currentScreen === "tools"}
-      <!-- Tools Screen -->
-      <main class="flex-1 overflow-hidden">
-        <ToolsScreen />
       </main>
     {:else if currentScreen === "system-info"}
       <!-- System Info Screen -->

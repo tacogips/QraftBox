@@ -42,6 +42,7 @@ import {
   type AgentEvent,
 } from "./agent-runner.js";
 import { resolveAIAgentFromVendor } from "../../types/ai-agent.js";
+import type { ModelAuthMode } from "../../types/model-config.js";
 
 /**
  * Runtime session handle - only stores non-serializable runtime state
@@ -59,10 +60,12 @@ interface RuntimeSessionHandle {
   modelOverride?:
     | {
         vendor: "anthropics" | "openai";
+        authMode: ModelAuthMode;
         model: string;
         arguments: readonly string[];
       }
     | undefined;
+  forceNewSession?: boolean | undefined;
 }
 
 /**
@@ -763,6 +766,7 @@ export function createSessionManager(
           session.aiAgent ??
           resolveAIAgentFromVendor(handle.modelOverride?.vendor),
         vendor: handle.modelOverride?.vendor,
+        authMode: handle.modelOverride?.authMode,
         model: handle.modelOverride?.model,
         additionalArgs:
           handle.modelOverride !== undefined
@@ -860,9 +864,12 @@ export function createSessionManager(
         session.promptId !== undefined &&
         session.currentClaudeSessionId === undefined
       ) {
-        const resumeId = resolveResumeSessionId(session);
-        if (resumeId !== undefined) {
-          store.updateClaudeSessionId(nextSessionId, resumeId);
+        const handle = runtimeHandles.get(nextSessionId);
+        if (handle?.forceNewSession !== true) {
+          const resumeId = resolveResumeSessionId(session);
+          if (resumeId !== undefined) {
+            store.updateClaudeSessionId(nextSessionId, resumeId);
+          }
         }
       }
 
@@ -1197,10 +1204,12 @@ export function createSessionManager(
           msg.model_vendor !== undefined && msg.model_name !== undefined
             ? {
                 vendor: msg.model_vendor,
+                authMode: msg.model_auth_mode ?? "cli_auth",
                 model: msg.model_name,
                 arguments: msg.model_arguments ?? [],
               }
             : undefined,
+        forceNewSession: msg.force_new_session === true,
       };
       runtimeHandles.set(sessionId, handle);
 

@@ -232,19 +232,6 @@
           <button
             type="button"
             class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                 {currentScreen === 'tools'
-              ? 'text-text-primary font-semibold'
-              : 'text-text-secondary'}"
-            onclick={() => {
-              onNavigateToScreen("tools");
-              headerMenuOpen = false;
-            }}
-          >
-            Tools
-          </button>
-          <button
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
                  {currentScreen === 'system-info'
               ? 'text-text-primary font-semibold'
               : 'text-text-secondary'}"
@@ -520,11 +507,15 @@
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                    placeholder:text-text-tertiary"
             placeholder="/path/to/project"
-            disabled={!canManageProjects || newProjectLoading || pickingDirectory}
+            disabled={!canManageProjects ||
+              newProjectLoading ||
+              pickingDirectory}
           />
           <button
             type="button"
-            disabled={!canManageProjects || pickingDirectory || newProjectLoading}
+            disabled={!canManageProjects ||
+              pickingDirectory ||
+              newProjectLoading}
             onclick={() => void onPickDirectory()}
             class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
                    disabled:opacity-50 disabled:cursor-not-allowed
@@ -539,11 +530,9 @@
           </button>
           <button
             type="submit"
-            disabled={
-              !canManageProjects ||
+            disabled={!canManageProjects ||
               newProjectPath.trim().length === 0 ||
-              newProjectLoading
-            }
+              newProjectLoading}
             class="px-2 py-1.5 rounded text-sm font-medium
                    bg-bg-tertiary text-text-primary hover:bg-border-default
                    disabled:opacity-50 disabled:cursor-not-allowed

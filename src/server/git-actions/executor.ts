@@ -7,6 +7,7 @@
 
 import { buildPrompt } from "./system-prompt.js";
 import type { ResolvedModelProfile } from "../../types/model-config.js";
+import { buildAgentAuthEnv } from "../ai/claude-env.js";
 
 /**
  * Result type for git action execution
@@ -103,6 +104,7 @@ async function runProcessWithTimeout(
   cwd: string,
   timeoutMs: number,
   actionId?: string | undefined,
+  env?: Record<string, string> | undefined,
 ): Promise<ProcessResult> {
   if (actionId !== undefined && cancelledActions.has(actionId)) {
     throw new Error("Operation cancelled");
@@ -110,6 +112,14 @@ async function runProcessWithTimeout(
 
   const proc = Bun.spawn([...cmd], {
     cwd,
+    ...(env !== undefined
+      ? {
+          env: {
+            ...process.env,
+            ...env,
+          },
+        }
+      : {}),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -165,6 +175,7 @@ async function runClaude(
     profileId: "legacy-default",
     name: "Legacy Default",
     vendor: "anthropics" as const,
+    authMode: "cli_auth" as const,
     model: "sonnet",
     arguments: [
       "--permission-mode",
@@ -202,6 +213,7 @@ async function runClaude(
       projectPath,
       5 * 60 * 1000,
       actionId,
+      buildAgentAuthEnv(profile.vendor, profile.authMode),
     );
 
     if (actionId !== undefined && cancelledActions.has(actionId)) {

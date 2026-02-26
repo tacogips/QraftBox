@@ -43,6 +43,12 @@
           dataUrl: string;
         }[]
       | undefined;
+    onRestartSeedChange?:
+      | ((state: {
+          canRestartFromFirstPrompt: boolean;
+          firstUserPrompt: string;
+        }) => void)
+      | undefined;
   }
 
   import {
@@ -65,6 +71,7 @@
     showAssistantThinking = false,
     pendingUserMessages = [],
     optimisticUserImageAttachments = [],
+    onRestartSeedChange = undefined,
   }: Props = $props();
 
   /**
@@ -117,6 +124,28 @@
     return DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true },
     });
+  }
+
+  const MAX_MARKDOWN_CACHE_ENTRIES = 400;
+  const markdownRenderCache = new Map<string, string>();
+
+  function renderMarkdownCached(text: string): string {
+    if (text.length === 0) {
+      return "";
+    }
+    const cached = markdownRenderCache.get(text);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const rendered = renderMarkdown(text);
+    markdownRenderCache.set(text, rendered);
+    if (markdownRenderCache.size > MAX_MARKDOWN_CACHE_ENTRIES) {
+      const oldestKey = markdownRenderCache.keys().next().value;
+      if (typeof oldestKey === "string") {
+        markdownRenderCache.delete(oldestKey);
+      }
+    }
+    return rendered;
   }
 
   function loadViewMode(): ViewMode {
@@ -208,6 +237,34 @@
     return count;
   });
 
+  const restartSeedState = $derived.by(() => {
+    if (allChatEvents.length !== 2) {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    const first = allChatEvents[0];
+    const second = allChatEvents[1];
+    if (first?.type !== "user" || second?.type !== "assistant") {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    const firstUserPrompt = extractTextContent(first).trim();
+    if (firstUserPrompt.length === 0) {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    return {
+      canRestartFromFirstPrompt: true,
+      firstUserPrompt,
+    };
+  });
+
   /** When maxMessages is set, only show the last N messages */
   const chatEvents = $derived(
     maxMessages !== undefined && allChatEvents.length > maxMessages
@@ -226,6 +283,13 @@
     } catch {
       // localStorage unavailable
     }
+  });
+
+  $effect(() => {
+    if (onRestartSeedChange === undefined) {
+      return;
+    }
+    onRestartSeedChange(restartSeedState);
   });
 
   function normalizeMessageText(rawText: string): string {
@@ -431,6 +495,44 @@
       ? optimisticUserImagesSticky
       : [];
   }
+
+  interface ChatDisplayEvent {
+    readonly event: TranscriptEvent;
+    readonly index: number;
+    readonly eventId: string;
+    readonly textContent: string;
+    readonly renderedHtml: string;
+    readonly imageAttachments: readonly DisplayImageAttachment[];
+    readonly isLong: boolean;
+    readonly isExpanded: boolean;
+  }
+
+  const chatDisplayEvents = $derived.by(() => {
+    const entries: ChatDisplayEvent[] = [];
+    for (const [index, event] of chatEvents.entries()) {
+      const eventId = getEventId(event, index);
+      const textContent = extractTextContent(event);
+      entries.push({
+        event,
+        index,
+        eventId,
+        textContent,
+        renderedHtml: renderMarkdownCached(textContent),
+        imageAttachments: resolveImageAttachments(event),
+        isLong: isLongContent(textContent),
+        isExpanded: expandedMessages.has(eventId),
+      });
+    }
+    return entries;
+  });
+
+  const optimisticUserMarkdownHtml = $derived(
+    renderMarkdownCached(stripSystemTags(optimisticUserMessageSticky ?? "")),
+  );
+
+  const optimisticAssistantMarkdownHtml = $derived(
+    renderMarkdownCached(stripSystemTags(optimisticAssistantMessage ?? "")),
+  );
 
   /**
    * Fetch transcript events from API
@@ -1298,12 +1400,14 @@
           ? 'max-h-[120px]'
           : 'max-h-[600px]'} chat-scroll overflow-y-auto space-y-2"
       >
-        {#each chatEvents as event, index (getEventId(event, index))}
-          {@const eventId = getEventId(event, index)}
-          {@const textContent = extractTextContent(event)}
-          {@const imageAttachments = resolveImageAttachments(event)}
-          {@const isLong = isLongContent(textContent)}
-          {@const isExpanded = expandedMessages.has(eventId)}
+        {#each chatDisplayEvents as chatEvent (chatEvent.eventId)}
+          {@const event = chatEvent.event}
+          {@const index = chatEvent.index}
+          {@const eventId = chatEvent.eventId}
+          {@const textContent = chatEvent.textContent}
+          {@const imageAttachments = chatEvent.imageAttachments}
+          {@const isLong = chatEvent.isLong}
+          {@const isExpanded = chatEvent.isExpanded}
 
           <div
             class="flex w-full {getMessageRowAlignment(event.type)}"
@@ -1399,7 +1503,7 @@
                     ? 'transcript-markdown-collapsed'
                     : ''}"
                 >
-                  {@html renderMarkdown(textContent)}
+                  {@html chatEvent.renderedHtml}
                 </div>
                 {#if imageAttachments.length > 0}
                   <div class="mt-3 flex flex-wrap gap-2">
@@ -1454,7 +1558,7 @@
                 <div
                   class="transcript-markdown text-sm leading-6 break-words text-text-primary"
                 >
-                  {@html renderMarkdown(pendingMessage.raw)}
+                  {@html renderMarkdownCached(pendingMessage.raw)}
                 </div>
                 {#if pendingImages.length > 0}
                   <div class="mt-3 flex flex-wrap gap-2">
@@ -1498,9 +1602,7 @@
                 <div
                   class="transcript-markdown text-sm leading-6 break-words text-text-primary"
                 >
-                  {@html renderMarkdown(
-                    stripSystemTags(optimisticUserMessageSticky ?? ""),
-                  )}
+                  {@html optimisticUserMarkdownHtml}
                 </div>
                 {#if normalizedOptimisticUserImages.length > 0}
                   <div class="mt-3 flex flex-wrap gap-2">
@@ -1538,9 +1640,7 @@
                 <div
                   class="transcript-markdown text-sm leading-6 break-words text-text-primary"
                 >
-                  {@html renderMarkdown(
-                    stripSystemTags(optimisticAssistantMessage ?? ""),
-                  )}
+                  {@html optimisticAssistantMarkdownHtml}
                 </div>
               </div>
             </div>
@@ -1644,9 +1744,11 @@
             style="transform: translateX(calc(27.5% - {currentIndex *
               45}% - {currentIndex * 12}px))"
           >
-            {#each chatEvents as event, index (getEventId(event, index))}
-              {@const textContent = extractTextContent(event)}
-              {@const imageAttachments = resolveImageAttachments(event)}
+            {#each chatDisplayEvents as chatEvent (chatEvent.eventId)}
+              {@const event = chatEvent.event}
+              {@const index = chatEvent.index}
+              {@const textContent = chatEvent.textContent}
+              {@const imageAttachments = chatEvent.imageAttachments}
               {@const isCurrent = index === currentIndex}
 
               <!-- Each card: 45% width, neighbors peek from sides -->
@@ -1756,7 +1858,7 @@
                   <div
                     class="transcript-markdown max-h-[300px] overflow-y-auto text-xs leading-5 break-words text-text-primary"
                   >
-                    {@html renderMarkdown(textContent)}
+                    {@html chatEvent.renderedHtml}
                   </div>
                   {#if imageAttachments.length > 0}
                     <div class="mt-3 flex flex-wrap gap-2">

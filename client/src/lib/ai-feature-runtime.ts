@@ -223,6 +223,9 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
     message: string,
     immediate: boolean,
     context: AIPromptContext,
+    options?: {
+      forceNewSession?: boolean | undefined;
+    },
   ): Promise<AISessionSubmitResult | null> {
     if (deps.getContextId() === null) {
       return null;
@@ -240,6 +243,7 @@ export function createAIFeatureController(deps: AIFeatureDeps): {
         context,
         projectPath: deps.getProjectPath(),
         qraftAiSessionId: targetSessionId,
+        forceNewSession: options?.forceNewSession === true,
         aiAgent: undefined,
         modelProfileId: context.modelProfileId,
       };

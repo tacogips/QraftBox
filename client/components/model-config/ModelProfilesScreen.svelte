@@ -7,6 +7,7 @@
   } from "../../src/lib/app-api";
   import type {
     ModelConfigState,
+    ModelAuthMode,
     ModelProfile,
     ModelVendor,
   } from "../../../src/types/model-config";
@@ -19,12 +20,14 @@
 
   let draftName = $state("");
   let draftVendor = $state<ModelVendor>("anthropics");
+  let draftAuthMode = $state<ModelAuthMode>("cli_auth");
   let draftModel = $state("claude-opus-4-6");
   let draftArgumentsText = $state("--permission-mode\nbypassPermissions");
 
   let editingProfileId = $state<string | null>(null);
   let editName = $state("");
   let editVendor = $state<ModelVendor>("anthropics");
+  let editAuthMode = $state<ModelAuthMode>("cli_auth");
   let editModel = $state("");
   let editArgumentsText = $state("");
 
@@ -76,6 +79,7 @@
       await createModelProfileApi({
         name,
         vendor: draftVendor,
+        authMode: draftAuthMode,
         model,
         arguments: parseArguments(draftArgumentsText),
       });
@@ -93,6 +97,7 @@
     editingProfileId = profile.id;
     editName = profile.name;
     editVendor = profile.vendor;
+    editAuthMode = profile.authMode;
     editModel = profile.model;
     editArgumentsText = profile.arguments.join("\n");
   }
@@ -101,6 +106,7 @@
     editingProfileId = null;
     editName = "";
     editVendor = "anthropics";
+    editAuthMode = "cli_auth";
     editModel = "";
     editArgumentsText = "";
   }
@@ -119,6 +125,7 @@
       await updateModelProfileApi(profileId, {
         name,
         vendor: editVendor,
+        authMode: editAuthMode,
         model,
         arguments: parseArguments(editArgumentsText),
       });
@@ -217,6 +224,17 @@
         </label>
 
         <label class="block text-sm">
+          <span class="text-text-secondary">Authentication</span>
+          <select
+            class="mt-1 w-full rounded border border-border-default bg-bg-primary px-2 py-1.5 text-sm"
+            bind:value={draftAuthMode}
+          >
+            <option value="cli_auth">Use logged-in CLI auth</option>
+            <option value="api_key">Use API key env vars</option>
+          </select>
+        </label>
+
+        <label class="block text-sm">
           <span class="text-text-secondary">Arguments (one token per line)</span
           >
           <textarea
@@ -285,6 +303,17 @@
                 </label>
 
                 <label class="block text-sm">
+                  <span class="text-text-secondary">Authentication</span>
+                  <select
+                    class="mt-1 w-full rounded border border-border-default bg-bg-secondary px-2 py-1.5 text-sm"
+                    bind:value={editAuthMode}
+                  >
+                    <option value="cli_auth">Use logged-in CLI auth</option>
+                    <option value="api_key">Use API key env vars</option>
+                  </select>
+                </label>
+
+                <label class="block text-sm">
                   <span class="text-text-secondary">Arguments</span>
                   <textarea
                     rows="3"
@@ -319,6 +348,11 @@
                     </p>
                     <p class="text-xs text-text-secondary">
                       {profile.vendor} / {profile.model}
+                    </p>
+                    <p class="text-xs text-text-secondary">
+                      auth: {profile.authMode === "api_key"
+                        ? "API key env vars"
+                        : "CLI authenticated session"}
                     </p>
                     <p class="text-xs text-text-tertiary font-mono break-all">
                       {profile.arguments.join(" ")}

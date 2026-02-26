@@ -47,6 +47,11 @@
       immediate: boolean,
       references: readonly FileReference[],
     ) => Promise<void>;
+    onSubmitPromptAsNewSession: (
+      message: string,
+      immediate: boolean,
+      references: readonly FileReference[],
+    ) => Promise<void>;
   }
 
   const {
@@ -81,6 +86,7 @@
     onRunResumeSessionPrompt,
     onClose,
     onSubmitPrompt,
+    onSubmitPromptAsNewSession,
   }: Props = $props();
 
   const normalizedSessionId = $derived.by(() => {
@@ -179,6 +185,58 @@
   let runningRefreshPurpose = $state(false);
   let runningResumeSession = $state(false);
   const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+  const LATENCY_SAMPLE_CAP = 40;
+  let pendingInputKeydownAtMs = $state<number | null>(null);
+  let promptInputLatencySamples = $state<number[]>([]);
+
+  function isTextInsertionKey(event: KeyboardEvent): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return false;
+    }
+    return event.key.length === 1;
+  }
+
+  function quantile(values: readonly number[], q: number): number {
+    if (values.length === 0) {
+      return 0;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.max(
+      0,
+      Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q)),
+    );
+    return sorted[index] ?? 0;
+  }
+
+  function pushLatencySample(sampleMs: number): void {
+    if (!Number.isFinite(sampleMs) || sampleMs < 0) {
+      return;
+    }
+    const rounded = Math.round(sampleMs * 10) / 10;
+    const next = [...promptInputLatencySamples, rounded];
+    promptInputLatencySamples =
+      next.length > LATENCY_SAMPLE_CAP
+        ? next.slice(next.length - LATENCY_SAMPLE_CAP)
+        : next;
+  }
+
+  const promptInputLatencyMetrics = $derived.by(() => {
+    const samples = promptInputLatencySamples;
+    if (samples.length === 0) {
+      return null;
+    }
+    const last = samples[samples.length - 1] ?? 0;
+    const avg = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    const p95 = quantile(samples, 0.95);
+    const max = Math.max(...samples);
+    return {
+      last,
+      avg,
+      p95,
+      max,
+      count: samples.length,
+    };
+  });
 
   interface ImageAttachment {
     readonly id: string;
@@ -368,6 +426,38 @@
     }
   }
 
+  async function submitAsNewSession(immediate: boolean): Promise<void> {
+    const trimmedPrompt = promptText.trim();
+    if (trimmedPrompt.length === 0 || submitting || restartingFromBeginning) {
+      return;
+    }
+
+    submitting = true;
+    submitError = null;
+    optimisticUserMessage = trimmedPrompt;
+    optimisticUserStatus = immediate ? "running" : "queued";
+    optimisticUserImageAttachments = toOptimisticImageAttachments();
+    focusTailNonce += 1;
+    try {
+      await onSubmitPromptAsNewSession(
+        trimmedPrompt,
+        immediate,
+        toAttachmentRefs(),
+      );
+      promptText = "";
+      attachmentError = null;
+      clearImageAttachments();
+    } catch (error: unknown) {
+      submitError =
+        error instanceof Error ? error.message : "Failed to submit prompt";
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
+    } finally {
+      submitting = false;
+    }
+  }
+
   async function runDefaultPrompt(
     kind: "refresh-purpose" | "resume-session",
   ): Promise<void> {
@@ -401,6 +491,9 @@
   }
 
   function handlePromptComposerKeydown(event: KeyboardEvent): void {
+    if (isTextInsertionKey(event)) {
+      pendingInputKeydownAtMs = performance.now();
+    }
     if (submitting || promptText.trim().length === 0) {
       return;
     }
@@ -420,6 +513,18 @@
     if (!event.altKey) {
       void submitNextPrompt(false);
     }
+  }
+
+  function handlePromptInput(): void {
+    const keydownAt = pendingInputKeydownAtMs;
+    pendingInputKeydownAtMs = null;
+    if (keydownAt === null) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      const elapsedMs = performance.now() - keydownAt;
+      pushLatencySample(elapsedMs);
+    });
   }
 
   function promptShortcutLabel(): string {
@@ -490,6 +595,8 @@
       optimisticAssistantMessageSticky = undefined;
       showSubmitOptions = false;
       attachmentError = null;
+      pendingInputKeydownAtMs = null;
+      promptInputLatencySamples = [];
       clearImageAttachments();
       return;
     }
@@ -858,6 +965,7 @@
             placeholder="Add the next instruction for this session"
             bind:value={promptText}
             onkeydown={handlePromptComposerKeydown}
+            oninput={handlePromptInput}
           ></textarea>
           <input
             bind:this={attachmentInput}
@@ -981,12 +1089,32 @@
                 >
                   {submitting ? "Submitting..." : "Run immediately"}
                 </button>
+                <button
+                  type="button"
+                  class="mt-1 w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-hover
+                         text-text-secondary disabled:opacity-60"
+                  disabled={submitting || promptText.trim().length === 0}
+                  onclick={() => void submitAsNewSession(false)}
+                  title="Start a brand-new session and navigate to it"
+                >
+                  {submitting ? "Submitting..." : "Submit as new session"}
+                </button>
               </div>
             {/if}
           </div>
           <p class="mt-2 text-[11px] text-text-tertiary">
             Queue by default. {promptShortcutHint}
           </p>
+          {#if promptInputLatencyMetrics !== null}
+            <p class="mt-1 text-[11px] text-text-tertiary font-mono">
+              Input latency (keydown->paint): last {promptInputLatencyMetrics
+                .last.toFixed(1)}ms / avg {promptInputLatencyMetrics.avg.toFixed(
+                1,
+              )}ms / p95 {promptInputLatencyMetrics.p95.toFixed(1)}ms / max {promptInputLatencyMetrics
+                .max.toFixed(1)}ms
+              ({promptInputLatencyMetrics.count})
+            </p>
+          {/if}
         </div>
       </div>
     </div>
