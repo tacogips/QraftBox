@@ -338,12 +338,10 @@
       type="button"
       onclick={handleSubmit}
       disabled={prompt.trim().length === 0}
-      class="px-4 py-2 min-h-[44px]
-             bg-success-emphasis hover:brightness-110
-             text-white text-sm font-medium rounded
-             disabled:opacity-50 disabled:cursor-not-allowed
-             transition-all duration-150
-             focus:outline-none focus:ring-2 focus:ring-success-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
+      class="px-3 py-1.5 min-h-[44px] text-xs rounded bg-accent-muted text-accent-fg
+             border border-accent-emphasis/40 hover:bg-accent-muted/80 font-medium
+             disabled:opacity-60 disabled:cursor-not-allowed transition-colors duration-150
+             focus:outline-none focus:ring-2 focus:ring-accent-emphasis focus:ring-offset-2 focus:ring-offset-bg-secondary"
     >
       Submit
     </button>

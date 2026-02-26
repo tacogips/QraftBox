@@ -1107,12 +1107,11 @@
           </p>
           {#if promptInputLatencyMetrics !== null}
             <p class="mt-1 text-[11px] text-text-tertiary font-mono">
-              Input latency (keydown->paint): last {promptInputLatencyMetrics
-                .last.toFixed(1)}ms / avg {promptInputLatencyMetrics.avg.toFixed(
+              Input latency (keydown->paint): last {promptInputLatencyMetrics.last.toFixed(
                 1,
-              )}ms / p95 {promptInputLatencyMetrics.p95.toFixed(1)}ms / max {promptInputLatencyMetrics
-                .max.toFixed(1)}ms
-              ({promptInputLatencyMetrics.count})
+              )}ms / avg {promptInputLatencyMetrics.avg.toFixed(1)}ms / p95 {promptInputLatencyMetrics.p95.toFixed(
+                1,
+              )}ms / max {promptInputLatencyMetrics.max.toFixed(1)}ms ({promptInputLatencyMetrics.count})
             </p>
           {/if}
         </div>

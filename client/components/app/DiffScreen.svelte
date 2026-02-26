@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
+  import type { AISessionSubmitResult } from "../../../src/types/ai";
+  import { buildScreenHash, parseHash } from "../../src/lib/app-routing";
   import { buildRawFileUrl } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
@@ -15,6 +17,9 @@
   let mobileSafariFallbackOffset = $state(0);
   let isIphone = $state(false);
   let isPhoneViewport = $state(false);
+  let latestSubmittedSessionId = $state<string | null>(null);
+
+  const SESSION_QUERY_KEY = "ai_session_id";
 
   function detectIphone(): boolean {
     const ua = navigator.userAgent;
@@ -41,6 +46,21 @@
       /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
     return detectIphone() && isSafari;
   }
+
+  function buildSessionHistoryHref(sessionId: string): string {
+    const { slug } = parseHash(window.location.hash);
+    const url = new URL(window.location.href);
+    url.searchParams.set(SESSION_QUERY_KEY, sessionId);
+    url.hash = buildScreenHash(slug, "ai-session");
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  const latestSessionHistoryHref = $derived.by(() => {
+    if (latestSubmittedSessionId === null) {
+      return null;
+    }
+    return buildSessionHistoryHref(latestSubmittedSessionId);
+  });
 
   $effect(() => {
     const update = (): void => {
@@ -237,7 +257,7 @@
       message: string,
       immediate: boolean,
       context: AIPromptContext,
-    ) => Promise<void>;
+    ) => Promise<AISessionSubmitResult | null>;
     onReloadFileTree: () => void;
     onGitActionSuccess: (
       action: "commit" | "push" | "pull" | "pr" | "init",
@@ -257,6 +277,8 @@
       references: [],
       diffSummary: undefined,
       resumeSessionId: currentQraftAiSessionId,
+    }).then((result) => {
+      latestSubmittedSessionId = result?.sessionId ?? currentQraftAiSessionId;
     });
   }
 
@@ -375,6 +397,11 @@
             {isIphone}
             {onSetViewMode}
             onCommentSubmit={handleInlineCommentSubmit}
+            submittedSessionId={latestSubmittedSessionId}
+            submittedSessionHistoryHref={latestSessionHistoryHref}
+            onDismissSubmittedSession={() => {
+              latestSubmittedSessionId = null;
+            }}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -391,6 +418,11 @@
             {isIphone}
             {onSetViewMode}
             onCommentSubmit={handleInlineCommentSubmit}
+            submittedSessionId={latestSubmittedSessionId}
+            submittedSessionHistoryHref={latestSessionHistoryHref}
+            onDismissSubmittedSession={() => {
+              latestSubmittedSessionId = null;
+            }}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -417,6 +449,11 @@
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}
+          submittedSessionId={latestSubmittedSessionId}
+          submittedSessionHistoryHref={latestSessionHistoryHref}
+          onDismissSubmittedSession={() => {
+            latestSubmittedSessionId = null;
+          }}
         />
       {:else if fileContentLoading}
         <div class="p-8 text-center text-text-secondary">Loading file...</div>
@@ -440,6 +477,11 @@
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
           onCommentSubmit={handleInlineCommentSubmit}
+          submittedSessionId={latestSubmittedSessionId}
+          submittedSessionHistoryHref={latestSessionHistoryHref}
+          onDismissSubmittedSession={() => {
+            latestSubmittedSessionId = null;
+          }}
         />
       {:else}
         <div class="p-8 text-center text-text-secondary">

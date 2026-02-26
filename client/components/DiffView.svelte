@@ -33,6 +33,9 @@
       prompt: string,
       immediate: boolean,
     ) => void;
+    submittedSessionId?: string | null;
+    submittedSessionHistoryHref?: string | null;
+    onDismissSubmittedSession?: () => void;
     highlightedLines?: readonly number[];
     onNavigatePrev?: (() => void) | undefined;
     onNavigateNext?: (() => void) | undefined;
@@ -47,6 +50,9 @@
     onSetViewMode = undefined,
     onLineSelect = undefined,
     onCommentSubmit = undefined,
+    submittedSessionId = null,
+    submittedSessionHistoryHref = null,
+    onDismissSubmittedSession = undefined,
     highlightedLines = undefined,
     onNavigatePrev = undefined,
     onNavigateNext = undefined,
@@ -174,7 +180,6 @@
         immediate,
       );
     }
-    activeComment = null;
   }
 
   function handleCommentCancel(): void {
@@ -455,6 +460,9 @@
       {oldHighlightMap}
       {newHighlightMap}
       filePath={file.path}
+      {submittedSessionId}
+      {submittedSessionHistoryHref}
+      {onDismissSubmittedSession}
     />
   {:else if mode === "inline"}
     <InlineDiff
@@ -469,6 +477,9 @@
       {oldHighlightMap}
       {newHighlightMap}
       filePath={file.path}
+      {submittedSessionId}
+      {submittedSessionHistoryHref}
+      {onDismissSubmittedSession}
     />
   {:else}
     <div

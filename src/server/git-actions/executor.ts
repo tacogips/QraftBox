@@ -257,6 +257,114 @@ async function runClaude(
   }
 }
 
+async function getHeadCommitHash(projectPath: string): Promise<string | null> {
+  try {
+    const { stdout, exitCode } = await runProcessWithTimeout(
+      ["git", "rev-parse", "HEAD"],
+      projectPath,
+      5_000,
+    );
+    if (exitCode !== 0) {
+      return null;
+    }
+    const hash = stdout.trim();
+    return hash.length > 0 ? hash : null;
+  } catch {
+    return null;
+  }
+}
+
+async function stageAllChanges(projectPath: string): Promise<GitActionResult> {
+  try {
+    const { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "add", "-A"],
+      projectPath,
+      30_000,
+    );
+
+    if (exitCode === 0) {
+      return { success: true, output: stdout };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `git add exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to stage changes: ${errorMessage}`,
+    };
+  }
+}
+
+async function listStagedFiles(
+  projectPath: string,
+): Promise<readonly string[]> {
+  try {
+    const { stdout, exitCode } = await runProcessWithTimeout(
+      ["git", "diff", "--cached", "--name-only"],
+      projectPath,
+      10_000,
+    );
+    if (exitCode !== 0) {
+      return [];
+    }
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function commitStagedChangesFallback(
+  projectPath: string,
+  stagedFiles: readonly string[],
+): Promise<GitActionResult> {
+  const title = "chore: commit staged changes";
+  const filesPreview = stagedFiles.slice(0, 20).map((file) => `- ${file}`);
+  const truncatedNote =
+    stagedFiles.length > 20
+      ? `\n- ...and ${stagedFiles.length - 20} more file(s)`
+      : "";
+  const body = `Fallback commit path executed because AI did not run git commit.\n\nStaged files:\n${filesPreview.join("\n")}${truncatedNote}`;
+
+  try {
+    const { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "commit", "-m", title, "-m", body],
+      projectPath,
+      30_000,
+    );
+
+    if (exitCode === 0) {
+      return {
+        success: true,
+        output: stdout.length > 0 ? stdout : stderr,
+      };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `git commit exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Fallback commit failed: ${errorMessage}`,
+    };
+  }
+}
+
 async function getCurrentPRView(projectPath: string): Promise<PRView | null> {
   try {
     const { stdout, exitCode } = await runProcessWithTimeout(
@@ -381,10 +489,56 @@ export async function executeCommit(
 ): Promise<GitActionResult> {
   currentOperationPhase = "committing";
   try {
+    const stageResult = await stageAllChanges(projectPath);
+    if (!stageResult.success) {
+      return {
+        success: false,
+        output: stageResult.output,
+        error: stageResult.error ?? "Failed to stage changes",
+      };
+    }
+
+    const beforeHead = await getHeadCommitHash(projectPath);
+
     // Build prompt with commit system prompt
     const prompt = await buildPrompt("commit", customCtx, outputLanguage);
 
-    return await runClaude(modelProfile, projectPath, prompt, actionId);
+    const result = await runClaude(modelProfile, projectPath, prompt, actionId);
+    if (!result.success) {
+      return result;
+    }
+
+    const afterHead = await getHeadCommitHash(projectPath);
+    if (beforeHead === afterHead) {
+      const stagedFiles = await listStagedFiles(projectPath);
+      if (stagedFiles.length === 0) {
+        return {
+          success: false,
+          output: result.output,
+          error:
+            "No commit was created and no staged changes remain. Stage files and try again.",
+        };
+      }
+
+      const fallbackCommit = await commitStagedChangesFallback(
+        projectPath,
+        stagedFiles,
+      );
+      if (fallbackCommit.success) {
+        return {
+          success: true,
+          output: `${result.output}\n\nFallback commit succeeded:\n${fallbackCommit.output}`,
+        };
+      }
+
+      return {
+        success: false,
+        output: result.output,
+        error: fallbackCommit.error ?? "No commit was created",
+      };
+    }
+
+    return result;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     return {

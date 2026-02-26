@@ -591,6 +591,44 @@
       sidebarCollapsed = true;
     }
   });
+
+  // Keep diff/file tree in sync even when git state changes outside file writes
+  // (e.g. commits from terminal update .git metadata but not working files).
+  $effect(() => {
+    if (contextId === null || !activeTabIsGitRepo) {
+      return;
+    }
+
+    const refreshGitState = (): void => {
+      const currentContextId = contextId;
+      if (currentContextId === null) {
+        return;
+      }
+      void fetchDiff(currentContextId);
+      if (fileTreeMode === "all") {
+        void refreshAllFiles(currentContextId);
+      }
+    };
+
+    const handleWindowFocus = (): void => {
+      refreshGitState();
+    };
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "visible") {
+        refreshGitState();
+      }
+    };
+
+    const pollTimer = setInterval(refreshGitState, 5000);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(pollTimer);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  });
 </script>
 
 <div class="flex flex-col h-[100dvh] bg-bg-primary text-text-primary">

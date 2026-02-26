@@ -53,6 +53,9 @@
       prompt: string,
       immediate: boolean,
     ) => void;
+    submittedSessionId?: string | null;
+    submittedSessionHistoryHref?: string | null;
+    onDismissSubmittedSession?: () => void;
     onNavigatePrev?: (() => void) | undefined;
     onNavigateNext?: (() => void) | undefined;
   }
@@ -66,6 +69,9 @@
     onSetViewMode = undefined,
     onLineSelect = undefined,
     onCommentSubmit = undefined,
+    submittedSessionId = null,
+    submittedSessionHistoryHref = null,
+    onDismissSubmittedSession = undefined,
     onNavigatePrev = undefined,
     onNavigateNext = undefined,
   }: Props = $props();
@@ -198,7 +204,6 @@
         immediate,
       );
     }
-    activeComment = null;
     commentText = "";
   }
 
@@ -537,11 +542,11 @@
             </div>
             {#if activeComment !== null && line.lineNumber === activeComment.endLine}
               <div
-                class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
+                class="max-w-4xl border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
               >
                 <textarea
-                  class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
-                         focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+                  class="w-full min-h-28 resize-y rounded border border-border-default bg-bg-primary
+                         px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
                   placeholder="Ask AI about this code..."
                   bind:value={commentText}
                   onkeydown={(e) => {
@@ -573,6 +578,31 @@
                     />
                   </div>
                 </div>
+                {#if submittedSessionId !== null && submittedSessionHistoryHref !== null}
+                  <div
+                    class="mt-2 flex items-center justify-between gap-3 rounded border border-accent-emphasis/40 bg-accent-muted/10 px-2 py-1 text-xs text-text-secondary"
+                  >
+                    <span class="truncate">AI session submitted.</span>
+                    <div class="flex items-center gap-2">
+                      <a
+                        class="text-accent-fg underline underline-offset-2 hover:opacity-80"
+                        href={submittedSessionHistoryHref}
+                      >
+                        View session history
+                      </a>
+                      <button
+                        type="button"
+                        class="text-text-secondary hover:text-text-primary"
+                        onclick={() => {
+                          onDismissSubmittedSession?.();
+                          handleCommentCancel();
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                {/if}
               </div>
             {/if}
           {/if}
