@@ -628,7 +628,23 @@
     );
     const fallbackCards =
       buildFallbackCardsForActiveOnlySessions(sessionCardIds);
-    return [...sessionCards, ...fallbackCards].sort((cardA, cardB) => {
+    const mergedCards = [...sessionCards, ...fallbackCards];
+    const dedupedCards = new Map<string, OverviewSessionCard>();
+    for (const card of mergedCards) {
+      const existingCard = dedupedCards.get(card.qraftAiSessionId);
+      if (existingCard === undefined) {
+        dedupedCards.set(card.qraftAiSessionId, card);
+        continue;
+      }
+
+      const existingUpdatedAt = new Date(existingCard.updatedAt).getTime();
+      const candidateUpdatedAt = new Date(card.updatedAt).getTime();
+      if (candidateUpdatedAt >= existingUpdatedAt) {
+        dedupedCards.set(card.qraftAiSessionId, card);
+      }
+    }
+
+    return [...dedupedCards.values()].sort((cardA, cardB) => {
       const timeA = new Date(cardA.updatedAt).getTime();
       const timeB = new Date(cardB.updatedAt).getTime();
       return timeB - timeA;

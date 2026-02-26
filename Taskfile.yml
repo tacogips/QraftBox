@@ -34,8 +34,11 @@ tasks:
     vars:
       PORT: '{{.PORT | default "5173"}}'
       HOST: '{{.HOST | default "0.0.0.0"}}'
+      API_TARGET_HOST: '{{.API_TARGET_HOST | default "127.0.0.1"}}'
+      API_TARGET_PORT: '{{.API_TARGET_PORT | default "7144"}}'
     cmds:
-      - bun run dev -- --host {{.HOST}} --port {{.PORT}}
+      - rm -rf node_modules/.vite/deps node_modules/.vite/deps_temp
+      - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}}
 
   build:
     desc: Build the project

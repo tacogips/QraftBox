@@ -115,7 +115,7 @@
    */
   async function fetchPRStatus(): Promise<void> {
     try {
-      const resp = await fetch(`/api/ctx/${contextId}/pr/${contextId}/status`);
+      const resp = await fetch(`/api/ctx/${contextId}/pr/status`);
       if (resp.ok) {
         prStatus = (await resp.json()) as PRStatusResponse;
       }
