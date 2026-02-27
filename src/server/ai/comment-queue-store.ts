@@ -6,13 +6,23 @@ import { createLogger } from "../logger";
 
 const logger = createLogger("AiCommentQueueStore");
 
+export const AI_COMMENT_SIDES = ["old", "new"] as const;
+export type AiCommentSide = (typeof AI_COMMENT_SIDES)[number];
+
+export function isAiCommentSide(value: unknown): value is AiCommentSide {
+  return (
+    typeof value === "string" &&
+    (AI_COMMENT_SIDES as readonly string[]).includes(value)
+  );
+}
+
 export type QueuedAiCommentRecord = {
   readonly id: string;
   readonly projectPath: string;
   readonly filePath: string;
   readonly startLine: number;
   readonly endLine: number;
-  readonly side: "old" | "new";
+  readonly side: AiCommentSide;
   readonly source: "diff" | "current-state" | "full-file";
   readonly prompt: string;
   readonly createdAt: number;
@@ -23,7 +33,7 @@ export type NewQueuedAiComment = {
   readonly filePath: string;
   readonly startLine: number;
   readonly endLine: number;
-  readonly side: "old" | "new";
+  readonly side: AiCommentSide;
   readonly source: "diff" | "current-state" | "full-file";
   readonly prompt: string;
 };
@@ -125,7 +135,7 @@ class AiCommentQueueStoreImpl implements AiCommentQueueStore {
       file_path: string;
       start_line: number;
       end_line: number;
-      side: "old" | "new";
+      side: AiCommentSide;
       source: "diff" | "current-state" | "full-file";
       prompt: string;
       created_at: number;
@@ -165,7 +175,7 @@ class AiCommentQueueStoreImpl implements AiCommentQueueStore {
           file_path: string;
           start_line: number;
           end_line: number;
-          side: "old" | "new";
+          side: AiCommentSide;
           source: "diff" | "current-state" | "full-file";
           prompt: string;
           created_at: number;
@@ -210,7 +220,7 @@ class AiCommentQueueStoreImpl implements AiCommentQueueStore {
           file_path: string;
           start_line: number;
           end_line: number;
-          side: "old" | "new";
+          side: AiCommentSide;
           source: "diff" | "current-state" | "full-file";
           prompt: string;
           created_at: number;

@@ -3,6 +3,7 @@ import type {
   AiCommentQueueStore,
   NewQueuedAiComment,
 } from "../ai/comment-queue-store";
+import { isAiCommentSide } from "../ai/comment-queue-store";
 
 function parseProjectPath(value: string | undefined): string | null {
   if (value === undefined) return null;
@@ -56,7 +57,7 @@ export function createAiCommentRoutes(store: AiCommentQueueStore): Hono {
     if (startLine === null || endLine === null || endLine < startLine) {
       return c.json({ error: "startLine/endLine are invalid" }, 400);
     }
-    if (side !== "old" && side !== "new") {
+    if (!isAiCommentSide(side)) {
       return c.json({ error: "side must be old or new" }, 400);
     }
     if (

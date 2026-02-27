@@ -7,12 +7,14 @@
     addQueuedAiCommentApi,
     buildRawFileUrl,
     clearQueuedAiCommentsApi,
+    fetchModelConfigState,
     fetchQueuedAiCommentsApi,
     removeQueuedAiCommentApi,
     updateQueuedAiCommentApi,
     type QueuedAiComment,
   } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
+  import type { ModelProfile } from "../../../src/types/model-config";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
@@ -28,12 +30,16 @@
   let isPhoneViewport = $state(false);
   let latestSubmittedSessionId = $state<string | null>(null);
   let queuedComments = $state<QueuedAiComment[]>([]);
-  let pendingJumpTarget = $state<{ filePath: string; lineNumber: number } | null>(
-    null,
-  );
+  let pendingJumpTarget = $state<{
+    filePath: string;
+    lineNumber: number;
+  } | null>(null);
   let commentListExpanded = $state(true);
   let editingCommentId = $state<string | null>(null);
   let editingCommentPrompt = $state("");
+  let aiModelProfiles = $state<ModelProfile[]>([]);
+  let selectedAiModelProfileId = $state<string | undefined>(undefined);
+  let modelConfigLoaded = $state(false);
 
   const SESSION_QUERY_KEY = "ai_session_id";
   const LINE_HIGHLIGHT_CLASS = "line-jump-highlight";
@@ -156,7 +162,9 @@
   }
 
   async function removeQueuedComment(commentId: string): Promise<void> {
-    queuedComments = queuedComments.filter((comment) => comment.id !== commentId);
+    queuedComments = queuedComments.filter(
+      (comment) => comment.id !== commentId,
+    );
     if (editingCommentId === commentId) {
       cancelEditingComment();
     }
@@ -183,7 +191,10 @@
   }
 
   function jumpToQueuedComment(comment: QueuedAiComment): void {
-    pendingJumpTarget = { filePath: comment.filePath, lineNumber: comment.startLine };
+    pendingJumpTarget = {
+      filePath: comment.filePath,
+      lineNumber: comment.startLine,
+    };
     if (selectedPath !== comment.filePath) {
       onFileSelect(comment.filePath);
       return;
@@ -197,7 +208,8 @@
     }
 
     const hasDiffContextComments = queuedComments.some(
-      (comment) => comment.source === "diff" || comment.source === "current-state",
+      (comment) =>
+        comment.source === "diff" || comment.source === "current-state",
     );
     const batchHeader = hasDiffContextComments
       ? "Please process the following queued file comments in one batch. For items marked [DIFF], answer in terms of old-vs-new changes and review intent."
@@ -239,6 +251,7 @@
         })),
         diffSummary: undefined,
         resumeSessionId: currentQraftAiSessionId,
+        modelProfileId: selectedAiModelProfileId,
       });
     } catch (error) {
       console.error("Failed to submit queued comments:", error);
@@ -276,7 +289,11 @@
       return;
     }
     try {
-      const updated = await updateQueuedAiCommentApi(projectPath, commentId, prompt);
+      const updated = await updateQueuedAiCommentApi(
+        projectPath,
+        commentId,
+        prompt,
+      );
       queuedComments = queuedComments.map((comment) =>
         comment.id === commentId ? updated : comment,
       );
@@ -320,6 +337,23 @@
         window.clearTimeout(timer);
       }
     };
+  });
+
+  $effect(() => {
+    if (modelConfigLoaded) {
+      return;
+    }
+    modelConfigLoaded = true;
+    void fetchModelConfigState()
+      .then((state) => {
+        aiModelProfiles = [...state.profiles];
+        selectedAiModelProfileId =
+          state.operationBindings.aiDefaultProfileId ?? undefined;
+      })
+      .catch(() => {
+        aiModelProfiles = [];
+        selectedAiModelProfileId = undefined;
+      });
   });
 
   $effect(() => {
@@ -880,6 +914,28 @@
               Comment List ({queuedComments.length})
             </div>
             <div class="flex items-center gap-2">
+              <select
+                class="max-w-56 rounded border border-border-default bg-bg-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis disabled:opacity-60"
+                value={selectedAiModelProfileId ?? ""}
+                disabled={aiModelProfiles.length === 0}
+                onchange={(event) => {
+                  const nextValue = (event.currentTarget as HTMLSelectElement)
+                    .value;
+                  selectedAiModelProfileId =
+                    nextValue.length > 0 ? nextValue : undefined;
+                }}
+                aria-label="Profile for comment list submit"
+              >
+                {#if aiModelProfiles.length === 0}
+                  <option value="">No profile available</option>
+                {:else}
+                  {#each aiModelProfiles as profile (profile.id)}
+                    <option value={profile.id}>
+                      {profile.name} ({profile.vendor} / {profile.model})
+                    </option>
+                  {/each}
+                {/if}
+              </select>
               <button
                 type="button"
                 class="px-3 py-1 text-xs rounded bg-accent-muted text-accent-fg
@@ -929,7 +985,9 @@
           {:else}
             <ul class="space-y-1.5">
               {#each queuedComments as comment (comment.id)}
-                <li class="rounded border border-border-default bg-bg-primary px-2 py-1.5">
+                <li
+                  class="rounded border border-border-default bg-bg-primary px-2 py-1.5"
+                >
                   <div class="flex items-start justify-between gap-2">
                     <button
                       type="button"
@@ -1020,6 +1078,8 @@
     outline: 2px solid var(--color-accent-emphasis);
     outline-offset: -2px;
     background: color-mix(in srgb, var(--color-accent-muted) 65%, transparent);
-    transition: outline-color 0.2s ease, background-color 0.2s ease;
+    transition:
+      outline-color 0.2s ease,
+      background-color 0.2s ease;
   }
 </style>

@@ -275,7 +275,7 @@
               }
             }}
           ></textarea>
-            <div class="flex items-center justify-between mt-2">
+          <div class="flex items-center justify-between mt-2">
             <!-- Left side: File and line info -->
             <div class="text-xs text-text-tertiary font-mono">
               {lineContext}
