@@ -274,7 +274,9 @@
   );
 </script>
 
-<div class="diff-view-container w-full h-full min-h-0 flex flex-col bg-bg-primary">
+<div
+  class="diff-view-container w-full h-full min-h-0 flex flex-col bg-bg-primary"
+>
   <!-- Header with file info -->
   <div
     class="flex items-center gap-2 px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
