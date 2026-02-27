@@ -719,7 +719,7 @@
       {:else if error !== null}
         <div class="p-8 text-center text-danger-fg">{error}</div>
       {:else if selectedFile !== null && effectiveViewMode === "current-state"}
-        <div class="px-2 pb-2">
+        <div class="px-2 pb-2 h-full min-h-0">
           <CurrentStateView
             file={selectedFile}
             viewMode={effectiveViewMode}
@@ -755,7 +755,7 @@
           />
         </div>
       {:else if selectedFile !== null && (effectiveViewMode === "side-by-side" || effectiveViewMode === "inline")}
-        <div class="px-2 pb-2">
+        <div class="px-2 pb-2 h-full min-h-0">
           <DiffView
             file={selectedFile}
             mode={effectiveViewMode === "side-by-side"

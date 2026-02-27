@@ -55,6 +55,7 @@
   >("idle");
   let activeActionId = $state<string | null>(null);
   let cancellingOperation = $state(false);
+  let localOperationLock = $state(false);
 
   // Toast state for notifications
   let toastMessage = $state<string | null>(null);
@@ -133,6 +134,55 @@
     error?: string;
   }
 
+  interface GitOperationStatusResponse {
+    operating: boolean;
+    phase: string;
+  }
+
+  function normalizeOperationPhase(
+    phase: string,
+  ):
+    | "idle"
+    | "committing"
+    | "pushing"
+    | "pulling"
+    | "creating-pr"
+    | "initializing" {
+    switch (phase) {
+      case "committing":
+      case "pushing":
+      case "pulling":
+      case "creating-pr":
+      case "initializing":
+        return phase;
+      default:
+        return "idle";
+    }
+  }
+
+  async function syncGitOperationStatus(): Promise<void> {
+    if (localOperationLock) {
+      return;
+    }
+    try {
+      const resp = await fetch("/api/git-actions/operating");
+      if (!resp.ok) {
+        return;
+      }
+      const data = (await resp.json()) as GitOperationStatusResponse;
+      operating = data.operating;
+      operationPhase = data.operating
+        ? normalizeOperationPhase(data.phase)
+        : "idle";
+      if (!data.operating) {
+        activeActionId = null;
+        cancellingOperation = false;
+      }
+    } catch {
+      // Non-critical; keep local UI state.
+    }
+  }
+
   /**
    * Calculate dropdown position from the 3-dot button
    */
@@ -202,6 +252,7 @@
    */
   async function handleCommit(): Promise<void> {
     const actionId = createActionId();
+    localOperationLock = true;
     operating = true;
     operationPhase = "committing";
     activeActionId = actionId;
@@ -229,6 +280,7 @@
       const msg = e instanceof Error ? e.message : "Commit failed";
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
       activeActionId = null;
@@ -240,6 +292,7 @@
    * Execute push via git
    */
   async function handlePush(): Promise<void> {
+    localOperationLock = true;
     operating = true;
     operationPhase = "pushing";
     try {
@@ -265,6 +318,7 @@
       const msg = e instanceof Error ? e.message : "Push failed";
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
     }
@@ -274,6 +328,7 @@
    * Execute pull via git
    */
   async function handlePull(): Promise<void> {
+    localOperationLock = true;
     operating = true;
     operationPhase = "pulling";
     try {
@@ -299,6 +354,7 @@
       const msg = e instanceof Error ? e.message : "Pull failed";
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
     }
@@ -313,6 +369,7 @@
     const customCtx = customCtxText.trim();
     const actionId = createActionId();
 
+    localOperationLock = true;
     operating = true;
     operationPhase = "committing";
     activeActionId = actionId;
@@ -349,6 +406,7 @@
       const msg = e instanceof Error ? e.message : "Operation failed";
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
       activeActionId = null;
@@ -386,6 +444,7 @@
           ? prBaseBranch
           : "main";
     const actionId = createActionId();
+    localOperationLock = true;
     operating = true;
     operationPhase = "creating-pr";
     activeActionId = actionId;
@@ -449,6 +508,7 @@
           : `${isUpdate ? "Update PR" : "Create PR"} failed`;
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
       activeActionId = null;
@@ -494,6 +554,7 @@
    * Initialize git repository in current directory.
    */
   async function handleInitRepo(): Promise<void> {
+    localOperationLock = true;
     operating = true;
     operationPhase = "initializing";
     try {
@@ -520,6 +581,7 @@
       const msg = e instanceof Error ? e.message : "Git init failed";
       showToast(msg, "error");
     } finally {
+      localOperationLock = false;
       operating = false;
       operationPhase = "idle";
     }
@@ -544,9 +606,18 @@
 
   // Fetch PR status on mount (only for git repos)
   $effect(() => {
+    void syncGitOperationStatus();
+    const intervalId = setInterval(() => {
+      void syncGitOperationStatus();
+    }, 2000);
+
     if (isGitRepo) {
       void fetchPRStatus();
     }
+
+    return () => {
+      clearInterval(intervalId);
+    };
   });
 </script>
 

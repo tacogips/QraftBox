@@ -384,6 +384,25 @@
     viewMode = mode;
   }
 
+  function handleFileTreeModeChange(mode: "diff" | "all"): void {
+    const previousMode = fileTreeMode;
+    fileTreeMode = mode;
+
+    if (previousMode === "all" && mode === "diff") {
+      // When entering diff-only tree mode, focus the first changed file.
+      selectedPath = diffFiles[0]?.path ?? null;
+
+      // If user was in full-file mode, default to side-by-side diff view.
+      if (viewMode === "full-file") {
+        viewMode = "side-by-side";
+      }
+    }
+
+    if (mode === "all" && contextId !== null) {
+      void fetchAllFiles(contextId);
+    }
+  }
+
   /**
    * Toggle sidebar
    */
@@ -698,12 +717,7 @@
         currentQraftAiSessionId={qraftAiSessionId}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
-        onFileTreeModeChange={(mode) => {
-          fileTreeMode = mode;
-          if (mode === "all" && contextId !== null) {
-            void fetchAllFiles(contextId);
-          }
-        }}
+        onFileTreeModeChange={handleFileTreeModeChange}
         {showIgnored}
         onShowIgnoredChange={(value) => {
           showIgnored = value;
@@ -769,12 +783,7 @@
         isFirstMessage={!sessionMessageSubmitted}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
-        onFileTreeModeChange={(mode) => {
-          fileTreeMode = mode;
-          if (mode === "all" && contextId !== null) {
-            void fetchAllFiles(contextId);
-          }
-        }}
+        onFileTreeModeChange={handleFileTreeModeChange}
         {showIgnored}
         onShowIgnoredChange={(value) => {
           showIgnored = value;
