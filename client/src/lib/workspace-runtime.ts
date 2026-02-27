@@ -42,6 +42,7 @@ interface WorkspaceControllerDeps {
   setFileTreeMode: SetState<"diff" | "all">;
   setShowAllFiles: SetState<boolean>;
   setDiffFiles: SetState<DiffFile[]>;
+  getSelectedPath: GetState<string | null>;
   setSelectedPath: SetState<string | null>;
   setAllFilesTree: SetState<unknown | null>;
   setAllFilesTreeStale: SetState<boolean>;
@@ -97,8 +98,15 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
 
   async function fetchDiff(ctxId: string): Promise<void> {
     const files = await fetchDiffFiles(ctxId);
+    const selectedPath = deps.getSelectedPath();
     deps.setDiffFiles(files);
-    if (files.length > 0 && files[0] !== undefined) {
+    if (files.length === 0) {
+      return;
+    }
+
+    const hasSelectedPathInDiff =
+      selectedPath !== null && files.some((file) => file.path === selectedPath);
+    if (!hasSelectedPathInDiff && files[0] !== undefined) {
       deps.setSelectedPath(files[0].path);
     }
   }

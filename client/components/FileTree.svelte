@@ -913,7 +913,7 @@
     </div>
 
     <!-- Filter Input -->
-    <div class="relative flex-1">
+    <div class="relative flex-1 min-w-0">
       <svg
         class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none"
         fill="none"
@@ -966,6 +966,57 @@
           </svg>
         </button>
       {/if}
+    </div>
+    <div class="flex items-center gap-0.5 shrink-0">
+      <!-- Expand all directories -->
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
+        onclick={expandAll}
+        title="Expand all directories"
+        aria-label="Expand all directories"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v1" />
+          <path d="M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8z" />
+          <path d="M12 12v6" />
+          <path d="M9 15h6" />
+        </svg>
+      </button>
+      <!-- Collapse all directories -->
+      <button
+        type="button"
+        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
+        onclick={collapseAll}
+        title="Collapse all directories"
+        aria-label="Collapse all directories"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M3 6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v1" />
+          <path d="M3 10h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8z" />
+          <path d="M9 15h6" />
+        </svg>
+      </button>
     </div>
     {#if filterText !== ""}
       <span class="text-[10px] text-text-tertiary whitespace-nowrap"
@@ -1126,84 +1177,6 @@
           {/if}
         </button>
       {/if}
-      <!-- Toggle show all files -->
-      {#if onShowAllFilesChange}
-        <button
-          type="button"
-          class="w-5 h-5 flex items-center justify-center rounded transition-colors {showAllFiles
-            ? 'text-text-primary'
-            : 'text-text-tertiary hover:text-text-primary'}"
-          onclick={() => onShowAllFilesChange?.(!showAllFiles)}
-          title={showAllFiles
-            ? "Show git-managed files only"
-            : "Show all files (including non-git)"}
-          aria-label={showAllFiles
-            ? "Show git-managed files only"
-            : "Show all files (including non-git)"}
-          aria-pressed={showAllFiles}
-        >
-          <!-- Folder tree icon -->
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path
-              d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-            />
-            {#if showAllFiles}
-              <line x1="12" y1="11" x2="12" y2="17" />
-              <line x1="9" y1="14" x2="15" y2="14" />
-            {/if}
-          </svg>
-        </button>
-      {/if}
-      <span class="w-px h-3 bg-border-default mx-0.5"></span>
-      <!-- Expand All -->
-      <button
-        type="button"
-        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
-        onclick={expandAll}
-        title="Expand all"
-        aria-label="Expand all directories"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            d="M5.22 3.22a.75.75 0 011.06 0L8 4.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 4.28a.75.75 0 010-1.06zm0 5a.75.75 0 011.06 0L8 9.94l1.72-1.72a.75.75 0 111.06 1.06l-2.25 2.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z"
-          />
-        </svg>
-      </button>
-      <!-- Collapse All -->
-      <button
-        type="button"
-        class="w-5 h-5 flex items-center justify-center text-text-tertiary hover:text-text-primary rounded transition-colors"
-        onclick={collapseAll}
-        title="Collapse all"
-        aria-label="Collapse all directories"
-      >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="currentColor"
-          aria-hidden="true"
-        >
-          <path
-            d="M10.78 12.78a.75.75 0 01-1.06 0L8 11.06l-1.72 1.72a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06zm0-5a.75.75 0 01-1.06 0L8 6.06 6.28 7.78a.75.75 0 01-1.06-1.06l2.25-2.25a.75.75 0 011.06 0l2.25 2.25a.75.75 0 010 1.06z"
-          />
-        </svg>
-      </button>
     </div>
   </div>
 </div>

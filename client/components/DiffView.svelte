@@ -122,12 +122,36 @@
   });
 
   function handleSideBySideLineSelect(side: "old" | "new", line: number): void {
+    if (side === "old") {
+      return;
+    }
+
+    if (activeComment !== null && activeComment.side === side) {
+      const start = Math.min(activeComment.startLine, line);
+      const end = Math.max(activeComment.endLine, line);
+      activeComment = { side, startLine: start, endLine: end };
+    } else {
+      activeComment = { side, startLine: line, endLine: line };
+    }
+
     if (onLineSelect !== undefined) {
       onLineSelect(line);
     }
   }
 
   function handleInlineLineSelect(line: number, type: "old" | "new"): void {
+    if (type === "old") {
+      return;
+    }
+
+    if (activeComment !== null && activeComment.side === type) {
+      const start = Math.min(activeComment.startLine, line);
+      const end = Math.max(activeComment.endLine, line);
+      activeComment = { side: type, startLine: start, endLine: end };
+    } else {
+      activeComment = { side: type, startLine: line, endLine: line };
+    }
+
     if (onLineSelect !== undefined) {
       onLineSelect(line);
     }
@@ -142,6 +166,10 @@
     line: number,
     shiftKey: boolean,
   ): void {
+    if (side === "old") {
+      return;
+    }
+
     if (shiftKey && activeComment !== null && activeComment.side === side) {
       const start = Math.min(activeComment.startLine, line);
       const end = Math.max(activeComment.endLine, line);
@@ -160,6 +188,10 @@
     type: "old" | "new",
     shiftKey: boolean,
   ): void {
+    if (type === "old") {
+      return;
+    }
+
     if (shiftKey && activeComment !== null && activeComment.side === type) {
       const start = Math.min(activeComment.startLine, line);
       const end = Math.max(activeComment.endLine, line);

@@ -91,6 +91,17 @@
     }
   }
 
+  function handleLineNumberSelect(lineNumber: number): void {
+    if (activeComment !== null) {
+      const start = Math.min(activeComment.startLine, lineNumber);
+      const end = Math.max(activeComment.endLine, lineNumber);
+      activeComment = { startLine: start, endLine: end };
+      return;
+    }
+
+    activeComment = { startLine: lineNumber, endLine: lineNumber };
+  }
+
   function handleCommentSubmit(prompt: string, immediate: boolean): void {
     if (activeComment !== null && onCommentSubmit !== undefined) {
       onCommentSubmit(
@@ -403,7 +414,14 @@
               aria-label="Add comment on line {lineNumber}">+</button
             >
           {/if}
-          <span class="select-none">{lineNumber}</span>
+          <button
+            type="button"
+            class="select-none cursor-pointer px-1 -mx-1 rounded hover:bg-bg-tertiary/50"
+            onclick={() => handleLineNumberSelect(lineNumber)}
+            aria-label="Select line {lineNumber} for AI prompt"
+          >
+            {lineNumber}
+          </button>
         </div>
 
         <!-- Line content -->

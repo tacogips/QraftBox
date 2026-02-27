@@ -171,29 +171,11 @@
   });
 
   /**
-   * Handle line selection on old (left) pane
-   */
-  function handleOldLineSelect(lineNumber: number): void {
-    if (onLineSelect !== undefined) {
-      onLineSelect("old", lineNumber);
-    }
-  }
-
-  /**
    * Handle line selection on new (right) pane
    */
   function handleNewLineSelect(lineNumber: number): void {
     if (onLineSelect !== undefined) {
       onLineSelect("new", lineNumber);
-    }
-  }
-
-  /**
-   * Handle comment button click on old pane
-   */
-  function handleOldCommentOpen(lineNumber: number, shiftKey: boolean): void {
-    if (onCommentOpen !== undefined) {
-      onCommentOpen("old", lineNumber, shiftKey);
     }
   }
 
@@ -237,97 +219,8 @@
               {change}
               {lineNumber}
               highlighted={oldHighlightMap?.get(lineNumber)}
-              onSelect={() => handleOldLineSelect(lineNumber)}
-              onCommentClick={(shiftKey) =>
-                handleOldCommentOpen(lineNumber, shiftKey)}
             />
           </div>
-          {#if commentLine !== undefined && commentLine.side === "old" && commentLine.endLine === lineNumber}
-            <div
-              class="max-w-4xl border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
-            >
-              <textarea
-                class="w-full min-h-28 resize-y rounded border border-border-default bg-bg-primary
-                       px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
-                placeholder="Ask AI about this code..."
-                bind:value={commentText}
-                onkeydown={(e) => {
-                  if (
-                    e.key === "Enter" &&
-                    e.ctrlKey &&
-                    onCommentSubmit !== undefined
-                  ) {
-                    e.preventDefault();
-                    onCommentSubmit(commentText, true);
-                    commentText = "";
-                  }
-                  if (e.key === "Escape" && onCommentCancel !== undefined) {
-                    onCommentCancel();
-                    commentText = "";
-                  }
-                }}
-              ></textarea>
-              <div class="flex items-center justify-between mt-2">
-                <!-- Left side: File and line info -->
-                <div class="text-xs text-text-tertiary font-mono">
-                  {lineContext}
-                </div>
-                <!-- Right side: Buttons -->
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-                    onclick={() => {
-                      if (onCommentCancel !== undefined) {
-                        onCommentCancel();
-                        commentText = "";
-                      }
-                    }}>Cancel</button
-                  >
-                  <SplitButton
-                    disabled={commentText.trim().length === 0}
-                    onPrimaryClick={() => {
-                      if (onCommentSubmit !== undefined) {
-                        onCommentSubmit(commentText, false);
-                        commentText = "";
-                      }
-                    }}
-                    onSecondaryClick={() => {
-                      if (onCommentSubmit !== undefined) {
-                        onCommentSubmit(commentText, true);
-                        commentText = "";
-                      }
-                    }}
-                  />
-                </div>
-              </div>
-              {#if submittedSessionId !== null && submittedSessionHistoryHref !== null}
-                <div
-                  class="mt-2 flex items-center justify-between gap-3 rounded border border-accent-emphasis/40 bg-accent-muted/10 px-2 py-1 text-xs text-text-secondary"
-                >
-                  <span class="truncate">AI session submitted.</span>
-                  <div class="flex items-center gap-2">
-                    <a
-                      class="text-accent-fg underline underline-offset-2 hover:opacity-80"
-                      href={submittedSessionHistoryHref}
-                    >
-                      View session history
-                    </a>
-                    <button
-                      type="button"
-                      class="text-text-secondary hover:text-text-primary"
-                      onclick={() => {
-                        onDismissSubmittedSession?.();
-                        onCommentCancel?.();
-                      }}
-                    >
-                      Close
-                    </button>
-                  </div>
-                </div>
-              {/if}
-            </div>
-          {/if}
         {/each}
       {/if}
     </div>

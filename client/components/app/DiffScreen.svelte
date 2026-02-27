@@ -267,15 +267,25 @@
   function handleInlineCommentSubmit(
     startLine: number,
     endLine: number,
-    _side: "old" | "new",
+    side: "old" | "new",
     filePath: string,
     prompt: string,
     immediate: boolean,
+    source: "diff" | "current-state" | "full-file",
   ): void {
+    if (source === "diff" && side === "old") {
+      return;
+    }
+
+    const diffAwareContext =
+      source === "diff" || source === "current-state"
+        ? "Selection is from latest file lines (new/current side). Include related old-vs-new diff context in your answer."
+        : undefined;
+
     void onSubmitPrompt(prompt, immediate, {
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
-      diffSummary: undefined,
+      diffSummary: diffAwareContext,
       resumeSessionId: currentQraftAiSessionId,
     }).then((result) => {
       latestSubmittedSessionId = result?.sessionId ?? currentQraftAiSessionId;
@@ -396,7 +406,23 @@
             {selectedHasDiff}
             {isIphone}
             {onSetViewMode}
-            onCommentSubmit={handleInlineCommentSubmit}
+            onCommentSubmit={(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+            ) =>
+              handleInlineCommentSubmit(
+                startLine,
+                endLine,
+                side,
+                filePath,
+                prompt,
+                immediate,
+                "current-state",
+              )}
             submittedSessionId={latestSubmittedSessionId}
             submittedSessionHistoryHref={latestSessionHistoryHref}
             onDismissSubmittedSession={() => {
@@ -417,7 +443,23 @@
             {selectedHasDiff}
             {isIphone}
             {onSetViewMode}
-            onCommentSubmit={handleInlineCommentSubmit}
+            onCommentSubmit={(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+            ) =>
+              handleInlineCommentSubmit(
+                startLine,
+                endLine,
+                side,
+                filePath,
+                prompt,
+                immediate,
+                "diff",
+              )}
             submittedSessionId={latestSubmittedSessionId}
             submittedSessionHistoryHref={latestSessionHistoryHref}
             onDismissSubmittedSession={() => {
@@ -448,7 +490,16 @@
           {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={handleInlineCommentSubmit}
+          onCommentSubmit={(startLine, endLine, side, filePath, prompt, immediate) =>
+            handleInlineCommentSubmit(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+              "full-file",
+            )}
           submittedSessionId={latestSubmittedSessionId}
           submittedSessionHistoryHref={latestSessionHistoryHref}
           onDismissSubmittedSession={() => {
@@ -476,7 +527,16 @@
           {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={handleInlineCommentSubmit}
+          onCommentSubmit={(startLine, endLine, side, filePath, prompt, immediate) =>
+            handleInlineCommentSubmit(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+              "full-file",
+            )}
           submittedSessionId={latestSubmittedSessionId}
           submittedSessionHistoryHref={latestSessionHistoryHref}
           onDismissSubmittedSession={() => {

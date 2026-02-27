@@ -338,6 +338,7 @@
     setFileTreeMode: (value) => (fileTreeMode = value),
     setShowAllFiles: (value) => (showAllFiles = value),
     setDiffFiles: (value) => (diffFiles = value),
+    getSelectedPath: () => selectedPath,
     setSelectedPath: (value) => (selectedPath = value),
     setAllFilesTree: (value) => (allFilesTree = value as FileNode | null),
     setAllFilesTreeStale: (value) => (allFilesTreeStale = value),
