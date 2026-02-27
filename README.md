@@ -21,6 +21,9 @@ QraftBox is a local tool for viewing code changes (diffs), managing git branches
 ![File tree diff status](usage/resource/file_tree_diff.png)
 ![Commit history](usage/resource/commit_history.png)
 ![AI session history](usage/resource/session_history.png)
+![Session list](usage/resource/session_list_2026-02-27.png)
+![AI session detail](usage/resource/ai_session_2026-02-27.png)
+![Ask AI for code lines](usage/resource/ask_ai_for_code_lines_2026-02-27.png)
 ![Browser terminal](usage/resource/terminal.png)
 
 ## SECURITY WARNING
@@ -313,54 +316,6 @@ qraftbox --host 0.0.0.0
 Then access it using your computer's IP address from the other device (e.g., `http://192.168.1.100:7144`).
 
 **SECURITY WARNING:** Using `--host 0.0.0.0` exposes QraftBox to all network interfaces. Only use this on trusted private networks, never expose it to the internet. For remote access, always use a VPN instead.
-
-### Feature Preview (Images)
-
-#### UI Screenshots
-
-- Diff viewer (side-by-side)
-
-  ![Diff side-by-side view](usage/resource/diff_side_by_side.png)
-
-- Current file diff
-
-  ![Current file diff view](usage/resource/diff_current.png)
-
-- Stacked diff view
-
-  ![Stacked diff view](usage/resource/diff_stack.png)
-
-- File tree (normal view)
-
-  ![File tree view](usage/resource/file_tree_view.png)
-
-- File tree (diff status)
-
-  ![File tree diff status](usage/resource/file_tree_diff.png)
-
-- Commit history
-
-  ![Commit history](usage/resource/commit_history.png)
-
-- AI session history
-
-  ![AI session history](usage/resource/session_history.png)
-
-- Session list
-
-  ![Session list](usage/resource/session_list_2026-02-27.png)
-
-- AI session detail
-
-  ![AI session detail](usage/resource/ai_session_2026-02-27.png)
-
-- Ask AI for code lines
-
-  ![Ask AI for code lines](usage/resource/ask_ai_for_code_lines_2026-02-27.png)
-
-- Browser terminal
-
-  ![Browser terminal](usage/resource/terminal.png)
 
 ### Run as a Daemon with PM2 (Bun)
 
