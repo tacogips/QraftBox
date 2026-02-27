@@ -99,14 +99,22 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   async function fetchDiff(ctxId: string): Promise<void> {
     const files = await fetchDiffFiles(ctxId);
     const selectedPath = deps.getSelectedPath();
+    const fileTreeMode = deps.getFileTreeMode();
     deps.setDiffFiles(files);
     if (files.length === 0) {
       return;
     }
 
+    if (selectedPath === null) {
+      if (files[0] !== undefined) {
+        deps.setSelectedPath(files[0].path);
+      }
+      return;
+    }
+
     const hasSelectedPathInDiff =
-      selectedPath !== null && files.some((file) => file.path === selectedPath);
-    if (!hasSelectedPathInDiff && files[0] !== undefined) {
+      files.some((file) => file.path === selectedPath);
+    if (fileTreeMode === "diff" && !hasSelectedPathInDiff && files[0] !== undefined) {
       deps.setSelectedPath(files[0].path);
     }
   }

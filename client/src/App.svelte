@@ -420,6 +420,10 @@
     }
     if (contextId !== null) {
       await fetchDiff(contextId);
+      // Pull may change the full filesystem snapshot; refresh all-files tree when visible.
+      if (action === "pull" && fileTreeMode === "all") {
+        await refreshAllFiles(contextId);
+      }
     }
   }
 
@@ -601,14 +605,18 @@
     }
 
     const refreshGitState = (): void => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      if (currentScreen !== "files" && currentScreen !== "ai-session") {
+        return;
+      }
       const currentContextId = contextId;
       if (currentContextId === null) {
         return;
       }
+      // Poll only git-derived state for external terminal git operations.
       void fetchDiff(currentContextId);
-      if (fileTreeMode === "all") {
-        void refreshAllFiles(currentContextId);
-      }
     };
 
     const handleWindowFocus = (): void => {
@@ -620,7 +628,7 @@
       }
     };
 
-    const pollTimer = setInterval(refreshGitState, 5000);
+    const pollTimer = setInterval(refreshGitState, 15000);
     window.addEventListener("focus", handleWindowFocus);
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
