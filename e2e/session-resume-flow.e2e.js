@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('second prompt continues current session id', async ({ page }) => {
   const contextId = 'ctx-1';
   const projectPath = '/tmp/project';
+  const seededQraftSessionId = 'qs_seeded_1';
   const submitBodies = [];
 
   await page.route('**/api/**', async (route) => {
@@ -89,18 +90,47 @@ test('second prompt continues current session id', async ({ page }) => {
     }
 
     if (
-      path === `/api/ctx/${contextId}/claude-sessions/sessions` &&
+      path.startsWith(`/api/ctx/${contextId}/claude-sessions/sessions`) &&
       method === 'GET'
     ) {
       await route.fulfill({
         status: 200,
         json: {
-          sessions: [],
-          total: 0,
+          sessions: [
+            {
+              sessionId: 'cli-session-1',
+              fullPath: `${projectPath}/.claude/sessions/cli-session-1.jsonl`,
+              fileMtime: Date.now(),
+              firstPrompt: 'seed purpose for resume-flow test',
+              summary: 'seed summary',
+              messageCount: 1,
+              created: new Date().toISOString(),
+              modified: new Date().toISOString(),
+              gitBranch: 'main',
+              projectPath,
+              isSidechain: false,
+              hasUserPrompt: true,
+              source: 'qraftbox',
+              projectEncoded: '-tmp-project',
+              qraftAiSessionId: seededQraftSessionId,
+              aiAgent: 'claude',
+            },
+          ],
+          total: 1,
           offset: 0,
           limit: 20,
         },
       });
+      return;
+    }
+
+    if (
+      path.startsWith(
+        `/api/ctx/${contextId}/claude-sessions/sessions/${seededQraftSessionId}/transcript`,
+      ) &&
+      method === 'GET'
+    ) {
+      await route.fulfill({ status: 200, json: { events: [] } });
       return;
     }
 
@@ -121,9 +151,8 @@ test('second prompt continues current session id', async ({ page }) => {
     await route.fulfill({ status: 200, json: {} });
   });
 
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Sessions' }).click();
-  await page.getByRole('button', { name: /create new session/i }).click();
+  await page.goto('/#/project/ai-session');
+  await page.getByText('seed purpose for resume-flow test').click();
 
   const promptInput = page.getByPlaceholder('Add the next instruction for this session');
   await expect(promptInput).toBeVisible();
