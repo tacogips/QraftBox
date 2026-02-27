@@ -16,6 +16,101 @@ import { existsSync } from "node:fs";
  */
 export type SystemPromptName = "commit" | "create-pr";
 
+const DEPRECATED_COMMIT_PROMPT =
+  "You are the commit agent. Summarize staged changes clearly.";
+
+const DEFAULT_SYSTEM_PROMPTS: Readonly<Record<SystemPromptName, string>> = {
+  commit: `You are a specialized commit generation agent.
+Your task is to analyze current repository changes and COMPLETE a real git commit.
+
+Critical requirements:
+- Execute git commands directly.
+- Do not only output a proposed commit message.
+- The task is complete only when a new commit is created (HEAD changes).
+- Never ask for confirmation.
+- Never include AI attribution or co-author lines.
+
+Workflow:
+1) Validate repository state
+- Run: git status --porcelain=v1
+- If there are no changes to commit, report that clearly and stop.
+- If merge conflicts exist, report and stop.
+
+2) Analyze changes
+- Run: git status
+- Run: git diff HEAD
+- Inspect modified files as needed to understand intent.
+- Collect key technical points and user-facing impact.
+
+3) Pre-commit hygiene
+- Remove ignored build/scratch artifacts when safe.
+- Check diff for obvious secret patterns (tokens/keys/passwords) and machine-specific private paths.
+- If found, redact/remove before commit.
+
+4) Stage changes
+- Run: git add -A
+- Verify staged set with: git diff --cached --name-status
+
+5) Generate commit message (required format)
+- Conventional commit title: <type>: <description>
+- Body sections:
+  1. Primary Changes and Intent
+  2. Key Technical Concepts
+  3. Files and Code Sections
+  4. Problem Solving
+  5. Impact
+  6. Unresolved TODOs (use checkbox list; if none, write "- [ ] None")
+
+6) Execute commit
+- Run: git commit -m "<title>" -m "<body>"
+- If commit fails, fix actionable issues and retry.
+
+7) Verify success (mandatory)
+- Run: git rev-parse HEAD
+- Run: git log -1 --pretty=format:%s%n%n%b
+- Ensure the latest commit matches the intended title/body.
+
+Output rules:
+- Keep output concise.
+- Report commit hash and final commit message.
+- Do not leave the repository in a partially staged ambiguous state.`,
+  "create-pr": `You are a specialized pull request generation agent.
+Create or update the GitHub PR for the current branch with a clear, accurate title and body.
+
+Critical requirements:
+- Execute required git/gh commands directly.
+- Do not output only a draft without applying it.
+- Never ask for confirmation.
+- Never include AI attribution.
+
+Workflow:
+1) Collect context
+- Run: git status --short
+- Run: git log --oneline -n 20
+- Run: gh pr status || true
+
+2) Determine action
+- If PR for current branch exists: update it.
+- If not: create a new PR.
+
+3) Generate PR content
+- Title: concise and specific.
+- Body must include:
+  - ## Summary
+  - ## Changes
+  - ## Testing
+  - ## Notes (optional)
+- Mention key files/components changed.
+
+4) Apply via GitHub CLI
+- Create: gh pr create ...
+- Update: gh pr edit ...
+
+5) Verify
+- Run: gh pr view --json url,title,body,state
+- Output PR URL and final title.`,
+};
+
 /**
  * Get the system prompt configuration directory path
  *
@@ -66,70 +161,19 @@ export function resolveSystemPromptPath(name: SystemPromptName): string | null {
 }
 
 /**
- * Get the source agent file path for default content
- *
- * @param name - System prompt name
- * @returns Full path to the agent .md file
- */
-function getSourceAgentPath(name: SystemPromptName): string {
-  const filename = name === "commit" ? "git-commit.md" : "git-pr.md";
-  return join(process.cwd(), ".claude", "agents", filename);
-}
-
-/**
- * Strip YAML frontmatter from agent file content
- *
- * Removes everything up to and including the second "---" line.
- *
- * @param content - Full agent file content with YAML frontmatter
- * @returns Content with frontmatter removed
- */
-function stripFrontmatter(content: string): string {
-  const lines = content.split("\n");
-
-  // Find the first "---"
-  const firstDashIndex = lines.findIndex((line) => line.trim() === "---");
-  if (firstDashIndex === -1) {
-    // No frontmatter found, return as is
-    return content;
-  }
-
-  // Find the second "---" after the first
-  const secondDashIndex = lines.findIndex(
-    (line, index) => index > firstDashIndex && line.trim() === "---",
-  );
-  if (secondDashIndex === -1) {
-    // No closing frontmatter delimiter found, return as is
-    return content;
-  }
-
-  // Return everything after the second "---", trimmed
-  return lines
-    .slice(secondDashIndex + 1)
-    .join("\n")
-    .trim();
-}
-
-/**
  * Load default content from agent file
  *
- * Reads the agent .md file and strips YAML frontmatter.
+ * Uses built-in defaults embedded in the application.
  *
  * @param name - System prompt name
  * @returns Default content for the system prompt
  */
 async function loadDefaultContent(name: SystemPromptName): Promise<string> {
-  const agentPath = getSourceAgentPath(name);
+  return DEFAULT_SYSTEM_PROMPTS[name];
+}
 
-  try {
-    const fullContent = await readFile(agentPath, "utf-8");
-    return stripFrontmatter(fullContent);
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : "Unknown error";
-    throw new Error(
-      `Failed to read default agent file ${agentPath}: ${errorMessage}`,
-    );
-  }
+function isDeprecatedCommitPrompt(content: string): boolean {
+  return content.trim() === DEPRECATED_COMMIT_PROMPT;
 }
 
 /**
@@ -139,8 +183,8 @@ async function loadDefaultContent(name: SystemPromptName): Promise<string> {
  * Called on app startup.
  *
  * Default files:
- * - commit.md - Content from .claude/agents/git-commit.md (after YAML frontmatter)
- * - create-pr.md - Content from .claude/agents/git-pr.md (after YAML frontmatter)
+ * - commit.md - Built-in default commit prompt
+ * - create-pr.md - Built-in default PR prompt
  */
 export async function ensureSystemPromptFiles(): Promise<void> {
   const dir = getSystemPromptDir();
@@ -165,6 +209,11 @@ export async function ensureSystemPromptFiles(): Promise<void> {
       const defaultContent = await loadDefaultContent("commit");
       await writeFile(commitPath, defaultContent, "utf-8");
     }
+  }
+  const existingCommitContent = await readFile(commitPath, "utf-8");
+  if (isDeprecatedCommitPrompt(existingCommitContent)) {
+    const defaultContent = await loadDefaultContent("commit");
+    await writeFile(commitPath, defaultContent, "utf-8");
   }
 
   // Ensure create-pr.md exists
