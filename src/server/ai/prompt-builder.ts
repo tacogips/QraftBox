@@ -294,6 +294,18 @@ function formatDiffSummary(ds: DiffSummaryContext): string {
   return lines.join("\n");
 }
 
+function isDiffSummaryContext(value: unknown): value is DiffSummaryContext {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<DiffSummaryContext>;
+  return (
+    typeof candidate.baseBranch === "string" &&
+    typeof candidate.targetBranch === "string" &&
+    Array.isArray(candidate.changedFiles)
+  );
+}
+
 /**
  * Format the full context for a prompt
  *
@@ -309,7 +321,7 @@ export function formatContext(context: AIPromptContext): string {
   }
 
   // Diff summary
-  if (context.diffSummary !== undefined) {
+  if (isDiffSummaryContext(context.diffSummary)) {
     sections.push(formatDiffSummary(context.diffSummary));
   }
 

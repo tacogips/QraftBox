@@ -25,7 +25,11 @@
       line: number,
       shiftKey: boolean,
     ) => void;
-    onCommentSubmit?: (prompt: string, immediate: boolean) => void;
+    onCommentSubmit?: (
+      prompt: string,
+      immediate: boolean,
+      action: "submit" | "comment",
+    ) => void;
     onCommentCancel?: () => void;
     commentLine?:
       | { side: "old" | "new"; startLine: number; endLine: number }
@@ -59,6 +63,7 @@
   }: Props = $props();
 
   let commentText = $state("");
+  let commentQueuedNotice = $state(false);
 
   /**
    * Get line context display
@@ -195,6 +200,11 @@
     if (commentLine === undefined || commentLine.side !== side) return false;
     return rangeLines.includes(lineNumber);
   }
+
+  $effect(() => {
+    commentLine;
+    commentQueuedNotice = false;
+  });
 </script>
 
 <div class="flex w-full h-full">
@@ -242,7 +252,11 @@
         </div>
       {:else}
         {#each newLines as { change, lineNumber }, index (index)}
-          <div class={isInRange("new", lineNumber) ? "bg-accent-muted" : ""}>
+          <div
+            data-file-path={filePath}
+            data-line-number={lineNumber}
+            class={isInRange("new", lineNumber) ? "bg-accent-muted" : ""}
+          >
             <DiffLine
               {change}
               {lineNumber}
@@ -268,11 +282,13 @@
                     onCommentSubmit !== undefined
                   ) {
                     e.preventDefault();
-                    onCommentSubmit(commentText, true);
+                    onCommentSubmit(commentText, false, "comment");
+                    commentQueuedNotice = true;
                     commentText = "";
                   }
                   if (e.key === "Escape" && onCommentCancel !== undefined) {
                     onCommentCancel();
+                    commentQueuedNotice = false;
                     commentText = "";
                   }
                 }}
@@ -286,29 +302,43 @@
                 <div class="flex items-center gap-2">
                   <button
                     type="button"
-                    class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                    class="px-3 py-1 text-sm rounded bg-success-emphasis text-white
+                           hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
                     onclick={() => {
-                      if (onCommentCancel !== undefined) {
-                        onCommentCancel();
+                      if (onCommentSubmit !== undefined) {
+                        onCommentSubmit(commentText, false, "comment");
+                        commentQueuedNotice = true;
                         commentText = "";
                       }
-                    }}>Cancel</button
+                    }}
+                    disabled={commentText.trim().length === 0}>Comment</button
                   >
                   <SplitButton
                     disabled={commentText.trim().length === 0}
                     onPrimaryClick={() => {
                       if (onCommentSubmit !== undefined) {
-                        onCommentSubmit(commentText, false);
+                        onCommentSubmit(commentText, false, "submit");
                         commentText = "";
                       }
                     }}
                     onSecondaryClick={() => {
                       if (onCommentSubmit !== undefined) {
-                        onCommentSubmit(commentText, true);
+                        onCommentSubmit(commentText, true, "submit");
                         commentText = "";
                       }
                     }}
                   />
+                  <button
+                    type="button"
+                    class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                    onclick={() => {
+                      if (onCommentCancel !== undefined) {
+                        onCommentCancel();
+                        commentQueuedNotice = false;
+                        commentText = "";
+                      }
+                    }}>Cancel</button
+                  >
                 </div>
               </div>
               {#if submittedSessionId !== null && submittedSessionHistoryHref !== null}
@@ -334,6 +364,22 @@
                       Close
                     </button>
                   </div>
+                </div>
+              {/if}
+              {#if commentQueuedNotice}
+                <div
+                  class="mt-2 flex items-center justify-between gap-3 rounded border border-success-emphasis/40 bg-success-subtle px-2 py-1 text-xs text-success-fg"
+                >
+                  <span class="truncate">Comment added to queue.</span>
+                  <button
+                    type="button"
+                    class="text-text-secondary hover:text-text-primary"
+                    onclick={() => {
+                      commentQueuedNotice = false;
+                    }}
+                  >
+                    Close
+                  </button>
                 </div>
               {/if}
             </div>

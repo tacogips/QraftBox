@@ -32,6 +32,7 @@
       filePath: string,
       prompt: string,
       immediate: boolean,
+      action: "submit" | "comment",
     ) => void;
     submittedSessionId?: string | null;
     submittedSessionHistoryHref?: string | null;
@@ -201,7 +202,11 @@
     }
   }
 
-  function handleCommentSubmit(prompt: string, immediate: boolean): void {
+  function handleCommentSubmit(
+    prompt: string,
+    immediate: boolean,
+    action: "submit" | "comment" = "submit",
+  ): void {
     if (activeComment !== null && onCommentSubmit !== undefined) {
       onCommentSubmit(
         activeComment.startLine,
@@ -210,6 +215,7 @@
         file.path,
         prompt,
         immediate,
+        action,
       );
     }
   }
@@ -271,19 +277,9 @@
 <div class="diff-view-container w-full h-full flex flex-col">
   <!-- Header with file info -->
   <div
-    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
+    class="flex items-center gap-2 px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
-    <div class="flex items-center gap-2">
-      <span
-        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
-      >
-        {file.path}
-      </span>
-      <span class="text-[10px] text-text-secondary">
-        +{file.additions} -{file.deletions}
-      </span>
-    </div>
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 shrink-0 ml-6">
       <div
         class="flex items-center border border-border-default rounded-md overflow-hidden"
       >
@@ -470,6 +466,16 @@
           />
         </svg>
       </button>
+    </div>
+    <div class="flex items-center gap-2 min-w-0 flex-1">
+      <span
+        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
+      >
+        {file.path}
+      </span>
+      <span class="text-[10px] text-text-secondary shrink-0">
+        +{file.additions} -{file.deletions}
+      </span>
     </div>
   </div>
 
