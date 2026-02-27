@@ -1466,11 +1466,16 @@ export class ClaudeSessionReader {
   }
 
   /**
-   * Detect session source (qraftbox, claude-cli, or unknown)
+   * Detect session source (qraftbox, claude-cli, codex-cli, or unknown)
    */
   private async detectSource(
     entry: ClaudeSessionEntry,
   ): Promise<SessionSource> {
+    // Detect codex sessions by session ID prefix
+    if (entry.sessionId.startsWith("codex-session-")) {
+      return "codex-cli";
+    }
+
     // Primary detection: Check SQLite mapping store for qraftbox-created sessions
     if (this.mappingStore !== undefined) {
       try {
