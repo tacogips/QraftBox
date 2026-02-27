@@ -102,6 +102,11 @@
      * Current project directory path shown above file tree
      */
     currentDirectory?: string;
+
+    /**
+     * Increment this value to force one-shot expand-all behavior.
+     */
+    expandAllTrigger?: number;
   }
 
   const {
@@ -124,6 +129,7 @@
     onLoadFullTree = undefined,
     onReload = undefined,
     currentDirectory = "",
+    expandAllTrigger = 0,
   }: Props = $props();
 
   const MAX_TRUNCATED_DIRECTORY_CHARS = 52;
@@ -359,6 +365,15 @@
     const source = treeForExpand ?? filteredTree ?? tree;
     expandedPaths = new Set(collectDirectoryPaths(source));
   }
+
+  let prevExpandAllTrigger = expandAllTrigger;
+  $effect(() => {
+    if (expandAllTrigger === prevExpandAllTrigger) {
+      return;
+    }
+    prevExpandAllTrigger = expandAllTrigger;
+    void expandAll();
+  });
 
   /**
    * Collapse all directories

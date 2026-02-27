@@ -5,6 +5,7 @@ export type ScreenType =
   | "terminal"
   | "project"
   | "system-info"
+  | "notifications"
   | "model-profiles"
   | "action-defaults";
 
@@ -15,6 +16,7 @@ export const VALID_SCREENS: ReadonlySet<string> = new Set([
   "terminal",
   "project",
   "system-info",
+  "notifications",
   "model-profiles",
   "action-defaults",
 ]);

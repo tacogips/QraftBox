@@ -499,6 +499,7 @@
     canNarrow,
     canWiden,
     currentQraftAiSessionId,
+    fileTreeExpandAllTrigger,
     showIgnored,
     onToggleSidebar,
     onFileSelect,
@@ -543,6 +544,7 @@
     canNarrow: boolean;
     canWiden: boolean;
     currentQraftAiSessionId: string;
+    fileTreeExpandAllTrigger: number;
     showIgnored: boolean;
     showAllFiles: boolean;
     onToggleSidebar: () => void;
@@ -649,6 +651,7 @@
             {contextId}
             {showIgnored}
             {showAllFiles}
+            expandAllTrigger={fileTreeExpandAllTrigger}
             onModeChange={onFileTreeModeChange}
             {onShowIgnoredChange}
             {onShowAllFilesChange}

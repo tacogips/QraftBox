@@ -169,9 +169,14 @@
   let loadingState: LoadingState = $state({ status: "idle" });
   let viewMode: ViewMode = $state(loadViewMode());
   let showSystemPrompts = $state(loadShowSystemPrompts());
+  let messageFilterInput = $state("");
+  let messageFilterQuery = $state("");
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
+  const CHAT_TAIL_FOLLOW_THRESHOLD_PX = 64;
+  let followLatestWhileNearTail = $state(true);
+  let pendingProgrammaticScrollFrames = $state(0);
   let copiedEventId: string | null = $state(null);
   let lastInitializedSessionId: string | null = $state(null);
   let optimisticUserMessageSticky: string | undefined = $state(undefined);
@@ -272,6 +277,12 @@
       : allChatEvents,
   );
 
+  const filteredChatEvents = $derived.by(() =>
+    chatEvents.filter((event) =>
+      messageMatchesFilter(extractTextContent(event)),
+    ),
+  );
+
   const isCompact = $derived(maxMessages !== undefined);
 
   $effect(() => {
@@ -292,8 +303,41 @@
     onRestartSeedChange(restartSeedState);
   });
 
+  $effect(() => {
+    const activeFilterInput = messageFilterInput;
+    void activeFilterInput;
+    const debounceTimer = setTimeout(() => {
+      messageFilterQuery = activeFilterInput.trim();
+    }, 200);
+    return () => {
+      clearTimeout(debounceTimer);
+    };
+  });
+
+  $effect(() => {
+    const activeSessionId = sessionId;
+    void activeSessionId;
+    followLatestWhileNearTail = true;
+    pendingProgrammaticScrollFrames = 0;
+  });
+
   function normalizeMessageText(rawText: string): string {
     return stripSystemTags(rawText).replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeFilterText(text: string): string {
+    return normalizeMessageText(text).toLowerCase();
+  }
+
+  const normalizedMessageFilterQuery = $derived.by(() =>
+    normalizeFilterText(messageFilterQuery),
+  );
+
+  function messageMatchesFilter(text: string): boolean {
+    if (normalizedMessageFilterQuery.length === 0) {
+      return true;
+    }
+    return normalizeFilterText(text).includes(normalizedMessageFilterQuery);
   }
 
   const normalizedOptimisticUser = $derived(
@@ -370,6 +414,12 @@
     return items;
   });
 
+  const filteredPendingQueuedUserMessages = $derived.by(() =>
+    pendingQueuedUserMessages.filter((pendingMessage) =>
+      messageMatchesFilter(pendingMessage.raw),
+    ),
+  );
+
   const pendingQueuedNormalizedSet = $derived.by(() => {
     const normalizedSet = new Set<string>();
     for (const pendingMessage of pendingQueuedUserMessages) {
@@ -401,6 +451,16 @@
       !normalizedChatTextSet.has(normalizedOptimisticAssistant),
   );
 
+  const showFilteredOptimisticUser = $derived(
+    showOptimisticUser &&
+      messageMatchesFilter(optimisticUserMessageSticky ?? ""),
+  );
+
+  const showFilteredOptimisticAssistant = $derived(
+    showOptimisticAssistant &&
+      messageMatchesFilter(optimisticAssistantMessage ?? ""),
+  );
+
   const latestChatEventType = $derived.by(() => {
     if (chatEvents.length === 0) {
       return undefined;
@@ -419,6 +479,11 @@
         (chatEvents.length > 0 && latestChatEventType !== "assistant")),
   );
 
+  const showFilteredAssistantThinkingPlaceholder = $derived(
+    showAssistantThinkingPlaceholder &&
+      normalizedMessageFilterQuery.length === 0,
+  );
+
   const optimisticTailCount = $derived(
     (showOptimisticUser ? 1 : 0) +
       (showOptimisticAssistant ? 1 : 0) +
@@ -435,6 +500,13 @@
       (optimisticAssistantMessage ?? "").length > 0 ||
       pendingQueuedUserMessages.length > 0 ||
       showAssistantThinkingPlaceholder,
+  );
+
+  const hasFilteredOptimisticContent = $derived(
+    filteredPendingQueuedUserMessages.length > 0 ||
+      showFilteredOptimisticUser ||
+      showFilteredOptimisticAssistant ||
+      showFilteredAssistantThinkingPlaceholder,
   );
 
   $effect(() => {
@@ -509,7 +581,7 @@
 
   const chatDisplayEvents = $derived.by(() => {
     const entries: ChatDisplayEvent[] = [];
-    for (const [index, event] of chatEvents.entries()) {
+    for (const [index, event] of filteredChatEvents.entries()) {
       const eventId = getEventId(event, index);
       const textContent = extractTextContent(event);
       entries.push({
@@ -525,6 +597,8 @@
     }
     return entries;
   });
+
+  const navigableEventCount = $derived(chatDisplayEvents.length);
 
   const optimisticUserMarkdownHtml = $derived(
     renderMarkdownCached(stripSystemTags(optimisticUserMessageSticky ?? "")),
@@ -654,13 +728,14 @@
    * Default to last message when switching to carousel mode
    */
   $effect(() => {
-    if (viewMode === "carousel" && chatEvents.length > 0) {
-      currentIndex = chatEvents.length - 1;
+    if (viewMode === "carousel" && navigableEventCount > 0) {
+      currentIndex = navigableEventCount - 1;
     }
   });
 
   /**
-   * In chat mode, initialize to the latest message when opening a session.
+   * In chat mode, keep the viewport at the latest message only for live-follow
+   * sessions (while respecting user manual scroll position).
    */
   $effect(() => {
     if (
@@ -670,9 +745,10 @@
     ) {
       const liveTailCount = optimisticTailCount;
 
-      const targetIndex = chatEvents.length - 1;
+      const targetIndex = navigableEventCount - 1;
       const isSessionSwitch = lastInitializedSessionId !== sessionId;
-      const shouldFollowTail = followLatest || isSessionSwitch;
+      const shouldFollowTail =
+        followLatest && (isSessionSwitch || followLatestWhileNearTail);
       if (!shouldFollowTail) {
         return;
       }
@@ -685,7 +761,7 @@
         return;
       }
 
-      if (chatEvents.length === 0) {
+      if (navigableEventCount === 0) {
         return;
       }
 
@@ -698,9 +774,22 @@
     if (nonce === 0 || viewMode !== "chat" || chatScrollContainer === null) {
       return;
     }
+    followLatestWhileNearTail = true;
     requestAnimationFrame(() => {
       focusLatestRenderedMessage("auto", false);
     });
+  });
+
+  $effect(() => {
+    const total = navigableEventCount;
+    void total;
+    if (total === 0) {
+      currentIndex = 0;
+      return;
+    }
+    if (currentIndex >= total) {
+      currentIndex = total - 1;
+    }
   });
 
   /**
@@ -1013,21 +1102,63 @@
     );
   }
 
+  function isNearChatTail(container: HTMLDivElement): boolean {
+    const distanceToTail =
+      container.scrollHeight - (container.scrollTop + container.clientHeight);
+    return distanceToTail <= CHAT_TAIL_FOLLOW_THRESHOLD_PX;
+  }
+
+  function syncFollowLatestToScrollPosition(): void {
+    if (chatScrollContainer === null) {
+      return;
+    }
+    followLatestWhileNearTail = isNearChatTail(chatScrollContainer);
+  }
+
+  function markProgrammaticScrollStart(): void {
+    pendingProgrammaticScrollFrames = 2;
+  }
+
+  function markProgrammaticScrollSettled(): void {
+    requestAnimationFrame(() => {
+      pendingProgrammaticScrollFrames = Math.max(
+        0,
+        pendingProgrammaticScrollFrames - 1,
+      );
+      if (pendingProgrammaticScrollFrames === 0) {
+        syncFollowLatestToScrollPosition();
+      }
+    });
+  }
+
+  function handleChatScroll(): void {
+    if (pendingProgrammaticScrollFrames > 0) {
+      pendingProgrammaticScrollFrames -= 1;
+      if (pendingProgrammaticScrollFrames === 0) {
+        syncFollowLatestToScrollPosition();
+      }
+      return;
+    }
+    syncFollowLatestToScrollPosition();
+  }
+
   function focusChatIndex(
     index: number,
     behavior: ScrollBehavior,
     shouldFocus = true,
   ): void {
-    if (chatEvents.length === 0) {
+    if (navigableEventCount === 0) {
       return;
     }
 
-    const boundedIndex = Math.max(0, Math.min(index, chatEvents.length - 1));
+    const boundedIndex = Math.max(0, Math.min(index, navigableEventCount - 1));
     currentIndex = boundedIndex;
 
     const targetElement = getChatItemElement(boundedIndex);
     if (targetElement !== null) {
+      markProgrammaticScrollStart();
       targetElement.scrollIntoView({ block: "nearest", behavior });
+      markProgrammaticScrollSettled();
       if (shouldFocus) {
         targetElement.focus({ preventScroll: true });
       }
@@ -1039,7 +1170,9 @@
       if (deferredTargetElement === null) {
         return;
       }
+      markProgrammaticScrollStart();
       deferredTargetElement.scrollIntoView({ block: "nearest", behavior });
+      markProgrammaticScrollSettled();
       if (shouldFocus) {
         deferredTargetElement.focus({ preventScroll: true });
       }
@@ -1063,7 +1196,9 @@
     if (latest === undefined) {
       return;
     }
+    markProgrammaticScrollStart();
     latest.scrollIntoView({ block: "nearest", behavior });
+    markProgrammaticScrollSettled();
     if (shouldFocus) {
       latest.focus({ preventScroll: true });
     }
@@ -1086,7 +1221,7 @@
   function handleNext(): void {
     if (viewMode === "chat") {
       focusChatIndex(currentIndex + 1, "auto");
-    } else if (currentIndex < chatEvents.length - 1) {
+    } else if (currentIndex < navigableEventCount - 1) {
       currentIndex = currentIndex + 1;
     }
   }
@@ -1114,9 +1249,10 @@
    */
   function handleGoToLast(): void {
     if (viewMode === "carousel") {
-      currentIndex = chatEvents.length - 1;
+      currentIndex = navigableEventCount - 1;
     } else if (chatScrollContainer !== null) {
-      focusChatIndex(chatEvents.length - 1, "auto");
+      followLatestWhileNearTail = true;
+      focusChatIndex(navigableEventCount - 1, "auto");
     }
   }
 
@@ -1200,8 +1336,8 @@
 >
   <!-- View mode toggle with navigation (hidden in compact mode) -->
   {#if !isCompact}
-    <div class="flex items-center justify-center gap-2 mb-3">
-      <div class="flex bg-bg-tertiary rounded-md p-0.5">
+    <div class="mb-3 flex flex-wrap items-center justify-center gap-2">
+      <div class="flex shrink-0 bg-bg-tertiary rounded-md p-0.5">
         <button
           type="button"
           class="px-3 py-1 text-xs font-medium rounded transition-all {viewMode ===
@@ -1248,8 +1384,8 @@
       </button>
 
       <!-- Navigation buttons: previous/next + jump to first/last -->
-      {#if chatEvents.length > 0}
-        <div class="flex items-center gap-0.5">
+      {#if navigableEventCount > 0}
+        <div class="flex shrink-0 items-center gap-0.5">
           <button
             type="button"
             onclick={handlePrevious}
@@ -1275,7 +1411,7 @@
           <button
             type="button"
             onclick={handleNext}
-            disabled={currentIndex >= chatEvents.length - 1}
+            disabled={currentIndex >= navigableEventCount - 1}
             class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Next message"
             title="Next message"
@@ -1320,7 +1456,7 @@
           <button
             type="button"
             onclick={handleGoToLast}
-            disabled={currentIndex >= chatEvents.length - 1}
+            disabled={currentIndex >= navigableEventCount - 1}
             class="w-6 h-6 flex items-center justify-center rounded hover:bg-bg-tertiary text-text-tertiary hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             aria-label="Jump to last message"
             title="Jump to last message"
@@ -1342,6 +1478,13 @@
           </button>
         </div>
       {/if}
+
+      <input
+        type="text"
+        class="h-7 w-56 max-w-full rounded border border-border-default bg-bg-secondary px-2.5 text-xs text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+        placeholder="Filter messages by text"
+        bind:value={messageFilterInput}
+      />
     </div>
   {/if}
 
@@ -1386,16 +1529,19 @@
       </div>
     </div>
   {:else if loadingState.status === "success" || hasOptimisticContent}
-    {#if chatEvents.length === 0 && !hasOptimisticContent}
+    {#if navigableEventCount === 0 && !hasFilteredOptimisticContent}
       <div class="flex items-center justify-center py-12">
         <p class="text-sm text-text-tertiary">
-          No user or assistant messages found
+          {normalizedMessageFilterQuery.length > 0
+            ? "No messages matched the filter"
+            : "No user or assistant messages found"}
         </p>
       </div>
-    {:else if viewMode === "chat" || (chatEvents.length === 0 && hasOptimisticContent)}
+    {:else if viewMode === "chat" || (navigableEventCount === 0 && hasFilteredOptimisticContent)}
       <!-- Chat mode: vertical scrollable list, scrolled to bottom by default -->
       <div
         bind:this={chatScrollContainer}
+        onscroll={handleChatScroll}
         class="{isCompact
           ? 'max-h-[120px]'
           : 'max-h-[600px]'} chat-scroll overflow-y-auto space-y-2"
@@ -1531,7 +1677,7 @@
           </div>
         {/each}
 
-        {#each pendingQueuedUserMessages as pendingMessage}
+        {#each filteredPendingQueuedUserMessages as pendingMessage}
           {@const pendingImages = attachmentsForPendingMessage(pendingMessage)}
           <div
             class="flex w-full justify-end"
@@ -1576,7 +1722,7 @@
           </div>
         {/each}
 
-        {#if showOptimisticUser}
+        {#if showFilteredOptimisticUser}
           <div
             class="flex w-full justify-end"
             data-chat-tail-anchor="true"
@@ -1620,7 +1766,7 @@
           </div>
         {/if}
 
-        {#if showOptimisticAssistant}
+        {#if showFilteredOptimisticAssistant}
           <div
             class="flex w-full justify-start"
             data-chat-tail-anchor="true"
@@ -1647,7 +1793,7 @@
           </div>
         {/if}
 
-        {#if showAssistantThinkingPlaceholder}
+        {#if showFilteredAssistantThinkingPlaceholder}
           <div
             class="flex w-full justify-start"
             data-chat-tail-anchor="true"
@@ -1705,7 +1851,7 @@
         <button
           type="button"
           onclick={handleNext}
-          disabled={currentIndex === chatEvents.length - 1}
+          disabled={currentIndex === navigableEventCount - 1}
           class="absolute right-1 top-1/2 -translate-y-1/2 z-10
                  w-8 h-8 flex items-center justify-center rounded-full
                  bg-bg-tertiary/80 hover:bg-bg-hover text-text-secondary hover:text-text-primary
@@ -1879,7 +2025,7 @@
 
         <!-- Counter -->
         <div class="text-xs text-text-tertiary text-center mt-2">
-          {currentIndex + 1} / {chatEvents.length}
+          {currentIndex + 1} / {navigableEventCount}
         </div>
       </div>
     {/if}

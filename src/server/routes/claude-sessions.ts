@@ -406,6 +406,7 @@ export function createClaudeSessionsRoutes(
    * - source: Filter by session source (qraftbox, claude-cli, unknown)
    * - branch: Filter by git branch
    * - search: Search in firstPrompt and summary
+   * - searchInTranscript: Search query against full transcript content
    * - dateFrom: Start date (ISO 8601)
    * - dateTo: End date (ISO 8601)
    * - offset: Pagination offset (default: 0)
@@ -420,6 +421,7 @@ export function createClaudeSessionsRoutes(
       const sourceParam = c.req.query("source");
       const branch = c.req.query("branch");
       const search = c.req.query("search");
+      const searchInTranscriptParam = c.req.query("searchInTranscript");
       const dateFrom = c.req.query("dateFrom");
       const dateTo = c.req.query("dateTo");
       const offsetParam = c.req.query("offset");
@@ -493,6 +495,21 @@ export function createClaudeSessionsRoutes(
         sortOrder = sortOrderParam;
       }
 
+      let searchInTranscript: boolean | undefined;
+      if (searchInTranscriptParam !== undefined) {
+        if (
+          searchInTranscriptParam !== "true" &&
+          searchInTranscriptParam !== "false"
+        ) {
+          const errorResponse: ErrorResponse = {
+            error: "searchInTranscript must be 'true' or 'false' when provided",
+            code: 400,
+          };
+          return c.json(errorResponse, 400);
+        }
+        searchInTranscript = searchInTranscriptParam === "true";
+      }
+
       // Build date range filter - only include if at least one value is defined
       let dateRange: { from?: string; to?: string } | undefined;
       if (dateFrom !== undefined && dateTo !== undefined) {
@@ -517,6 +534,9 @@ export function createClaudeSessionsRoutes(
       }
       if (search !== undefined) {
         options.search = search;
+      }
+      if (searchInTranscript !== undefined) {
+        options.searchInTranscript = searchInTranscript;
       }
       if (dateRange !== undefined) {
         options.dateRange = dateRange;
@@ -544,6 +564,7 @@ export function createClaudeSessionsRoutes(
         source: options.source ?? null,
         branch: options.branch ?? null,
         search: options.search ?? null,
+        searchInTranscript: options.searchInTranscript ?? null,
         dateRange: options.dateRange ?? null,
         offset: options.offset ?? 0,
         limit: options.limit ?? 50,

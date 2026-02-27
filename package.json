@@ -1,7 +1,7 @@
 {
   "name": "qraftbox",
   "version": "0.0.4",
-  "description": "All You Need Is Diff",
+  "description": "QraftBox - AI-powered local git diff workspace",
   "type": "module",
   "main": "dist/main.js",
   "module": "dist/main.js",
@@ -52,8 +52,8 @@
   },
   "dependencies": {
     "@octokit/rest": "22.0.1",
-    "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
-    "codex-agent": "github:tacogips/codex-agent#525741b8acd6cd0781e5b7b20703dcb800511d46",
+    "claude-code-agent": "github:tacogips/claude-code-agent#4f9d8f0debc8b195124de020f76e0cbbfccb3684",
+    "codex-agent": "github:tacogips/codex-agent#ea567f282d3ecd5aa06abf68e408f7403d69ebc9",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

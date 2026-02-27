@@ -58,16 +58,6 @@
     readonly failureMessage?: string | undefined;
   }
 
-  interface TranscriptEvent {
-    readonly type: string;
-    readonly raw: Record<string, unknown>;
-    readonly content?: unknown;
-  }
-
-  interface TranscriptResponse {
-    readonly events: readonly TranscriptEvent[];
-  }
-
   interface Props {
     contextId: string | null;
     projectPath: string;
@@ -160,16 +150,16 @@
   let searchQueryInput = $state("");
   let searchQuery = $state("");
   let searchInTranscript = $state(true);
-  let transcriptSearchRunning = $state(false);
-  let transcriptMatchedSessionIds = $state<Set<string>>(new Set());
-  const transcriptSearchCache = new Map<string, string>();
 
   let latestFetchToken = 0;
-  let latestTranscriptSearchToken = 0;
   let latestHiddenFetchToken = 0;
   const SESSION_QUERY_KEY = "ai_session_id";
+  const SESSION_SEARCH_QUERY_KEY = "session_search";
+  const SESSION_SEARCH_TRANSCRIPT_KEY = "session_search_in_transcript";
   let lastSessionScopeKey = $state<string | null>(null);
   let lastPollingMode = $state<"active" | "idle" | null>(null);
+  let previousSearchQuery = $state("");
+  let previousSearchInTranscript = $state(true);
   let hiddenSessionIds = $state<ReadonlySet<string>>(new Set());
   let includeHiddenSessions = $state(false);
   let cancellingPrompt = $state(false);
@@ -177,6 +167,12 @@
   const runningSessionCount = $derived(runningSessions.length);
   const queuedSessionCount = $derived(queuedSessions.length);
   const pendingPromptCount = $derived(pendingPrompts.length);
+  const transcriptSearchRunning = $derived(
+    sessionsLoading && searchInTranscript && searchQuery.trim().length > 0,
+  );
+  const overviewSearchLoading = $derived(
+    sessionsLoading && searchQuery.trim().length > 0,
+  );
   const hasActiveWork = $derived(
     runningSessionCount > 0 || queuedSessionCount > 0 || pendingPromptCount > 0,
   );
@@ -249,6 +245,61 @@
       url.searchParams.delete(SESSION_QUERY_KEY);
     } else {
       url.searchParams.set(SESSION_QUERY_KEY, sessionId);
+    }
+
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      window.history.replaceState(window.history.state, "", next);
+    }
+  }
+
+  function readSearchStateFromUrl(): {
+    query: string;
+    includeTranscript: boolean;
+  } {
+    const params = new URLSearchParams(window.location.search);
+    const query = (params.get(SESSION_SEARCH_QUERY_KEY) ?? "").trim();
+    const transcriptParam = params.get(SESSION_SEARCH_TRANSCRIPT_KEY);
+    const includeTranscript =
+      transcriptParam === null ? true : transcriptParam === "true";
+    return { query, includeTranscript };
+  }
+
+  function applySearchStateFromUrl(state: {
+    query: string;
+    includeTranscript: boolean;
+  }): void {
+    searchQueryInput = state.query;
+    searchQuery = state.query;
+    searchInTranscript = state.includeTranscript;
+    previousSearchQuery = state.query;
+    previousSearchInTranscript = state.includeTranscript;
+  }
+
+  function writeOverviewStateToUrl(
+    sessionId: string | null,
+    query: string,
+    includeTranscript: boolean,
+  ): void {
+    const url = new URL(window.location.href);
+    const normalizedQuery = query.trim();
+
+    if (sessionId === null || sessionId.length === 0) {
+      url.searchParams.delete(SESSION_QUERY_KEY);
+    } else {
+      url.searchParams.set(SESSION_QUERY_KEY, sessionId);
+    }
+
+    if (normalizedQuery.length === 0) {
+      url.searchParams.delete(SESSION_SEARCH_QUERY_KEY);
+      url.searchParams.delete(SESSION_SEARCH_TRANSCRIPT_KEY);
+    } else {
+      url.searchParams.set(SESSION_SEARCH_QUERY_KEY, normalizedQuery);
+      url.searchParams.set(
+        SESSION_SEARCH_TRANSCRIPT_KEY,
+        includeTranscript ? "true" : "false",
+      );
     }
 
     const next = `${url.pathname}${url.search}${url.hash}`;
@@ -492,147 +543,6 @@
     );
   }
 
-  function extractTextFromContentBlocks(contentBlocks: unknown[]): string {
-    const textSegments: string[] = [];
-    for (const contentBlock of contentBlocks) {
-      if (typeof contentBlock !== "object" || contentBlock === null) {
-        continue;
-      }
-      const contentBlockObj = contentBlock as Record<string, unknown>;
-      if (
-        contentBlockObj["type"] === "text" &&
-        typeof contentBlockObj["text"] === "string"
-      ) {
-        textSegments.push(contentBlockObj["text"]);
-      }
-    }
-    return textSegments.join(" ");
-  }
-
-  function extractTranscriptEventText(
-    transcriptEvent: TranscriptEvent,
-  ): string {
-    const raw = transcriptEvent.raw;
-
-    if (
-      (transcriptEvent.type === "user" ||
-        transcriptEvent.type === "assistant") &&
-      typeof raw["message"] === "object" &&
-      raw["message"] !== null
-    ) {
-      const message = raw["message"] as Record<string, unknown>;
-      const content = message["content"];
-      if (typeof content === "string") {
-        return content;
-      }
-      if (Array.isArray(content)) {
-        return extractTextFromContentBlocks(content);
-      }
-    }
-
-    if (typeof transcriptEvent.content === "string") {
-      return transcriptEvent.content;
-    }
-
-    if (typeof raw["summary"] === "string") {
-      return raw["summary"];
-    }
-
-    return "";
-  }
-
-  async function fetchSessionTranscriptText(
-    sessionId: string,
-  ): Promise<string> {
-    const cachedText = transcriptSearchCache.get(sessionId);
-    if (cachedText !== undefined) {
-      return cachedText;
-    }
-
-    if (contextId === null) {
-      return "";
-    }
-
-    try {
-      const response = await fetch(
-        `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/transcript?limit=1000`,
-      );
-      if (!response.ok) {
-        transcriptSearchCache.set(sessionId, "");
-        return "";
-      }
-
-      const transcript = (await response.json()) as TranscriptResponse;
-      const text = transcript.events
-        .map((transcriptEvent) => extractTranscriptEventText(transcriptEvent))
-        .join(" ");
-      const normalizedTranscriptText = normalizeForSearch(text);
-      transcriptSearchCache.set(sessionId, normalizedTranscriptText);
-      return normalizedTranscriptText;
-    } catch {
-      transcriptSearchCache.set(sessionId, "");
-      return "";
-    }
-  }
-
-  async function runTranscriptSearch(
-    sessionEntries: readonly ExtendedSessionEntry[],
-    query: string,
-    token: number,
-  ): Promise<void> {
-    const normalizedQuery = normalizeForSearch(query);
-    if (normalizedQuery.length === 0 || contextId === null) {
-      transcriptMatchedSessionIds = new Set();
-      transcriptSearchRunning = false;
-      return;
-    }
-
-    transcriptSearchRunning = true;
-
-    const matchedIds = new Set<string>();
-
-    for (const sessionEntry of sessionEntries) {
-      const metadataText = `${sessionEntry.firstPrompt} ${sessionEntry.summary}`;
-      if (normalizeForSearch(metadataText).includes(normalizedQuery)) {
-        matchedIds.add(sessionEntry.qraftAiSessionId);
-      }
-    }
-
-    const candidates = sessionEntries.filter(
-      (sessionEntry) => !matchedIds.has(sessionEntry.qraftAiSessionId),
-    );
-
-    let candidateIndex = 0;
-    const workerCount = Math.min(6, candidates.length);
-
-    const workers = Array.from({ length: workerCount }, async () => {
-      while (candidateIndex < candidates.length) {
-        const currentIndex = candidateIndex;
-        candidateIndex += 1;
-        const candidate = candidates[currentIndex];
-        if (candidate === undefined) {
-          continue;
-        }
-
-        const transcriptText = await fetchSessionTranscriptText(
-          candidate.qraftAiSessionId,
-        );
-        if (transcriptText.includes(normalizedQuery)) {
-          matchedIds.add(candidate.qraftAiSessionId);
-        }
-      }
-    });
-
-    await Promise.all(workers);
-
-    if (token !== latestTranscriptSearchToken) {
-      return;
-    }
-
-    transcriptMatchedSessionIds = matchedIds;
-    transcriptSearchRunning = false;
-  }
-
   const cards = $derived.by(() => {
     const sessionCards = sessions.map((sessionEntry) =>
       buildCardFromSession(sessionEntry),
@@ -678,16 +588,13 @@
       return visibleCards;
     }
 
-    if (searchInTranscript) {
-      return visibleCards.filter(
-        (card) =>
-          transcriptMatchedSessionIds.has(card.qraftAiSessionId) ||
-          cardMatchesQuery(card, normalizedQuery),
-      );
-    }
-
-    return visibleCards.filter((card) =>
-      cardMatchesQuery(card, normalizedQuery),
+    const listedIds = new Set(
+      sessions.map((sessionEntry) => sessionEntry.qraftAiSessionId),
+    );
+    return visibleCards.filter(
+      (card) =>
+        listedIds.has(card.qraftAiSessionId) ||
+        cardMatchesQuery(card, normalizedQuery),
     );
   });
 
@@ -840,6 +747,12 @@
     sessionsError = null;
 
     try {
+      const trimmedSearchQuery = searchQuery.trim();
+      const hasSearchQuery = trimmedSearchQuery.length > 0;
+      if (hasSearchQuery) {
+        sessions = [];
+        hasMoreSessions = false;
+      }
       const query = new URLSearchParams({
         offset: "0",
         limit: String(requestedSessionLimit),
@@ -853,6 +766,10 @@
       if (projectPath.length > 0) {
         query.set("workingDirectoryPrefix", projectPath);
       }
+      if (hasSearchQuery) {
+        query.set("search", trimmedSearchQuery);
+        query.set("searchInTranscript", searchInTranscript ? "true" : "false");
+      }
 
       const response = await fetch(
         `/api/ctx/${contextId}/claude-sessions/sessions?${query.toString()}`,
@@ -864,6 +781,7 @@
 
       const data = (await response.json()) as {
         sessions: ExtendedSessionEntry[];
+        total?: number;
       };
 
       if (fetchToken !== latestFetchToken) {
@@ -871,7 +789,9 @@
       }
 
       sessions = data.sessions;
-      hasMoreSessions = data.sessions.length === requestedSessionLimit;
+      const total =
+        typeof data.total === "number" ? data.total : data.sessions.length;
+      hasMoreSessions = data.sessions.length < total;
     } catch (error: unknown) {
       if (fetchToken !== latestFetchToken) {
         return;
@@ -880,8 +800,6 @@
       hasMoreSessions = false;
       sessionsError =
         error instanceof Error ? error.message : "Failed to load sessions";
-      transcriptMatchedSessionIds = new Set();
-      transcriptSearchRunning = false;
     } finally {
       if (fetchToken === latestFetchToken) {
         sessionsLoading = false;
@@ -951,23 +869,24 @@
     }
   }
 
-  $effect(() => {
-    const activeSearchQueryInput = searchQueryInput;
-    void activeSearchQueryInput;
-    const debounceTimer = setTimeout(() => {
-      searchQuery = activeSearchQueryInput.trim();
-    }, 250);
-
-    return () => {
-      clearTimeout(debounceTimer);
-    };
-  });
+  function submitSearch(): void {
+    const nextQuery = searchQueryInput.trim();
+    const queryChanged = nextQuery !== searchQuery;
+    searchQuery = nextQuery;
+    if (!queryChanged && contextId !== null) {
+      requestedSessionLimit = SESSIONS_PAGE_SIZE;
+      hasMoreSessions = true;
+      void fetchOverviewSessions({ bypassCache: true });
+    }
+  }
 
   $effect(() => {
     const onPopState = (): void => {
+      applySearchStateFromUrl(readSearchStateFromUrl());
       applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     };
 
+    applySearchStateFromUrl(readSearchStateFromUrl());
     applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     window.addEventListener("popstate", onPopState);
     return () => {
@@ -990,6 +909,37 @@
     hasMoreSessions = true;
     void fetchOverviewSessions({ bypassCache: true });
     void fetchHiddenSessionIds();
+  });
+
+  $effect(() => {
+    const activeContextId = contextId;
+    const trimmedSearchQuery = searchQuery.trim();
+    const includeTranscript = searchInTranscript;
+    if (activeContextId === null) {
+      return;
+    }
+
+    const hadSearchQuery = previousSearchQuery.length > 0;
+    const queryChanged = trimmedSearchQuery !== previousSearchQuery;
+    const transcriptModeChanged =
+      includeTranscript !== previousSearchInTranscript;
+
+    previousSearchQuery = trimmedSearchQuery;
+    previousSearchInTranscript = includeTranscript;
+
+    // Refetch only when search is active and changed, or when clearing an
+    // active search back to default list.
+    const shouldRefetch =
+      (trimmedSearchQuery.length > 0 &&
+        (queryChanged || transcriptModeChanged)) ||
+      (trimmedSearchQuery.length === 0 && hadSearchQuery);
+    if (!shouldRefetch) {
+      return;
+    }
+
+    requestedSessionLimit = SESSIONS_PAGE_SIZE;
+    hasMoreSessions = true;
+    void fetchOverviewSessions({ bypassCache: true });
   });
 
   $effect(() => {
@@ -1027,32 +977,6 @@
     }, refreshIntervalMs);
 
     return () => clearInterval(refreshTimerId);
-  });
-
-  $effect(() => {
-    const activeContextId = contextId;
-    const sessionEntries = sessions;
-    const trimmedSearchQuery = searchQuery.trim();
-    const includeTranscript = searchInTranscript;
-    void activeContextId;
-    void sessionEntries;
-    void trimmedSearchQuery;
-    void includeTranscript;
-
-    latestTranscriptSearchToken += 1;
-    const searchToken = latestTranscriptSearchToken;
-
-    if (
-      activeContextId === null ||
-      trimmedSearchQuery.length === 0 ||
-      !includeTranscript
-    ) {
-      transcriptMatchedSessionIds = new Set();
-      transcriptSearchRunning = false;
-      return;
-    }
-
-    void runTranscriptSearch(sessionEntries, trimmedSearchQuery, searchToken);
   });
 
   $effect(() => {
@@ -1094,7 +1018,7 @@
     if (!hasHydratedSessionSelection) {
       return;
     }
-    writeSelectedSessionIdToUrl(selectedSessionId);
+    writeOverviewStateToUrl(selectedSessionId, searchQuery, searchInTranscript);
   });
 
   async function handlePopupSubmit(
@@ -1277,7 +1201,13 @@
 
 <div class="h-full flex flex-col min-h-0 bg-bg-primary">
   <div class="px-4 py-2 border-b border-border-default bg-bg-primary">
-    <div class="flex flex-col md:flex-row gap-2 md:items-center">
+    <form
+      class="flex flex-col md:flex-row gap-2 md:items-center"
+      onsubmit={(event) => {
+        event.preventDefault();
+        submitSearch();
+      }}
+    >
       <input
         type="text"
         class="flex-1 min-w-0 rounded border border-border-default bg-bg-secondary
@@ -1285,6 +1215,14 @@
         placeholder="Search session purpose/summary/chat text"
         bind:value={searchQueryInput}
       />
+      <button
+        type="submit"
+        class="inline-flex items-center justify-center rounded border border-border-default
+               bg-bg-secondary px-3 py-1.5 text-xs font-medium text-text-primary
+               hover:bg-bg-hover focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+      >
+        Search
+      </button>
       <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
         <input
           type="checkbox"
@@ -1304,12 +1242,28 @@
       {#if transcriptSearchRunning}
         <span class="text-xs text-text-tertiary">Searching chat...</span>
       {/if}
-    </div>
+    </form>
   </div>
 
   <div class="flex-1 min-h-0 overflow-auto p-4">
     {#if sessionsLoading && cards.length === 0}
-      <div class="text-sm text-text-secondary">Loading sessions...</div>
+      <div
+        class="space-y-3"
+        aria-label={overviewSearchLoading
+          ? "Searching sessions"
+          : "Loading sessions"}
+      >
+        <div class="overview-loading-indicator" aria-hidden="true">
+          <span class="overview-loading-spinner"></span>
+          <span class="overview-loading-spinner"></span>
+          <span class="overview-loading-spinner"></span>
+        </div>
+        <p class="text-xs text-text-tertiary text-center">
+          {overviewSearchLoading
+            ? "Searching sessions..."
+            : "Loading sessions..."}
+        </p>
+      </div>
     {:else if sessionsError !== null && cards.length === 0}
       <div class="text-sm text-danger-fg">{sessionsError}</div>
     {:else}
@@ -1343,6 +1297,33 @@
               >+</span
             >
           </button>
+
+          {#if overviewSearchLoading}
+            <div
+              class="w-full rounded-lg border border-border-default bg-bg-secondary/60
+                     p-2.5 min-h-[142px] flex flex-col gap-2 animate-pulse"
+              aria-label="Searching sessions"
+            >
+              <div class="h-3 w-24 rounded bg-bg-tertiary" />
+              <div class="h-4 w-3/4 rounded bg-bg-tertiary" />
+              <div class="h-3 w-full rounded bg-bg-tertiary" />
+              <div class="h-3 w-5/6 rounded bg-bg-tertiary" />
+            </div>
+          {/if}
+
+          {#if !overviewSearchLoading && searchQuery.trim().length > 0 && filteredCards.length === 0}
+            <div
+              class="w-full rounded-lg border border-border-default bg-bg-secondary
+                     p-2.5 min-h-[142px] flex flex-col items-center justify-center gap-1"
+            >
+              <p class="text-sm text-text-primary">
+                No sessions matched your search.
+              </p>
+              <p class="text-xs text-text-tertiary break-all text-center">
+                Query: "{searchQuery.trim()}"
+              </p>
+            </div>
+          {/if}
 
           {#each filteredCards as card (card.qraftAiSessionId)}
             <div
@@ -1491,11 +1472,9 @@
           </div>
         {/if}
 
-        {#if filteredCards.length === 0}
+        {#if filteredCards.length === 0 && searchQuery.trim().length === 0 && !sessionsLoading}
           <div class="text-sm text-text-secondary">
-            {searchQuery.length > 0
-              ? "No sessions matched your search."
-              : "No sessions found for this project."}
+            No sessions found for this project.
           </div>
         {/if}
       </div>
@@ -1564,6 +1543,42 @@
 {/if}
 
 <style>
+  .overview-loading-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 1.25rem;
+  }
+
+  .overview-loading-spinner {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: var(--color-accent-emphasis);
+    animation: overview-loader-bounce 0.9s ease-in-out infinite;
+  }
+
+  .overview-loading-spinner:nth-child(2) {
+    animation-delay: 0.12s;
+  }
+
+  .overview-loading-spinner:nth-child(3) {
+    animation-delay: 0.24s;
+  }
+
+  @keyframes overview-loader-bounce {
+    0%,
+    80%,
+    100% {
+      opacity: 0.4;
+      transform: translateY(0);
+    }
+    40% {
+      opacity: 1;
+      transform: translateY(-0.2rem);
+    }
+  }
+
   .overview-grid {
     display: grid;
     gap: 0.75rem;

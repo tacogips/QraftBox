@@ -9,6 +9,7 @@ import { readdir, readFile, stat } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync } from "fs";
+import { searchSessions as searchCodexSessions } from "codex-agent";
 import type {
   ClaudeSessionIndex,
   ClaudeSessionEntry,
@@ -58,6 +59,8 @@ export interface ListSessionsOptions {
   branch?: string;
   /** Search query for firstPrompt and summary */
   search?: string;
+  /** When true, search query matches full transcript content */
+  searchInTranscript?: boolean;
   /** Date range filter */
   dateRange?: {
     from?: string;
@@ -81,6 +84,11 @@ export interface ListSessionsOptions {
    * sessions-index.json is missing (overview/list screens).
    */
   fastListMode?: boolean;
+}
+
+interface TranscriptSearchMatches {
+  readonly claudeSessionIds: ReadonlySet<string>;
+  readonly codexSessionIds: ReadonlySet<string>;
 }
 
 /**
@@ -238,6 +246,8 @@ export class ClaudeSessionReader {
   ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
     const requiresSourceFiltering = options.source !== undefined;
+    const transcriptSearchMatches =
+      await this.resolveTranscriptSearchMatches(options);
 
     // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
     const projects = await this.listProjects(options.workingDirectoryPrefix);
@@ -281,7 +291,7 @@ export class ClaudeSessionReader {
           }
 
           // Apply additional filters
-          if (this.matchesFilters(extended, options)) {
+          if (this.matchesFilters(extended, options, transcriptSearchMatches)) {
             allSessions.push(extended);
           }
         }
@@ -315,7 +325,9 @@ export class ClaudeSessionReader {
             }
 
             // Apply additional filters
-            if (this.matchesFilters(extended, options)) {
+            if (
+              this.matchesFilters(extended, options, transcriptSearchMatches)
+            ) {
               allSessions.push(extended);
             }
           }
@@ -327,7 +339,10 @@ export class ClaudeSessionReader {
     }
 
     // Merge Codex CLI sessions from ~/.codex/sessions.
-    const codexSessions = await this.listCodexSessions(options);
+    const codexSessions = await this.listCodexSessions(
+      options,
+      transcriptSearchMatches,
+    );
     allSessions.push(...codexSessions);
 
     // Sort sessions
@@ -488,6 +503,7 @@ export class ClaudeSessionReader {
 
   private async listCodexSessions(
     options: ListSessionsOptions,
+    transcriptSearchMatches: TranscriptSearchMatches | undefined,
   ): Promise<ExtendedSessionEntry[]> {
     if (!existsSync(this.codexSessionsDir)) {
       return [];
@@ -501,7 +517,8 @@ export class ClaudeSessionReader {
     );
     return sessions.filter(
       (session): session is ExtendedSessionEntry =>
-        session !== null && this.matchesFilters(session, options),
+        session !== null &&
+        this.matchesFilters(session, options, transcriptSearchMatches),
     );
   }
 
@@ -1504,12 +1521,111 @@ export class ClaudeSessionReader {
     return "claude-cli";
   }
 
+  private async resolveTranscriptSearchMatches(
+    options: ListSessionsOptions,
+  ): Promise<TranscriptSearchMatches | undefined> {
+    const query = options.search?.trim();
+    if (query === undefined || query.length === 0) {
+      return undefined;
+    }
+    if (options.searchInTranscript !== true) {
+      return undefined;
+    }
+
+    const claudeSearchOptions = {
+      role: "both",
+      limit: Number.MAX_SAFE_INTEGER,
+      offset: 0,
+      ...(options.workingDirectoryPrefix !== undefined
+        ? { workingDirectoryPrefix: options.workingDirectoryPrefix }
+        : {}),
+    } as const;
+    const claudeSearchResult = await this.agentSessionReader.searchSessions(
+      query,
+      claudeSearchOptions,
+    );
+
+    const codexSearchOptions = {
+      role: "both",
+      limit: Number.MAX_SAFE_INTEGER,
+      offset: 0,
+      ...(options.workingDirectoryPrefix !== undefined
+        ? { cwd: options.workingDirectoryPrefix }
+        : {}),
+      ...(options.branch !== undefined ? { branch: options.branch } : {}),
+    } as const;
+    let codexSessionIds = new Set<string>();
+    try {
+      const codexResult = await searchCodexSessions(query, codexSearchOptions);
+      codexSessionIds = new Set(codexResult.sessionIds);
+    } catch (error: unknown) {
+      // Avoid failing the entire sessions API when codex-agent search
+      // cannot parse local rollout metadata in a specific environment.
+      codexSessionIds = await this.searchCodexSessionsFallback(query);
+      if (codexSessionIds.size === 0) {
+        console.warn(
+          `[ClaudeSessionReader] Codex transcript search failed and fallback found no matches: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    }
+
+    return {
+      claudeSessionIds: new Set(claudeSearchResult.sessionIds),
+      codexSessionIds,
+    };
+  }
+
+  private async searchCodexSessionsFallback(
+    query: string,
+  ): Promise<Set<string>> {
+    if (!existsSync(this.codexSessionsDir)) {
+      return new Set();
+    }
+
+    const normalizedQuery = query.toLowerCase();
+    if (normalizedQuery.length === 0) {
+      return new Set();
+    }
+
+    const files = await this.listCodexJsonlFilesCached();
+    const matchedIds = await this.mapWithConcurrency(
+      files,
+      SESSION_PARSE_CONCURRENCY,
+      async (filePath) => {
+        try {
+          const content = await readFile(filePath, "utf-8");
+          if (!content.toLowerCase().includes(normalizedQuery)) {
+            return undefined;
+          }
+          const session = await this.readCodexSessionEntry(filePath);
+          if (session === null) {
+            return undefined;
+          }
+          return session.sessionId.startsWith("codex-session-")
+            ? session.sessionId.slice("codex-session-".length)
+            : session.sessionId;
+        } catch {
+          return undefined;
+        }
+      },
+    );
+
+    return new Set(
+      matchedIds.filter(
+        (id): id is string => id !== undefined && id.length > 0,
+      ),
+    );
+  }
+
   /**
    * Check if a session matches the provided filters
    */
   private matchesFilters(
     session: ExtendedSessionEntry,
     options: ListSessionsOptions,
+    transcriptSearchMatches?: TranscriptSearchMatches,
   ): boolean {
     if (this.isInternalSessionPrompt(session.firstPrompt)) {
       return false;
@@ -1537,18 +1653,40 @@ export class ClaudeSessionReader {
       }
     }
 
-    // Search filter (case-insensitive, using stripped text)
+    // Search filter
     if (options.search !== undefined) {
-      const searchLower = options.search.toLowerCase();
-      const matchesPrompt = stripSystemTags(session.firstPrompt)
-        .toLowerCase()
-        .includes(searchLower);
-      const matchesSummary = stripSystemTags(session.summary)
-        .toLowerCase()
-        .includes(searchLower);
+      if (options.searchInTranscript === true) {
+        if (transcriptSearchMatches === undefined) {
+          return false;
+        }
+        if (session.source === "codex-cli") {
+          const normalizedSessionId = session.sessionId.startsWith(
+            "codex-session-",
+          )
+            ? session.sessionId.slice("codex-session-".length)
+            : session.sessionId;
+          if (
+            !transcriptSearchMatches.codexSessionIds.has(normalizedSessionId)
+          ) {
+            return false;
+          }
+        } else if (
+          !transcriptSearchMatches.claudeSessionIds.has(session.sessionId)
+        ) {
+          return false;
+        }
+      } else {
+        const searchLower = options.search.toLowerCase();
+        const matchesPrompt = stripSystemTags(session.firstPrompt)
+          .toLowerCase()
+          .includes(searchLower);
+        const matchesSummary = stripSystemTags(session.summary)
+          .toLowerCase()
+          .includes(searchLower);
 
-      if (!matchesPrompt && !matchesSummary) {
-        return false;
+        if (!matchesPrompt && !matchesSummary) {
+          return false;
+        }
       }
     }
 

@@ -268,7 +268,7 @@
           </div>
           {#if commentLine !== undefined && commentLine.side === "new" && commentLine.endLine === lineNumber}
             <div
-              class="max-w-4xl border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
+              class="max-w-full border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
             >
               <textarea
                 class="w-full min-h-28 resize-y rounded border border-border-default bg-bg-primary
@@ -293,13 +293,18 @@
                   }
                 }}
               ></textarea>
-              <div class="flex items-center justify-between mt-2">
+              <div
+                class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
+              >
                 <!-- Left side: File and line info -->
-                <div class="text-xs text-text-tertiary font-mono">
+                <div
+                  class="min-w-0 flex-1 truncate text-xs text-text-tertiary font-mono"
+                  title={lineContext}
+                >
                   {lineContext}
                 </div>
                 <!-- Right side: Buttons -->
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center justify-end gap-2">
                   <button
                     type="button"
                     class="px-3 py-1 text-sm rounded bg-success-emphasis text-white
