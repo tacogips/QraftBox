@@ -227,7 +227,7 @@
       </button>
       {#if headerMenuOpen}
         <div
-          class="absolute right-0 top-full mt-1 w-40 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
+          class="absolute right-0 top-full mt-1 w-48 bg-bg-secondary border border-border-default rounded-md shadow-lg z-50 py-1"
         >
           <button
             type="button"
@@ -254,6 +254,19 @@
             }}
           >
             Model Profiles
+          </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                 {currentScreen === 'notifications'
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("notifications");
+              headerMenuOpen = false;
+            }}
+          >
+            Notifications
           </button>
           <button
             type="button"

@@ -28,6 +28,7 @@ import { createModelConfigStore } from "./model-config/store.js";
 import { resolveClientDir } from "./client-dir";
 import type { ProjectWatcherManager } from "./watcher/manager";
 import { ensurePurposePromptFile } from "./claude/session-purpose";
+import { createAiCommentQueueStore } from "./ai/comment-queue-store.js";
 import type {
   TerminalSessionManager,
   TerminalSocketData,
@@ -149,6 +150,7 @@ export function createServer(options: ServerOptions): Hono {
       assistantAdditionalArgs: options.config.assistantAdditionalArgs,
     },
   });
+  const aiCommentStore = createAiCommentQueueStore();
 
   const sessionManager = createSessionManager(
     {
@@ -206,6 +208,7 @@ export function createServer(options: ServerOptions): Hono {
     terminalSessionManager: options.terminalSessionManager,
     temporaryProjectMode:
       options.temporaryProjectMode ?? options.config.temporaryProjectMode,
+    aiCommentStore,
   });
 
   // Static file serving and SPA fallback

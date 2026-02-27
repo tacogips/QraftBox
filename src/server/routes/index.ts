@@ -40,6 +40,8 @@ import type { TerminalSessionManager } from "../terminal/session-manager.js";
 import { createTerminalRoutes } from "./terminal.js";
 import type { ModelConfigStore } from "../model-config/store.js";
 import { createModelConfigRoutes } from "./model-config.js";
+import { createAiCommentRoutes } from "./ai-comments.js";
+import type { AiCommentQueueStore } from "../ai/comment-queue-store.js";
 
 /**
  * Route group definition
@@ -73,6 +75,7 @@ export interface MountRoutesConfig {
   readonly terminalSessionManager?: TerminalSessionManager | undefined;
   readonly modelConfigStore?: ModelConfigStore | undefined;
   readonly temporaryProjectMode?: boolean | undefined;
+  readonly aiCommentStore?: AiCommentQueueStore | undefined;
 }
 
 /**
@@ -231,6 +234,14 @@ export function getNonContextRouteGroups(
         modelConfigStore: config.modelConfigStore,
       }),
     },
+    ...(config.aiCommentStore !== undefined
+      ? [
+          {
+            prefix: "/ai-comments",
+            routes: createAiCommentRoutes(config.aiCommentStore),
+          },
+        ]
+      : []),
     // Local prompt management routes - /api/prompts
     ...(config.promptStore !== undefined
       ? [

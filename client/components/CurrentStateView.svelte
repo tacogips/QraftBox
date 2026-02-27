@@ -52,6 +52,7 @@
       filePath: string,
       prompt: string,
       immediate: boolean,
+      action: "submit" | "comment",
     ) => void;
     submittedSessionId?: string | null;
     submittedSessionHistoryHref?: string | null;
@@ -139,6 +140,7 @@
     null,
   );
   let commentText = $state("");
+  let commentQueuedNotice = $state(false);
 
   /**
    * Placeholder text showing file + line context
@@ -193,7 +195,11 @@
   /**
    * Handle comment submit
    */
-  function handleCommentSubmitLocal(prompt: string, immediate: boolean): void {
+  function handleCommentSubmitLocal(
+    prompt: string,
+    immediate: boolean,
+    action: "submit" | "comment" = "submit",
+  ): void {
     if (activeComment !== null && onCommentSubmit !== undefined) {
       onCommentSubmit(
         activeComment.startLine,
@@ -202,6 +208,7 @@
         file.path,
         prompt,
         immediate,
+        action,
       );
     }
     commentText = "";
@@ -213,6 +220,7 @@
   function handleCommentCancel(): void {
     activeComment = null;
     commentText = "";
+    commentQueuedNotice = false;
   }
 
   /**
@@ -292,19 +300,9 @@
 >
   <!-- Header with file info and controls -->
   <div
-    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
+    class="flex items-center gap-2 px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
-    <div class="flex items-center gap-2">
-      <span
-        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
-      >
-        {file.path}
-      </span>
-      <span class="text-[10px] text-text-secondary">
-        +{file.additions} -{file.deletions}
-      </span>
-    </div>
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 shrink-0 ml-6">
       <div
         class="flex items-center border border-border-default rounded-md overflow-hidden"
       >
@@ -492,6 +490,16 @@
         </svg>
       </button>
     </div>
+    <div class="flex items-center gap-2 min-w-0 flex-1">
+      <span
+        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
+      >
+        {file.path}
+      </span>
+      <span class="text-[10px] text-text-secondary shrink-0">
+        +{file.additions} -{file.deletions}
+      </span>
+    </div>
   </div>
 
   <!-- Content area -->
@@ -526,6 +534,8 @@
           <!-- Render the current state line (skip synthetic EOF lines with empty content) -->
           {#if line.content !== "" || line.changeType !== "unchanged"}
             <div
+              data-file-path={file.path}
+              data-line-number={line.lineNumber}
               class={commentRangeLines.includes(line.lineNumber)
                 ? "bg-accent-muted"
                 : ""}
@@ -552,7 +562,8 @@
                   onkeydown={(e) => {
                     if (e.key === "Enter" && e.ctrlKey) {
                       e.preventDefault();
-                      handleCommentSubmitLocal(commentText, true);
+                      handleCommentSubmitLocal(commentText, false, "comment");
+                      commentQueuedNotice = true;
                     }
                     if (e.key === "Escape") {
                       handleCommentCancel();
@@ -566,16 +577,26 @@
                   <div class="flex items-center gap-2">
                     <button
                       type="button"
-                      class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
-                      onclick={() => handleCommentCancel()}>Cancel</button
+                      class="px-3 py-1 text-sm rounded bg-success-emphasis text-white
+                             hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onclick={() => {
+                        handleCommentSubmitLocal(commentText, false, "comment");
+                        commentQueuedNotice = true;
+                      }}
+                      disabled={commentText.trim().length === 0}>Comment</button
                     >
                     <SplitButton
                       disabled={commentText.trim().length === 0}
                       onPrimaryClick={() =>
-                        handleCommentSubmitLocal(commentText, false)}
+                        handleCommentSubmitLocal(commentText, false, "submit")}
                       onSecondaryClick={() =>
-                        handleCommentSubmitLocal(commentText, true)}
+                        handleCommentSubmitLocal(commentText, true, "submit")}
                     />
+                    <button
+                      type="button"
+                      class="px-3 py-1 text-sm text-text-secondary hover:text-text-primary"
+                      onclick={() => handleCommentCancel()}>Cancel</button
+                    >
                   </div>
                 </div>
                 {#if submittedSessionId !== null && submittedSessionHistoryHref !== null}
@@ -601,6 +622,22 @@
                         Close
                       </button>
                     </div>
+                  </div>
+                {/if}
+                {#if commentQueuedNotice}
+                  <div
+                    class="mt-2 flex items-center justify-between gap-3 rounded border border-success-emphasis/40 bg-success-subtle px-2 py-1 text-xs text-success-fg"
+                  >
+                    <span class="truncate">Comment added to queue.</span>
+                    <button
+                      type="button"
+                      class="text-text-secondary hover:text-text-primary"
+                      onclick={() => {
+                        commentQueuedNotice = false;
+                      }}
+                    >
+                      Close
+                    </button>
                   </div>
                 {/if}
               </div>

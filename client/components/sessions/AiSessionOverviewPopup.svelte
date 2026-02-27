@@ -119,6 +119,12 @@
     if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
       return null;
     }
+    if (trimmed.startsWith("codex-session-")) {
+      return trimmed.slice("codex-session-".length);
+    }
+    if (trimmed.startsWith("claude-session-")) {
+      return trimmed.slice("claude-session-".length);
+    }
     return trimmed;
   });
 

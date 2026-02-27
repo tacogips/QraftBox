@@ -3,6 +3,7 @@ import type {
   QraftAiSessionId,
   FileReference,
   AISessionSubmitResult,
+  DiffSummaryContext,
 } from "../../../src/types/ai";
 import { AIAgent } from "../../../src/types/ai-agent";
 import type {
@@ -64,6 +65,18 @@ export type PromptQueueItem = {
   worktree_id: string;
   qraft_ai_session_id?: QraftAiSessionId | undefined;
   ai_agent?: AIAgent | undefined;
+};
+
+export type QueuedAiComment = {
+  id: string;
+  projectPath: string;
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  side: "old" | "new";
+  source: "diff" | "current-state" | "full-file";
+  prompt: string;
+  createdAt: number;
 };
 
 export type GitActionPromptName =
@@ -252,6 +265,74 @@ export async function fetchDiffFiles(ctxId: string): Promise<DiffFile[]> {
   return data.files;
 }
 
+export async function fetchQueuedAiCommentsApi(
+  projectPath: string,
+): Promise<readonly QueuedAiComment[]> {
+  const params = new URLSearchParams({ projectPath });
+  const response = await fetch(`/api/ai-comments?${params.toString()}`);
+  ensureOk(response, "Queued AI comments API error");
+  const data = (await response.json()) as { comments: readonly QueuedAiComment[] };
+  return data.comments;
+}
+
+export async function addQueuedAiCommentApi(
+  comment: Omit<QueuedAiComment, "id" | "createdAt">,
+): Promise<QueuedAiComment> {
+  const response = await fetch("/api/ai-comments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(comment),
+  });
+  ensureOk(response, "Add queued AI comment API error");
+  const data = (await response.json()) as { comment: QueuedAiComment };
+  return data.comment;
+}
+
+export async function removeQueuedAiCommentApi(
+  projectPath: string,
+  commentId: string,
+): Promise<boolean> {
+  const params = new URLSearchParams({ projectPath });
+  const response = await fetch(
+    `/api/ai-comments/${encodeURIComponent(commentId)}?${params.toString()}`,
+    { method: "DELETE" },
+  );
+  ensureOk(response, "Remove queued AI comment API error");
+  const data = (await response.json()) as { success: boolean };
+  return data.success;
+}
+
+export async function updateQueuedAiCommentApi(
+  projectPath: string,
+  commentId: string,
+  prompt: string,
+): Promise<QueuedAiComment> {
+  const params = new URLSearchParams({ projectPath });
+  const response = await fetch(
+    `/api/ai-comments/${encodeURIComponent(commentId)}?${params.toString()}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt }),
+    },
+  );
+  ensureOk(response, "Update queued AI comment API error");
+  const data = (await response.json()) as { comment: QueuedAiComment };
+  return data.comment;
+}
+
+export async function clearQueuedAiCommentsApi(
+  projectPath: string,
+): Promise<number> {
+  const params = new URLSearchParams({ projectPath });
+  const response = await fetch(`/api/ai-comments?${params.toString()}`, {
+    method: "DELETE",
+  });
+  ensureOk(response, "Clear queued AI comments API error");
+  const data = (await response.json()) as { deletedCount: number };
+  return data.deletedCount;
+}
+
 export async function fetchAllFilesTreeApi(
   ctxId: string,
   shallow: boolean,
@@ -339,7 +420,7 @@ export async function submitAIPrompt(params: {
         }
       | undefined;
     references: readonly FileReference[];
-    diffSummary: string | undefined;
+    diffSummary: DiffSummaryContext | undefined;
   };
 }): Promise<AISessionSubmitResult> {
   const response = await fetch("/api/ai/submit", {

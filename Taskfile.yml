@@ -13,6 +13,7 @@ tasks:
     desc: Install dependencies
     cmds:
       - bun install
+      - cd client && bun install
 
   dev:
     desc: Run backend + client dev servers with hot reload
@@ -37,6 +38,7 @@ tasks:
       API_TARGET_HOST: '{{.API_TARGET_HOST | default "127.0.0.1"}}'
       API_TARGET_PORT: '{{.API_TARGET_PORT | default "7144"}}'
     cmds:
+      - test -d node_modules/vite || bun install
       - rm -rf node_modules/.vite/deps node_modules/.vite/deps_temp
       - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}}
 

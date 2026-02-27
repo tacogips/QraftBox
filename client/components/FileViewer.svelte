@@ -37,6 +37,7 @@
       filePath: string,
       prompt: string,
       immediate: boolean,
+      action: "submit" | "comment",
     ) => void;
     submittedSessionId?: string | null;
     submittedSessionHistoryHref?: string | null;
@@ -69,6 +70,7 @@
 
   let activeComment = $state<CommentRange | null>(null);
   let commentText = $state("");
+  let commentQueuedNotice = $state(false);
   let highlightedHtml = $state<string[]>([]);
 
   const lines = $derived(content.split("\n"));
@@ -102,7 +104,11 @@
     activeComment = { startLine: lineNumber, endLine: lineNumber };
   }
 
-  function handleCommentSubmit(prompt: string, immediate: boolean): void {
+  function handleCommentSubmit(
+    prompt: string,
+    immediate: boolean,
+    action: "submit" | "comment" = "submit",
+  ): void {
     if (activeComment !== null && onCommentSubmit !== undefined) {
       onCommentSubmit(
         activeComment.startLine,
@@ -111,6 +117,7 @@
         path,
         prompt,
         immediate,
+        action,
       );
     }
     commentText = "";
@@ -119,6 +126,7 @@
   function handleCommentCancel(): void {
     activeComment = null;
     commentText = "";
+    commentQueuedNotice = false;
   }
 
   const commentPlaceholder = $derived.by(() => {
@@ -145,16 +153,9 @@
 >
   <!-- Sticky file name header -->
   <div
-    class="flex items-center justify-between px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
+    class="flex items-center gap-2 px-2 min-h-[32px] bg-bg-secondary border-b border-border-default sticky top-0 z-10"
   >
-    <div class="flex items-center gap-2">
-      <span
-        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
-      >
-        {path}
-      </span>
-    </div>
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1 shrink-0 ml-6">
       <div
         class="flex items-center border border-border-default rounded-md overflow-hidden"
       >
@@ -342,6 +343,13 @@
         </svg>
       </button>
     </div>
+    <div class="flex items-center gap-2 min-w-0 flex-1">
+      <span
+        class="text-xs font-medium text-text-primary truncate max-w-[300px]"
+      >
+        {path}
+      </span>
+    </div>
   </div>
 
   {#if isBinary === true && isImage === true}
@@ -395,7 +403,11 @@
     {#each lines as line, lineIndex}
       {@const lineNumber = lineIndex + 1}
       {@const inRange = commentRangeLines.includes(lineNumber)}
-      <div class="flex group/line {inRange ? 'bg-accent-muted' : ''}">
+      <div
+        data-file-path={path}
+        data-line-number={lineNumber}
+        class="flex group/line {inRange ? 'bg-accent-muted' : ''}"
+      >
         <!-- Line number gutter with "+" button -->
         <div
           class="w-12 flex-shrink-0 px-1 flex items-start justify-end text-text-secondary bg-bg-secondary border-r border-border-default relative"
@@ -453,7 +465,8 @@
                 onCommentSubmit !== undefined
               ) {
                 keyEvent.preventDefault();
-                handleCommentSubmit(commentText, true);
+                handleCommentSubmit(commentText, false, "comment");
+                commentQueuedNotice = true;
               }
               if (keyEvent.key === "Escape") {
                 handleCommentCancel();
@@ -463,9 +476,19 @@
           <div class="flex items-center gap-2 mt-2">
             <button
               type="button"
+              class="px-3 py-1.5 text-xs rounded bg-success-emphasis text-white
+                     hover:brightness-110 font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={commentText.trim().length === 0}
+              onclick={() => {
+                handleCommentSubmit(commentText, false, "comment");
+                commentQueuedNotice = true;
+              }}>Comment</button
+            >
+            <button
+              type="button"
               class="px-3 py-1.5 text-xs rounded bg-accent-muted text-accent-fg
                      border border-accent-emphasis/40 hover:bg-accent-muted/80 font-medium"
-              onclick={() => handleCommentSubmit(commentText, true)}
+              onclick={() => handleCommentSubmit(commentText, true, "submit")}
               >Submit</button
             >
             <button
@@ -497,6 +520,22 @@
                   Close
                 </button>
               </div>
+            </div>
+          {/if}
+          {#if commentQueuedNotice}
+            <div
+              class="mt-2 flex items-center justify-between gap-3 rounded border border-success-emphasis/40 bg-success-subtle px-2 py-1 text-xs text-success-fg"
+            >
+              <span class="truncate">Comment added to queue.</span>
+              <button
+                type="button"
+                class="text-text-secondary hover:text-text-primary"
+                onclick={() => {
+                  commentQueuedNotice = false;
+                }}
+              >
+                Close
+              </button>
             </div>
           {/if}
         </div>

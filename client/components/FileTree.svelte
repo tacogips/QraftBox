@@ -102,6 +102,11 @@
      * Current project directory path shown above file tree
      */
     currentDirectory?: string;
+
+    /**
+     * Increment this value to force one-shot expand-all behavior.
+     */
+    expandAllTrigger?: number;
   }
 
   const {
@@ -124,6 +129,7 @@
     onLoadFullTree = undefined,
     onReload = undefined,
     currentDirectory = "",
+    expandAllTrigger = 0,
   }: Props = $props();
 
   const MAX_TRUNCATED_DIRECTORY_CHARS = 52;
@@ -359,6 +365,15 @@
     const source = treeForExpand ?? filteredTree ?? tree;
     expandedPaths = new Set(collectDirectoryPaths(source));
   }
+
+  let prevExpandAllTrigger = expandAllTrigger;
+  $effect(() => {
+    if (expandAllTrigger === prevExpandAllTrigger) {
+      return;
+    }
+    prevExpandAllTrigger = expandAllTrigger;
+    void expandAll();
+  });
 
   /**
    * Collapse all directories
@@ -756,6 +771,61 @@
   <div
     class="px-2 py-1.5 border-b border-border-default flex items-center gap-1.5"
   >
+    <!-- Filter Input -->
+    <div class="relative flex-1 min-w-0">
+      <svg
+        class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        ></path>
+      </svg>
+      <input
+        type="text"
+        class="w-full pl-7 pr-7 py-1 text-xs bg-bg-primary text-text-primary border border-border-default rounded
+               placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-accent-emphasis"
+        placeholder="Filter files..."
+        bind:value={filterText}
+        onkeydown={(e) => {
+          if (e.key === "Escape") {
+            filterText = "";
+          }
+        }}
+      />
+      {#if filterText !== ""}
+        <button
+          type="button"
+          class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center
+                 text-text-tertiary hover:text-text-primary rounded"
+          onclick={() => {
+            filterText = "";
+          }}
+          aria-label="Clear filter"
+        >
+          <svg
+            class="w-3 h-3"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"
+            ></path>
+          </svg>
+        </button>
+      {/if}
+    </div>
     <!-- Mode Toggle (split button) -->
     <div class="status-filter-container relative flex-shrink-0">
       <div class="flex items-center">
@@ -909,62 +979,6 @@
             >
           </button>
         </div>
-      {/if}
-    </div>
-
-    <!-- Filter Input -->
-    <div class="relative flex-1 min-w-0">
-      <svg
-        class="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-text-tertiary pointer-events-none"
-        fill="none"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        aria-hidden="true"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-        ></path>
-      </svg>
-      <input
-        type="text"
-        class="w-full pl-7 pr-7 py-1 text-xs bg-bg-primary text-text-primary border border-border-default rounded
-               placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-accent-emphasis focus:border-accent-emphasis"
-        placeholder="Filter files..."
-        bind:value={filterText}
-        onkeydown={(e) => {
-          if (e.key === "Escape") {
-            filterText = "";
-          }
-        }}
-      />
-      {#if filterText !== ""}
-        <button
-          type="button"
-          class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center
-                 text-text-tertiary hover:text-text-primary rounded"
-          onclick={() => {
-            filterText = "";
-          }}
-          aria-label="Clear filter"
-        >
-          <svg
-            class="w-3 h-3"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 18L18 6M6 6l12 12"
-            ></path>
-          </svg>
-        </button>
       {/if}
     </div>
     <div class="flex items-center gap-0.5 shrink-0">
@@ -1432,7 +1446,7 @@
   .status-filter-dropdown {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0;
+    right: 0;
     z-index: 100;
     min-width: 180px;
     background-color: var(--color-bg-primary);

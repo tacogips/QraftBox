@@ -34,6 +34,7 @@
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
+  import NotificationsScreen from "../components/system-info/NotificationsScreen.svelte";
   import ModelProfilesScreen from "../components/model-config/ModelProfilesScreen.svelte";
   import ActionDefaultsScreen from "../components/model-config/ActionDefaultsScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
@@ -82,6 +83,7 @@
   let projectPath = $state<string>("");
   let workspaceTabs = $state<ServerTab[]>([]);
   let currentScreen = $state<ScreenType>(screenFromHash(window.location.hash));
+  let previousScreen = $state<ScreenType>(screenFromHash(window.location.hash));
   let recentProjects = $state<RecentProject[]>([]);
   let canManageProjects = $state(true);
   // Add-project state
@@ -91,6 +93,9 @@
   let pickingDirectory = $state(false);
   let directoryPickerOpen = $state(false);
   let mergeDialogOpen = $state(false);
+  let fileTreeExpandAllTrigger = $state(0);
+  let filesScreenSelectedPathByContext = $state<Record<string, string>>({});
+  let defaultGitDiffViewAppliedContexts = $state<Record<string, true>>({});
 
   // AI prompt state
   let queueStatus = $state<QueueStatus>({
@@ -375,6 +380,12 @@
    */
   function handleFileSelect(path: string): void {
     selectedPath = path;
+    if (currentScreen === "files" && contextId !== null) {
+      filesScreenSelectedPathByContext = {
+        ...filesScreenSelectedPathByContext,
+        [contextId]: path,
+      };
+    }
   }
 
   /**
@@ -382,6 +393,25 @@
    */
   function setViewMode(mode: ViewMode): void {
     viewMode = mode;
+  }
+
+  function handleFileTreeModeChange(mode: "diff" | "all"): void {
+    const previousMode = fileTreeMode;
+    fileTreeMode = mode;
+
+    if (previousMode === "all" && mode === "diff") {
+      // When entering diff-only tree mode, focus the first changed file.
+      selectedPath = diffFiles[0]?.path ?? null;
+
+      // If user was in full-file mode, default to side-by-side diff view.
+      if (viewMode === "full-file") {
+        viewMode = "side-by-side";
+      }
+    }
+
+    if (mode === "all" && contextId !== null) {
+      void fetchAllFiles(contextId);
+    }
   }
 
   /**
@@ -587,6 +617,61 @@
     }
   });
 
+  // Preserve the file selected in Files screen across page switches.
+  $effect(() => {
+    const prev = previousScreen;
+    const next = currentScreen;
+    if (prev === next) return;
+
+    if (prev === "files" && contextId !== null && selectedPath !== null) {
+      filesScreenSelectedPathByContext = {
+        ...filesScreenSelectedPathByContext,
+        [contextId]: selectedPath,
+      };
+    }
+
+    if (next === "files" && contextId !== null) {
+      const remembered = filesScreenSelectedPathByContext[contextId];
+      if (remembered !== undefined && remembered !== selectedPath) {
+        selectedPath = remembered;
+      }
+    }
+
+    previousScreen = next;
+  });
+
+  // Default Files initial view for git projects with diffs:
+  // - diff-only tree mode
+  // - side-by-side diff view
+  // - fully expanded tree once
+  $effect(() => {
+    if (
+      currentScreen !== "files" ||
+      contextId === null ||
+      !activeTabIsGitRepo
+    ) {
+      return;
+    }
+    if (defaultGitDiffViewAppliedContexts[contextId] === true) {
+      return;
+    }
+    if (diffFiles.length === 0) {
+      return;
+    }
+
+    defaultGitDiffViewAppliedContexts = {
+      ...defaultGitDiffViewAppliedContexts,
+      [contextId]: true,
+    };
+
+    fileTreeMode = "diff";
+    viewMode = "side-by-side";
+    if (selectedPath === null) {
+      selectedPath = diffFiles[0]?.path ?? null;
+    }
+    fileTreeExpandAllTrigger += 1;
+  });
+
   // On mobile, entering a file-tree heavy screen should start with tree collapsed.
   $effect(() => {
     if (
@@ -696,14 +781,10 @@
         canNarrow={sidebarWidth > SIDEBAR_MIN_WIDTH}
         canWiden={sidebarWidth < SIDEBAR_MAX_WIDTH}
         currentQraftAiSessionId={qraftAiSessionId}
+        {fileTreeExpandAllTrigger}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
-        onFileTreeModeChange={(mode) => {
-          fileTreeMode = mode;
-          if (mode === "all" && contextId !== null) {
-            void fetchAllFiles(contextId);
-          }
-        }}
+        onFileTreeModeChange={handleFileTreeModeChange}
         {showIgnored}
         onShowIgnoredChange={(value) => {
           showIgnored = value;
@@ -769,12 +850,7 @@
         isFirstMessage={!sessionMessageSubmitted}
         onToggleSidebar={toggleSidebar}
         onFileSelect={handleFileSelect}
-        onFileTreeModeChange={(mode) => {
-          fileTreeMode = mode;
-          if (mode === "all" && contextId !== null) {
-            void fetchAllFiles(contextId);
-          }
-        }}
+        onFileTreeModeChange={handleFileTreeModeChange}
         {showIgnored}
         onShowIgnoredChange={(value) => {
           showIgnored = value;
@@ -852,6 +928,11 @@
       <!-- System Info Screen -->
       <main class="flex-1 overflow-hidden">
         <SystemInfoScreen />
+      </main>
+    {:else if currentScreen === "notifications"}
+      <!-- Notifications Screen -->
+      <main class="flex-1 overflow-hidden">
+        <NotificationsScreen />
       </main>
     {:else if currentScreen === "model-profiles"}
       <!-- Model Profiles Screen -->

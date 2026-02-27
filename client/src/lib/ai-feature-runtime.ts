@@ -3,6 +3,7 @@ import {
   type AISessionSubmitResult,
   type AISession,
   type FileReference,
+  type DiffSummaryContext,
   type QraftAiSessionId,
   type QueueStatus,
 } from "../../../src/types/ai";
@@ -80,7 +81,7 @@ export interface AIPromptContext {
       }
     | undefined;
   references: readonly FileReference[];
-  diffSummary: string | undefined;
+  diffSummary: DiffSummaryContext | undefined;
   /**
    * Session ID to resume. When set, the prompt continues an existing
    * session's conversation. When undefined, a new session is created.
