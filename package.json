@@ -1,6 +1,6 @@
 {
   "name": "qraftbox",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "All You Need Is Diff",
   "type": "module",
   "main": "dist/main.js",
