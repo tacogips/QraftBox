@@ -12,10 +12,16 @@ QraftBox is a local tool for viewing code changes (diffs), managing git branches
 
 ## Quick Visual Preview
 
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### Screenshot Gallery
 
 ![Diff side-by-side view](usage/resource/diff_side_by_side.png)
+![Current file diff view](usage/resource/diff_current.png)
+![Stacked diff view](usage/resource/diff_stack.png)
+![File tree view](usage/resource/file_tree_view.png)
 ![File tree diff status](usage/resource/file_tree_diff.png)
+![Commit history](usage/resource/commit_history.png)
+![AI session history](usage/resource/session_history.png)
+![Browser terminal](usage/resource/terminal.png)
 
 ## SECURITY WARNING
 
@@ -308,11 +314,7 @@ Then access it using your computer's IP address from the other device (e.g., `ht
 
 **SECURITY WARNING:** Using `--host 0.0.0.0` exposes QraftBox to all network interfaces. Only use this on trusted private networks, never expose it to the internet. For remote access, always use a VPN instead.
 
-### Feature Preview (Video / Images)
-
-#### Overview Video
-
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### Feature Preview (Images)
 
 #### UI Screenshots
 
@@ -774,11 +776,7 @@ qraftbox --host 0.0.0.0
 
 **セキュリティ警告:** `--host 0.0.0.0` を使用すると、QraftBox がすべてのネットワークインターフェースに公開されます。信頼できるプライベートネットワーク上でのみ使用し、絶対にインターネットに公開しないでください。リモートアクセスには必ず VPN を使用してください。
 
-### 機能プレビュー（動画 / 画像）
-
-#### 概要動画
-
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### 機能プレビュー（画像）
 
 #### UIスクリーンショット
 

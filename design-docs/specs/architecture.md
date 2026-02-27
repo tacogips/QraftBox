@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-02-17.
+This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-02-27.
 
 ## Overview
 
@@ -41,7 +41,7 @@ QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-bas
 - Session metadata is persisted in SQLite (`~/.local/QraftBox/ai-sessions.db`).
 - Session mappings (qraft_ai_session_id <-> claude_session_id) are persisted in SQLite (`~/.local/QraftBox/session-mappings.db`).
 - Prompt queue is persisted in JSON files under `~/.local/QraftBox/prompts/`.
-- AI execution integrates with `claude-code-agent` via `AgentRunner`.
+- AI execution runs through local AI CLIs via `AgentRunner` (Claude Code and Codex are actively integrated).
 
 ### Tools System
 
@@ -69,7 +69,7 @@ QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-bas
 - `client/src/App.svelte` is the screen router and state hub using `$state` and `$derived`.
 - Feature controllers live in `client/src/lib/` (workspace, file view, AI runtime, realtime).
 - Stores live in `client/src/stores/` (diff, workspace, AI, queue, search, commits, etc.).
-- Screens: files/diff, commits, sessions, terminal, tools, system info, model config, project selection.
+- Screens: files/diff, commits, AI sessions, terminal, tools, system info, model config, project selection, worktree, GitHub ops.
 
 ## API Surface (Summary)
 
@@ -77,8 +77,8 @@ Non-context routes (no workspace context required):
 - `GET /api/health`
 - `GET /api/workspace` (tabs, active context, recent projects)
 - `GET /api/browse` (directory listing)
-- `POST /api/ai/*` (AI prompt operations)
-- `GET /api/prompts` (local prompt queue)
+- `POST/GET/PUT /api/ai/*` (AI submit, queue, sessions, hidden state, cancel/stream)
+- `GET/POST/PATCH/DELETE /api/prompts/*` (local prompt CRUD + dispatch/summarize)
 - `GET /api/tools` (tool registry)
 - `POST /api/git-actions` (git action prompts)
 - `GET/POST/PATCH /api/model-config`
@@ -120,3 +120,4 @@ Context routes (require `contextId`):
 ## Known Limitations (As-Built)
 
 - GitHub and PR routes are implemented but not currently mounted in `mountAllRoutes` (context routes are stubbed).
+- Comment routes exist in `src/server/routes/comments.ts` but are not mounted in the active route registry.

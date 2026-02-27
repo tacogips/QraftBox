@@ -8,6 +8,7 @@ This document describes the current CLI interface as implemented in `src/cli/ind
 
 - `projectPath` defaults to the current working directory.
 - Multiple project directories can be opened at startup via `--project-dir`.
+- If `projectPath` is explicitly provided and `--project-dir` is omitted, startup runs in temporary single-project mode (no tab persistence).
 
 ## Options
 
@@ -40,3 +41,7 @@ This document describes the current CLI interface as implemented in `src/cli/ind
 
 - `0`: Normal shutdown (SIGINT/SIGTERM) or successful completion.
 - `1`: Invalid config or fatal startup/runtime error.
+
+## Notes
+
+- `-h` is assigned to `--host`; CLI help is available via `--help`.
