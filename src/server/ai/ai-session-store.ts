@@ -118,6 +118,7 @@ export function toSessionInfo(row: AiSessionRow): AISessionInfo {
     context: { references: [] },
     lastAssistantMessage: row.lastAssistantMessage,
     currentActivity: row.currentActivity,
+    error: row.error,
     claudeSessionId: row.currentClaudeSessionId,
     clientSessionId: row.clientSessionId,
     modelProfileId: row.modelProfileId,

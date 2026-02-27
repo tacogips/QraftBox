@@ -8,7 +8,7 @@ import {
   createInMemorySessionMappingStore,
   type SessionMappingStore,
 } from "../ai/session-mapping-store";
-import { mkdir, writeFile, rm } from "fs/promises";
+import { mkdir, writeFile, rm, utimes } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import type {
@@ -34,7 +34,11 @@ describe("ClaudeSessionReader", () => {
     await mkdir(codexSessionsDir, { recursive: true });
 
     mappingStore = createInMemorySessionMappingStore();
-    reader = new ClaudeSessionReader(projectsDir, mappingStore, codexSessionsDir);
+    reader = new ClaudeSessionReader(
+      projectsDir,
+      mappingStore,
+      codexSessionsDir,
+    );
   });
 
   afterEach(async () => {
@@ -633,6 +637,215 @@ describe("ClaudeSessionReader", () => {
       expect(result.total).toBe(3);
       expect(result.offset).toBe(10);
     });
+
+    it("should skip JSONL firstPrompt recovery when explicitly disabled", async () => {
+      const projectDir = join(projectsDir, "-g-gits-tacogips-qraftbox");
+      await mkdir(projectDir, { recursive: true });
+
+      const jsonlPath = join(projectDir, "session-only-tags.jsonl");
+      const jsonlContent = [
+        JSON.stringify({
+          type: "user",
+          message: {
+            content:
+              "<local-command-caveat>System command</local-command-caveat>",
+          },
+          timestamp: "2026-02-05T10:00:00Z",
+        }),
+        JSON.stringify({
+          type: "user",
+          message: {
+            content:
+              "Recovered prompt should only appear in full recovery mode",
+          },
+          timestamp: "2026-02-05T10:01:00Z",
+        }),
+      ].join("\n");
+      await writeFile(jsonlPath, jsonlContent);
+
+      const entryWithSystemOnlyPrompt = createMockSessionEntry(
+        "session-only-tags",
+        "2026-02-05T10:00:00Z",
+        "2026-02-05T11:00:00Z",
+        "fast-path-test-branch",
+        "<local-command-caveat>System-only index prompt</local-command-caveat>",
+      );
+      entryWithSystemOnlyPrompt.fullPath = jsonlPath;
+
+      const index: ClaudeSessionIndex = {
+        version: 1,
+        originalPath: "/g/gits/tacogips/qraftbox",
+        entries: [entryWithSystemOnlyPrompt],
+      };
+      await writeFile(
+        join(projectDir, "sessions-index.json"),
+        JSON.stringify(index, null, 2),
+      );
+
+      const listFastPath = await reader.listSessions({
+        branch: "fast-path-test-branch",
+        recoverFirstPromptFromJsonl: false,
+      });
+      expect(listFastPath.sessions).toHaveLength(1);
+      expect(listFastPath.sessions[0]?.firstPrompt).toBe("");
+
+      const listWithRecovery = await reader.listSessions({
+        branch: "fast-path-test-branch",
+      });
+      expect(listWithRecovery.sessions).toHaveLength(1);
+      expect(listWithRecovery.sessions[0]?.firstPrompt).toBe(
+        "Recovered prompt should only appear in full recovery mode",
+      );
+    });
+
+    it("should use fast JSONL fallback candidate window in default list mode", async () => {
+      const isolatedProjectsDir = join(tempDir, "isolated-projects-fast");
+      const isolatedCodexDir = join(tempDir, "isolated-codex-fast");
+      await mkdir(isolatedProjectsDir, { recursive: true });
+      await mkdir(isolatedCodexDir, { recursive: true });
+      const isolatedReader = new ClaudeSessionReader(
+        isolatedProjectsDir,
+        mappingStore,
+        isolatedCodexDir,
+      );
+      const projectDir = join(isolatedProjectsDir, "-perf-no-index");
+      await mkdir(projectDir, { recursive: true });
+
+      const oldestPath = join(projectDir, "session-oldest.jsonl");
+      const newerPath = join(projectDir, "session-newer.jsonl");
+      const newestPath = join(projectDir, "session-newest.jsonl");
+
+      const makeJsonlContent = (firstPrompt: string, timestamp: string) =>
+        [
+          JSON.stringify({
+            type: "user",
+            message: { content: firstPrompt },
+            timestamp,
+            gitBranch: "main",
+            isSidechain: false,
+          }),
+          JSON.stringify({
+            type: "summary",
+            summary: `${firstPrompt} summary`,
+            timestamp,
+          }),
+        ].join("\n");
+
+      await writeFile(
+        oldestPath,
+        makeJsonlContent("oldest prompt", "2026-02-01T10:00:00Z"),
+      );
+      await writeFile(
+        newerPath,
+        makeJsonlContent("newer prompt", "2026-02-02T10:00:00Z"),
+      );
+      await writeFile(
+        newestPath,
+        makeJsonlContent("newest prompt", "2026-02-03T10:00:00Z"),
+      );
+
+      await utimes(
+        oldestPath,
+        new Date("2026-02-01T10:00:00Z"),
+        new Date("2026-02-01T10:00:00Z"),
+      );
+      await utimes(
+        newerPath,
+        new Date("2026-02-02T10:00:00Z"),
+        new Date("2026-02-02T10:00:00Z"),
+      );
+      await utimes(
+        newestPath,
+        new Date("2026-02-03T10:00:00Z"),
+        new Date("2026-02-03T10:00:00Z"),
+      );
+
+      const result = await isolatedReader.listSessions({
+        offset: 0,
+        limit: 1,
+        fastListMode: true,
+      });
+
+      // Fast fallback candidate count = (offset + limit) * 2 = 2,
+      // so only the two newest files are scanned for default list mode.
+      expect(result.total).toBe(2);
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.sessionId).toBe("session-newest");
+    });
+
+    it("should use full JSONL fallback when search filter is provided", async () => {
+      const isolatedProjectsDir = join(tempDir, "isolated-projects-search");
+      const isolatedCodexDir = join(tempDir, "isolated-codex-search");
+      await mkdir(isolatedProjectsDir, { recursive: true });
+      await mkdir(isolatedCodexDir, { recursive: true });
+      const isolatedReader = new ClaudeSessionReader(
+        isolatedProjectsDir,
+        mappingStore,
+        isolatedCodexDir,
+      );
+      const projectDir = join(isolatedProjectsDir, "-perf-no-index-search");
+      await mkdir(projectDir, { recursive: true });
+
+      const oldestPath = join(projectDir, "session-oldest-search.jsonl");
+      const newerPath = join(projectDir, "session-newer-search.jsonl");
+      const newestPath = join(projectDir, "session-newest-search.jsonl");
+
+      const makeJsonlContent = (firstPrompt: string, timestamp: string) =>
+        [
+          JSON.stringify({
+            type: "user",
+            message: { content: firstPrompt },
+            timestamp,
+            gitBranch: "main",
+            isSidechain: false,
+          }),
+          JSON.stringify({
+            type: "summary",
+            summary: `${firstPrompt} summary`,
+            timestamp,
+          }),
+        ].join("\n");
+
+      await writeFile(
+        oldestPath,
+        makeJsonlContent("special old prompt", "2026-02-01T10:00:00Z"),
+      );
+      await writeFile(
+        newerPath,
+        makeJsonlContent("generic newer prompt", "2026-02-02T10:00:00Z"),
+      );
+      await writeFile(
+        newestPath,
+        makeJsonlContent("generic newest prompt", "2026-02-03T10:00:00Z"),
+      );
+
+      await utimes(
+        oldestPath,
+        new Date("2026-02-01T10:00:00Z"),
+        new Date("2026-02-01T10:00:00Z"),
+      );
+      await utimes(
+        newerPath,
+        new Date("2026-02-02T10:00:00Z"),
+        new Date("2026-02-02T10:00:00Z"),
+      );
+      await utimes(
+        newestPath,
+        new Date("2026-02-03T10:00:00Z"),
+        new Date("2026-02-03T10:00:00Z"),
+      );
+
+      const result = await isolatedReader.listSessions({
+        search: "special old prompt",
+        offset: 0,
+        limit: 1,
+      });
+
+      // Search disables fast fallback; full scan should still find oldest file.
+      expect(result.total).toBe(1);
+      expect(result.sessions).toHaveLength(1);
+      expect(result.sessions[0]?.sessionId).toBe("session-oldest-search");
+    });
   });
 
   describe("getSession", () => {
@@ -1106,6 +1319,20 @@ describe("ClaudeSessionReader", () => {
           },
         }),
         JSON.stringify({
+          timestamp: "2026-02-22T10:00:01.500Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: '<qraftbox-internal-prompt label="ai-session-resume" anchor="session-action-v1">resume this session</qraftbox-internal-prompt>',
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
           timestamp: "2026-02-22T10:00:02.000Z",
           type: "response_item",
           payload: {
@@ -1117,7 +1344,9 @@ describe("ClaudeSessionReader", () => {
       ].join("\n");
       await writeFile(codexPath, codexJsonl);
 
-      const session = await reader.getSession("codex-session-codex-transcript-id");
+      const session = await reader.getSession(
+        "codex-session-codex-transcript-id",
+      );
       expect(session).not.toBeNull();
 
       const transcript = await reader.readTranscript(
@@ -1130,6 +1359,204 @@ describe("ClaudeSessionReader", () => {
       expect(transcript?.events[0]?.type).toBe("user");
       expect(transcript?.events[1]?.type).toBe("assistant");
       expect(transcript?.events[1]?.content).toBe("Assistant reply");
+    });
+
+    it("prefers provenance metadata over text heuristics for first prompt", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "25");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-25T10-00-00-provenance-first-prompt.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-provenance-first-prompt",
+            timestamp: "2026-02-25T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:01.000Z",
+          type: "response_item",
+          origin: "system_injected",
+          display_default: false,
+          source_tag: "agents_instructions",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-25T10:00:02.000Z",
+          type: "response_item",
+          origin: "user_input",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Real user request",
+              },
+            ],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const session = await reader.getSession(
+        "codex-session-codex-provenance-first-prompt",
+      );
+      expect(session).not.toBeNull();
+      expect(session?.firstPrompt).toBe("Real user request");
+    });
+
+    it("keeps codex injected transcript events for UI-level toggling", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "26");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-26T10-00-00-provenance-transcript.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-provenance-transcript",
+            timestamp: "2026-02-26T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:01.000Z",
+          type: "response_item",
+          origin: "system_injected",
+          display_default: false,
+          source_tag: "environment_context",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "<environment_context><cwd>/g/gits/tacogips/QraftBox</cwd></environment_context>",
+              },
+            ],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-26T10:00:02.000Z",
+          type: "response_item",
+          origin: "user_input",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Visible user input" }],
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const transcript = await reader.readTranscript(
+        "codex-session-codex-provenance-transcript",
+        0,
+        100,
+      );
+      expect(transcript).not.toBeNull();
+      expect(transcript?.events).toHaveLength(2);
+      expect(transcript?.events[0]?.content).toBe(
+        "<environment_context><cwd>/g/gits/tacogips/QraftBox</cwd></environment_context>",
+      );
+      expect(transcript?.events[1]?.content).toBe("Visible user input");
+    });
+
+    it("filters codex sessions by workingDirectoryPrefix", async () => {
+      const inProjectDayDir = join(codexSessionsDir, "2026", "02", "23");
+      const outProjectDayDir = join(codexSessionsDir, "2026", "02", "24");
+      await mkdir(inProjectDayDir, { recursive: true });
+      await mkdir(outProjectDayDir, { recursive: true });
+
+      const inProjectPath = join(
+        inProjectDayDir,
+        "rollout-2026-02-23T10-00-00-in-project.jsonl",
+      );
+      const outProjectPath = join(
+        outProjectDayDir,
+        "rollout-2026-02-24T10-00-00-out-project.jsonl",
+      );
+
+      const inProjectJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-23T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-in-project",
+            timestamp: "2026-02-23T10:00:00.000Z",
+            cwd: "/g/gits/tacogips/QraftBox",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-23T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Inside project" }],
+          },
+        }),
+      ].join("\n");
+
+      const outProjectJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-24T10:00:00.000Z",
+          type: "session_meta",
+          payload: {
+            id: "codex-out-project",
+            timestamp: "2026-02-24T10:00:00.000Z",
+            cwd: "/tmp/another-repo",
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-24T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Outside project" }],
+          },
+        }),
+      ].join("\n");
+
+      await writeFile(inProjectPath, inProjectJsonl);
+      await writeFile(outProjectPath, outProjectJsonl);
+
+      const result = await reader.listSessions({
+        source: "codex-cli",
+        workingDirectoryPrefix: "/g/gits/tacogips/QraftBox",
+      });
+
+      expect(
+        result.sessions.some(
+          (session) => session.sessionId === "codex-session-codex-in-project",
+        ),
+      ).toBe(true);
+      expect(
+        result.sessions.some(
+          (session) => session.sessionId === "codex-session-codex-out-project",
+        ),
+      ).toBe(false);
     });
   });
 });

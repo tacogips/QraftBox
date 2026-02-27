@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AIAgent } from "../../../src/types/ai-agent";
+  import type { FileReference } from "../../../src/types/ai";
   import type { ModelProfile } from "../../../src/types/model-config";
   import {
     getSessionStatusMeta,
@@ -11,6 +12,8 @@
     open: boolean;
     contextId: string | null;
     sessionId: string | null;
+    qraftSessionId: string | null;
+    cliSessionId: string | null;
     title: string;
     status: SessionStatus;
     purpose: string;
@@ -18,28 +21,45 @@
     source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     aiAgent: AIAgent;
     queuedPromptCount: number;
+    failureMessage?: string | undefined;
     pendingPromptMessages: readonly {
       message: string;
       status: "queued" | "running";
     }[];
+    optimisticAssistantMessage?: string | undefined;
     showModelProfileSelector?: boolean;
     modelProfiles?: readonly ModelProfile[];
     selectedModelProfileId?: string | undefined;
     onModelProfileChange?: (profileId: string | undefined) => void;
+    activeModelLabel?: string | undefined;
     canCancelPrompt: boolean;
     cancelPromptInProgress: boolean;
     cancelPromptError: string | null;
+    canRunSessionDefaultPrompts: boolean;
     isHidden: boolean;
     onToggleHidden: () => Promise<void>;
     onCancelPrompt: () => Promise<void>;
+    onRunRefreshPurposePrompt: () => Promise<void>;
+    onRunResumeSessionPrompt: () => Promise<void>;
     onClose: () => void;
-    onSubmitPrompt: (message: string, immediate: boolean) => Promise<void>;
+    onSubmitPrompt: (
+      message: string,
+      immediate: boolean,
+      references: readonly FileReference[],
+    ) => Promise<void>;
+    onSubmitPromptAsNewSession: (
+      message: string,
+      immediate: boolean,
+      references: readonly FileReference[],
+    ) => Promise<void>;
   }
 
   const {
     open,
     contextId,
     sessionId,
+    qraftSessionId,
+    cliSessionId,
     title,
     status,
     purpose,
@@ -47,19 +67,26 @@
     source,
     aiAgent,
     queuedPromptCount,
+    failureMessage = undefined,
     pendingPromptMessages,
+    optimisticAssistantMessage = undefined,
     showModelProfileSelector = false,
     modelProfiles = [],
     selectedModelProfileId = undefined,
     onModelProfileChange,
+    activeModelLabel = undefined,
     canCancelPrompt,
     cancelPromptInProgress,
     cancelPromptError,
+    canRunSessionDefaultPrompts,
     isHidden,
     onToggleHidden,
     onCancelPrompt,
+    onRunRefreshPurposePrompt,
+    onRunResumeSessionPrompt,
     onClose,
     onSubmitPrompt,
+    onSubmitPromptAsNewSession,
   }: Props = $props();
 
   const normalizedSessionId = $derived.by(() => {
@@ -73,13 +100,299 @@
     return trimmed;
   });
 
+  const normalizedQraftSessionId = $derived.by(() => {
+    if (typeof qraftSessionId !== "string") {
+      return null;
+    }
+    const trimmed = qraftSessionId.trim();
+    if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  });
+
+  const normalizedCliSessionId = $derived.by(() => {
+    if (typeof cliSessionId !== "string") {
+      return null;
+    }
+    const trimmed = cliSessionId.trim();
+    if (trimmed.length === 0 || trimmed === "undefined" || trimmed === "null") {
+      return null;
+    }
+    return trimmed;
+  });
+
+  const cliSessionLabel = $derived.by(() =>
+    aiAgent === "codex" || source === "codex-cli"
+      ? "Codex Session ID"
+      : "Claude Session ID",
+  );
+
+  let copiedIdType = $state<"qraft" | "cli" | null>(null);
+  let copiedFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function resetCopyFeedbackTimer(): void {
+    if (copiedFeedbackTimer !== null) {
+      clearTimeout(copiedFeedbackTimer);
+      copiedFeedbackTimer = null;
+    }
+  }
+
+  function markIdCopied(idType: "qraft" | "cli"): void {
+    copiedIdType = idType;
+    resetCopyFeedbackTimer();
+    copiedFeedbackTimer = setTimeout(() => {
+      copiedIdType = null;
+      copiedFeedbackTimer = null;
+    }, 1200);
+  }
+
+  async function copySessionId(
+    idType: "qraft" | "cli",
+    value: string | null,
+  ): Promise<void> {
+    if (value === null || value.length === 0) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(value);
+      markIdCopied(idType);
+      return;
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+      markIdCopied(idType);
+    }
+  }
+
   let promptText = $state("");
+  let attachmentInput: HTMLInputElement | null = $state(null);
   let submitting = $state(false);
   let submitError = $state<string | null>(null);
+  let attachmentError = $state<string | null>(null);
   let optimisticUserMessage = $state<string | undefined>(undefined);
   let optimisticUserStatus = $state<"queued" | "running">("queued");
+  let optimisticAssistantMessageSticky = $state<string | undefined>(undefined);
   let focusTailNonce = $state(0);
   let showSubmitOptions = $state(false);
+  let runningRefreshPurpose = $state(false);
+  let runningResumeSession = $state(false);
+  const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+  const LATENCY_SAMPLE_CAP = 40;
+  let pendingInputKeydownAtMs = $state<number | null>(null);
+  let promptInputLatencySamples = $state<number[]>([]);
+
+  function isTextInsertionKey(event: KeyboardEvent): boolean {
+    if (event.ctrlKey || event.metaKey || event.altKey) {
+      return false;
+    }
+    return event.key.length === 1;
+  }
+
+  function quantile(values: readonly number[], q: number): number {
+    if (values.length === 0) {
+      return 0;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const index = Math.max(
+      0,
+      Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * q)),
+    );
+    return sorted[index] ?? 0;
+  }
+
+  function pushLatencySample(sampleMs: number): void {
+    if (!Number.isFinite(sampleMs) || sampleMs < 0) {
+      return;
+    }
+    const rounded = Math.round(sampleMs * 10) / 10;
+    const next = [...promptInputLatencySamples, rounded];
+    promptInputLatencySamples =
+      next.length > LATENCY_SAMPLE_CAP
+        ? next.slice(next.length - LATENCY_SAMPLE_CAP)
+        : next;
+  }
+
+  const promptInputLatencyMetrics = $derived.by(() => {
+    const samples = promptInputLatencySamples;
+    if (samples.length === 0) {
+      return null;
+    }
+    const last = samples[samples.length - 1] ?? 0;
+    const avg = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+    const p95 = quantile(samples, 0.95);
+    const max = Math.max(...samples);
+    return {
+      last,
+      avg,
+      p95,
+      max,
+      count: samples.length,
+    };
+  });
+
+  interface ImageAttachment {
+    readonly id: string;
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly sizeBytes: number;
+    readonly base64: string;
+    readonly previewUrl: string;
+  }
+  let imageAttachments = $state<ImageAttachment[]>([]);
+  interface OptimisticImageAttachment {
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly dataUrl: string;
+  }
+  let optimisticUserImageAttachments = $state<
+    readonly OptimisticImageAttachment[]
+  >([]);
+
+  function sanitizeAttachmentFileName(fileName: string): string {
+    return fileName.replace(/[\\/]/g, "_");
+  }
+
+  function attachmentKey(
+    fileName: string,
+    sizeBytes: number,
+    mimeType: string,
+  ): string {
+    return `${fileName}:${sizeBytes}:${mimeType}`;
+  }
+
+  function toAttachmentRefs(): readonly FileReference[] {
+    return imageAttachments.map((attachment) => ({
+      path: `upload/${sanitizeAttachmentFileName(attachment.fileName)}`,
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      encoding: "base64",
+      content: attachment.base64,
+      attachmentKind: "image",
+    }));
+  }
+
+  function toOptimisticImageAttachments(): readonly OptimisticImageAttachment[] {
+    return imageAttachments.map((attachment) => ({
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      dataUrl: `data:${attachment.mimeType};base64,${attachment.base64}`,
+    }));
+  }
+
+  function clearImageAttachments(): void {
+    for (const attachment of imageAttachments) {
+      URL.revokeObjectURL(attachment.previewUrl);
+    }
+    imageAttachments = [];
+  }
+
+  function removeImageAttachment(id: string): void {
+    const found = imageAttachments.find((attachment) => attachment.id === id);
+    if (found !== undefined) {
+      URL.revokeObjectURL(found.previewUrl);
+    }
+    imageAttachments = imageAttachments.filter(
+      (attachment) => attachment.id !== id,
+    );
+  }
+
+  function formatBytes(sizeBytes: number): string {
+    if (sizeBytes < 1024) {
+      return `${sizeBytes} B`;
+    }
+    if (sizeBytes < 1024 * 1024) {
+      return `${(sizeBytes / 1024).toFixed(1)} KB`;
+    }
+    return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function readImageAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+          return;
+        }
+        reject(new Error("Failed to read image file."));
+      };
+      reader.onerror = () => reject(new Error("Failed to read image file."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleImageAttachmentInput(event: Event): Promise<void> {
+    const input = event.currentTarget as HTMLInputElement;
+    const files = input.files;
+    if (files === null || files.length === 0) {
+      return;
+    }
+
+    attachmentError = null;
+    const skippedMessages: string[] = [];
+    const existingKeys = new Set(
+      imageAttachments.map((attachment) =>
+        attachmentKey(
+          attachment.fileName,
+          attachment.sizeBytes,
+          attachment.mimeType,
+        ),
+      ),
+    );
+    const nextAttachments = [...imageAttachments];
+
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith("image/")) {
+        skippedMessages.push(`${file.name}: only image files are supported.`);
+        continue;
+      }
+      if (file.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+        skippedMessages.push(
+          `${file.name}: exceeds ${formatBytes(MAX_IMAGE_ATTACHMENT_BYTES)} limit.`,
+        );
+        continue;
+      }
+
+      const candidateKey = attachmentKey(file.name, file.size, file.type);
+      if (existingKeys.has(candidateKey)) {
+        continue;
+      }
+
+      try {
+        const dataUrl = await readImageAsDataUrl(file);
+        const base64 = dataUrl.split(",", 2)[1];
+        if (base64 === undefined || base64.length === 0) {
+          skippedMessages.push(`${file.name}: failed to encode image.`);
+          continue;
+        }
+
+        nextAttachments.push({
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          base64,
+          previewUrl: URL.createObjectURL(file),
+        });
+        existingKeys.add(candidateKey);
+      } catch {
+        skippedMessages.push(`${file.name}: failed to read image.`);
+      }
+    }
+
+    imageAttachments = nextAttachments;
+    attachmentError =
+      skippedMessages.length > 0 ? skippedMessages.join(" ") : null;
+    input.value = "";
+  }
 
   function normalizePromptText(message: string): string {
     return message.replace(/\s+/g, " ").trim();
@@ -95,29 +408,148 @@
     submitError = null;
     optimisticUserMessage = trimmedPrompt;
     optimisticUserStatus = immediate ? "running" : "queued";
+    optimisticUserImageAttachments = toOptimisticImageAttachments();
     focusTailNonce += 1;
     try {
-      await onSubmitPrompt(trimmedPrompt, immediate);
+      await onSubmitPrompt(trimmedPrompt, immediate, toAttachmentRefs());
       promptText = "";
+      attachmentError = null;
+      clearImageAttachments();
     } catch (error: unknown) {
       submitError =
         error instanceof Error ? error.message : "Failed to submit prompt";
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
     } finally {
       submitting = false;
     }
   }
 
+  async function submitAsNewSession(immediate: boolean): Promise<void> {
+    const trimmedPrompt = promptText.trim();
+    if (trimmedPrompt.length === 0 || submitting || restartingFromBeginning) {
+      return;
+    }
+
+    submitting = true;
+    submitError = null;
+    optimisticUserMessage = trimmedPrompt;
+    optimisticUserStatus = immediate ? "running" : "queued";
+    optimisticUserImageAttachments = toOptimisticImageAttachments();
+    focusTailNonce += 1;
+    try {
+      await onSubmitPromptAsNewSession(
+        trimmedPrompt,
+        immediate,
+        toAttachmentRefs(),
+      );
+      promptText = "";
+      attachmentError = null;
+      clearImageAttachments();
+    } catch (error: unknown) {
+      submitError =
+        error instanceof Error ? error.message : "Failed to submit prompt";
+      optimisticUserMessage = undefined;
+      optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
+    } finally {
+      submitting = false;
+    }
+  }
+
+  async function runDefaultPrompt(
+    kind: "refresh-purpose" | "resume-session",
+  ): Promise<void> {
+    if (!canRunSessionDefaultPrompts || submitting) {
+      return;
+    }
+
+    const assignRunningState = (value: boolean): void => {
+      if (kind === "refresh-purpose") {
+        runningRefreshPurpose = value;
+      } else {
+        runningResumeSession = value;
+      }
+    };
+
+    assignRunningState(true);
+    submitError = null;
+    try {
+      if (kind === "refresh-purpose") {
+        await onRunRefreshPurposePrompt();
+      } else {
+        await onRunResumeSessionPrompt();
+      }
+      focusTailNonce += 1;
+    } catch (error: unknown) {
+      submitError =
+        error instanceof Error ? error.message : "Failed to run default prompt";
+    } finally {
+      assignRunningState(false);
+    }
+  }
+
   function handlePromptComposerKeydown(event: KeyboardEvent): void {
+    if (isTextInsertionKey(event)) {
+      pendingInputKeydownAtMs = performance.now();
+    }
     if (submitting || promptText.trim().length === 0) {
       return;
     }
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
-      void submitNextPrompt(event.shiftKey);
+    if (event.key !== "Enter") {
+      return;
+    }
+    if (event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    // Cmd/Ctrl+Enter submits with immediate priority.
+    if (event.ctrlKey || event.metaKey) {
+      void submitNextPrompt(true);
+      return;
+    }
+    // Enter submits queued by default for faster keyboard flow.
+    if (!event.altKey) {
+      void submitNextPrompt(false);
     }
   }
+
+  function handlePromptInput(): void {
+    const keydownAt = pendingInputKeydownAtMs;
+    pendingInputKeydownAtMs = null;
+    if (keydownAt === null) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      const elapsedMs = performance.now() - keydownAt;
+      pushLatencySample(elapsedMs);
+    });
+  }
+
+  function promptShortcutLabel(): string {
+    if (typeof navigator === "undefined") {
+      return "Enter submits queued. Shift+Enter adds a newline. Ctrl/Cmd+Enter runs immediately.";
+    }
+    const isMacPlatform =
+      navigator.platform.toLowerCase().includes("mac") ||
+      navigator.userAgent.toLowerCase().includes("macintosh");
+    return isMacPlatform
+      ? "Enter submits queued. Shift+Enter adds a newline. Cmd+Enter runs immediately."
+      : "Enter submits queued. Shift+Enter adds a newline. Ctrl+Enter runs immediately.";
+  }
+
+  const promptShortcutHint = $derived(promptShortcutLabel());
+  const shouldLiveRefreshTranscript = $derived(
+    status === "running" || source === "codex-cli",
+  );
+  const hasRunningPendingPrompt = $derived(
+    optimisticUserStatus === "running" ||
+      pendingPromptMessages.some((pending) => pending.status === "running"),
+  );
+  const shouldShowAssistantThinking = $derived(
+    status === "running" || hasRunningPendingPrompt,
+  );
 
   $effect(() => {
     const optimisticMessage = optimisticUserMessage;
@@ -134,9 +566,24 @@
     }
     // Clear stale optimistic message when no matching pending prompt exists
     // and the session is no longer actively processing (e.g. after cancel).
-    if (status === "awaiting_input") {
+    if (status === "awaiting_input" || status === "failed") {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
+    }
+  });
+
+  $effect(() => {
+    const assistantMessage = optimisticAssistantMessage;
+    if (
+      typeof assistantMessage === "string" &&
+      assistantMessage.trim().length > 0
+    ) {
+      optimisticAssistantMessageSticky = assistantMessage;
+      return;
+    }
+    if (!open) {
+      optimisticAssistantMessageSticky = undefined;
     }
   });
 
@@ -144,7 +591,13 @@
     if (!open) {
       optimisticUserMessage = undefined;
       optimisticUserStatus = "queued";
+      optimisticUserImageAttachments = [];
+      optimisticAssistantMessageSticky = undefined;
       showSubmitOptions = false;
+      attachmentError = null;
+      pendingInputKeydownAtMs = null;
+      promptInputLatencySamples = [];
+      clearImageAttachments();
       return;
     }
     const onKeydown = (event: KeyboardEvent): void => {
@@ -155,6 +608,14 @@
     window.addEventListener("keydown", onKeydown);
     return () => {
       window.removeEventListener("keydown", onKeydown);
+    };
+  });
+
+  $effect(() => {
+    return () => {
+      resetCopyFeedbackTimer();
+      optimisticUserImageAttachments = [];
+      clearImageAttachments();
     };
   });
 </script>
@@ -197,7 +658,7 @@
                   ? 'bg-accent-muted text-accent-fg'
                   : source === 'codex-cli'
                     ? 'bg-attention-emphasis/20 text-attention-fg'
-                  : 'bg-bg-tertiary text-text-secondary'}"
+                    : 'bg-bg-tertiary text-text-secondary'}"
             >
               {source}
             </span>
@@ -221,9 +682,164 @@
           <p class="text-xs text-text-tertiary mt-0.5 truncate">
             Latest activity: {latestResponse}
           </p>
+          {#if status === "failed" && failureMessage !== undefined}
+            <p
+              class="mt-1 rounded border border-danger-emphasis/40 bg-danger-emphasis/10 px-2 py-1 text-xs text-danger-fg"
+            >
+              Failure: {failureMessage}
+            </p>
+          {/if}
+          <div class="mt-1 flex flex-wrap items-start gap-x-4 gap-y-1">
+            <div class="flex min-w-[320px] flex-1 items-center gap-1.5">
+              <span
+                class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
+              >
+                Qraft Session ID
+              </span>
+              <span
+                class="min-w-0 truncate text-[11px] text-text-secondary font-mono"
+              >
+                {normalizedQraftSessionId ?? "-"}
+              </span>
+              <button
+                type="button"
+                class="shrink-0 p-0.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover
+                       focus:outline-none focus:ring-1 focus:ring-accent-emphasis
+                       disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() => copySessionId("qraft", normalizedQraftSessionId)}
+                disabled={normalizedQraftSessionId === null}
+                aria-label="Copy Qraft session ID"
+                title="Copy Qraft session ID"
+              >
+                {#if copiedIdType === "qraft"}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-success-fg"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                {:else}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path
+                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    />
+                  </svg>
+                {/if}
+              </button>
+            </div>
+            <div class="flex min-w-[320px] flex-1 items-center gap-1.5">
+              <span
+                class="shrink-0 text-[10px] uppercase tracking-wide text-text-tertiary"
+              >
+                {cliSessionLabel}
+              </span>
+              <span
+                class="min-w-0 truncate text-[11px] text-text-secondary font-mono"
+              >
+                {normalizedCliSessionId ?? "-"}
+              </span>
+              <button
+                type="button"
+                class="shrink-0 p-0.5 rounded text-text-tertiary hover:text-text-primary hover:bg-bg-hover
+                       focus:outline-none focus:ring-1 focus:ring-accent-emphasis
+                       disabled:opacity-60 disabled:cursor-not-allowed"
+                onclick={() => copySessionId("cli", normalizedCliSessionId)}
+                disabled={normalizedCliSessionId === null}
+                aria-label={`Copy ${cliSessionLabel}`}
+                title={`Copy ${cliSessionLabel}`}
+              >
+                {#if copiedIdType === "cli"}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="text-success-fg"
+                    aria-hidden="true"
+                  >
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                {:else}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path
+                      d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                    />
+                  </svg>
+                {/if}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="shrink-0 flex items-center gap-2">
+          {#if canRunSessionDefaultPrompts}
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => {
+                void runDefaultPrompt("refresh-purpose");
+              }}
+              disabled={submitting ||
+                runningRefreshPurpose ||
+                runningResumeSession}
+              aria-label="Refresh purpose"
+              title="Run default refresh-purpose prompt"
+            >
+              {runningRefreshPurpose ? "Refreshing..." : "Refresh Purpose"}
+            </button>
+            <button
+              type="button"
+              class="px-2 py-1 rounded border border-border-default text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => {
+                void runDefaultPrompt("resume-session");
+              }}
+              disabled={submitting ||
+                runningResumeSession ||
+                runningRefreshPurpose}
+              aria-label="Resume session"
+              title="Run default resume-session prompt"
+            >
+              {runningResumeSession ? "Resuming..." : "Resume Session"}
+            </button>
+          {/if}
           {#if canCancelPrompt}
             <button
               type="button"
@@ -266,11 +882,16 @@
             <SessionTranscriptInline
               sessionId={normalizedSessionId}
               {contextId}
-              autoRefreshMs={status === "running" || submitting ? 1500 : 0}
-              followLatest={status === "running"}
+              autoRefreshMs={shouldLiveRefreshTranscript || submitting
+                ? 1500
+                : 0}
+              followLatest={shouldLiveRefreshTranscript}
               {focusTailNonce}
+              showAssistantThinking={shouldShowAssistantThinking}
               {optimisticUserMessage}
               {optimisticUserStatus}
+              {optimisticUserImageAttachments}
+              optimisticAssistantMessage={optimisticAssistantMessageSticky}
               pendingUserMessages={pendingPromptMessages}
             />
           {:else if normalizedSessionId === null}
@@ -289,11 +910,6 @@
         </div>
 
         <div class="min-h-0 overflow-y-auto p-4 bg-bg-secondary/40">
-          <h3
-            class="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2"
-          >
-            Next Prompt
-          </h3>
           {#if showModelProfileSelector}
             <div class="mb-3 space-y-1">
               <label
@@ -326,17 +942,108 @@
                 {/if}
               </select>
             </div>
+          {:else}
+            <div class="mb-3 space-y-1">
+              <p
+                class="text-[11px] font-semibold uppercase tracking-wide text-text-secondary"
+              >
+                Profile (session)
+              </p>
+              <p class="text-[11px] text-text-tertiary">
+                {activeModelLabel ?? "-"}
+              </p>
+            </div>
           {/if}
+          <h3
+            class="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-2"
+          >
+            Next Prompt
+          </h3>
           <textarea
             class="w-full h-40 resize-y min-h-28 rounded border border-border-default bg-bg-primary
                    px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder="Add the next instruction for this session"
             bind:value={promptText}
             onkeydown={handlePromptComposerKeydown}
+            oninput={handlePromptInput}
           ></textarea>
+          <input
+            bind:this={attachmentInput}
+            type="file"
+            accept="image/*"
+            multiple
+            class="hidden"
+            onchange={handleImageAttachmentInput}
+          />
+          <div class="mt-2 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 items-center justify-center rounded border border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover"
+              onclick={() => attachmentInput?.click()}
+              disabled={submitting}
+              aria-label="Attach images"
+              title="Attach images"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path
+                  d="M21.44 11.05l-8.49 8.49a6 6 0 01-8.49-8.49l8.49-8.49a4 4 0 015.66 5.66l-8.49 8.49a2 2 0 01-2.83-2.83l7.78-7.78"
+                />
+              </svg>
+            </button>
+            <p class="text-[11px] text-text-tertiary">
+              Images only (PDF later).
+            </p>
+          </div>
+          {#if imageAttachments.length > 0}
+            <div class="mt-2 space-y-2">
+              {#each imageAttachments as attachment (attachment.id)}
+                <div
+                  class="flex items-center gap-2 rounded border border-border-default bg-bg-primary p-2"
+                >
+                  <img
+                    src={attachment.previewUrl}
+                    alt={attachment.fileName}
+                    class="h-14 w-14 rounded object-cover border border-border-default/70"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-xs text-text-primary">
+                      {attachment.fileName}
+                    </p>
+                    <p class="text-[11px] text-text-tertiary">
+                      {attachment.mimeType} - {formatBytes(
+                        attachment.sizeBytes,
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    class="rounded border border-border-default px-2 py-1 text-[11px] text-text-secondary hover:bg-bg-hover"
+                    onclick={() => removeImageAttachment(attachment.id)}
+                    disabled={submitting}
+                  >
+                    Remove
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
 
           {#if submitError !== null}
             <p class="mt-2 text-xs text-danger-fg">{submitError}</p>
+          {/if}
+          {#if attachmentError !== null}
+            <p class="mt-2 text-xs text-danger-fg">{attachmentError}</p>
           {/if}
           {#if cancelPromptError !== null}
             <p class="mt-2 text-xs text-danger-fg">{cancelPromptError}</p>
@@ -382,15 +1089,31 @@
                 >
                   {submitting ? "Submitting..." : "Run immediately"}
                 </button>
+                <button
+                  type="button"
+                  class="mt-1 w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-hover
+                         text-text-secondary disabled:opacity-60"
+                  disabled={submitting || promptText.trim().length === 0}
+                  onclick={() => void submitAsNewSession(false)}
+                  title="Start a brand-new session and navigate to it"
+                >
+                  {submitting ? "Submitting..." : "Submit as new session"}
+                </button>
               </div>
             {/if}
           </div>
           <p class="mt-2 text-[11px] text-text-tertiary">
-            Default is <span class="font-medium text-text-secondary"
-              >Submit (queued)</span
-            >. Shortcut: Ctrl/Cmd+Enter submits queued, Ctrl/Cmd+Shift+Enter
-            runs immediately.
+            Queue by default. {promptShortcutHint}
           </p>
+          {#if promptInputLatencyMetrics !== null}
+            <p class="mt-1 text-[11px] text-text-tertiary font-mono">
+              Input latency (keydown->paint): last {promptInputLatencyMetrics.last.toFixed(
+                1,
+              )}ms / avg {promptInputLatencyMetrics.avg.toFixed(1)}ms / p95 {promptInputLatencyMetrics.p95.toFixed(
+                1,
+              )}ms / max {promptInputLatencyMetrics.max.toFixed(1)}ms ({promptInputLatencyMetrics.count})
+            </p>
+          {/if}
         </div>
       </div>
     </div>

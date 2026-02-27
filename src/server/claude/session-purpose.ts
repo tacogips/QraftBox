@@ -1,5 +1,8 @@
 import type { TranscriptEvent } from "./session-reader.js";
-import { stripSystemTags } from "../../utils/strip-system-tags";
+import {
+  isInjectedSessionSystemPrompt,
+  stripSystemTags,
+} from "../../utils/strip-system-tags";
 import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -9,6 +12,8 @@ const MAX_INTENT_ITEMS = 10;
 const MAX_INPUT_CHARS = 1600;
 const PURPOSE_REFRESH_INTERVAL = 3;
 const PURPOSE_PROMPT_FILE = "ai-session-purpose.md";
+const SESSION_REFRESH_PURPOSE_PROMPT_FILE = "ai-session-refresh-purpose.md";
+const SESSION_RESUME_PROMPT_FILE = "ai-session-resume.md";
 const PURPOSE_PROMPT_TEMPLATE = `You summarize a coding session's current objective.
 Input contains user intent messages only.
 Return exactly one concise purpose sentence.
@@ -20,6 +25,26 @@ Rules:
 
 User intent messages (oldest to newest):
 {{intentLines}}`;
+const SESSION_REFRESH_PURPOSE_PROMPT_TEMPLATE = `Refresh the current session purpose based on the latest user and assistant messages.
+Return one concise sentence describing the current objective.`;
+const SESSION_RESUME_PROMPT_TEMPLATE = `resume this session`;
+
+export type AISessionPromptName =
+  | "ai-session-purpose"
+  | "ai-session-refresh-purpose"
+  | "ai-session-resume";
+
+const SESSION_PROMPT_FILES: Record<AISessionPromptName, string> = {
+  "ai-session-purpose": PURPOSE_PROMPT_FILE,
+  "ai-session-refresh-purpose": SESSION_REFRESH_PURPOSE_PROMPT_FILE,
+  "ai-session-resume": SESSION_RESUME_PROMPT_FILE,
+};
+
+const SESSION_PROMPT_FALLBACKS: Record<AISessionPromptName, string> = {
+  "ai-session-purpose": PURPOSE_PROMPT_TEMPLATE,
+  "ai-session-refresh-purpose": SESSION_REFRESH_PURPOSE_PROMPT_TEMPLATE,
+  "ai-session-resume": SESSION_RESUME_PROMPT_TEMPLATE,
+};
 
 function getPurposePromptDir(): string {
   return join(homedir(), ".config", "qraftbox", "prompt");
@@ -31,30 +56,68 @@ export function getPurposePromptPath(): string {
 
 export type PurposePromptSource = "file" | "fallback";
 
-export async function loadPurposePromptTemplate(): Promise<{
+export function getAISessionPromptPath(name: AISessionPromptName): string {
+  return join(getPurposePromptDir(), SESSION_PROMPT_FILES[name]);
+}
+
+export async function loadAISessionPromptTemplate(
+  name: AISessionPromptName,
+): Promise<{
   readonly template: string;
   readonly source: PurposePromptSource;
 }> {
-  const path = getPurposePromptPath();
+  const path = getAISessionPromptPath(name);
   try {
     const template = await readFile(path, "utf-8");
     return { template, source: "file" };
   } catch {
-    return { template: PURPOSE_PROMPT_TEMPLATE, source: "fallback" };
+    return { template: SESSION_PROMPT_FALLBACKS[name], source: "fallback" };
   }
 }
 
-export async function ensurePurposePromptFile(): Promise<void> {
+export async function ensureAISessionPromptFile(
+  name: AISessionPromptName,
+): Promise<void> {
   const dir = getPurposePromptDir();
-  const path = getPurposePromptPath();
+  const path = getAISessionPromptPath(name);
 
   if (!existsSync(dir)) {
     await mkdir(dir, { recursive: true });
   }
 
   if (!existsSync(path)) {
-    await writeFile(path, PURPOSE_PROMPT_TEMPLATE, "utf-8");
+    await writeFile(path, SESSION_PROMPT_FALLBACKS[name], "utf-8");
   }
+}
+
+export async function saveAISessionPromptTemplate(
+  name: AISessionPromptName,
+  template: string,
+): Promise<void> {
+  const next = template.trim();
+  if (next.length === 0) {
+    throw new Error("Prompt content is required");
+  }
+
+  await ensureAISessionPromptFile(name);
+  await writeFile(getAISessionPromptPath(name), `${next}\n`, "utf-8");
+}
+
+export async function loadPurposePromptTemplate(): Promise<{
+  readonly template: string;
+  readonly source: PurposePromptSource;
+}> {
+  return loadAISessionPromptTemplate("ai-session-purpose");
+}
+
+export async function ensurePurposePromptFile(): Promise<void> {
+  await ensureAISessionPromptFile("ai-session-purpose");
+}
+
+export async function savePurposePromptTemplate(
+  template: string,
+): Promise<void> {
+  await saveAISessionPromptTemplate("ai-session-purpose", template);
 }
 
 function normalizeWhitespace(text: string): string {
@@ -161,6 +224,9 @@ export function extractUserIntents(
 
   for (const event of events) {
     const rawText = extractUserMessageText(event);
+    if (isInjectedSessionSystemPrompt(rawText)) {
+      continue;
+    }
     const normalized = normalizeWhitespace(stripSystemTags(rawText));
     if (normalized.length < 3) {
       continue;

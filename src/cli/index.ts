@@ -51,7 +51,7 @@ export function parseArgs(args: string[]): CLIConfig {
       "All You Need Is Diff - Local diff viewer with git integration",
     )
     .version(packageJson.version)
-    .argument("[projectPath]", "Path to project directory", ".")
+    .argument("[projectPath]", "Path to project directory")
     .option("-p, --port <number>", "Server port", "7144")
     .option("-h, --host <string>", "Server host", "localhost")
     .option("--open", "Open browser automatically")
@@ -76,7 +76,8 @@ export function parseArgs(args: string[]): CLIConfig {
   program.parse(args);
 
   const options = program.opts();
-  const projectPath = program.args[0] ?? ".";
+  const positionalProjectPath = program.args[0];
+  const projectPath = positionalProjectPath ?? ".";
 
   // Parse port as number
   const port = parseInt(options["port"], 10);
@@ -121,6 +122,10 @@ export function parseArgs(args: string[]): CLIConfig {
         ? (options["assistantAdditionalArgs"] as string).split(",")
         : ["--dangerously-skip-permissions"],
     projectDirs,
+    temporaryProjectMode:
+      typeof positionalProjectPath === "string" &&
+      positionalProjectPath.length > 0 &&
+      projectDirs.length === 0,
   };
 }
 
@@ -255,6 +260,9 @@ export async function main(): Promise<void> {
     logger.info(`Sync mode: ${config.syncMode}`);
     logger.info(`AI features: ${config.ai ? "enabled" : "disabled"}`);
     logger.info(`File watching: ${config.watch ? "enabled" : "disabled"}`);
+    logger.info(
+      `Temporary project mode: ${config.temporaryProjectMode === true ? "enabled" : "disabled"}`,
+    );
 
     // Create context manager
     const contextManager = createContextManager();
@@ -266,11 +274,16 @@ export async function main(): Promise<void> {
     const openTabsStore = createOpenTabsStore();
 
     // Determine which project directories to open
+    const temporaryProjectMode = config.temporaryProjectMode === true;
     let dirsToOpen = [...config.projectDirs];
     let activeTabPath: string | null = null;
 
-    // If no --project-dir specified, restore previously open tabs
-    if (dirsToOpen.length === 0) {
+    if (temporaryProjectMode) {
+      // Positional path always opens as a temporary, single-project session.
+      dirsToOpen = [config.projectPath];
+      activeTabPath = config.projectPath;
+    } else if (dirsToOpen.length === 0) {
+      // If no --project-dir specified, restore previously open tabs
       const storeInitialized = await openTabsStore.isInitialized();
       if (storeInitialized) {
         // Store has been used before - trust saved state (even if empty)
@@ -302,14 +315,18 @@ export async function main(): Promise<void> {
     const initialTabs = [];
     for (const dir of dirsToOpen) {
       try {
-        const tab = await contextManager.createContext(dir);
-        initialTabs.push(tab);
-        await recentStore.add({
-          path: tab.path,
-          name: tab.name,
-          lastOpened: Date.now(),
-          isGitRepo: tab.isGitRepo,
+        const tab = await contextManager.createContext(dir, {
+          persistInRegistry: !temporaryProjectMode,
         });
+        initialTabs.push(tab);
+        if (!temporaryProjectMode) {
+          await recentStore.add({
+            path: tab.path,
+            name: tab.name,
+            lastOpened: Date.now(),
+            isGitRepo: tab.isGitRepo,
+          });
+        }
       } catch (e) {
         logger.error(`Failed to open project directory: ${dir}`, e);
       }
@@ -329,9 +346,10 @@ export async function main(): Promise<void> {
       config,
       contextManager,
       recentStore,
-      openTabsStore,
+      openTabsStore: temporaryProjectMode ? undefined : openTabsStore,
       activeTabPath: activeTabPath ?? undefined,
       initialTabs,
+      temporaryProjectMode,
       broadcast: (event: string, data: unknown) => {
         wsManager.broadcast(event, data);
       },

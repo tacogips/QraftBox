@@ -14,14 +14,26 @@ import type {
 import { isSessionSource } from "../../types/claude-session";
 import {
   ClaudeSessionReader,
+  type ListSessionsOptions,
   type SessionSummary,
+  type TranscriptEvent,
 } from "../claude/session-reader";
-import { stripSystemTags } from "../../utils/strip-system-tags";
+import {
+  stripSystemTags,
+  wrapQraftboxInternalPrompt,
+} from "../../utils/strip-system-tags";
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
-import type { QraftAiSessionId } from "../../types/ai.js";
+import type {
+  ClaudeSessionId,
+  QraftAiSessionId,
+  WorktreeId,
+} from "../../types/ai.js";
 import { AIAgent } from "../../types/ai-agent.js";
 import { SessionEnrichmentService } from "../claude/session-enrichment.js";
-import type { SessionManager } from "../ai/session-manager.js";
+import {
+  generateWorktreeId,
+  type SessionManager,
+} from "../ai/session-manager.js";
 import type { AiSessionRow } from "../ai/ai-session-store.js";
 import {
   buildPurposePrompt,
@@ -33,6 +45,24 @@ import {
 } from "../claude/session-purpose.js";
 import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 import type { ModelConfigStore } from "../model-config/store.js";
+import type { AISessionInfo } from "../../types/ai.js";
+import { buildAgentAuthEnv } from "../ai/claude-env.js";
+
+interface ClaudeSessionReaderLike {
+  listProjects(pathFilter?: string): Promise<ProjectInfo[]>;
+  listSessions(options?: ListSessionsOptions): Promise<SessionListResponse>;
+  getSession(sessionId: string): Promise<ExtendedSessionEntry | null>;
+  readTranscript(
+    sessionId: string,
+    offset?: number,
+    limit?: number,
+  ): Promise<{ events: TranscriptEvent[]; total: number } | null>;
+  getSessionSummary(sessionId: string): Promise<SessionSummary | null>;
+}
+
+interface ClaudeSessionsRouteDependencies {
+  readonly sessionReader?: ClaudeSessionReaderLike;
+}
 
 /**
  * Error response format
@@ -65,10 +95,9 @@ interface PurposeCacheEntry {
   readonly source: "llm" | "fallback";
 }
 
-function wrapInternalPurposePrompt(content: string): string {
-  return `<qraftbox-internal-prompt label="ai-session-purpose" anchor="session-purpose-v1">
-${content}
-</qraftbox-internal-prompt>`;
+interface SessionListCacheEntry {
+  readonly cachedAtMs: number;
+  readonly payload: SessionListResponse;
 }
 
 /**
@@ -90,15 +119,20 @@ export function createClaudeSessionsRoutes(
   mappingStore?: SessionMappingStore | undefined,
   sessionManager?: SessionManager | undefined,
   modelConfigStore?: ModelConfigStore | undefined,
+  dependencies?: ClaudeSessionsRouteDependencies,
 ): Hono {
   const app = new Hono();
-  const sessionReader = new ClaudeSessionReader(undefined, mappingStore);
+  const sessionReader: ClaudeSessionReaderLike =
+    dependencies?.sessionReader ??
+    new ClaudeSessionReader(undefined, mappingStore);
   const enrichmentService =
     mappingStore !== undefined
       ? new SessionEnrichmentService(mappingStore)
       : undefined;
   const purposeCache = new Map<string, PurposeCacheEntry>();
   const inFlightPurpose = new Map<string, Promise<SessionPurposeResponse>>();
+  const sessionListCache = new Map<string, SessionListCacheEntry>();
+  const SESSION_LIST_CACHE_TTL_MS = 5000;
 
   function extractAssistantTextFromMessage(msg: unknown): string | undefined {
     if (typeof msg !== "object" || msg === null || !("type" in msg)) {
@@ -150,12 +184,15 @@ export function createClaudeSessionsRoutes(
       cwd: projectPath,
       allowedTools: [],
       mcpServers: {},
+      env: buildAgentAuthEnv("anthropics", "cli_auth"),
     });
 
     let assistantText = "";
     try {
-      const prompt = wrapInternalPurposePrompt(
+      const prompt = wrapQraftboxInternalPrompt(
+        "ai-session-purpose",
         await buildPurposePrompt(intents, outputLanguage),
+        "session-purpose-v1",
       );
       const session = await runner.startSession({ prompt });
       session.on("message", (msg: unknown) => {
@@ -192,7 +229,7 @@ export function createClaudeSessionsRoutes(
     qraftAiSessionId: string,
   ): string | undefined {
     if (mappingStore !== undefined) {
-      const mappedClaudeSessionId = mappingStore.findClaudeSessionId(
+      const mappedClaudeSessionId = mappingStore.findClaudeSessionIdSqlOnly(
         qraftAiSessionId as QraftAiSessionId,
       );
       if (mappedClaudeSessionId !== undefined) {
@@ -214,21 +251,129 @@ export function createClaudeSessionsRoutes(
 
     // Fallback: qraftAiSessionId is typically the client session group ID,
     // while actual session rows have distinct generated ids.
-    const bestMatch = sessionManager
-      .listSessions()
-      .filter(
-        (session) =>
-          session.claudeSessionId !== undefined &&
-          (session.clientSessionId === qraftAiSessionId ||
-            session.id === qraftAiSessionId),
-      )
-      .sort((a, b) => {
-        const aTime = Date.parse(a.completedAt ?? a.startedAt ?? a.createdAt);
-        const bTime = Date.parse(b.completedAt ?? b.startedAt ?? b.createdAt);
-        return bTime - aTime;
-      })[0];
-
+    let bestMatch: AISessionInfo | undefined;
+    let bestTime = Number.NEGATIVE_INFINITY;
+    for (const session of sessionManager.listSessions()) {
+      if (
+        session.claudeSessionId === undefined ||
+        (session.clientSessionId !== qraftAiSessionId &&
+          session.id !== qraftAiSessionId)
+      ) {
+        continue;
+      }
+      const sessionTime = Date.parse(
+        session.completedAt ?? session.startedAt ?? session.createdAt,
+      );
+      if (sessionTime > bestTime) {
+        bestTime = sessionTime;
+        bestMatch = session;
+      }
+    }
     return bestMatch?.claudeSessionId;
+  }
+
+  function resolveBestQraftSessionInfo(
+    qraftAiSessionId: string,
+  ): AISessionInfo | undefined {
+    if (sessionManager === undefined) {
+      return undefined;
+    }
+
+    const direct = sessionManager.getSession(
+      qraftAiSessionId as QraftAiSessionId,
+    );
+    if (direct !== null) {
+      return direct;
+    }
+
+    let bestMatch: AISessionInfo | undefined;
+    let bestTime = Number.NEGATIVE_INFINITY;
+    for (const session of sessionManager.listSessions()) {
+      if (
+        session.clientSessionId !== qraftAiSessionId &&
+        session.id !== qraftAiSessionId
+      ) {
+        continue;
+      }
+      const sessionTime = Date.parse(
+        session.completedAt ?? session.startedAt ?? session.createdAt,
+      );
+      if (sessionTime > bestTime) {
+        bestTime = sessionTime;
+        bestMatch = session;
+      }
+    }
+    return bestMatch;
+  }
+
+  function buildFallbackTranscriptPayload(qraftAiSessionId: string):
+    | {
+        events: readonly {
+          type: "user" | "assistant";
+          timestamp: string;
+          content: string;
+          raw: Record<string, unknown>;
+        }[];
+        qraftAiSessionId: string;
+        offset: number;
+        limit: number;
+        total: number;
+      }
+    | undefined {
+    const session = resolveBestQraftSessionInfo(qraftAiSessionId);
+    if (session === undefined) {
+      return undefined;
+    }
+
+    const events: {
+      type: "user" | "assistant";
+      timestamp: string;
+      content: string;
+      raw: Record<string, unknown>;
+    }[] = [];
+
+    const userContent = stripSystemTags(session.prompt).trim();
+    if (userContent.length > 0) {
+      events.push({
+        type: "user",
+        timestamp: session.createdAt,
+        content: userContent,
+        raw: {
+          type: "user",
+          message: { role: "user", content: userContent },
+          source: "qraftbox-fallback",
+        },
+      });
+    }
+
+    const assistantContent = stripSystemTags(
+      session.lastAssistantMessage ?? "",
+    ).trim();
+    if (assistantContent.length > 0) {
+      events.push({
+        type: "assistant",
+        timestamp:
+          session.completedAt ?? session.startedAt ?? session.createdAt,
+        content: assistantContent,
+        raw: {
+          type: "assistant",
+          message: { role: "assistant", content: assistantContent },
+          source: "qraftbox-fallback",
+        },
+      });
+    }
+
+    if (events.length === 0) {
+      return undefined;
+    }
+
+    return {
+      events,
+      qraftAiSessionId,
+      offset: 0,
+      limit: 200,
+      total: events.length,
+    };
   }
 
   /**
@@ -359,17 +504,7 @@ export function createClaudeSessionsRoutes(
       }
 
       // Build options object with only defined values
-      const options: {
-        workingDirectoryPrefix?: string;
-        source?: SessionSource;
-        branch?: string;
-        search?: string;
-        dateRange?: { from?: string; to?: string };
-        offset?: number;
-        limit?: number;
-        sortBy?: "modified" | "created";
-        sortOrder?: "asc" | "desc";
-      } = {};
+      const options: ListSessionsOptions = {};
 
       if (workingDirectoryPrefix !== undefined) {
         options.workingDirectoryPrefix = workingDirectoryPrefix;
@@ -398,15 +533,74 @@ export function createClaudeSessionsRoutes(
       if (sortOrder !== undefined) {
         options.sortOrder = sortOrder;
       }
+      // Keep list endpoint responsive: avoid per-session JSONL scans when
+      // recovering firstPrompt from system-only index content.
+      options.recoverFirstPromptFromJsonl = false;
+      // Favor low-latency overview list rendering when index files are absent.
+      options.fastListMode = true;
+
+      const cacheKey = JSON.stringify({
+        workingDirectoryPrefix: options.workingDirectoryPrefix ?? null,
+        source: options.source ?? null,
+        branch: options.branch ?? null,
+        search: options.search ?? null,
+        dateRange: options.dateRange ?? null,
+        offset: options.offset ?? 0,
+        limit: options.limit ?? 50,
+        sortBy: options.sortBy ?? "modified",
+        sortOrder: options.sortOrder ?? "desc",
+        recoverFirstPromptFromJsonl: options.recoverFirstPromptFromJsonl,
+        fastListMode: options.fastListMode,
+      });
+      const nowMs = Date.now();
+      const cached = sessionListCache.get(cacheKey);
+      if (cached !== undefined) {
+        const cacheAgeMs = nowMs - cached.cachedAtMs;
+        if (cacheAgeMs < SESSION_LIST_CACHE_TTL_MS) {
+          return c.json(cached.payload);
+        }
+      }
 
       // List sessions with filters
       const response: SessionListResponse =
         await sessionReader.listSessions(options);
+      const allRuntimeSessions =
+        sessionManager !== undefined ? sessionManager.listSessions() : [];
+      const completedRuntimeRows =
+        sessionManager !== undefined ? sessionManager.listCompletedRows() : [];
 
       // Strip system tags from firstPrompt/summary before returning
       for (const session of response.sessions) {
         session.firstPrompt = stripSystemTags(session.firstPrompt);
         session.summary = stripSystemTags(session.summary);
+      }
+
+      // Normalize mappings so CLI/codex sessions created from QraftBox share
+      // the same qraftAiSessionId (client session group ID).
+      if (mappingStore !== undefined && sessionManager !== undefined) {
+        for (const row of completedRuntimeRows) {
+          const clientSessionId = row.clientSessionId;
+          const concreteSessionId = row.currentClaudeSessionId;
+          if (
+            clientSessionId === undefined ||
+            concreteSessionId === undefined ||
+            concreteSessionId.length === 0 ||
+            concreteSessionId.startsWith("pending-")
+          ) {
+            continue;
+          }
+          try {
+            mappingStore.upsert(
+              concreteSessionId,
+              row.projectPath,
+              (row.worktreeId ?? "unknown") as WorktreeId,
+              "qraftbox",
+              clientSessionId,
+            );
+          } catch {
+            // Best-effort normalization; keep list endpoint resilient.
+          }
+        }
       }
 
       // Enrich sessions with qraftAiSessionId via batch SQLite lookup.
@@ -415,17 +609,190 @@ export function createClaudeSessionsRoutes(
         enrichmentService.enrichSessionsWithQraftIds(response.sessions);
       }
 
-      // Merge QraftBox-only sessions (completed sessions without CLI counterpart)
+      if (mappingStore !== undefined) {
+        const normalizeSessionId = (value: string): string =>
+          value.startsWith("codex-session-")
+            ? value.slice("codex-session-".length)
+            : value;
+        for (const session of response.sessions) {
+          try {
+            const isQraftSource =
+              mappingStore.isQraftBoxSession(
+                session.sessionId as ClaudeSessionId,
+              ) ||
+              mappingStore.isQraftBoxSession(
+                normalizeSessionId(session.sessionId) as ClaudeSessionId,
+              );
+            if (isQraftSource) {
+              session.source = "qraftbox";
+            }
+          } catch {
+            // Best-effort source normalization.
+          }
+        }
+      }
+
+      // Reconcile Codex sessions created via QraftBox when runtime row still has
+      // only pending-* claudeSessionId. In that case, bind the concrete listed
+      // codex session back to the clientSessionId by prompt/time proximity.
       if (sessionManager !== undefined) {
+        const normalizeText = (value: string): string =>
+          stripSystemTags(value).replace(/\s+/g, " ").trim().toLowerCase();
+
+        const codexListedSessions = response.sessions.filter(
+          (session) => session.aiAgent === AIAgent.CODEX,
+        );
+
+        for (const row of completedRuntimeRows) {
+          if (
+            row.aiAgent !== AIAgent.CODEX ||
+            row.clientSessionId === undefined ||
+            row.currentClaudeSessionId === undefined ||
+            !row.currentClaudeSessionId.startsWith("pending-")
+          ) {
+            continue;
+          }
+
+          const normalizedPrompt = normalizeText(row.message ?? "");
+          if (normalizedPrompt.length === 0) {
+            continue;
+          }
+
+          const rowTime = new Date(
+            row.completedAt ?? row.startedAt ?? row.createdAt,
+          ).getTime();
+
+          let bestMatch: ExtendedSessionEntry | undefined;
+          let bestDelta = Number.POSITIVE_INFINITY;
+          for (const session of codexListedSessions) {
+            const sessionPrompt = normalizeText(session.firstPrompt);
+            if (sessionPrompt !== normalizedPrompt) {
+              continue;
+            }
+            const sessionTime = new Date(session.modified).getTime();
+            const delta = Math.abs(sessionTime - rowTime);
+            if (delta < bestDelta) {
+              bestDelta = delta;
+              bestMatch = session;
+            }
+          }
+
+          if (bestMatch === undefined || bestDelta > 2 * 60 * 1000) {
+            continue;
+          }
+
+          bestMatch.qraftAiSessionId = row.clientSessionId;
+          bestMatch.source = "qraftbox";
+          if (mappingStore !== undefined) {
+            try {
+              mappingStore.upsert(
+                bestMatch.sessionId as ClaudeSessionId,
+                row.projectPath,
+                (row.worktreeId ?? "unknown") as WorktreeId,
+                "qraftbox",
+                row.clientSessionId,
+              );
+            } catch {
+              // Best-effort mapping reconciliation.
+            }
+          }
+        }
+      }
+
+      // Reconcile active (including running) QraftBox sessions by concrete
+      // claudeSessionId so list rows keep Qraft identity in real time.
+      if (sessionManager !== undefined) {
+        const normalizeSessionId = (value: string): string =>
+          value.startsWith("codex-session-")
+            ? value.slice("codex-session-".length)
+            : value;
+
+        const activeByConcreteClaudeId = new Map<string, AISessionInfo>();
+        for (const session of allRuntimeSessions) {
+          if (
+            session.clientSessionId === undefined ||
+            session.claudeSessionId === undefined ||
+            session.claudeSessionId.length === 0 ||
+            session.claudeSessionId.startsWith("pending-")
+          ) {
+            continue;
+          }
+          activeByConcreteClaudeId.set(
+            normalizeSessionId(session.claudeSessionId),
+            session,
+          );
+        }
+
+        for (const listed of response.sessions) {
+          const concreteId = normalizeSessionId(listed.sessionId);
+          const active = activeByConcreteClaudeId.get(concreteId);
+          if (active === undefined || active.clientSessionId === undefined) {
+            continue;
+          }
+          listed.qraftAiSessionId = active.clientSessionId;
+          listed.source = "qraftbox";
+          if (mappingStore !== undefined) {
+            try {
+              mappingStore.upsert(
+                listed.sessionId as ClaudeSessionId,
+                listed.projectPath,
+                generateWorktreeId(listed.projectPath),
+                "qraftbox",
+                active.clientSessionId,
+              );
+            } catch {
+              // Best-effort reconciliation.
+            }
+          }
+        }
+      }
+
+      const effectiveOffset = options.offset ?? 0;
+      const effectiveLimit = options.limit ?? 50;
+
+      // Merge QraftBox-only sessions (completed sessions without CLI counterpart).
+      // For paginated follow-up pages (offset > 0), keep reader pagination intact.
+      if (sessionManager !== undefined && effectiveOffset === 0) {
         const cliQraftIds = new Set(
           response.sessions.map((session) => session.qraftAiSessionId),
         );
+        const normalizeSessionId = (value: string): string => {
+          if (value.startsWith("codex-session-")) {
+            return value.slice("codex-session-".length);
+          }
+          return value;
+        };
+        const normalizeText = (value: string): string =>
+          stripSystemTags(value).replace(/\s+/g, " ").trim().toLowerCase();
+        const cliSessionIds = new Set(
+          response.sessions
+            .map((session) => session.sessionId)
+            .filter((sessionId) => sessionId.length > 0)
+            .map((sessionId) => normalizeSessionId(sessionId)),
+        );
+        const cliSessionIdsByPromptMinute = new Map<string, string[]>();
+        const cliPromptTimeKeys = new Set(
+          response.sessions
+            .filter((session) => session.source !== "qraftbox")
+            .map((session) => {
+              const normalizedPrompt = normalizeText(session.firstPrompt);
+              const bucketMinute = Math.floor(
+                new Date(session.modified).getTime() / 60000,
+              );
+              const key = `${normalizedPrompt}::${bucketMinute}`;
+              const existing = cliSessionIdsByPromptMinute.get(key) ?? [];
+              existing.push(session.sessionId);
+              cliSessionIdsByPromptMinute.set(key, existing);
+              return key;
+            }),
+        );
+        const cliSessionIdsToDrop = new Set<string>();
 
-        const completedRows = sessionManager.listCompletedRows();
+        let addedQraftOnlyCount = 0;
 
         // Group by clientSessionId, keeping newest per group
         const latestByGroup = new Map<string, AiSessionRow>();
-        for (const row of completedRows) {
+        for (const row of completedRuntimeRows) {
           const groupKey = row.clientSessionId ?? row.id;
           const existing = latestByGroup.get(groupKey);
           if (existing === undefined) {
@@ -447,6 +814,36 @@ export function createClaudeSessionsRoutes(
           // Skip if CLI already has this session
           const qraftId = row.clientSessionId ?? row.id;
           if (cliQraftIds.has(qraftId as QraftAiSessionId)) continue;
+          if (
+            row.currentClaudeSessionId !== undefined &&
+            row.currentClaudeSessionId.length > 0 &&
+            cliSessionIds.has(normalizeSessionId(row.currentClaudeSessionId))
+          ) {
+            continue;
+          }
+          if (
+            row.aiAgent === AIAgent.CODEX &&
+            row.currentClaudeSessionId !== undefined &&
+            row.currentClaudeSessionId.startsWith("pending-")
+          ) {
+            const normalizedPrompt = normalizeText(row.message ?? "");
+            const rowBucketMinute = Math.floor(
+              new Date(
+                row.completedAt ?? row.startedAt ?? row.createdAt,
+              ).getTime() / 60000,
+            );
+            const matchKey = `${normalizedPrompt}::${rowBucketMinute}`;
+            if (cliPromptTimeKeys.has(matchKey)) {
+              const matchedCliSessionIds =
+                cliSessionIdsByPromptMinute.get(matchKey) ?? [];
+              if (matchedCliSessionIds.length > 0) {
+                const matchedSessionId = matchedCliSessionIds[0];
+                if (matchedSessionId !== undefined) {
+                  cliSessionIdsToDrop.add(matchedSessionId);
+                }
+              }
+            }
+          }
 
           // Apply workingDirectoryPrefix filter
           if (
@@ -499,6 +896,13 @@ export function createClaudeSessionsRoutes(
           };
 
           response.sessions.push(extended);
+          addedQraftOnlyCount += 1;
+        }
+
+        if (cliSessionIdsToDrop.size > 0) {
+          response.sessions = response.sessions.filter(
+            (session) => !cliSessionIdsToDrop.has(session.sessionId),
+          );
         }
 
         // Re-sort the combined list
@@ -509,8 +913,11 @@ export function createClaudeSessionsRoutes(
           );
         });
 
-        // Update total
-        response.total = response.sessions.length;
+        // Respect requested page size after merge.
+        response.sessions = response.sessions.slice(0, effectiveLimit);
+        response.total += addedQraftOnlyCount;
+        response.offset = 0;
+        response.limit = effectiveLimit;
       }
 
       // Apply purpose override only for QraftBox-originated sessions.
@@ -529,6 +936,44 @@ export function createClaudeSessionsRoutes(
           session.firstPrompt = computedPurpose;
         }
       }
+
+      // Enrich list rows with model/profile metadata from runtime session store.
+      // This allows UI to display which profile/model was used per session.
+      if (sessionManager !== undefined) {
+        const latestRuntimeByGroupId = new Map<string, AISessionInfo>();
+        const runtimeTimestampMs = (session: AISessionInfo): number =>
+          new Date(
+            session.completedAt ?? session.startedAt ?? session.createdAt,
+          ).getTime();
+
+        for (const runtimeSession of allRuntimeSessions) {
+          const groupId = runtimeSession.clientSessionId ?? runtimeSession.id;
+          const existing = latestRuntimeByGroupId.get(groupId);
+          if (
+            existing === undefined ||
+            runtimeTimestampMs(runtimeSession) > runtimeTimestampMs(existing)
+          ) {
+            latestRuntimeByGroupId.set(groupId, runtimeSession);
+          }
+        }
+
+        for (const listedSession of response.sessions) {
+          const runtime = latestRuntimeByGroupId.get(
+            listedSession.qraftAiSessionId,
+          );
+          if (runtime === undefined) {
+            continue;
+          }
+          listedSession.modelProfileId = runtime.modelProfileId;
+          listedSession.modelVendor = runtime.modelVendor;
+          listedSession.modelName = runtime.modelName;
+        }
+      }
+
+      sessionListCache.set(cacheKey, {
+        cachedAtMs: nowMs,
+        payload: response,
+      });
 
       return c.json(response);
     } catch (e) {
@@ -622,6 +1067,10 @@ export function createClaudeSessionsRoutes(
     // Resolve qraftAiSessionId to Claude UUID
     const claudeSessionId = resolveClaudeSessionId(qraftId);
     if (claudeSessionId === undefined) {
+      const fallback = buildFallbackTranscriptPayload(qraftId);
+      if (fallback !== undefined) {
+        return c.json(fallback);
+      }
       const errorResponse: ErrorResponse = {
         error: `Session not found: ${qraftId}`,
         code: 404,
@@ -674,6 +1123,10 @@ export function createClaudeSessionsRoutes(
       );
 
       if (result === null) {
+        const fallback = buildFallbackTranscriptPayload(qraftId);
+        if (fallback !== undefined) {
+          return c.json(fallback);
+        }
         const errorResponse: ErrorResponse = {
           error: `Session not found: ${qraftId}`,
           code: 404,

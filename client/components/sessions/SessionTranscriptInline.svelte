@@ -27,6 +27,8 @@
     optimisticUserStatus?: "queued" | "running" | undefined;
     /** Optimistic assistant message shown before transcript persistence */
     optimisticAssistantMessage?: string | undefined;
+    /** Show assistant thinking placeholder while waiting for first response */
+    showAssistantThinking?: boolean | undefined;
     /** Queued user prompts not yet persisted to transcript */
     pendingUserMessages?:
       | readonly {
@@ -34,9 +36,27 @@
           status: "queued" | "running";
         }[]
       | undefined;
+    optimisticUserImageAttachments?:
+      | readonly {
+          fileName: string;
+          mimeType: string;
+          dataUrl: string;
+        }[]
+      | undefined;
+    onRestartSeedChange?:
+      | ((state: {
+          canRestartFromFirstPrompt: boolean;
+          firstUserPrompt: string;
+        }) => void)
+      | undefined;
   }
 
-  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+  import {
+    isInjectedSessionSystemPrompt,
+    stripSystemTags,
+  } from "../../../src/utils/strip-system-tags";
+  import DOMPurify from "dompurify";
+  import { marked } from "marked";
 
   const {
     sessionId,
@@ -48,7 +68,10 @@
     optimisticUserMessage = undefined,
     optimisticUserStatus = "queued",
     optimisticAssistantMessage = undefined,
+    showAssistantThinking = false,
     pendingUserMessages = [],
+    optimisticUserImageAttachments = [],
+    onRestartSeedChange = undefined,
   }: Props = $props();
 
   /**
@@ -88,6 +111,42 @@
   type ViewMode = "chat" | "carousel";
 
   const VIEW_MODE_STORAGE_KEY = "qraftbox:session-transcript-view-mode";
+  const SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
+    "qraftbox:session-transcript-show-system-prompts";
+
+  function renderMarkdown(text: string): string {
+    const parsed = marked.parse(text, {
+      async: false,
+      breaks: true,
+      gfm: true,
+    });
+    const html = typeof parsed === "string" ? parsed : "";
+    return DOMPurify.sanitize(html, {
+      USE_PROFILES: { html: true },
+    });
+  }
+
+  const MAX_MARKDOWN_CACHE_ENTRIES = 400;
+  const markdownRenderCache = new Map<string, string>();
+
+  function renderMarkdownCached(text: string): string {
+    if (text.length === 0) {
+      return "";
+    }
+    const cached = markdownRenderCache.get(text);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const rendered = renderMarkdown(text);
+    markdownRenderCache.set(text, rendered);
+    if (markdownRenderCache.size > MAX_MARKDOWN_CACHE_ENTRIES) {
+      const oldestKey = markdownRenderCache.keys().next().value;
+      if (typeof oldestKey === "string") {
+        markdownRenderCache.delete(oldestKey);
+      }
+    }
+    return rendered;
+  }
 
   function loadViewMode(): ViewMode {
     try {
@@ -99,13 +158,29 @@
     return "chat";
   }
 
+  function loadShowSystemPrompts(): boolean {
+    try {
+      return localStorage.getItem(SHOW_SYSTEM_PROMPTS_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  }
+
   let loadingState: LoadingState = $state({ status: "idle" });
   let viewMode: ViewMode = $state(loadViewMode());
+  let showSystemPrompts = $state(loadShowSystemPrompts());
   let currentIndex = $state(0);
   let expandedMessages = $state<Set<string>>(new Set());
   let chatScrollContainer: HTMLDivElement | null = $state(null);
   let copiedEventId: string | null = $state(null);
   let lastInitializedSessionId: string | null = $state(null);
+  let optimisticUserMessageSticky: string | undefined = $state(undefined);
+  let optimisticUserStatusSticky: "queued" | "running" = $state("queued");
+  let optimisticUserImagesSticky: readonly DisplayImageAttachment[] = $state(
+    [],
+  );
+  let optimisticUserImageMatchKeySticky: string | undefined = $state(undefined);
+  let lastStickySessionId: string | null = $state(null);
 
   /**
    * Copy event content to clipboard
@@ -131,12 +206,64 @@
     loadingState.status === "success"
       ? loadingState.data.filter((event) => {
           if (event.type !== "user" && event.type !== "assistant") return false;
-          const text = extractTextContent(event);
-          if (text.trim().length === 0) return false;
+          const text = extractTextContent(event).trim();
+          const hasImages = extractImageAttachments(event).length > 0;
+          if (text.length === 0 && !hasImages) return false;
+          if (
+            !showSystemPrompts &&
+            event.type === "user" &&
+            isInjectedSessionSystemPrompt(extractTextContentRaw(event))
+          ) {
+            return false;
+          }
           return true;
         })
       : [],
   );
+
+  const hiddenSystemPromptCount = $derived.by(() => {
+    if (loadingState.status !== "success" || showSystemPrompts) {
+      return 0;
+    }
+    let count = 0;
+    for (const event of loadingState.data) {
+      if (event.type !== "user") {
+        continue;
+      }
+      if (isInjectedSessionSystemPrompt(extractTextContentRaw(event))) {
+        count += 1;
+      }
+    }
+    return count;
+  });
+
+  const restartSeedState = $derived.by(() => {
+    if (allChatEvents.length !== 2) {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    const first = allChatEvents[0];
+    const second = allChatEvents[1];
+    if (first?.type !== "user" || second?.type !== "assistant") {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    const firstUserPrompt = extractTextContent(first).trim();
+    if (firstUserPrompt.length === 0) {
+      return {
+        canRestartFromFirstPrompt: false,
+        firstUserPrompt: "",
+      };
+    }
+    return {
+      canRestartFromFirstPrompt: true,
+      firstUserPrompt,
+    };
+  });
 
   /** When maxMessages is set, only show the last N messages */
   const chatEvents = $derived(
@@ -147,12 +274,30 @@
 
   const isCompact = $derived(maxMessages !== undefined);
 
+  $effect(() => {
+    try {
+      localStorage.setItem(
+        SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
+        showSystemPrompts ? "true" : "false",
+      );
+    } catch {
+      // localStorage unavailable
+    }
+  });
+
+  $effect(() => {
+    if (onRestartSeedChange === undefined) {
+      return;
+    }
+    onRestartSeedChange(restartSeedState);
+  });
+
   function normalizeMessageText(rawText: string): string {
     return stripSystemTags(rawText).replace(/\s+/g, " ").trim();
   }
 
   const normalizedOptimisticUser = $derived(
-    normalizeMessageText(optimisticUserMessage ?? ""),
+    normalizeMessageText(optimisticUserMessageSticky ?? ""),
   );
 
   const normalizedOptimisticAssistant = $derived(
@@ -177,6 +322,28 @@
     readonly normalized: string;
     readonly status: "queued" | "running";
   }
+
+  interface DisplayImageAttachment {
+    readonly fileName: string;
+    readonly mimeType: string;
+    readonly dataUrl: string;
+  }
+
+  function normalizeImageAttachments(
+    attachments: readonly {
+      fileName: string;
+      mimeType: string;
+      dataUrl: string;
+    }[],
+  ): readonly DisplayImageAttachment[] {
+    return attachments.filter(
+      (attachment) =>
+        typeof attachment.dataUrl === "string" &&
+        attachment.dataUrl.startsWith("data:image/"),
+    );
+  }
+
+  const normalizedOptimisticUserImages = $derived(optimisticUserImagesSticky);
 
   const pendingQueuedUserMessages = $derived.by(() => {
     const items: PendingUserMessage[] = [];
@@ -211,6 +378,18 @@
     return normalizedSet;
   });
 
+  function attachmentsForPendingMessage(
+    pendingMessage: PendingUserMessage,
+  ): readonly DisplayImageAttachment[] {
+    if (
+      normalizedOptimisticUser.length > 0 &&
+      pendingMessage.normalized === normalizedOptimisticUser
+    ) {
+      return normalizedOptimisticUserImages;
+    }
+    return [];
+  }
+
   const showOptimisticUser = $derived(
     normalizedOptimisticUser.length > 0 &&
       !normalizedChatTextSet.has(normalizedOptimisticUser) &&
@@ -222,8 +401,28 @@
       !normalizedChatTextSet.has(normalizedOptimisticAssistant),
   );
 
+  const latestChatEventType = $derived.by(() => {
+    if (chatEvents.length === 0) {
+      return undefined;
+    }
+    const latestEvent = chatEvents[chatEvents.length - 1];
+    return latestEvent?.type;
+  });
+
+  const showAssistantThinkingPlaceholder = $derived(
+    showAssistantThinking &&
+      !showOptimisticAssistant &&
+      (showOptimisticUser ||
+        pendingQueuedUserMessages.some(
+          (pendingMessage) => pendingMessage.status === "running",
+        ) ||
+        (chatEvents.length > 0 && latestChatEventType !== "assistant")),
+  );
+
   const optimisticTailCount = $derived(
-    (showOptimisticUser ? 1 : 0) + (showOptimisticAssistant ? 1 : 0),
+    (showOptimisticUser ? 1 : 0) +
+      (showOptimisticAssistant ? 1 : 0) +
+      (showAssistantThinkingPlaceholder ? 1 : 0),
   );
 
   /**
@@ -232,9 +431,107 @@
    * been created yet).
    */
   const hasOptimisticContent = $derived(
-    (optimisticUserMessage ?? "").length > 0 ||
+    (optimisticUserMessageSticky ?? "").length > 0 ||
       (optimisticAssistantMessage ?? "").length > 0 ||
-      pendingQueuedUserMessages.length > 0,
+      pendingQueuedUserMessages.length > 0 ||
+      showAssistantThinkingPlaceholder,
+  );
+
+  $effect(() => {
+    if (lastStickySessionId !== sessionId) {
+      lastStickySessionId = sessionId;
+      optimisticUserMessageSticky = undefined;
+      optimisticUserStatusSticky = "queued";
+      optimisticUserImagesSticky = [];
+      optimisticUserImageMatchKeySticky = undefined;
+    }
+  });
+
+  $effect(() => {
+    if (
+      typeof optimisticUserMessage === "string" &&
+      normalizeMessageText(optimisticUserMessage).length > 0
+    ) {
+      optimisticUserMessageSticky = optimisticUserMessage;
+      optimisticUserStatusSticky = optimisticUserStatus;
+      optimisticUserImagesSticky = normalizeImageAttachments(
+        optimisticUserImageAttachments,
+      );
+      optimisticUserImageMatchKeySticky = normalizeMessageText(
+        optimisticUserMessage,
+      );
+    }
+  });
+
+  $effect(() => {
+    if (
+      optimisticUserMessageSticky === undefined ||
+      normalizeMessageText(optimisticUserMessageSticky).length === 0
+    ) {
+      return;
+    }
+    if (normalizedChatTextSet.has(normalizedOptimisticUser)) {
+      optimisticUserMessageSticky = undefined;
+      optimisticUserStatusSticky = "queued";
+    }
+  });
+
+  function resolveImageAttachments(
+    event: TranscriptEvent,
+  ): readonly DisplayImageAttachment[] {
+    const transcriptImages = extractImageAttachments(event);
+    if (transcriptImages.length > 0) {
+      return transcriptImages;
+    }
+    if (
+      event.type !== "user" ||
+      optimisticUserImagesSticky.length === 0 ||
+      optimisticUserImageMatchKeySticky === undefined
+    ) {
+      return [];
+    }
+    const normalizedEventText = normalizeMessageText(extractTextContent(event));
+    return normalizedEventText === optimisticUserImageMatchKeySticky
+      ? optimisticUserImagesSticky
+      : [];
+  }
+
+  interface ChatDisplayEvent {
+    readonly event: TranscriptEvent;
+    readonly index: number;
+    readonly eventId: string;
+    readonly textContent: string;
+    readonly renderedHtml: string;
+    readonly imageAttachments: readonly DisplayImageAttachment[];
+    readonly isLong: boolean;
+    readonly isExpanded: boolean;
+  }
+
+  const chatDisplayEvents = $derived.by(() => {
+    const entries: ChatDisplayEvent[] = [];
+    for (const [index, event] of chatEvents.entries()) {
+      const eventId = getEventId(event, index);
+      const textContent = extractTextContent(event);
+      entries.push({
+        event,
+        index,
+        eventId,
+        textContent,
+        renderedHtml: renderMarkdownCached(textContent),
+        imageAttachments: resolveImageAttachments(event),
+        isLong: isLongContent(textContent),
+        isExpanded: expandedMessages.has(eventId),
+      });
+    }
+    return entries;
+  });
+
+  const optimisticUserMarkdownHtml = $derived(
+    renderMarkdownCached(stripSystemTags(optimisticUserMessageSticky ?? "")),
+  );
+
+  const optimisticAssistantMarkdownHtml = $derived(
+    renderMarkdownCached(stripSystemTags(optimisticAssistantMessage ?? "")),
   );
 
   /**
@@ -371,10 +668,7 @@
       loadingState.status === "success" &&
       chatScrollContainer !== null
     ) {
-      if (chatEvents.length === 0) return;
-
-      const _liveTail = optimisticTailCount;
-      void _liveTail;
+      const liveTailCount = optimisticTailCount;
 
       const targetIndex = chatEvents.length - 1;
       const isSessionSwitch = lastInitializedSessionId !== sessionId;
@@ -384,7 +678,18 @@
       }
 
       lastInitializedSessionId = sessionId;
-      focusChatIndex(targetIndex, "auto");
+      if (liveTailCount > 0) {
+        requestAnimationFrame(() => {
+          focusLatestRenderedMessage("auto", false);
+        });
+        return;
+      }
+
+      if (chatEvents.length === 0) {
+        return;
+      }
+
+      focusChatIndex(targetIndex, "auto", false);
     }
   });
 
@@ -394,7 +699,7 @@
       return;
     }
     requestAnimationFrame(() => {
-      focusLatestRenderedMessage("auto");
+      focusLatestRenderedMessage("auto", false);
     });
   });
 
@@ -414,15 +719,12 @@
 
     // User/assistant: content is at raw.message.content
     if (event.type === "user" || event.type === "assistant") {
-      const message = raw["message"] as Record<string, unknown> | undefined;
-      if (message !== undefined) {
-        const msgContent = message["content"];
-        if (typeof msgContent === "string") {
-          return msgContent;
-        }
-        if (Array.isArray(msgContent)) {
-          return extractContentBlocks(msgContent);
-        }
+      const msgContent = extractMessageContent(raw);
+      if (typeof msgContent === "string") {
+        return msgContent;
+      }
+      if (Array.isArray(msgContent)) {
+        return extractContentBlocks(msgContent);
       }
     }
 
@@ -478,7 +780,16 @@
         "type" in block
       ) {
         const obj = block as Record<string, unknown>;
-        if (obj["type"] === "text" && typeof obj["text"] === "string") {
+        if (
+          (obj["type"] === "text" ||
+            obj["type"] === "input_text" ||
+            obj["type"] === "output_text") &&
+          typeof obj["text"] === "string"
+        ) {
+          const textValue = obj["text"].trim();
+          if (textValue.startsWith("<image") || textValue === "</image>") {
+            continue;
+          }
           textParts.push(obj["text"]);
         } else if (obj["type"] === "tool_use") {
           const toolName =
@@ -495,6 +806,122 @@
     return textParts.join("\n\n");
   }
 
+  function extractMessageContent(raw: Record<string, unknown>): unknown {
+    const message = raw["message"];
+    if (typeof message === "object" && message !== null) {
+      const messageContent = (message as { content?: unknown }).content;
+      if (messageContent !== undefined) {
+        return messageContent;
+      }
+    }
+
+    const payload = raw["payload"];
+    if (typeof payload === "object" && payload !== null) {
+      const payloadContent = (payload as { content?: unknown }).content;
+      if (payloadContent !== undefined) {
+        return payloadContent;
+      }
+    }
+
+    return undefined;
+  }
+
+  function extractImageSourceFromBlock(
+    block: Record<string, unknown>,
+  ): string | null {
+    const imageUrl = block["image_url"];
+    if (typeof imageUrl === "string" && imageUrl.length > 0) {
+      return imageUrl;
+    }
+    if (typeof imageUrl === "object" && imageUrl !== null) {
+      const url = (imageUrl as { url?: unknown }).url;
+      if (typeof url === "string" && url.length > 0) {
+        return url;
+      }
+    }
+
+    const source = block["source"];
+    if (typeof source === "object" && source !== null) {
+      const sourceObj = source as {
+        data?: unknown;
+        media_type?: unknown;
+        mime_type?: unknown;
+      };
+      const data =
+        typeof sourceObj.data === "string" ? sourceObj.data : undefined;
+      const mimeType =
+        typeof sourceObj.media_type === "string"
+          ? sourceObj.media_type
+          : typeof sourceObj.mime_type === "string"
+            ? sourceObj.mime_type
+            : undefined;
+      if (data !== undefined && mimeType !== undefined) {
+        return `data:${mimeType};base64,${data}`;
+      }
+    }
+
+    return null;
+  }
+
+  function extractImageAttachments(
+    event: TranscriptEvent,
+  ): readonly DisplayImageAttachment[] {
+    if (event.type !== "user" && event.type !== "assistant") {
+      return [];
+    }
+    const raw = event.raw as Record<string, unknown>;
+    const content = extractMessageContent(raw);
+    if (!Array.isArray(content)) {
+      return [];
+    }
+
+    const images: DisplayImageAttachment[] = [];
+
+    function pushImageFromBlock(block: Record<string, unknown>): void {
+      const src = extractImageSourceFromBlock(block);
+      if (src === null) {
+        return;
+      }
+      if (!src.startsWith("data:image/") && !src.startsWith("http")) {
+        return;
+      }
+      const fileName =
+        typeof block["file_name"] === "string" ? block["file_name"] : "image";
+      const mimeType = src.startsWith("data:image/")
+        ? src.slice("data:".length, src.indexOf(";"))
+        : "image/*";
+      images.push({
+        fileName,
+        mimeType,
+        dataUrl: src,
+      });
+    }
+
+    for (const blockValue of content) {
+      if (typeof blockValue !== "object" || blockValue === null) {
+        continue;
+      }
+      const block = blockValue as Record<string, unknown>;
+      pushImageFromBlock(block);
+
+      // Claude Code tool_result blocks can nest image blocks in content[].
+      if (block["type"] !== "tool_result") {
+        continue;
+      }
+      const nestedContent = block["content"];
+      if (!Array.isArray(nestedContent)) {
+        continue;
+      }
+      for (const nestedBlockValue of nestedContent) {
+        if (typeof nestedBlockValue !== "object" || nestedBlockValue === null) {
+          continue;
+        }
+        pushImageFromBlock(nestedBlockValue as Record<string, unknown>);
+      }
+    }
+    return images;
+  }
+
   /**
    * Get border color based on event type
    */
@@ -507,6 +934,16 @@
       default:
         return "border-border-muted";
     }
+  }
+
+  function getMessageRowAlignment(eventType: string): string {
+    return eventType === "user" ? "justify-end" : "justify-start";
+  }
+
+  function getMessageBubbleShape(eventType: string): string {
+    return eventType === "user"
+      ? "border-r-4 border-l-0 rounded-l"
+      : "border-l-4 border-r-0 rounded-r";
   }
 
   /**
@@ -576,7 +1013,11 @@
     );
   }
 
-  function focusChatIndex(index: number, behavior: ScrollBehavior): void {
+  function focusChatIndex(
+    index: number,
+    behavior: ScrollBehavior,
+    shouldFocus = true,
+  ): void {
     if (chatEvents.length === 0) {
       return;
     }
@@ -587,7 +1028,9 @@
     const targetElement = getChatItemElement(boundedIndex);
     if (targetElement !== null) {
       targetElement.scrollIntoView({ block: "nearest", behavior });
-      targetElement.focus({ preventScroll: true });
+      if (shouldFocus) {
+        targetElement.focus({ preventScroll: true });
+      }
       return;
     }
 
@@ -597,11 +1040,16 @@
         return;
       }
       deferredTargetElement.scrollIntoView({ block: "nearest", behavior });
-      deferredTargetElement.focus({ preventScroll: true });
+      if (shouldFocus) {
+        deferredTargetElement.focus({ preventScroll: true });
+      }
     });
   }
 
-  function focusLatestRenderedMessage(behavior: ScrollBehavior): void {
+  function focusLatestRenderedMessage(
+    behavior: ScrollBehavior,
+    shouldFocus = true,
+  ): void {
     if (chatScrollContainer === null) {
       return;
     }
@@ -616,7 +1064,9 @@
       return;
     }
     latest.scrollIntoView({ block: "nearest", behavior });
-    latest.focus({ preventScroll: true });
+    if (shouldFocus) {
+      latest.focus({ preventScroll: true });
+    }
   }
 
   /**
@@ -624,7 +1074,7 @@
    */
   function handlePrevious(): void {
     if (viewMode === "chat") {
-      focusChatIndex(currentIndex - 1, "smooth");
+      focusChatIndex(currentIndex - 1, "auto");
     } else if (currentIndex > 0) {
       currentIndex = currentIndex - 1;
     }
@@ -635,7 +1085,7 @@
    */
   function handleNext(): void {
     if (viewMode === "chat") {
-      focusChatIndex(currentIndex + 1, "smooth");
+      focusChatIndex(currentIndex + 1, "auto");
     } else if (currentIndex < chatEvents.length - 1) {
       currentIndex = currentIndex + 1;
     }
@@ -655,7 +1105,7 @@
     if (viewMode === "carousel") {
       currentIndex = 0;
     } else if (chatScrollContainer !== null) {
-      focusChatIndex(0, "smooth");
+      focusChatIndex(0, "auto");
     }
   }
 
@@ -666,7 +1116,7 @@
     if (viewMode === "carousel") {
       currentIndex = chatEvents.length - 1;
     } else if (chatScrollContainer !== null) {
-      focusChatIndex(chatEvents.length - 1, "smooth");
+      focusChatIndex(chatEvents.length - 1, "auto");
     }
   }
 
@@ -775,6 +1225,27 @@
           Carousel
         </button>
       </div>
+
+      <button
+        type="button"
+        class="px-2 py-1 text-xs font-medium rounded border transition-colors
+               {showSystemPrompts
+          ? 'border-accent-emphasis/50 bg-accent-muted text-accent-fg'
+          : 'border-border-default text-text-secondary hover:text-text-primary hover:bg-bg-hover'}"
+        onclick={() => {
+          showSystemPrompts = !showSystemPrompts;
+        }}
+        aria-pressed={showSystemPrompts}
+        title={showSystemPrompts
+          ? "Hide injected system prompts"
+          : "Show injected system prompts"}
+      >
+        {showSystemPrompts
+          ? "System Prompts: Shown"
+          : `System Prompts: Hidden${
+              hiddenSystemPromptCount > 0 ? ` (${hiddenSystemPromptCount})` : ""
+            }`}
+      </button>
 
       <!-- Navigation buttons: previous/next + jump to first/last -->
       {#if chatEvents.length > 0}
@@ -929,136 +1400,177 @@
           ? 'max-h-[120px]'
           : 'max-h-[600px]'} chat-scroll overflow-y-auto space-y-2"
       >
-        {#each chatEvents as event, index (getEventId(event, index))}
-          {@const eventId = getEventId(event, index)}
-          {@const textContent = extractTextContent(event)}
-          {@const isLong = isLongContent(textContent)}
-          {@const isExpanded = expandedMessages.has(eventId)}
+        {#each chatDisplayEvents as chatEvent (chatEvent.eventId)}
+          {@const event = chatEvent.event}
+          {@const index = chatEvent.index}
+          {@const eventId = chatEvent.eventId}
+          {@const textContent = chatEvent.textContent}
+          {@const imageAttachments = chatEvent.imageAttachments}
+          {@const isLong = chatEvent.isLong}
+          {@const isExpanded = chatEvent.isExpanded}
 
           <div
-            class="border-l-4 {getBorderColor(
-              event.type,
-            )} bg-bg-secondary rounded-r
-                   {currentIndex === index
-              ? 'ring-1 ring-accent-emphasis/55'
-              : ''}"
+            class="flex w-full {getMessageRowAlignment(event.type)}"
             data-chat-index={index}
             data-chat-tail-anchor="true"
             tabindex={currentIndex === index ? 0 : -1}
           >
-            <!-- Message header -->
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
-                  event.type,
-                )}"
-              >
-                {event.type}
-              </span>
-              <div class="flex items-center gap-2">
-                <span class="text-xs text-text-tertiary">
-                  {formatTimestamp(event.timestamp)}
-                </span>
-                <!-- Copy to clipboard button -->
-                <button
-                  type="button"
-                  onclick={(e: MouseEvent) => {
-                    e.stopPropagation();
-                    copyToClipboard(textContent, eventId);
-                  }}
-                  class="p-0.5 hover:bg-bg-hover rounded transition-colors
-                         focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                  aria-label="Copy message to clipboard"
-                  title="Copy to clipboard"
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] {getMessageBubbleShape(
+                event.type,
+              )} {getBorderColor(event.type)} bg-bg-secondary
+                     {currentIndex === index
+                ? 'ring-1 ring-accent-emphasis/55'
+                : ''}"
+            >
+              <!-- Message header -->
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {getBadgeColor(
+                    event.type,
+                  )}"
                 >
-                  {#if copiedEventId === eventId}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="text-success-fg"
-                      aria-hidden="true"
-                    >
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  {:else}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                      class="text-text-tertiary"
-                      aria-hidden="true"
-                    >
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                      <path
-                        d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                      />
-                    </svg>
-                  {/if}
-                </button>
+                  {event.type}
+                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-text-tertiary">
+                    {formatTimestamp(event.timestamp)}
+                  </span>
+                  <!-- Copy to clipboard button -->
+                  <button
+                    type="button"
+                    onclick={(e: MouseEvent) => {
+                      e.stopPropagation();
+                      copyToClipboard(textContent, eventId);
+                    }}
+                    class="p-0.5 hover:bg-bg-hover rounded transition-colors
+                           focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                    aria-label="Copy message to clipboard"
+                    title="Copy to clipboard"
+                  >
+                    {#if copiedEventId === eventId}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="text-success-fg"
+                        aria-hidden="true"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    {:else}
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="text-text-tertiary"
+                        aria-hidden="true"
+                      >
+                        <rect
+                          x="9"
+                          y="9"
+                          width="13"
+                          height="13"
+                          rx="2"
+                          ry="2"
+                        />
+                        <path
+                          d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+                        />
+                      </svg>
+                    {/if}
+                  </button>
+                </div>
               </div>
-            </div>
 
-            <!-- Message content -->
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {#if isLong && !isExpanded}
-                  {textContent.slice(0, 500)}...
-                {:else}
-                  {textContent}
+              <!-- Message content -->
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary {isLong &&
+                  !isExpanded
+                    ? 'transcript-markdown-collapsed'
+                    : ''}"
+                >
+                  {@html chatEvent.renderedHtml}
+                </div>
+                {#if imageAttachments.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each imageAttachments as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
+
+                {#if isLong}
+                  <button
+                    type="button"
+                    onclick={() => toggleExpanded(eventId)}
+                    class="mt-2 text-xs text-accent-fg hover:underline"
+                  >
+                    {isExpanded ? "Show less" : "Show more"}
+                  </button>
                 {/if}
               </div>
-
-              {#if isLong}
-                <button
-                  type="button"
-                  onclick={() => toggleExpanded(eventId)}
-                  class="mt-2 text-xs text-accent-fg hover:underline"
-                >
-                  {isExpanded ? "Show less" : "Show more"}
-                </button>
-              {/if}
             </div>
           </div>
         {/each}
 
         {#each pendingQueuedUserMessages as pendingMessage}
+          {@const pendingImages = attachmentsForPendingMessage(pendingMessage)}
           <div
-            class="border-l-4 {pendingMessage.status === 'running'
-              ? 'border-accent-emphasis'
-              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            class="flex w-full justify-end"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {pendingMessage.status ===
-                'running'
-                  ? 'bg-accent-muted text-accent-fg'
-                  : 'bg-attention-muted text-attention-fg'}"
-              >
-                user ({pendingMessage.status})
-              </span>
-            </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {pendingMessage.raw}
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-r-4 border-l-0 rounded-l
+                     {pendingMessage.status === 'running'
+                ? 'border-accent-emphasis'
+                : 'border-attention-emphasis'} bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {pendingMessage.status ===
+                  'running'
+                    ? 'bg-accent-muted text-accent-fg'
+                    : 'bg-attention-muted text-attention-fg'}"
+                >
+                  user ({pendingMessage.status})
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html renderMarkdownCached(pendingMessage.raw)}
+                </div>
+                {#if pendingImages.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each pendingImages as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -1066,27 +1578,43 @@
 
         {#if showOptimisticUser}
           <div
-            class="border-l-4 {optimisticUserStatus === 'running'
-              ? 'border-accent-emphasis'
-              : 'border-attention-emphasis'} bg-bg-secondary rounded-r"
+            class="flex w-full justify-end"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatus ===
-                'running'
-                  ? 'bg-accent-muted text-accent-fg'
-                  : 'bg-attention-muted text-attention-fg'}"
-              >
-                user ({optimisticUserStatus})
-              </span>
-            </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {stripSystemTags(optimisticUserMessage ?? "")}
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-r-4 border-l-0 rounded-l
+                     {optimisticUserStatusSticky === 'running'
+                ? 'border-accent-emphasis'
+                : 'border-attention-emphasis'} bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded {optimisticUserStatusSticky ===
+                  'running'
+                    ? 'bg-accent-muted text-accent-fg'
+                    : 'bg-attention-muted text-attention-fg'}"
+                >
+                  user ({optimisticUserStatusSticky})
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html optimisticUserMarkdownHtml}
+                </div>
+                {#if normalizedOptimisticUserImages.length > 0}
+                  <div class="mt-3 flex flex-wrap gap-2">
+                    {#each normalizedOptimisticUserImages as attachment}
+                      <img
+                        src={attachment.dataUrl}
+                        alt={attachment.fileName}
+                        class="h-20 w-20 rounded border border-border-default object-cover"
+                      />
+                    {/each}
+                  </div>
+                {/if}
               </div>
             </div>
           </div>
@@ -1094,22 +1622,51 @@
 
         {#if showOptimisticAssistant}
           <div
-            class="border-l-4 border-success-emphasis bg-bg-secondary rounded-r"
+            class="flex w-full justify-start"
             data-chat-tail-anchor="true"
             tabindex="-1"
           >
-            <div class="px-3 py-1.5 flex items-center justify-between">
-              <span
-                class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
-              >
-                assistant (live)
-              </span>
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-l-4 border-r-0 rounded-r border-success-emphasis bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+                >
+                  assistant (live)
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div
+                  class="transcript-markdown text-sm leading-6 break-words text-text-primary"
+                >
+                  {@html optimisticAssistantMarkdownHtml}
+                </div>
+              </div>
             </div>
-            <div class="px-3 py-2">
-              <div
-                class="text-sm leading-6 font-mono whitespace-pre-wrap break-words text-text-primary"
-              >
-                {stripSystemTags(optimisticAssistantMessage ?? "")}
+          </div>
+        {/if}
+
+        {#if showAssistantThinkingPlaceholder}
+          <div
+            class="flex w-full justify-start"
+            data-chat-tail-anchor="true"
+            tabindex="-1"
+          >
+            <div
+              class="w-fit max-w-[92%] md:max-w-[85%] border-l-4 border-r-0 rounded-r border-success-emphasis bg-bg-secondary"
+            >
+              <div class="px-3 py-1.5 flex items-center justify-between">
+                <span
+                  class="text-xs font-semibold px-2 py-0.5 rounded bg-success-muted text-success-fg"
+                >
+                  assistant (thinking)
+                </span>
+              </div>
+              <div class="px-3 py-2">
+                <div class="text-sm leading-6 font-mono text-text-secondary">
+                  Thinking...
+                </div>
               </div>
             </div>
           </div>
@@ -1183,19 +1740,22 @@
           onpointerleave={handlePointerUp}
         >
           <div
-            class="flex gap-3 transition-transform duration-300 ease-in-out"
+            class="flex gap-3 transition-transform duration-150 ease-in-out"
             style="transform: translateX(calc(27.5% - {currentIndex *
               45}% - {currentIndex * 12}px))"
           >
-            {#each chatEvents as event, index (getEventId(event, index))}
-              {@const textContent = extractTextContent(event)}
+            {#each chatDisplayEvents as chatEvent (chatEvent.eventId)}
+              {@const event = chatEvent.event}
+              {@const index = chatEvent.index}
+              {@const textContent = chatEvent.textContent}
+              {@const imageAttachments = chatEvent.imageAttachments}
               {@const isCurrent = index === currentIndex}
 
               <!-- Each card: 45% width, neighbors peek from sides -->
               <button
                 type="button"
                 onclick={() => handleGoToIndex(index)}
-                class="w-[45%] shrink-0 text-left transition-all duration-300
+                class="w-[45%] shrink-0 text-left transition-all duration-150
                        {isCurrent
                   ? 'opacity-100 scale-100'
                   : 'opacity-40 scale-95'}"
@@ -1296,10 +1856,21 @@
 
                   <!-- Card content -->
                   <div
-                    class="max-h-[300px] overflow-y-auto text-xs font-mono whitespace-pre-wrap break-words text-text-primary"
+                    class="transcript-markdown max-h-[300px] overflow-y-auto text-xs leading-5 break-words text-text-primary"
                   >
-                    {textContent}
+                    {@html chatEvent.renderedHtml}
                   </div>
+                  {#if imageAttachments.length > 0}
+                    <div class="mt-3 flex flex-wrap gap-2">
+                      {#each imageAttachments as attachment}
+                        <img
+                          src={attachment.dataUrl}
+                          alt={attachment.fileName}
+                          class="h-16 w-16 rounded border border-border-default object-cover"
+                        />
+                      {/each}
+                    </div>
+                  {/if}
                 </div>
               </button>
             {/each}
@@ -1338,5 +1909,75 @@
 
   .chat-scroll::-webkit-scrollbar-thumb:hover {
     background-color: var(--color-border-emphasis);
+  }
+
+  .transcript-markdown :global(p) {
+    margin: 0.4rem 0;
+  }
+
+  .transcript-markdown :global(ul),
+  .transcript-markdown :global(ol) {
+    margin: 0.4rem 0;
+    padding-left: 1.25rem;
+  }
+
+  .transcript-markdown :global(li + li) {
+    margin-top: 0.15rem;
+  }
+
+  .transcript-markdown :global(code) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    font-size: 0.9em;
+    background: var(--color-bg-tertiary);
+    padding: 0.12rem 0.35rem;
+    border-radius: 0.25rem;
+  }
+
+  .transcript-markdown :global(pre) {
+    margin: 0.5rem 0;
+    padding: 0.55rem 0.65rem;
+    overflow-x: auto;
+    border-radius: 0.35rem;
+    background: var(--color-bg-tertiary);
+  }
+
+  .transcript-markdown :global(pre code) {
+    background: transparent;
+    padding: 0;
+  }
+
+  .transcript-markdown :global(blockquote) {
+    margin: 0.45rem 0;
+    padding-left: 0.7rem;
+    border-left: 3px solid var(--color-border-emphasis);
+    color: var(--color-text-secondary);
+  }
+
+  .transcript-markdown :global(a) {
+    color: var(--color-accent-fg);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .transcript-markdown-collapsed {
+    max-height: 12rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .transcript-markdown-collapsed::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2.5rem;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0%,
+      var(--color-bg-secondary) 100%
+    );
+    pointer-events: none;
   }
 </style>

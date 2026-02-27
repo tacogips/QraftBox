@@ -1,12 +1,15 @@
 <script lang="ts">
   import type { DiffFile, ViewMode } from "../../src/types/diff";
   import type { FileNode } from "../../src/stores/files";
+  import type { AISessionSubmitResult } from "../../../src/types/ai";
+  import { buildScreenHash, parseHash } from "../../src/lib/app-routing";
   import { buildRawFileUrl } from "../../src/lib/app-api";
   import type { AIPromptContext } from "../../src/lib/ai-feature-runtime";
   import DiffView from "../DiffView.svelte";
   import FileViewer from "../FileViewer.svelte";
   import FileTree from "../FileTree.svelte";
   import CurrentStateView from "../CurrentStateView.svelte";
+  import GitPushButton from "../git-actions/GitPushButton.svelte";
 
   let mobileBottomDockRef: HTMLDivElement | null = $state(null);
   let mobileBottomDockHeight = $state(0);
@@ -14,6 +17,9 @@
   let mobileSafariFallbackOffset = $state(0);
   let isIphone = $state(false);
   let isPhoneViewport = $state(false);
+  let latestSubmittedSessionId = $state<string | null>(null);
+
+  const SESSION_QUERY_KEY = "ai_session_id";
 
   function detectIphone(): boolean {
     const ua = navigator.userAgent;
@@ -40,6 +46,21 @@
       /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
     return detectIphone() && isSafari;
   }
+
+  function buildSessionHistoryHref(sessionId: string): string {
+    const { slug } = parseHash(window.location.hash);
+    const url = new URL(window.location.href);
+    url.searchParams.set(SESSION_QUERY_KEY, sessionId);
+    url.hash = buildScreenHash(slug, "ai-session");
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  const latestSessionHistoryHref = $derived.by(() => {
+    if (latestSubmittedSessionId === null) {
+      return null;
+    }
+    return buildSessionHistoryHref(latestSubmittedSessionId);
+  });
 
   $effect(() => {
     const update = (): void => {
@@ -157,11 +178,13 @@
     sidebarCollapsed,
     sidebarWidth,
     allFilesLoading,
+    projectPath,
     fileTree,
     fileTreeMode,
     selectedPath,
     diffFiles,
     contextId,
+    isGitRepo,
     selectedFile,
     effectiveViewMode,
     selectedHasDiff,
@@ -188,17 +211,20 @@
     onSetViewMode,
     onSubmitPrompt,
     onReloadFileTree,
+    onGitActionSuccess,
   }: {
     loading: boolean;
     error: string | null;
     sidebarCollapsed: boolean;
     sidebarWidth: number;
     allFilesLoading: boolean;
+    projectPath: string;
     fileTree: FileNode;
     fileTreeMode: "diff" | "all";
     selectedPath: string | null;
     diffFiles: DiffFile[];
     contextId: string | null;
+    isGitRepo: boolean;
     selectedFile: DiffFile | null;
     effectiveViewMode: ViewMode;
     selectedHasDiff: boolean;
@@ -231,23 +257,38 @@
       message: string,
       immediate: boolean,
       context: AIPromptContext,
-    ) => Promise<void>;
+    ) => Promise<AISessionSubmitResult | null>;
     onReloadFileTree: () => void;
+    onGitActionSuccess: (
+      action: "commit" | "push" | "pull" | "pr" | "init",
+    ) => Promise<void>;
   } = $props();
 
   function handleInlineCommentSubmit(
     startLine: number,
     endLine: number,
-    _side: "old" | "new",
+    side: "old" | "new",
     filePath: string,
     prompt: string,
     immediate: boolean,
+    source: "diff" | "current-state" | "full-file",
   ): void {
+    if (source === "diff" && side === "old") {
+      return;
+    }
+
+    const diffAwareContext =
+      source === "diff" || source === "current-state"
+        ? "Selection is from latest file lines (new/current side). Include related old-vs-new diff context in your answer."
+        : undefined;
+
     void onSubmitPrompt(prompt, immediate, {
       primaryFile: { path: filePath, startLine, endLine, content: "" },
       references: [],
-      diffSummary: undefined,
+      diffSummary: diffAwareContext,
       resumeSessionId: currentQraftAiSessionId,
+    }).then((result) => {
+      latestSubmittedSessionId = result?.sessionId ?? currentQraftAiSessionId;
     });
   }
 
@@ -281,6 +322,7 @@
         {:else}
           <FileTree
             tree={fileTree}
+            currentDirectory={projectPath}
             mode={fileTreeMode}
             {selectedPath}
             onFileSelect={handleTreeFileSelect}
@@ -332,6 +374,20 @@
       ? `translateX(${sidebarWidth}px)`
       : undefined}
   >
+    {#if contextId !== null}
+      <div
+        class="h-10 border-b border-border-default bg-bg-secondary px-2 flex items-center justify-end"
+      >
+        <GitPushButton
+          {contextId}
+          {projectPath}
+          hasChanges={diffFiles.length > 0}
+          onSuccess={onGitActionSuccess}
+          {isGitRepo}
+        />
+      </div>
+    {/if}
+
     <main
       class="flex-1 min-h-0 overflow-auto bg-bg-primary"
       style:padding-bottom={isPhoneViewport
@@ -346,7 +402,32 @@
         <div class="px-2 pb-2">
           <CurrentStateView
             file={selectedFile}
-            onCommentSubmit={handleInlineCommentSubmit}
+            viewMode={effectiveViewMode}
+            {selectedHasDiff}
+            {isIphone}
+            {onSetViewMode}
+            onCommentSubmit={(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+            ) =>
+              handleInlineCommentSubmit(
+                startLine,
+                endLine,
+                side,
+                filePath,
+                prompt,
+                immediate,
+                "current-state",
+              )}
+            submittedSessionId={latestSubmittedSessionId}
+            submittedSessionHistoryHref={latestSessionHistoryHref}
+            onDismissSubmittedSession={() => {
+              latestSubmittedSessionId = null;
+            }}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -358,7 +439,32 @@
             mode={effectiveViewMode === "side-by-side"
               ? "side-by-side"
               : "inline"}
-            onCommentSubmit={handleInlineCommentSubmit}
+            viewMode={effectiveViewMode}
+            {selectedHasDiff}
+            {isIphone}
+            {onSetViewMode}
+            onCommentSubmit={(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+            ) =>
+              handleInlineCommentSubmit(
+                startLine,
+                endLine,
+                side,
+                filePath,
+                prompt,
+                immediate,
+                "diff",
+              )}
+            submittedSessionId={latestSubmittedSessionId}
+            submittedSessionHistoryHref={latestSessionHistoryHref}
+            onDismissSubmittedSession={() => {
+              latestSubmittedSessionId = null;
+            }}
             onNavigatePrev={navigatePrev}
             onNavigateNext={navigateNext}
           />
@@ -378,9 +484,34 @@
           rawFileUrl={fileContent.ctxId !== undefined
             ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
             : undefined}
+          viewMode={effectiveViewMode}
+          {selectedHasDiff}
+          {isIphone}
+          {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={handleInlineCommentSubmit}
+          onCommentSubmit={(
+            startLine,
+            endLine,
+            side,
+            filePath,
+            prompt,
+            immediate,
+          ) =>
+            handleInlineCommentSubmit(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+              "full-file",
+            )}
+          submittedSessionId={latestSubmittedSessionId}
+          submittedSessionHistoryHref={latestSessionHistoryHref}
+          onDismissSubmittedSession={() => {
+            latestSubmittedSessionId = null;
+          }}
         />
       {:else if fileContentLoading}
         <div class="p-8 text-center text-text-secondary">Loading file...</div>
@@ -397,9 +528,34 @@
           rawFileUrl={fileContent.ctxId !== undefined
             ? buildRawFileUrl(fileContent.ctxId, fileContent.path)
             : undefined}
+          viewMode={effectiveViewMode}
+          {selectedHasDiff}
+          {isIphone}
+          {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={handleInlineCommentSubmit}
+          onCommentSubmit={(
+            startLine,
+            endLine,
+            side,
+            filePath,
+            prompt,
+            immediate,
+          ) =>
+            handleInlineCommentSubmit(
+              startLine,
+              endLine,
+              side,
+              filePath,
+              prompt,
+              immediate,
+              "full-file",
+            )}
+          submittedSessionId={latestSubmittedSessionId}
+          submittedSessionHistoryHref={latestSessionHistoryHref}
+          onDismissSubmittedSession={() => {
+            latestSubmittedSessionId = null;
+          }}
         />
       {:else}
         <div class="p-8 text-center text-text-secondary">
@@ -429,163 +585,6 @@
         </span>
         <span class="text-success-fg">+{stats.additions}</span>
         <span class="text-danger-fg">-{stats.deletions}</span>
-        <div
-          class="flex items-center border border-border-default rounded-md overflow-hidden ml-auto"
-        >
-          <button
-            type="button"
-            class="p-1 transition-colors
-                   {effectiveViewMode === 'full-file'
-              ? 'bg-bg-emphasis text-text-on-emphasis'
-              : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => onSetViewMode("full-file")}
-            title="Full File"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
-                stroke="currentColor"
-                stroke-width="1.5"
-              />
-              <line
-                x1="5.5"
-                y1="6"
-                x2="11"
-                y2="6"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-              <line
-                x1="5.5"
-                y1="8.5"
-                x2="11"
-                y2="8.5"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-              <line
-                x1="5.5"
-                y1="11"
-                x2="9"
-                y2="11"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-            </svg>
-          </button>
-
-          {#if !isIphone}
-            <button
-              type="button"
-              class="p-1 border-l border-border-default transition-colors
-                     {!selectedHasDiff
-                ? 'text-text-disabled cursor-not-allowed opacity-40'
-                : effectiveViewMode === 'side-by-side'
-                  ? 'bg-bg-emphasis text-text-on-emphasis'
-                  : 'text-text-secondary hover:bg-bg-hover'}"
-              onclick={() => {
-                if (selectedHasDiff) onSetViewMode("side-by-side");
-              }}
-              disabled={!selectedHasDiff}
-              title="Side by Side"
-            >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect
-                  x="1"
-                  y="2"
-                  width="6"
-                  height="12"
-                  rx="1"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-                <rect
-                  x="9"
-                  y="2"
-                  width="6"
-                  height="12"
-                  rx="1"
-                  stroke="currentColor"
-                  stroke-width="1.5"
-                />
-              </svg>
-            </button>
-          {/if}
-
-          <button
-            type="button"
-            class="p-1 border-l border-border-default transition-colors
-                   {!selectedHasDiff
-              ? 'text-text-disabled cursor-not-allowed opacity-40'
-              : effectiveViewMode === 'inline'
-                ? 'bg-bg-emphasis text-text-on-emphasis'
-                : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => {
-              if (selectedHasDiff) onSetViewMode("inline");
-            }}
-            disabled={!selectedHasDiff}
-            title={isIphone ? "Stack" : "Inline"}
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <rect
-                x="1"
-                y="2"
-                width="14"
-                height="12"
-                rx="1"
-                stroke="currentColor"
-                stroke-width="1.5"
-              />
-              <line
-                x1="4"
-                y1="5.5"
-                x2="12"
-                y2="5.5"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-              <line
-                x1="4"
-                y1="8"
-                x2="12"
-                y2="8"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-              <line
-                x1="4"
-                y1="10.5"
-                x2="10"
-                y2="10.5"
-                stroke="currentColor"
-                stroke-width="1.2"
-              />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            class="p-1 border-l border-border-default transition-colors
-                   {!selectedHasDiff
-              ? 'text-text-disabled cursor-not-allowed opacity-40'
-              : effectiveViewMode === 'current-state'
-                ? 'bg-bg-emphasis text-text-on-emphasis'
-                : 'text-text-secondary hover:bg-bg-hover'}"
-            onclick={() => {
-              if (selectedHasDiff) onSetViewMode("current-state");
-            }}
-            disabled={!selectedHasDiff}
-            title="Current"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
-                stroke="currentColor"
-                stroke-width="1.5"
-              />
-            </svg>
-          </button>
-        </div>
       </div>
     </div>
   </div>

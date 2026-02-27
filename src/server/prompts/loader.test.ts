@@ -542,9 +542,9 @@ describe("getDefaultPromptId", () => {
     await cleanupTestDir(testDir);
   });
 
-  test("should return null when no default is set", async () => {
+  test("should return hardcoded default when no default is set", async () => {
     const defaultId = await getDefaultPromptId("commit");
-    expect(defaultId).toBeNull();
+    expect(defaultId).toBe("commit");
   });
 
   test("should return default ID when set", async () => {
@@ -553,11 +553,11 @@ describe("getDefaultPromptId", () => {
     expect(defaultId).toBe("commit-custom");
   });
 
-  test("should return null for category without default", async () => {
+  test("should return hardcoded default for category without explicit default", async () => {
     await setDefaultPromptId("commit", "commit-custom");
 
     const pushDefaultId = await getDefaultPromptId("push");
-    expect(pushDefaultId).toBeNull();
+    expect(pushDefaultId).toBe("push");
   });
 
   test("should handle multiple categories", async () => {

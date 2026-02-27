@@ -1,4 +1,4 @@
-export type SessionStatus = "running" | "queued" | "awaiting_input";
+export type SessionStatus = "running" | "queued" | "failed" | "awaiting_input";
 
 interface SessionStatusMeta {
   readonly label: string;
@@ -14,6 +14,10 @@ const STATUS_META: Readonly<Record<SessionStatus, SessionStatusMeta>> = {
     label: "Queued",
     badgeClass: "bg-attention-muted text-attention-fg",
   },
+  failed: {
+    label: "Failed",
+    badgeClass: "bg-danger-emphasis/15 text-danger-fg",
+  },
   awaiting_input: {
     label: "Waiting for input",
     badgeClass: "bg-bg-tertiary text-text-secondary",
@@ -23,6 +27,7 @@ const STATUS_META: Readonly<Record<SessionStatus, SessionStatusMeta>> = {
 interface SessionStatusInput {
   readonly hasRunningTask: boolean;
   readonly hasQueuedTask: boolean;
+  readonly hasFailedTask?: boolean;
 }
 
 export function deriveSessionStatus(
@@ -33,6 +38,9 @@ export function deriveSessionStatus(
   }
   if (statusInput.hasQueuedTask) {
     return "queued";
+  }
+  if (statusInput.hasFailedTask) {
+    return "failed";
   }
   return "awaiting_input";
 }
@@ -47,6 +55,9 @@ export function defaultLatestActivity(status: SessionStatus): string {
   }
   if (status === "queued") {
     return "Prompt is queued for processing";
+  }
+  if (status === "failed") {
+    return "Prompt failed";
   }
   return "Waiting for next user input";
 }

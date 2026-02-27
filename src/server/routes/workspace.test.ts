@@ -107,6 +107,78 @@ describe("GET /api/workspace", () => {
     expect(body.workspace.activeTabId).toBeNull();
     expect(body.workspace.maxTabs).toBeGreaterThan(0);
   });
+
+  test("returns project-management metadata", async () => {
+    const response = await app.request("/");
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as {
+      metadata?: {
+        temporaryProjectMode?: boolean;
+        canManageProjects?: boolean;
+      };
+    };
+    expect(body.metadata?.temporaryProjectMode).toBe(false);
+    expect(body.metadata?.canManageProjects).toBe(true);
+  });
+});
+
+describe("temporary project mode", () => {
+  let app: ReturnType<typeof createWorkspaceRoutes>;
+  let contextManager: ContextManager;
+  let recentStoreTestDir: string;
+
+  beforeEach(async () => {
+    resetWorkspaceState();
+    recentStoreTestDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "workspace-test-recent-"),
+    );
+    contextManager = createContextManager();
+    const recentStore = createRecentDirectoryStore({
+      dbPath: path.join(recentStoreTestDir, "recent.db"),
+    });
+    app = createWorkspaceRoutes(
+      contextManager,
+      recentStore,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+  });
+
+  test("reports temporary mode metadata", async () => {
+    const response = await app.request("/");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      metadata: {
+        temporaryProjectMode: boolean;
+        canManageProjects: boolean;
+      };
+    };
+    expect(body.metadata.temporaryProjectMode).toBe(true);
+    expect(body.metadata.canManageProjects).toBe(false);
+  });
+
+  test("blocks opening new tabs", async () => {
+    const response = await app.request("/tabs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: testDir1 }),
+    });
+    expect(response.status).toBe(403);
+  });
+
+  test("blocks closing tabs", async () => {
+    const response = await app.request(
+      "/tabs/00000000-0000-0000-0000-000000000000",
+      {
+        method: "DELETE",
+      },
+    );
+    expect(response.status).toBe(403);
+  });
 });
 
 describe("POST /api/workspace/tabs", () => {

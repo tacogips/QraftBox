@@ -10,8 +10,13 @@ import type {
   OperationLanguageSettings,
   ModelProfile,
   ModelVendor,
+  ModelAuthMode,
   OperationModelBindings,
 } from "../../../src/types/model-config";
+import type {
+  PromptTemplate,
+  PromptCategory,
+} from "../../../src/types/prompt-config";
 import type { ServerFileNode } from "./file-tree-utils";
 
 export type ServerTab = {
@@ -61,6 +66,20 @@ export type PromptQueueItem = {
   ai_agent?: AIAgent | undefined;
 };
 
+export type GitActionPromptName =
+  | "commit"
+  | "create-pr"
+  | "ai-session-purpose"
+  | "ai-session-refresh-purpose"
+  | "ai-session-resume";
+
+export type EffectivePromptResponse = {
+  name: GitActionPromptName;
+  path: string;
+  content: string;
+  source: "file" | "fallback";
+};
+
 export type AISessionInfo = {
   id: string;
   state: string;
@@ -71,6 +90,7 @@ export type AISessionInfo = {
   context: unknown;
   lastAssistantMessage?: string | undefined;
   currentActivity?: string | undefined;
+  error?: string | undefined;
   clientSessionId?: QraftAiSessionId | undefined;
   aiAgent?: AIAgent | undefined;
 };
@@ -85,6 +105,10 @@ function ensureOk(response: Response, message: string): Response {
 export async function fetchWorkspace(): Promise<{
   tabs: ServerTab[];
   activeTabId: string | null;
+  metadata: {
+    temporaryProjectMode: boolean;
+    canManageProjects: boolean;
+  };
 }> {
   const response = await fetch("/api/workspace");
   ensureOk(response, "Failed to fetch workspace");
@@ -93,10 +117,18 @@ export async function fetchWorkspace(): Promise<{
       tabs?: ServerTab[];
       activeTabId?: string | null;
     };
+    metadata?: {
+      temporaryProjectMode?: boolean;
+      canManageProjects?: boolean;
+    };
   };
   return {
     tabs: data.workspace.tabs ?? [],
     activeTabId: data.workspace.activeTabId ?? null,
+    metadata: {
+      temporaryProjectMode: data.metadata?.temporaryProjectMode ?? false,
+      canManageProjects: data.metadata?.canManageProjects ?? true,
+    },
   };
 }
 
@@ -140,6 +172,32 @@ export async function createWorkspaceTab(path: string): Promise<{
   if (!response.ok) {
     const errData = (await response.json()) as { error?: string };
     throw new Error(errData.error ?? `Failed to open (${response.status})`);
+  }
+
+  const data = (await response.json()) as {
+    tab: ServerTab;
+    workspace: { tabs: ServerTab[] };
+  };
+
+  return { tab: data.tab, tabs: data.workspace.tabs };
+}
+
+export async function createWorkspaceTabBySlug(slug: string): Promise<{
+  tab: ServerTab;
+  tabs: ServerTab[];
+}> {
+  const response = await fetch(
+    `/api/workspace/tabs/by-slug/${encodeURIComponent(slug)}`,
+    {
+      method: "POST",
+    },
+  );
+
+  if (!response.ok) {
+    const errData = (await response.json()) as { error?: string };
+    throw new Error(
+      errData.error ?? `Failed to open by slug (${response.status})`,
+    );
   }
 
   const data = (await response.json()) as {
@@ -268,6 +326,7 @@ export async function submitAIPrompt(params: {
   message: string;
   projectPath: string;
   qraftAiSessionId: QraftAiSessionId;
+  forceNewSession?: boolean | undefined;
   aiAgent?: AIAgent | undefined;
   modelProfileId?: string | undefined;
   context: {
@@ -292,6 +351,7 @@ export async function submitAIPrompt(params: {
       context: params.context,
       project_path: params.projectPath,
       qraft_ai_session_id: params.qraftAiSessionId,
+      force_new_session: params.forceNewSession === true,
       ai_agent: params.aiAgent,
       model_profile_id: params.modelProfileId,
     }),
@@ -310,6 +370,7 @@ export async function fetchModelConfigState(): Promise<ModelConfigState> {
 export async function createModelProfileApi(input: {
   name: string;
   vendor: ModelVendor;
+  authMode?: ModelAuthMode;
   model: string;
   arguments: readonly string[];
 }): Promise<ModelProfile> {
@@ -328,6 +389,7 @@ export async function updateModelProfileApi(
   input: {
     name?: string;
     vendor?: ModelVendor;
+    authMode?: ModelAuthMode;
     model?: string;
     arguments?: readonly string[];
   },
@@ -377,6 +439,74 @@ export async function updateModelLanguagesApi(
     operationLanguages: OperationLanguageSettings;
   };
   return data.operationLanguages;
+}
+
+export async function fetchPromptTemplatesApi(
+  contextId: string,
+  category?: PromptCategory | undefined,
+): Promise<readonly PromptTemplate[]> {
+  const params = new URLSearchParams();
+  if (category !== undefined) {
+    params.set("category", category);
+  }
+  const query = params.toString();
+  const base = `/api/ctx/${contextId}/prompts`;
+  const url = query.length > 0 ? `${base}?${query}` : base;
+  const response = await fetch(url);
+  ensureOk(response, "Failed to fetch prompt templates");
+  const data = (await response.json()) as {
+    prompts: readonly PromptTemplate[];
+  };
+  return data.prompts;
+}
+
+export async function fetchDefaultPromptIdApi(
+  contextId: string,
+  category: PromptCategory,
+): Promise<string | null> {
+  const response = await fetch(
+    `/api/ctx/${contextId}/prompts/default/${category}`,
+  );
+  ensureOk(response, "Failed to fetch default prompt");
+  const data = (await response.json()) as { defaultId: string | null };
+  return data.defaultId;
+}
+
+export async function updateDefaultPromptIdApi(
+  contextId: string,
+  category: PromptCategory,
+  id: string,
+): Promise<void> {
+  const response = await fetch(
+    `/api/ctx/${contextId}/prompts/default/${category}`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    },
+  );
+  ensureOk(response, "Failed to update default prompt");
+}
+
+export async function fetchGitActionPromptApi(
+  name: GitActionPromptName,
+): Promise<EffectivePromptResponse> {
+  const response = await fetch(`/api/git-actions/prompts/${name}`);
+  ensureOk(response, "Failed to fetch action prompt");
+  return (await response.json()) as EffectivePromptResponse;
+}
+
+export async function updateGitActionPromptApi(
+  name: GitActionPromptName,
+  content: string,
+): Promise<EffectivePromptResponse> {
+  const response = await fetch(`/api/git-actions/prompts/${name}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  });
+  ensureOk(response, "Failed to update action prompt");
+  return (await response.json()) as EffectivePromptResponse;
 }
 
 export async function fetchPromptQueueApi(): Promise<PromptQueueItem[]> {

@@ -58,11 +58,7 @@ export interface ClaudeSessionEntry {
  * - codex-cli: Created by Codex CLI directly
  * - unknown: Cannot determine source
  */
-export type SessionSource =
-  | "qraftbox"
-  | "claude-cli"
-  | "codex-cli"
-  | "unknown";
+export type SessionSource = "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
 
 /**
  * Extended session entry with source tracking
@@ -76,6 +72,12 @@ export interface ExtendedSessionEntry extends ClaudeSessionEntry {
   qraftAiSessionId: QraftAiSessionId;
   /** AI agent used by this session */
   aiAgent?: AIAgent | undefined;
+  /** Selected model profile ID snapshot if available */
+  modelProfileId?: string | undefined;
+  /** Model vendor snapshot if available */
+  modelVendor?: "anthropics" | "openai" | undefined;
+  /** Model name snapshot if available */
+  modelName?: string | undefined;
 }
 
 /**

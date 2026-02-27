@@ -246,6 +246,47 @@ describe("AI Routes", () => {
         }),
       );
     });
+
+    test("passes force_new_session when requested", async () => {
+      const submitPromptMock = sessionManager.submitPrompt as Mock;
+
+      await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Start from beginning",
+          run_immediately: true,
+          qraft_ai_session_id: "qs_existing_123",
+          force_new_session: true,
+        }),
+      });
+
+      expect(submitPromptMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          qraft_ai_session_id: "qs_existing_123",
+          force_new_session: true,
+        }),
+      );
+    });
+
+    test("returns 400 when force_new_session is not a boolean", async () => {
+      const res = await app.request("/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "invalid flag",
+          run_immediately: true,
+          force_new_session: "yes",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; code: number };
+      expect(body.code).toBe(400);
+      expect(body.error).toContain(
+        "force_new_session must be a boolean when provided",
+      );
+    });
   });
 
   describe("GET /prompt-queue", () => {

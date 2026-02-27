@@ -137,6 +137,19 @@ describe("ContextManager", () => {
       expect(retrieved?.id).toBe(tab.id);
       expect(retrieved?.path).toBe(tab.path);
     });
+
+    test("creates temporary context without persisting project registry mapping", async () => {
+      const tab: WorkspaceTab = await contextManager.createContext(gitRepoDir, {
+        persistInRegistry: false,
+      });
+
+      expect(tab.projectSlug).toStartWith("tmp-");
+
+      const resolved = await contextManager
+        .getProjectRegistry()
+        .resolveSlug(tab.projectSlug);
+      expect(resolved).toBeUndefined();
+    });
   });
 
   describe("getContext", () => {

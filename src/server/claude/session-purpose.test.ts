@@ -49,6 +49,37 @@ describe("session-purpose", () => {
     ]);
   });
 
+  test("skips injected codex bootstrap prompts from intent extraction", () => {
+    const events: TranscriptEvent[] = [
+      {
+        type: "user",
+        raw: {
+          message: {
+            content:
+              "# AGENTS.md instructions for /g/gits/tacogips/QraftBox\n\n<INSTRUCTIONS>...</INSTRUCTIONS>",
+          },
+        },
+      },
+      {
+        type: "user",
+        raw: {
+          message: {
+            content:
+              "<environment_context><cwd>/g/gits/tacogips/QraftBox</cwd></environment_context>",
+          },
+        },
+      },
+      {
+        type: "user",
+        raw: { message: { content: "Investigate why summary is stale" } },
+      },
+    ];
+
+    expect(extractUserIntents(events)).toEqual([
+      "Investigate why summary is stale",
+    ]);
+  });
+
   test("normalizes purpose text and signature", () => {
     const intents = ["A", "B", "C"];
     const signature = createIntentSignature(intents);

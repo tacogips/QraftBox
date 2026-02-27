@@ -24,6 +24,7 @@ describe("parseArgs", () => {
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       projectDirs: [],
+      temporaryProjectMode: false,
     });
   });
 
@@ -116,6 +117,28 @@ describe("parseArgs", () => {
     const config = parseArgs(args);
 
     expect(config.projectPath).toBe("./my-project");
+    expect(config.temporaryProjectMode).toBe(true);
+  });
+
+  test("enables temporary mode for explicit current directory '.'", () => {
+    const args = ["node", "script.js", "."];
+    const config = parseArgs(args);
+
+    expect(config.projectPath).toBe(".");
+    expect(config.temporaryProjectMode).toBe(true);
+  });
+
+  test("disables temporary project mode when --project-dir is provided", () => {
+    const args = [
+      "node",
+      "script.js",
+      "/tmp/positional",
+      "--project-dir",
+      "/tmp/project-a",
+    ];
+    const config = parseArgs(args);
+
+    expect(config.temporaryProjectMode).toBe(false);
   });
 
   test("parses all options together", () => {
@@ -146,6 +169,7 @@ describe("parseArgs", () => {
       assistantModel: "claude-opus-4-6",
       assistantAdditionalArgs: ["--dangerously-skip-permissions"],
       projectDirs: [],
+      temporaryProjectMode: true,
     });
   });
 

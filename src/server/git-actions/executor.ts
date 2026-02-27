@@ -7,6 +7,7 @@
 
 import { buildPrompt } from "./system-prompt.js";
 import type { ResolvedModelProfile } from "../../types/model-config.js";
+import { buildAgentAuthEnv } from "../ai/claude-env.js";
 
 /**
  * Result type for git action execution
@@ -56,7 +57,8 @@ let currentOperationPhase:
   | "committing"
   | "pushing"
   | "pulling"
-  | "creating-pr" = "idle";
+  | "creating-pr"
+  | "initializing" = "idle";
 
 /**
  * Returns the current operation phase.
@@ -66,7 +68,8 @@ export function getOperationPhase():
   | "committing"
   | "pushing"
   | "pulling"
-  | "creating-pr" {
+  | "creating-pr"
+  | "initializing" {
   return currentOperationPhase;
 }
 
@@ -101,6 +104,7 @@ async function runProcessWithTimeout(
   cwd: string,
   timeoutMs: number,
   actionId?: string | undefined,
+  env?: Record<string, string> | undefined,
 ): Promise<ProcessResult> {
   if (actionId !== undefined && cancelledActions.has(actionId)) {
     throw new Error("Operation cancelled");
@@ -108,6 +112,14 @@ async function runProcessWithTimeout(
 
   const proc = Bun.spawn([...cmd], {
     cwd,
+    ...(env !== undefined
+      ? {
+          env: {
+            ...process.env,
+            ...env,
+          },
+        }
+      : {}),
     stdout: "pipe",
     stderr: "pipe",
   });
@@ -163,6 +175,7 @@ async function runClaude(
     profileId: "legacy-default",
     name: "Legacy Default",
     vendor: "anthropics" as const,
+    authMode: "cli_auth" as const,
     model: "sonnet",
     arguments: [
       "--permission-mode",
@@ -200,6 +213,7 @@ async function runClaude(
       projectPath,
       5 * 60 * 1000,
       actionId,
+      buildAgentAuthEnv(profile.vendor, profile.authMode),
     );
 
     if (actionId !== undefined && cancelledActions.has(actionId)) {
@@ -239,6 +253,114 @@ async function runClaude(
       success: false,
       output: "",
       error: `Failed to execute claude: ${errorMessage}`,
+    };
+  }
+}
+
+async function getHeadCommitHash(projectPath: string): Promise<string | null> {
+  try {
+    const { stdout, exitCode } = await runProcessWithTimeout(
+      ["git", "rev-parse", "HEAD"],
+      projectPath,
+      5_000,
+    );
+    if (exitCode !== 0) {
+      return null;
+    }
+    const hash = stdout.trim();
+    return hash.length > 0 ? hash : null;
+  } catch {
+    return null;
+  }
+}
+
+async function stageAllChanges(projectPath: string): Promise<GitActionResult> {
+  try {
+    const { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "add", "-A"],
+      projectPath,
+      30_000,
+    );
+
+    if (exitCode === 0) {
+      return { success: true, output: stdout };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `git add exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to stage changes: ${errorMessage}`,
+    };
+  }
+}
+
+async function listStagedFiles(
+  projectPath: string,
+): Promise<readonly string[]> {
+  try {
+    const { stdout, exitCode } = await runProcessWithTimeout(
+      ["git", "diff", "--cached", "--name-only"],
+      projectPath,
+      10_000,
+    );
+    if (exitCode !== 0) {
+      return [];
+    }
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+async function commitStagedChangesFallback(
+  projectPath: string,
+  stagedFiles: readonly string[],
+): Promise<GitActionResult> {
+  const title = "chore: commit staged changes";
+  const filesPreview = stagedFiles.slice(0, 20).map((file) => `- ${file}`);
+  const truncatedNote =
+    stagedFiles.length > 20
+      ? `\n- ...and ${stagedFiles.length - 20} more file(s)`
+      : "";
+  const body = `Fallback commit path executed because AI did not run git commit.\n\nStaged files:\n${filesPreview.join("\n")}${truncatedNote}`;
+
+  try {
+    const { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "commit", "-m", title, "-m", body],
+      projectPath,
+      30_000,
+    );
+
+    if (exitCode === 0) {
+      return {
+        success: true,
+        output: stdout.length > 0 ? stdout : stderr,
+      };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `git commit exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Fallback commit failed: ${errorMessage}`,
     };
   }
 }
@@ -367,10 +489,56 @@ export async function executeCommit(
 ): Promise<GitActionResult> {
   currentOperationPhase = "committing";
   try {
+    const stageResult = await stageAllChanges(projectPath);
+    if (!stageResult.success) {
+      return {
+        success: false,
+        output: stageResult.output,
+        error: stageResult.error ?? "Failed to stage changes",
+      };
+    }
+
+    const beforeHead = await getHeadCommitHash(projectPath);
+
     // Build prompt with commit system prompt
     const prompt = await buildPrompt("commit", customCtx, outputLanguage);
 
-    return await runClaude(modelProfile, projectPath, prompt, actionId);
+    const result = await runClaude(modelProfile, projectPath, prompt, actionId);
+    if (!result.success) {
+      return result;
+    }
+
+    const afterHead = await getHeadCommitHash(projectPath);
+    if (beforeHead === afterHead) {
+      const stagedFiles = await listStagedFiles(projectPath);
+      if (stagedFiles.length === 0) {
+        return {
+          success: false,
+          output: result.output,
+          error:
+            "No commit was created and no staged changes remain. Stage files and try again.",
+        };
+      }
+
+      const fallbackCommit = await commitStagedChangesFallback(
+        projectPath,
+        stagedFiles,
+      );
+      if (fallbackCommit.success) {
+        return {
+          success: true,
+          output: `${result.output}\n\nFallback commit succeeded:\n${fallbackCommit.output}`,
+        };
+      }
+
+      return {
+        success: false,
+        output: result.output,
+        error: fallbackCommit.error ?? "No commit was created",
+      };
+    }
+
+    return result;
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
     return {
@@ -546,6 +714,65 @@ export async function executePull(
       success: false,
       output: "",
       error: `Failed to execute pull: ${errorMessage}`,
+    };
+  } finally {
+    currentOperationPhase = "idle";
+  }
+}
+
+/**
+ * Execute git init
+ *
+ * Initializes a new git repository in the target directory.
+ *
+ * @param projectPath - Absolute path to directory
+ * @returns Init execution result
+ */
+export async function executeInit(
+  projectPath: string,
+): Promise<GitActionResult> {
+  currentOperationPhase = "initializing";
+  try {
+    const proc = Bun.spawn(["git", "init"], {
+      cwd: projectPath,
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+
+    const timeoutMs = 30 * 1000;
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Git init timeout")), timeoutMs),
+    );
+
+    const [stdout, stderr, exitCode] = await Promise.race([
+      Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]),
+      timeoutPromise,
+    ]);
+
+    if (exitCode === 0) {
+      const output = stdout.length > 0 ? stdout : stderr;
+      return {
+        success: true,
+        output,
+      };
+    }
+
+    return {
+      success: false,
+      output: stdout,
+      error:
+        stderr.length > 0 ? stderr : `Git init exited with code ${exitCode}`,
+    };
+  } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : String(e);
+    return {
+      success: false,
+      output: "",
+      error: `Failed to execute git init: ${errorMessage}`,
     };
   } finally {
     currentOperationPhase = "idle";

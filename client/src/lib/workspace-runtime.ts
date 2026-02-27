@@ -3,6 +3,7 @@ import {
   activateWorkspaceTab,
   closeWorkspaceTab,
   createWorkspaceTab,
+  createWorkspaceTabBySlug,
   fetchDiffFiles,
   fetchRecentWorkspaceProjects,
   fetchWorkspace,
@@ -33,12 +34,15 @@ interface WorkspaceControllerDeps {
   setNewProjectLoading: SetState<boolean>;
   setPickingDirectory: SetState<boolean>;
   setDirectoryPickerOpen: SetState<boolean>;
+  getCanManageProjects: GetState<boolean>;
+  setCanManageProjects: SetState<boolean>;
   isMobileDirectoryPickerClient: GetState<boolean>;
   setLoading: SetState<boolean>;
   getFileTreeMode: GetState<"diff" | "all">;
   setFileTreeMode: SetState<"diff" | "all">;
   setShowAllFiles: SetState<boolean>;
   setDiffFiles: SetState<DiffFile[]>;
+  getSelectedPath: GetState<string | null>;
   setSelectedPath: SetState<string | null>;
   setAllFilesTree: SetState<unknown | null>;
   setAllFilesTreeStale: SetState<boolean>;
@@ -94,9 +98,35 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
 
   async function fetchDiff(ctxId: string): Promise<void> {
     const files = await fetchDiffFiles(ctxId);
+    const selectedPath = deps.getSelectedPath();
+    const fileTreeMode = deps.getFileTreeMode();
     deps.setDiffFiles(files);
-    if (files.length > 0 && files[0] !== undefined) {
+    if (files.length === 0) {
+      return;
+    }
+
+    if (selectedPath === null) {
+      if (files[0] !== undefined) {
+        deps.setSelectedPath(files[0].path);
+      }
+      return;
+    }
+
+    const hasSelectedPathInDiff =
+      files.some((file) => file.path === selectedPath);
+    if (fileTreeMode === "diff" && !hasSelectedPathInDiff && files[0] !== undefined) {
       deps.setSelectedPath(files[0].path);
+    }
+  }
+
+  async function openProjectBySlug(slug: string): Promise<boolean> {
+    try {
+      const result = await createWorkspaceTabBySlug(slug);
+      deps.setWorkspaceTabs(result.tabs);
+      await switchProject(result.tab.id);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -138,6 +168,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
 
   async function fetchContext(): Promise<string> {
     const workspace = await fetchWorkspace();
+    deps.setCanManageProjects(workspace.metadata.canManageProjects);
     const tabs = workspace.tabs;
     if (tabs.length > 0) {
       deps.setWorkspaceTabs(tabs);
@@ -158,7 +189,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function switchProject(tabId: string): Promise<void> {
-    if (tabId === deps.getContextId()) return;
+    if (!deps.getCanManageProjects()) return;
 
     const tab = deps.getWorkspaceTabs().find((item) => item.id === tabId);
     if (tab === undefined) return;
@@ -204,6 +235,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
     tabId: string,
     event: MouseEvent,
   ): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
     event.stopPropagation();
     const closingTab = deps.getWorkspaceTabs().find((tab) => tab.id === tabId);
 
@@ -287,6 +319,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function openProjectByPath(path: string): Promise<void> {
+    if (!deps.getCanManageProjects()) {
+      deps.setNewProjectError(
+        "Project management is disabled in temporary project mode",
+      );
+      return;
+    }
+
     const trimmed = path.trim();
     if (trimmed.length === 0) return;
 
@@ -319,6 +358,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function removeRecentProject(path: string): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
+
     try {
       await removeRecentWorkspaceProject(path);
     } catch {
@@ -333,6 +374,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
   }
 
   async function pickDirectory(): Promise<void> {
+    if (!deps.getCanManageProjects()) return;
+
     deps.setNewProjectError(null);
 
     if (deps.isMobileDirectoryPickerClient()) {
@@ -374,6 +417,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
         .find((tab) => tab.projectSlug === parsed.slug);
       if (targetTab !== undefined && targetTab.id !== deps.getContextId()) {
         void switchProject(targetTab.id);
+        return;
+      }
+      if (targetTab === undefined) {
+        if (deps.getCanManageProjects()) {
+          void openProjectBySlug(parsed.slug);
+        }
       }
     }
   }
@@ -389,6 +438,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
       const contextId = await fetchContext();
 
       if (contextId === "") {
+        if (parsed.slug !== null) {
+          const opened = await openProjectBySlug(parsed.slug);
+          if (opened) {
+            void fetchRecentProjects();
+            return;
+          }
+        }
         void fetchRecentProjects();
         deps.setLoading(false);
         return;
@@ -404,6 +460,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDeps): {
           deps.setContextId(targetTab.id);
           deps.setProjectPath(targetTab.path);
           await activateWorkspaceTab(targetTab.id);
+        } else if (targetTab === undefined) {
+          const opened = await openProjectBySlug(parsed.slug);
+          if (opened) {
+            void fetchRecentProjects();
+            return;
+          }
         }
       }
 

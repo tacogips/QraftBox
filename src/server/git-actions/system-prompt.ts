@@ -211,6 +211,26 @@ export async function loadSystemPrompt(
 }
 
 /**
+ * Save system prompt content to disk.
+ *
+ * @param name - System prompt name ("commit" | "create-pr")
+ * @param content - Prompt content to save
+ */
+export async function saveSystemPrompt(
+  name: SystemPromptName,
+  content: string,
+): Promise<void> {
+  const next = content.trim();
+  if (next.length === 0) {
+    throw new Error("Prompt content is required");
+  }
+
+  await ensureSystemPromptFiles();
+  const path = getSystemPromptPath(name);
+  await writeFile(path, `${next}\n`, "utf-8");
+}
+
+/**
  * Wrap content in qraftbox-system-prompt XML tags
  *
  * @param content - Content to wrap

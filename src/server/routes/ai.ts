@@ -13,10 +13,7 @@ import type {
   PromptId,
   WorktreeId,
 } from "../../types/ai";
-import {
-  isAIAgent,
-  resolveAIAgentFromVendor,
-} from "../../types/ai-agent";
+import { isAIAgent, resolveAIAgentFromVendor } from "../../types/ai-agent";
 import type { SessionManager } from "../ai/session-manager";
 import { createLogger } from "../logger.js";
 import type { ModelConfigStore } from "../model-config/store.js";
@@ -89,6 +86,17 @@ export function createAIRoutes(context: AIServerContext): Hono {
         return c.json(errorResponse, 400);
       }
 
+      if (
+        body.force_new_session !== undefined &&
+        typeof body.force_new_session !== "boolean"
+      ) {
+        const errorResponse: ErrorResponse = {
+          error: "force_new_session must be a boolean when provided",
+          code: 400,
+        };
+        return c.json(errorResponse, 400);
+      }
+
       // Ensure project_path defaults to server config
       const msg: AIPromptMessage = {
         ...(context.modelConfigStore !== undefined
@@ -103,6 +111,7 @@ export function createAIRoutes(context: AIServerContext): Hono {
               return {
                 model_profile_id: selected.profileId,
                 model_vendor: selected.vendor,
+                model_auth_mode: selected.authMode,
                 model_name: selected.model,
                 model_arguments: selected.arguments,
               };
@@ -124,13 +133,13 @@ export function createAIRoutes(context: AIServerContext): Hono {
           body.qraft_ai_session_id.length > 0
             ? body.qraft_ai_session_id
             : undefined,
+        force_new_session: body.force_new_session === true,
         ai_agent: undefined,
       };
 
-      const selectedAgent =
-        isAIAgent(body.ai_agent)
-          ? body.ai_agent
-          : resolveAIAgentFromVendor(msg.model_vendor);
+      const selectedAgent = isAIAgent(body.ai_agent)
+        ? body.ai_agent
+        : resolveAIAgentFromVendor(msg.model_vendor);
 
       const resolvedMsg: AIPromptMessage = {
         ...msg,

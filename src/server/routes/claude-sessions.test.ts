@@ -258,6 +258,39 @@ describe("Claude Sessions Routes", () => {
       expect(body.limit).toBe(10);
     });
 
+    test("disables JSONL firstPrompt recovery for list endpoint fast path", async () => {
+      let capturedOptions:
+        | { recoverFirstPromptFromJsonl?: boolean; limit?: number }
+        | undefined;
+      const appWithMockReader = createClaudeSessionsRoutes(
+        undefined,
+        undefined,
+        undefined,
+        {
+          sessionReader: {
+            listProjects: async () => [],
+            listSessions: async (options) => {
+              capturedOptions = options;
+              return {
+                sessions: [],
+                total: 0,
+                offset: options?.offset ?? 0,
+                limit: options?.limit ?? 50,
+              };
+            },
+            getSession: async () => null,
+            readTranscript: async () => null,
+            getSessionSummary: async () => null,
+          },
+        },
+      );
+
+      const response = await appWithMockReader.request("/sessions?limit=5");
+      expect(response.status).toBe(200);
+      expect(capturedOptions?.limit).toBe(5);
+      expect(capturedOptions?.recoverFirstPromptFromJsonl).toBe(false);
+    });
+
     test("returns 400 for invalid offset", async () => {
       const response = await app.request("/sessions?offset=-1");
 

@@ -16,10 +16,16 @@ import {
   type RunningSession,
   type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import type { ModelAuthMode } from "../../types/model-config.js";
+import { buildAgentAuthEnv } from "./claude-env.js";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const AWAITING_INPUT_POLL_INTERVAL_MS = 100;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "object" || value === null) {
@@ -42,6 +48,353 @@ function readStringField(
 
 function isLikelyClaudeSessionId(value: string): boolean {
   return UUID_PATTERN.test(value);
+}
+
+interface CodexMessageEvent {
+  readonly type: "message";
+  readonly content: string;
+  readonly isDelta?: boolean;
+}
+
+interface CodexToolCallEvent {
+  readonly type: "tool_call";
+  readonly toolName: string;
+}
+
+interface CodexToolResultEvent {
+  readonly type: "tool_result";
+  readonly toolName: string;
+  readonly isError: boolean;
+}
+
+interface CodexSessionDetectedEvent {
+  readonly type: "session_detected";
+  readonly sessionId: ClaudeSessionId;
+}
+
+type CodexParsedEvent =
+  | CodexMessageEvent
+  | CodexToolCallEvent
+  | CodexToolResultEvent
+  | CodexSessionDetectedEvent
+  | null;
+
+function readFirstStringField(
+  obj: Record<string, unknown>,
+  keys: readonly string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = readStringField(obj, key);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Build a Codex CLI command for non-interactive JSONL execution.
+ *
+ * - New session: codex exec --json [opts...] <prompt>
+ * - Resume session: codex exec resume --json [opts...] <sessionId> <prompt>
+ */
+export function buildCodexExecCommand(
+  params: AgentRunParams,
+  imagePaths?: readonly string[],
+): string[] {
+  const args: string[] = ["codex", "exec"];
+
+  if (params.resumeSessionId !== undefined) {
+    args.push("resume");
+  }
+
+  args.push("--json");
+
+  if (params.model !== undefined && params.model.length > 0) {
+    args.push("--model", params.model);
+  }
+
+  if (params.additionalArgs !== undefined && params.additionalArgs.length > 0) {
+    args.push(...params.additionalArgs);
+  }
+
+  if (imagePaths !== undefined && imagePaths.length > 0) {
+    for (const imagePath of imagePaths) {
+      args.push("--image", imagePath);
+    }
+  }
+
+  if (params.resumeSessionId !== undefined) {
+    args.push(params.resumeSessionId);
+  }
+
+  args.push(params.prompt);
+  return args;
+}
+
+export function parseCodexJsonLine(line: string): CodexParsedEvent {
+  const trimmed = line.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+
+  const obj = asRecord(parsed);
+  if (obj === undefined) {
+    return null;
+  }
+
+  const lineType = readStringField(obj, "type");
+  if (lineType === "thread.started") {
+    const sessionId =
+      readFirstStringField(obj, [
+        "thread_id",
+        "threadId",
+        "session_id",
+        "sessionId",
+      ]) ??
+      (() => {
+        const thread = asRecord(obj["thread"]);
+        if (thread === undefined) return undefined;
+        return readFirstStringField(thread, ["id", "thread_id", "threadId"]);
+      })();
+    if (sessionId !== undefined) {
+      return {
+        type: "session_detected",
+        sessionId: sessionId as ClaudeSessionId,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "item.started") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    const itemType = readStringField(item, "type");
+    if (itemType === "command_execution") {
+      const toolName = readFirstStringField(item, [
+        "tool_name",
+        "toolName",
+        "name",
+      ]);
+      return {
+        type: "tool_call",
+        toolName: toolName ?? "local_shell_call",
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "item.completed") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    const itemType = readStringField(item, "type");
+
+    if (itemType === "agent_message") {
+      const text = readFirstStringField(item, ["text", "content", "message"]);
+      if (text !== undefined) {
+        return { type: "message", content: text };
+      }
+      return null;
+    }
+
+    if (itemType === "command_execution") {
+      const toolName = readFirstStringField(item, [
+        "tool_name",
+        "toolName",
+        "name",
+      ]);
+      const exitCodeRaw = item["exit_code"];
+      const isError =
+        (typeof exitCodeRaw === "number" && exitCodeRaw !== 0) ||
+        readStringField(item, "status") === "failed";
+      return {
+        type: "tool_result",
+        toolName: toolName ?? "local_shell_call",
+        isError,
+      };
+    }
+
+    return null;
+  }
+
+  if (lineType === "item.delta") {
+    const item = asRecord(obj["item"]);
+    if (item === undefined) return null;
+    if (readStringField(item, "type") !== "agent_message") {
+      return null;
+    }
+    const delta = asRecord(obj["delta"]);
+    const text =
+      (delta !== undefined
+        ? readFirstStringField(delta, ["text", "content"])
+        : undefined) ?? readFirstStringField(item, ["text"]);
+    if (text !== undefined) {
+      return { type: "message", content: text, isDelta: true };
+    }
+    return null;
+  }
+
+  if (lineType === "session_meta") {
+    const payload = asRecord(obj["payload"]);
+    const meta = payload !== undefined ? asRecord(payload["meta"]) : undefined;
+    const sessionId =
+      meta !== undefined
+        ? readStringField(meta, "id")
+        : payload !== undefined
+          ? readStringField(payload, "id")
+          : undefined;
+    if (sessionId !== undefined) {
+      return {
+        type: "session_detected",
+        sessionId: sessionId as ClaudeSessionId,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "event_msg") {
+    const payload = asRecord(obj["payload"]);
+    if (payload === undefined) return null;
+    const eventType = readStringField(payload, "type");
+    if (eventType === "AgentMessage") {
+      const messageValue = payload["message"];
+      if (typeof messageValue === "string" && messageValue.trim().length > 0) {
+        return { type: "message", content: messageValue };
+      }
+      const messageObj = asRecord(messageValue);
+      const nestedContent =
+        messageObj !== undefined ? messageObj["content"] : undefined;
+      if (
+        typeof nestedContent === "string" &&
+        nestedContent.trim().length > 0
+      ) {
+        return { type: "message", content: nestedContent };
+      }
+      if (Array.isArray(nestedContent)) {
+        const parts: string[] = [];
+        for (const item of nestedContent) {
+          const block = asRecord(item);
+          if (block === undefined) continue;
+          const text = readStringField(block, "text");
+          if (text !== undefined) {
+            parts.push(text);
+          }
+        }
+        const combined = parts.join("\n").trim();
+        if (combined.length > 0) {
+          return { type: "message", content: combined };
+        }
+      }
+      return null;
+    }
+    if (eventType === "ExecCommandBegin") {
+      return { type: "tool_call", toolName: "local_shell_call" };
+    }
+    if (eventType === "ExecCommandEnd") {
+      const exitCodeRaw = payload["exit_code"];
+      const isError =
+        typeof exitCodeRaw === "number" ? exitCodeRaw !== 0 : false;
+      return {
+        type: "tool_result",
+        toolName: "local_shell_call",
+        isError,
+      };
+    }
+    return null;
+  }
+
+  if (lineType === "response_item") {
+    const payload = asRecord(obj["payload"]);
+    if (payload === undefined) return null;
+    const responseType = readStringField(payload, "type");
+    if (
+      responseType === "message" &&
+      readStringField(payload, "role") === "assistant"
+    ) {
+      const content = payload["content"];
+      if (!Array.isArray(content)) return null;
+      const parts: string[] = [];
+      for (const item of content) {
+        const block = asRecord(item);
+        if (block === undefined) continue;
+        const blockType = readStringField(block, "type");
+        if (blockType !== "output_text" && blockType !== "input_text") continue;
+        const text = readStringField(block, "text");
+        if (text !== undefined) parts.push(text);
+      }
+      const combined = parts.join("\n").trim();
+      if (combined.length > 0) {
+        return { type: "message", content: combined };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function shouldEmitCodexSessionDetected(
+  previouslyDetectedSessionId: ClaudeSessionId | undefined,
+  nextSessionId: ClaudeSessionId,
+): boolean {
+  return (
+    previouslyDetectedSessionId === undefined ||
+    previouslyDetectedSessionId !== nextSessionId
+  );
+}
+
+export function buildCodexMessageSnapshots(
+  previousContent: string,
+  incomingContent: string,
+  isDelta: boolean | undefined,
+): readonly string[] {
+  if (incomingContent.length === 0) {
+    return [];
+  }
+
+  if (isDelta === true) {
+    const snapshots: string[] = [];
+    let acc = previousContent;
+    for (const char of Array.from(incomingContent)) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  if (previousContent.length === 0) {
+    const snapshots: string[] = [];
+    let acc = "";
+    for (const char of Array.from(incomingContent)) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  if (
+    previousContent.length > 0 &&
+    incomingContent.startsWith(previousContent) &&
+    incomingContent.length > previousContent.length
+  ) {
+    const snapshots: string[] = [];
+    let acc = previousContent;
+    for (const char of Array.from(
+      incomingContent.slice(previousContent.length),
+    )) {
+      acc += char;
+      snapshots.push(acc);
+    }
+    return snapshots;
+  }
+
+  return [incomingContent];
 }
 
 /**
@@ -142,6 +495,7 @@ export interface AgentRunParams {
   readonly attachments?: readonly AgentSessionAttachment[] | undefined;
   readonly aiAgent?: AIAgent | undefined;
   readonly vendor?: "anthropics" | "openai" | undefined;
+  readonly authMode?: ModelAuthMode | undefined;
   readonly model?: string | undefined;
   readonly additionalArgs?: readonly string[] | undefined;
 }
@@ -259,18 +613,22 @@ class ClaudeAgentRunner implements AgentRunner {
         const allowedToolNames = [...this.toolRegistry.getAllowedToolNames()];
         const mcpServerConfig = this.toolRegistry.toMcpServerConfig();
 
+        const cliPath = this.resolveCliPath(params);
+        const vendor =
+          params.vendor ?? (cliPath === "codex" ? "openai" : "anthropics");
         agent = new SessionRunner({
           cwd: params.projectPath,
           mcpServers: {
             "qraftbox-tools": mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
-          cliPath: this.resolveCliPath(params),
+          cliPath,
           model: params.model ?? this.config.assistantModel,
           additionalArgs:
             params.additionalArgs !== undefined
               ? [...params.additionalArgs]
               : [...this.config.assistantAdditionalArgs],
+          env: buildAgentAuthEnv(vendor, params.authMode),
         });
 
         // Start or resume session
@@ -438,12 +796,58 @@ class ClaudeAgentRunner implements AgentRunner {
           channel.push({ type: "error", message: errorMessage });
         });
 
-        // Iterate messages until completion or cancellation
-        for await (const _msg of runningSession.messages()) {
-          // Check cancellation flag
-          if (cancelled) {
-            break;
+        const waitForAwaitingInput = async (): Promise<boolean> => {
+          const initialState = String(runningSession?.getState().state);
+          let observedNonAwaitingState = initialState !== "awaiting_input";
+
+          while (!cancelled) {
+            const stateSnapshot = runningSession?.getState().state;
+            const normalizedState = String(stateSnapshot);
+            if (normalizedState !== "awaiting_input") {
+              observedNonAwaitingState = true;
+            }
+
+            // Resumed sessions can start in awaiting_input from the previous turn.
+            // Only treat awaiting_input as completion after this run has first
+            // transitioned to a non-awaiting state.
+            if (
+              observedNonAwaitingState &&
+              normalizedState === "awaiting_input"
+            ) {
+              return true;
+            }
+            await Bun.sleep(AWAITING_INPUT_POLL_INTERVAL_MS);
           }
+          return false;
+        };
+
+        const consumeStreamMessages = async (): Promise<void> => {
+          if (runningSession === undefined) {
+            return;
+          }
+          for await (const _msg of runningSession.messages()) {
+            if (cancelled) {
+              break;
+            }
+          }
+        };
+
+        // Claude can remain in awaiting_input while keeping the stream open.
+        // Treat that as a completed turn so queue locks are released and
+        // follow-up prompts can execute.
+        const reachedAwaitingInput = await Promise.race([
+          consumeStreamMessages().then(() => false),
+          waitForAwaitingInput(),
+        ]);
+
+        if (reachedAwaitingInput) {
+          channel.push({ type: "activity", activity: undefined });
+          channel.push({
+            type: "completed",
+            success: true,
+            lastAssistantMessage: streamedAssistantContent,
+          });
+          return;
         }
 
         // Wait for completion
@@ -533,6 +937,299 @@ class ClaudeAgentRunner implements AgentRunner {
   }
 }
 
+class CodexAgentRunner implements AgentRunner {
+  execute(params: AgentRunParams): AgentExecution {
+    const channel = new EventChannel<AgentEvent>();
+    let started = false;
+    let cancelled = false;
+    let codexProcess:
+      | {
+          readonly stdout: ReadableStream<Uint8Array>;
+          readonly stderr: ReadableStream<Uint8Array>;
+          readonly exited: Promise<number>;
+          kill(): void;
+        }
+      | undefined;
+    let streamedAssistantContent = "";
+    let tempDirForResumeImages: string | undefined;
+
+    const startExecution = async (): Promise<void> => {
+      try {
+        let detectedSessionId: ClaudeSessionId | undefined =
+          params.resumeSessionId;
+
+        const emitParsedEvent = (parsed: CodexParsedEvent): void => {
+          if (parsed === null) {
+            return;
+          }
+          if (parsed.type === "session_detected") {
+            if (
+              shouldEmitCodexSessionDetected(
+                detectedSessionId,
+                parsed.sessionId,
+              )
+            ) {
+              channel.push({
+                type: "claude_session_detected",
+                claudeSessionId: parsed.sessionId,
+              });
+            }
+            detectedSessionId = parsed.sessionId;
+            return;
+          }
+          if (parsed.type === "message") {
+            const snapshots = buildCodexMessageSnapshots(
+              streamedAssistantContent,
+              parsed.content,
+              parsed.isDelta,
+            );
+            for (const snapshot of snapshots) {
+              streamedAssistantContent = snapshot;
+              channel.push({
+                type: "message",
+                role: "assistant",
+                content: snapshot,
+              });
+              channel.push({ type: "activity", activity: undefined });
+            }
+            return;
+          }
+          if (parsed.type === "tool_call") {
+            channel.push({
+              type: "tool_call",
+              toolName: parsed.toolName,
+              input: {},
+            });
+            channel.push({
+              type: "activity",
+              activity: `Using ${parsed.toolName}...`,
+            });
+            return;
+          }
+          if (parsed.type === "tool_result") {
+            channel.push({
+              type: "tool_result",
+              toolName: parsed.toolName,
+              output: undefined,
+              isError: parsed.isError,
+            });
+            channel.push({
+              type: "activity",
+              activity: `Processing ${parsed.toolName} result...`,
+            });
+          }
+        };
+
+        const streamToText = async (
+          stream: ReadableStream<Uint8Array>,
+        ): Promise<string> => {
+          const decoder = new TextDecoder();
+          let text = "";
+          for await (const chunk of stream) {
+            text += decoder.decode(chunk, { stream: true });
+          }
+          text += decoder.decode();
+          return text;
+        };
+
+        const extensionForMimeType = (mimeType: string): string => {
+          switch (mimeType.toLowerCase()) {
+            case "image/png":
+              return ".png";
+            case "image/jpeg":
+              return ".jpg";
+            case "image/webp":
+              return ".webp";
+            case "image/gif":
+              return ".gif";
+            default:
+              return ".img";
+          }
+        };
+
+        const materializeImagePaths = async (
+          attachments: readonly AgentSessionAttachment[] | undefined,
+        ): Promise<readonly string[]> => {
+          if (attachments === undefined || attachments.length === 0) {
+            return [];
+          }
+
+          const paths: string[] = [];
+          for (const attachment of attachments) {
+            if (
+              typeof attachment.mimeType !== "string" ||
+              !attachment.mimeType.startsWith("image/")
+            ) {
+              continue;
+            }
+
+            if (
+              typeof attachment.path === "string" &&
+              attachment.path.length > 0
+            ) {
+              paths.push(attachment.path);
+              continue;
+            }
+
+            if (
+              attachment.encoding === "base64" &&
+              typeof attachment.content === "string" &&
+              attachment.content.length > 0
+            ) {
+              if (tempDirForResumeImages === undefined) {
+                tempDirForResumeImages = await mkdtemp(
+                  join(tmpdir(), "qraftbox-codex-resume-"),
+                );
+              }
+              const extension = extensionForMimeType(attachment.mimeType);
+              const filePath = join(
+                tempDirForResumeImages,
+                `${paths.length}${extension}`,
+              );
+              const bytes = new Uint8Array(
+                Buffer.from(attachment.content, "base64"),
+              );
+              await writeFile(filePath, bytes);
+              paths.push(filePath);
+            }
+          }
+          return paths;
+        };
+
+        const imagePaths = await materializeImagePaths(params.attachments);
+        const command = buildCodexExecCommand(params, imagePaths);
+        const spawned = Bun.spawn({
+          cmd: command,
+          cwd: params.projectPath,
+          env: {
+            ...process.env,
+            ...buildAgentAuthEnv("openai", params.authMode),
+          },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
+        codexProcess = spawned;
+        const stderrPromise = streamToText(spawned.stderr);
+        const decoder = new TextDecoder();
+        let buffered = "";
+
+        for await (const chunk of spawned.stdout) {
+          if (cancelled) {
+            break;
+          }
+          buffered += decoder.decode(chunk, { stream: true });
+          let newlineIndex = buffered.indexOf("\n");
+          while (newlineIndex >= 0) {
+            const line = buffered.slice(0, newlineIndex);
+            buffered = buffered.slice(newlineIndex + 1);
+            emitParsedEvent(parseCodexJsonLine(line));
+            newlineIndex = buffered.indexOf("\n");
+          }
+        }
+
+        buffered += decoder.decode();
+        if (buffered.trim().length > 0) {
+          emitParsedEvent(parseCodexJsonLine(buffered));
+        }
+
+        const exitCode = await spawned.exited;
+        const stderrText = (await stderrPromise).trim();
+        codexProcess = undefined;
+
+        if (cancelled) {
+          channel.push({ type: "completed", success: false });
+          return;
+        }
+
+        if (exitCode === 0) {
+          channel.push({ type: "activity", activity: undefined });
+          channel.push({
+            type: "completed",
+            success: true,
+            lastAssistantMessage: streamedAssistantContent,
+          });
+          return;
+        }
+
+        const fallbackError = `Codex execution failed (exit ${exitCode})`;
+        const errorMessage = stderrText.length > 0 ? stderrText : fallbackError;
+        channel.push({ type: "error", message: errorMessage });
+        channel.push({ type: "activity", activity: undefined });
+        channel.push({
+          type: "completed",
+          success: false,
+          error: errorMessage,
+          lastAssistantMessage: streamedAssistantContent,
+        });
+        return;
+      } catch (error) {
+        if (cancelled) {
+          channel.push({ type: "completed", success: false });
+        } else {
+          const errorMessage =
+            error instanceof Error ? error.message : "Codex execution failed";
+          channel.push({ type: "error", message: errorMessage });
+          channel.push({
+            type: "completed",
+            success: false,
+            error: errorMessage,
+          });
+        }
+      } finally {
+        if (tempDirForResumeImages !== undefined) {
+          await rm(tempDirForResumeImages, { recursive: true, force: true });
+        }
+        channel.close();
+      }
+    };
+
+    return {
+      events(): AsyncIterable<AgentEvent> {
+        if (!started) {
+          started = true;
+          void startExecution();
+        }
+        return channel;
+      },
+
+      async cancel(): Promise<void> {
+        cancelled = true;
+        if (codexProcess !== undefined) {
+          codexProcess.kill();
+          codexProcess = undefined;
+        }
+      },
+
+      async abort(): Promise<void> {
+        cancelled = true;
+        if (codexProcess !== undefined) {
+          codexProcess.kill();
+          codexProcess = undefined;
+        }
+      },
+    };
+  }
+}
+
+class HybridAgentRunner implements AgentRunner {
+  private readonly claudeRunner: ClaudeAgentRunner;
+  private readonly codexRunner: CodexAgentRunner;
+
+  constructor(config: AIConfig, toolRegistry: QraftBoxToolRegistry) {
+    this.claudeRunner = new ClaudeAgentRunner(config, toolRegistry);
+    this.codexRunner = new CodexAgentRunner();
+  }
+
+  execute(params: AgentRunParams): AgentExecution {
+    const isCodex =
+      params.aiAgent === AIAgent.CODEX ||
+      (params.aiAgent === undefined && params.vendor === "openai");
+    return isCodex
+      ? this.codexRunner.execute(params)
+      : this.claudeRunner.execute(params);
+  }
+}
+
 /**
  * StubbedAgentRunner - Fallback implementation when no toolRegistry is available
  */
@@ -597,7 +1294,7 @@ export function createAgentRunner(
   toolRegistry?: QraftBoxToolRegistry | undefined,
 ): AgentRunner {
   if (toolRegistry !== undefined) {
-    return new ClaudeAgentRunner(config, toolRegistry);
+    return new HybridAgentRunner(config, toolRegistry);
   }
   return new StubbedAgentRunner();
 }

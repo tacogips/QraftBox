@@ -12,10 +12,16 @@ QraftBox is a local tool for viewing code changes (diffs), managing git branches
 
 ## Quick Visual Preview
 
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### Screenshot Gallery
 
 ![Diff side-by-side view](usage/resource/diff_side_by_side.png)
+![Current file diff view](usage/resource/diff_current.png)
+![Stacked diff view](usage/resource/diff_stack.png)
+![File tree view](usage/resource/file_tree_view.png)
 ![File tree diff status](usage/resource/file_tree_diff.png)
+![Commit history](usage/resource/commit_history.png)
+![AI session history](usage/resource/session_history.png)
+![Browser terminal](usage/resource/terminal.png)
 
 ## SECURITY WARNING
 
@@ -37,7 +43,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 
 - **See what changed** -- View diffs (the differences between file versions) in a clean, readable format. Choose between inline view (changes shown in one column) or side-by-side view (old version on the left, new version on the right).
 - **Manage branches** -- Switch between git branches, view branch lists, and work with git worktrees (multiple working directories for the same repository).
-- **AI-powered git operations** -- Use `claude-code-agent` (Claude Code CLI) to write commit messages, push code, and create pull requests with AI assistance.
+- **AI-powered git operations** -- Use AI assistants (Claude Code / Codex) to write commit messages, push code, and create pull requests with AI assistance.
 - **Browse AI sessions** -- View past AI sessions and their transcripts.
 - **Work with multiple projects** -- Open multiple directories in tabs, just like a browser.
 - **Real-time updates** -- QraftBox watches your files and updates the view automatically when files change.
@@ -55,6 +61,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 - AI session browsing
 - Multi-directory tabs
 - Real-time file watching updates
+- Git notes comments on diffs
 - Built-in tool registry and browser terminal
 - AI model profile and operation binding management
 
@@ -62,9 +69,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 
 - Orchestration
 - Workflow
-- Codex integration
 - Scheduling
-- Git notes comments on diffs
 
 ## How it Works (Simple Explanation)
 
@@ -72,7 +77,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 2. You open your web browser and go to `http://localhost:7144`.
 3. You see a web page where you can browse your git repositories, view diffs, and perform git operations.
 
-That's it. Everything runs on your machine. When AI features are enabled, prompts are sent to the configured AI provider via `claude-code-agent`, and tool plugins may call external services depending on their configuration.
+That's it. Everything runs on your machine. When AI features are enabled, prompts are sent to the configured AI provider via local AI CLIs (Claude Code / Codex) through `claude-code-agent`, and tool plugins may call external services depending on their configuration.
 
 ### Architecture Overview
 
@@ -118,7 +123,7 @@ This downloads a pre-built binary for your platform (macOS / Linux, x64 / arm64)
 curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --npm
 
 # Install a specific version
-curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version 0.0.1
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version X.Y.Z
 
 # Install to a custom directory
 curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --install-dir /usr/local/bin
@@ -183,10 +188,10 @@ Pre-built binaries include everything needed. No Bun installation required.
 
 ```bash
 # Extract (replace the filename with the one you downloaded)
-tar xzf qraftbox-v0.0.1-darwin-arm64.tar.gz
+tar xzf qraftbox-vX.Y.Z-darwin-arm64.tar.gz
 
 # Go into the directory
-cd qraftbox-v0.0.1-darwin-arm64
+cd qraftbox-vX.Y.Z-darwin-arm64
 
 # Run it
 ./qraftbox
@@ -254,7 +259,7 @@ This slash command wraps the install script and accepts the same options:
 
 ```
 /install-qraftbox --npm                        # Install via npm
-/install-qraftbox --version 0.0.1              # Specific version
+/install-qraftbox --version X.Y.Z              # Specific version
 /install-qraftbox --install-dir /usr/local/bin  # Custom directory
 /install-qraftbox --uninstall                   # Remove QraftBox
 ```
@@ -309,11 +314,7 @@ Then access it using your computer's IP address from the other device (e.g., `ht
 
 **SECURITY WARNING:** Using `--host 0.0.0.0` exposes QraftBox to all network interfaces. Only use this on trusted private networks, never expose it to the internet. For remote access, always use a VPN instead.
 
-### Feature Preview (Video / Images)
-
-#### Overview Video
-
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### Feature Preview (Images)
 
 #### UI Screenshots
 
@@ -383,8 +384,10 @@ Options:
   --no-watch                       Disable file watching
   -s, --sync-mode <mode>           Git sync mode: manual, auto-push, auto-pull, auto
                                    (default: "manual")
+  --ai                             Enable AI features (default: true)
   --no-ai                          Disable AI features
-  --assistant-additional-args <args>  Comma-separated args passed to AI assistant
+  --assistant-additional-args <args>  Additional CLI arguments for AI assistant
+                                     (comma-separated)
   -d, --project-dir <paths...>     Project directories to open at startup
   -V, --version                    Show version number
   --help                           Show help
@@ -502,7 +505,7 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 
 - **変更内容を見る** -- diff（ファイルのバージョン間の差分）を見やすい形式で表示します。インライン表示（1列で変更を表示）とサイドバイサイド表示（左に旧バージョン、右に新バージョン）を選べます。
 - **ブランチを管理する** -- git ブランチの切り替え、ブランチ一覧の表示、git ワークツリー（同じリポジトリで複数の作業ディレクトリを持つ機能）の操作ができます。
-- **AIによるgit操作** -- `claude-code-agent`（Claude Code CLI）を使って、コミットメッセージの作成、コードのプッシュ、プルリクエストの作成をAIの支援のもと行えます。
+- **AIによるgit操作** -- AIアシスタント（Claude Code / Codex）を使って、コミットメッセージの作成、コードのプッシュ、プルリクエストの作成をAIの支援のもと行えます。
 - **AIセッションを閲覧する** -- 過去のAIセッションとそのやり取りの記録を見ることができます。
 - **複数プロジェクトで作業する** -- ブラウザのタブのように、複数のディレクトリをタブで開けます。
 - **リアルタイム更新** -- QraftBox はファイルを監視し、変更があると自動的に画面を更新します。
@@ -520,6 +523,7 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 - AIセッション閲覧
 - 複数ディレクトリのタブ管理
 - ファイル監視によるリアルタイム更新
+- 差分へのGit notesコメント
 - ツールレジストリとブラウザ内ターミナル
 - AIモデルプロファイルと操作バインディング管理
 
@@ -527,9 +531,7 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 
 - オーケストレーション
 - ワークフロー
-- Codex連携
 - スケジュール実装
-- 差分へのGit notesコメント
 
 ## 仕組み（かんたんな説明）
 
@@ -537,7 +539,7 @@ QraftBox は、コードの変更（diff）を見たり、gitブランチを管�
 2. ウェブブラウザを開いて `http://localhost:7144` にアクセスします。
 3. git リポジトリの閲覧、diff の表示、git操作ができるウェブページが表示されます。
 
-以上です。すべてあなたのマシン上で動きます。AI機能を有効にすると、`claude-code-agent` 経由で設定されたAIプロバイダにプロンプトが送信されます。また、ツールプラグインは設定に応じて外部サービスへアクセスする場合があります。
+以上です。すべてあなたのマシン上で動きます。AI機能を有効にすると、`claude-code-agent` 経由でローカルのAI CLI（Claude Code / Codex）を通して設定されたAIプロバイダにプロンプトが送信されます。また、ツールプラグインは設定に応じて外部サービスへアクセスする場合があります。
 
 ### アーキテクチャ概要
 
@@ -583,7 +585,7 @@ curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh |
 curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --npm
 
 # バージョンを指定してインストール
-curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version 0.0.1
+curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --version X.Y.Z
 
 # インストール先を指定
 curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh | bash -s -- --install-dir /usr/local/bin
@@ -648,10 +650,10 @@ AI機能を使う場合は **Claude Code** も必要です: [https://docs.anthro
 
 ```bash
 # 展開（ファイル名はダウンロードしたものに置き換えてください）
-tar xzf qraftbox-v0.0.1-darwin-arm64.tar.gz
+tar xzf qraftbox-vX.Y.Z-darwin-arm64.tar.gz
 
 # ディレクトリに移動
-cd qraftbox-v0.0.1-darwin-arm64
+cd qraftbox-vX.Y.Z-darwin-arm64
 
 # 実行
 ./qraftbox
@@ -719,7 +721,7 @@ QraftBox リポジトリ内で [Claude Code](https://docs.anthropic.com/en/docs/
 
 ```
 /install-qraftbox --npm                        # npm 経由でインストール
-/install-qraftbox --version 0.0.1              # バージョン指定
+/install-qraftbox --version X.Y.Z              # バージョン指定
 /install-qraftbox --install-dir /usr/local/bin  # インストール先を指定
 /install-qraftbox --uninstall                   # QraftBox を削除
 ```
@@ -774,11 +776,7 @@ qraftbox --host 0.0.0.0
 
 **セキュリティ警告:** `--host 0.0.0.0` を使用すると、QraftBox がすべてのネットワークインターフェースに公開されます。信頼できるプライベートネットワーク上でのみ使用し、絶対にインターネットに公開しないでください。リモートアクセスには必ず VPN を使用してください。
 
-### 機能プレビュー（動画 / 画像）
-
-#### 概要動画
-
-<video src="usage/resource/movie.mp4" controls muted playsinline width="100%"></video>
+### 機能プレビュー（画像）
 
 #### UIスクリーンショット
 
@@ -848,8 +846,10 @@ Options:
   --no-watch                       ファイル監視を無効にする
   -s, --sync-mode <mode>           Git同期モード: manual, auto-push, auto-pull, auto
                                    （デフォルト: "manual"）
+  --ai                             AI機能を有効にする（デフォルト: true）
   --no-ai                          AI機能を無効にする
-  --assistant-additional-args <args>  AIアシスタントに渡す追加引数（カンマ区切り）
+  --assistant-additional-args <args>  AIアシスタントに渡す追加CLI引数
+                                     （カンマ区切り）
   -d, --project-dir <paths...>     起動時に開くプロジェクトディレクトリ
   -V, --version                    バージョン番号を表示
   --help                           ヘルプを表示

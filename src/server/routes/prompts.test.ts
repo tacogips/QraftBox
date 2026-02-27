@@ -238,13 +238,13 @@ describe("Prompt Routes", () => {
       }
     });
 
-    test("returns null when no default is set", async () => {
+    test("returns hardcoded default when no default is set", async () => {
       const response = await app.request("/default/commit");
 
       expect(response.status).toBe(200);
 
       const data = (await response.json()) as { defaultId: string | null };
-      expect(data.defaultId).toBeNull();
+      expect(data.defaultId).toBe("commit");
     });
 
     test("returns default ID when set", async () => {

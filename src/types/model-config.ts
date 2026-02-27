@@ -5,11 +5,13 @@
  */
 
 export type ModelVendor = "anthropics" | "openai";
+export type ModelAuthMode = "cli_auth" | "api_key";
 
 export interface ModelProfile {
   readonly id: string;
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly authMode: ModelAuthMode;
   readonly model: string;
   readonly arguments: readonly string[];
   readonly createdAt: string;
@@ -19,6 +21,7 @@ export interface ModelProfile {
 export interface NewModelProfileInput {
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly authMode?: ModelAuthMode | undefined;
   readonly model: string;
   readonly arguments: readonly string[];
 }
@@ -26,6 +29,7 @@ export interface NewModelProfileInput {
 export interface UpdateModelProfileInput {
   readonly name?: string | undefined;
   readonly vendor?: ModelVendor | undefined;
+  readonly authMode?: ModelAuthMode | undefined;
   readonly model?: string | undefined;
   readonly arguments?: readonly string[] | undefined;
 }
@@ -64,6 +68,7 @@ export interface ResolvedModelProfile {
   readonly profileId: string;
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly authMode: ModelAuthMode;
   readonly model: string;
   readonly arguments: readonly string[];
 }

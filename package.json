@@ -21,6 +21,8 @@
     "build": "bun build src/main.ts --outdir dist --target bun",
     "start": "bun run src/main.ts",
     "test": "vitest run",
+    "test:e2e": "playwright test -c playwright.config.cjs",
+    "test:all": "bun run test && bun run test:e2e",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit",
@@ -51,7 +53,7 @@
   "dependencies": {
     "@octokit/rest": "22.0.1",
     "claude-code-agent": "github:tacogips/claude-code-agent#5bc71fe1fe6649aabaefbe46e0623521cf9621b8",
-    "codex-agent": "github:tacogips/codex-agent#800b1b07fb920a8b222a75db396de9c294f878d3",
+    "codex-agent": "github:tacogips/codex-agent#525741b8acd6cd0781e5b7b20703dcb800511d46",
     "commander": "14.0.3",
     "hono": "4.11.7"
   }

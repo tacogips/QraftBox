@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type {
+  ModelAuthMode,
   UpdateOperationLanguageSettingsInput,
   ModelVendor,
   UpdateOperationModelBindingsInput,
@@ -15,6 +16,7 @@ interface ErrorResponse {
 interface CreateProfileRequest {
   readonly name: string;
   readonly vendor: ModelVendor;
+  readonly authMode?: ModelAuthMode | undefined;
   readonly model: string;
   readonly arguments?: readonly string[] | undefined;
 }
@@ -68,6 +70,7 @@ export function createModelConfigRoutes(store: ModelConfigStore): Hono {
       const profile = store.createProfile({
         name: body.name,
         vendor: body.vendor,
+        authMode: body.authMode,
         model: body.model,
         arguments: body.arguments ?? [],
       });

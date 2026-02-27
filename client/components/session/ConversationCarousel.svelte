@@ -188,7 +188,7 @@
     >
       <!-- Cards wrapper -->
       <div
-        class="flex transition-transform duration-300 ease-out"
+        class="flex transition-transform duration-150 ease-out"
         style="transform: translateX(-{currentIndex * 100}%);"
       >
         {#each turns as turn, index (turn.id)}

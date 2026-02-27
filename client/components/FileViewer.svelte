@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { ViewMode } from "../src/types/diff";
   import { highlightLines } from "../src/lib/highlighter";
 
   /**
@@ -25,6 +26,10 @@
     isPdf?: boolean;
     mimeType?: string;
     rawFileUrl?: string;
+    viewMode?: ViewMode;
+    selectedHasDiff?: boolean;
+    isIphone?: boolean;
+    onSetViewMode?: (mode: ViewMode) => void;
     onCommentSubmit?: (
       startLine: number,
       endLine: number,
@@ -33,6 +38,9 @@
       prompt: string,
       immediate: boolean,
     ) => void;
+    submittedSessionId?: string | null;
+    submittedSessionHistoryHref?: string | null;
+    onDismissSubmittedSession?: () => void;
     onNavigatePrev?: (() => void) | undefined;
     onNavigateNext?: (() => void) | undefined;
   }
@@ -47,7 +55,14 @@
     isPdf = undefined,
     mimeType = undefined,
     rawFileUrl = undefined,
+    viewMode = "full-file",
+    selectedHasDiff = true,
+    isIphone = false,
+    onSetViewMode = undefined,
     onCommentSubmit = undefined,
+    submittedSessionId = null,
+    submittedSessionHistoryHref = null,
+    onDismissSubmittedSession = undefined,
     onNavigatePrev = undefined,
     onNavigateNext = undefined,
   }: Props = $props();
@@ -76,6 +91,17 @@
     }
   }
 
+  function handleLineNumberSelect(lineNumber: number): void {
+    if (activeComment !== null) {
+      const start = Math.min(activeComment.startLine, lineNumber);
+      const end = Math.max(activeComment.endLine, lineNumber);
+      activeComment = { startLine: start, endLine: end };
+      return;
+    }
+
+    activeComment = { startLine: lineNumber, endLine: lineNumber };
+  }
+
   function handleCommentSubmit(prompt: string, immediate: boolean): void {
     if (activeComment !== null && onCommentSubmit !== undefined) {
       onCommentSubmit(
@@ -87,7 +113,6 @@
         immediate,
       );
     }
-    activeComment = null;
     commentText = "";
   }
 
@@ -129,7 +154,161 @@
         {path}
       </span>
     </div>
-    <div class="flex items-center gap-0.5">
+    <div class="flex items-center gap-1">
+      <div
+        class="flex items-center border border-border-default rounded-md overflow-hidden"
+      >
+        <button
+          type="button"
+          class="p-1 transition-colors
+                 {viewMode === 'full-file'
+            ? 'bg-bg-emphasis text-text-on-emphasis'
+            : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => onSetViewMode?.("full-file")}
+          title="Full File"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <line
+              x1="5.5"
+              y1="6"
+              x2="11"
+              y2="6"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="5.5"
+              y1="8.5"
+              x2="11"
+              y2="8.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="5.5"
+              y1="11"
+              x2="9"
+              y2="11"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+          </svg>
+        </button>
+        {#if !isIphone}
+          <button
+            type="button"
+            class="p-1 border-l border-border-default transition-colors
+                   {!selectedHasDiff
+              ? 'text-text-disabled cursor-not-allowed opacity-40'
+              : viewMode === 'side-by-side'
+                ? 'bg-bg-emphasis text-text-on-emphasis'
+                : 'text-text-secondary hover:bg-bg-hover'}"
+            onclick={() => {
+              if (selectedHasDiff) onSetViewMode?.("side-by-side");
+            }}
+            disabled={!selectedHasDiff}
+            title="Side by Side"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect
+                x="1"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+              <rect
+                x="9"
+                y="2"
+                width="6"
+                height="12"
+                rx="1"
+                stroke="currentColor"
+                stroke-width="1.5"
+              />
+            </svg>
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="p-1 border-l border-border-default transition-colors
+                 {!selectedHasDiff
+            ? 'text-text-disabled cursor-not-allowed opacity-40'
+            : viewMode === 'inline'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => {
+            if (selectedHasDiff) onSetViewMode?.("inline");
+          }}
+          disabled={!selectedHasDiff}
+          title={isIphone ? "Stack" : "Inline"}
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect
+              x="1"
+              y="2"
+              width="14"
+              height="12"
+              rx="1"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+            <line
+              x1="4"
+              y1="5.5"
+              x2="12"
+              y2="5.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="4"
+              y1="8"
+              x2="12"
+              y2="8"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+            <line
+              x1="4"
+              y1="10.5"
+              x2="10"
+              y2="10.5"
+              stroke="currentColor"
+              stroke-width="1.2"
+            />
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="p-1 border-l border-border-default transition-colors
+                 {!selectedHasDiff
+            ? 'text-text-disabled cursor-not-allowed opacity-40'
+            : viewMode === 'current-state'
+              ? 'bg-bg-emphasis text-text-on-emphasis'
+              : 'text-text-secondary hover:bg-bg-hover'}"
+          onclick={() => {
+            if (selectedHasDiff) onSetViewMode?.("current-state");
+          }}
+          disabled={!selectedHasDiff}
+          title="Current"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M3 2.5A1.5 1.5 0 014.5 1h5.586a1 1 0 01.707.293l2.414 2.414a1 1 0 01.293.707V13.5A1.5 1.5 0 0112 15H4.5A1.5 1.5 0 013 13.5v-11z"
+              stroke="currentColor"
+              stroke-width="1.5"
+            />
+          </svg>
+        </button>
+      </div>
       <button
         type="button"
         class="p-1 rounded transition-colors {onNavigatePrev !== undefined
@@ -235,7 +414,14 @@
               aria-label="Add comment on line {lineNumber}">+</button
             >
           {/if}
-          <span class="select-none">{lineNumber}</span>
+          <button
+            type="button"
+            class="select-none cursor-pointer px-1 -mx-1 rounded hover:bg-bg-tertiary/50"
+            onclick={() => handleLineNumberSelect(lineNumber)}
+            aria-label="Select line {lineNumber} for AI prompt"
+          >
+            {lineNumber}
+          </button>
         </div>
 
         <!-- Line content -->
@@ -253,11 +439,11 @@
       <!-- Inline comment box after endLine -->
       {#if activeComment !== null && activeComment.endLine === lineNumber}
         <div
-          class="border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
+          class="max-w-4xl border-t-2 border-b-2 border-accent-emphasis bg-bg-secondary p-3"
         >
           <textarea
-            class="w-full min-h-[80px] p-2 text-sm font-sans bg-bg-primary border border-border-default rounded resize-y
-                   focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
+            class="w-full min-h-28 resize-y rounded border border-border-default bg-bg-primary
+                   px-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent-emphasis"
             placeholder={commentPlaceholder}
             bind:value={commentText}
             onkeydown={(keyEvent) => {
@@ -277,7 +463,8 @@
           <div class="flex items-center gap-2 mt-2">
             <button
               type="button"
-              class="px-3 py-1 text-sm bg-success-emphasis text-white rounded hover:brightness-110"
+              class="px-3 py-1.5 text-xs rounded bg-accent-muted text-accent-fg
+                     border border-accent-emphasis/40 hover:bg-accent-muted/80 font-medium"
               onclick={() => handleCommentSubmit(commentText, true)}
               >Submit</button
             >
@@ -287,6 +474,31 @@
               onclick={() => handleCommentCancel()}>Cancel</button
             >
           </div>
+          {#if submittedSessionId !== null && submittedSessionHistoryHref !== null}
+            <div
+              class="mt-2 flex items-center justify-between gap-3 rounded border border-accent-emphasis/40 bg-accent-muted/10 px-2 py-1 text-xs text-text-secondary"
+            >
+              <span class="truncate">AI session submitted.</span>
+              <div class="flex items-center gap-2">
+                <a
+                  class="text-accent-fg underline underline-offset-2 hover:opacity-80"
+                  href={submittedSessionHistoryHref}
+                >
+                  View session history
+                </a>
+                <button
+                  type="button"
+                  class="text-text-secondary hover:text-text-primary"
+                  onclick={() => {
+                    onDismissSubmittedSession?.();
+                    handleCommentCancel();
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
     {/each}

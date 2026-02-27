@@ -255,6 +255,10 @@ export interface AISessionInfo {
   readonly lastAssistantMessage?: string | undefined;
   readonly currentActivity?: string | undefined;
   /**
+   * Terminal failure/cancellation message when available.
+   */
+  readonly error?: string | undefined;
+  /**
    * Claude CLI session ID currently bound to this execution
    */
   readonly claudeSessionId?: ClaudeSessionId | undefined;
@@ -396,12 +400,19 @@ export interface AIPromptMessage {
    * and reuse it for subsequent prompts in that session.
    */
   readonly qraft_ai_session_id?: QraftAiSessionId | undefined;
+  /**
+   * When true, force a brand-new underlying Claude/Codex session even if
+   * qraft_ai_session_id already has resume mappings.
+   */
+  readonly force_new_session?: boolean | undefined;
   /** Optional model profile ID to override default AI Ask profile */
   readonly model_profile_id?: string | undefined;
   /** AI agent to execute prompt with (defaults to claude on server) */
   readonly ai_agent?: AIAgent | undefined;
   /** Resolved model vendor snapshot at submission time */
   readonly model_vendor?: "anthropics" | "openai" | undefined;
+  /** Resolved profile auth mode snapshot at submission time */
+  readonly model_auth_mode?: "cli_auth" | "api_key" | undefined;
   /** Resolved model name snapshot at submission time */
   readonly model_name?: string | undefined;
   /** Resolved CLI arguments snapshot at submission time */

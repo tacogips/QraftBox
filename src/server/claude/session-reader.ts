@@ -24,6 +24,7 @@ import {
 import type { SessionMappingStore } from "../ai/session-mapping-store.js";
 import {
   hasQraftboxInternalPrompt,
+  isInjectedSessionSystemPrompt,
   stripSystemTags,
 } from "../../utils/strip-system-tags";
 import {
@@ -40,6 +41,10 @@ const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
 const MAX_SESSION_INDEX_SIZE = 10 * 1024 * 1024; // 10MB
 const LEGACY_INTERNAL_PURPOSE_PREFIX =
   "You summarize a coding session's current objective.";
+const FAST_JSONL_FALLBACK_MULTIPLIER = 2;
+const SESSION_PARSE_CONCURRENCY = 8;
+const SESSION_ENTRY_CACHE_TTL_MS = 15000;
+const CODEX_FILE_INDEX_CACHE_TTL_MS = 10000;
 
 /**
  * Options for listing sessions
@@ -66,6 +71,16 @@ export interface ListSessionsOptions {
   sortBy?: "modified" | "created";
   /** Sort order */
   sortOrder?: "asc" | "desc";
+  /**
+   * Whether to recover firstPrompt by scanning JSONL when index prompt is empty/system-only.
+   * Enabled by default for compatibility, but can be disabled for faster list rendering.
+   */
+  recoverFirstPromptFromJsonl?: boolean;
+  /**
+   * Whether to prioritize low-latency list rendering over rich metadata when
+   * sessions-index.json is missing (overview/list screens).
+   */
+  fastListMode?: boolean;
 }
 
 /**
@@ -76,6 +91,13 @@ export class ClaudeSessionReader {
   private readonly codexSessionsDir: string;
   private readonly mappingStore: SessionMappingStore | undefined;
   private readonly agentSessionReader: AgentSessionReader;
+  private readonly sessionEntryCache = new Map<
+    string,
+    { cachedAtMs: number; entry: ExtendedSessionEntry }
+  >();
+  private codexJsonlFilesCache:
+    | { cachedAtMs: number; files: readonly string[] }
+    | undefined;
 
   constructor(
     projectsDir?: string,
@@ -87,6 +109,33 @@ export class ClaudeSessionReader {
     this.mappingStore = mappingStore;
     const container = createProductionContainer();
     this.agentSessionReader = new AgentSessionReader(container);
+  }
+
+  private getCachedSessionEntry(
+    sessionId: string,
+  ): ExtendedSessionEntry | undefined {
+    const cached = this.sessionEntryCache.get(sessionId);
+    if (cached === undefined) {
+      return undefined;
+    }
+    if (Date.now() - cached.cachedAtMs > SESSION_ENTRY_CACHE_TTL_MS) {
+      this.sessionEntryCache.delete(sessionId);
+      return undefined;
+    }
+    if (!existsSync(cached.entry.fullPath)) {
+      this.sessionEntryCache.delete(sessionId);
+      return undefined;
+    }
+    return { ...cached.entry };
+  }
+
+  private cacheSessionEntry(entry: ExtendedSessionEntry): void {
+    const nowMs = Date.now();
+    this.sessionEntryCache.set(entry.sessionId, { cachedAtMs: nowMs, entry });
+    if (entry.sessionId.startsWith("codex-session-")) {
+      const normalizedId = entry.sessionId.slice("codex-session-".length);
+      this.sessionEntryCache.set(normalizedId, { cachedAtMs: nowMs, entry });
+    }
   }
 
   private isInternalSessionPrompt(text: string): boolean {
@@ -188,9 +237,23 @@ export class ClaudeSessionReader {
     options: ListSessionsOptions = {},
   ): Promise<SessionListResponse> {
     const allSessions: ExtendedSessionEntry[] = [];
+    const requiresSourceFiltering = options.source !== undefined;
 
     // Pass workingDirectoryPrefix as path filter to avoid scanning ALL projects
     const projects = await this.listProjects(options.workingDirectoryPrefix);
+
+    const effectiveOffset = options.offset ?? 0;
+    const effectiveLimit = options.limit ?? 50;
+    const fastJsonlFallbackCandidateCount =
+      (effectiveOffset + effectiveLimit) * FAST_JSONL_FALLBACK_MULTIPLIER;
+    const canUseFastJsonlFallback =
+      options.fastListMode === true &&
+      options.search === undefined &&
+      options.branch === undefined &&
+      options.dateRange === undefined &&
+      options.source === undefined &&
+      (options.sortBy === undefined || options.sortBy === "modified") &&
+      (options.sortOrder === undefined || options.sortOrder === "desc");
 
     // Read sessions from projects (filtering already done in listProjects)
     for (const project of projects) {
@@ -202,18 +265,20 @@ export class ClaudeSessionReader {
         const index = await this.readSessionIndex(indexPath);
 
         for (const entry of index.entries) {
-          // Strip system tags and fix empty firstPrompt
-          await this.fixSystemTagFirstPrompt(entry);
+          const normalizedEntry = this.normalizeSessionEntryForList(entry);
 
           const extended: ExtendedSessionEntry = {
-            ...entry,
-            source: await this.detectSource(entry),
+            ...normalizedEntry,
+            source: "claude-cli",
             projectEncoded: project.encoded,
             qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
-              entry.sessionId as ClaudeSessionId,
+              normalizedEntry.sessionId as ClaudeSessionId,
             ),
             aiAgent: AIAgent.CLAUDE,
           };
+          if (requiresSourceFiltering) {
+            extended.source = await this.detectSource(normalizedEntry);
+          }
 
           // Apply additional filters
           if (this.matchesFilters(extended, options)) {
@@ -223,21 +288,31 @@ export class ClaudeSessionReader {
       } catch (error: unknown) {
         // If index doesn't exist, build entries from JSONL files
         try {
-          const entries = await this.buildEntriesFromJsonlFiles(
-            projectDir,
-            project.encoded,
-          );
+          const entries = canUseFastJsonlFallback
+            ? await this.buildEntriesFromJsonlFilesFast(
+                projectDir,
+                project.encoded,
+                fastJsonlFallbackCandidateCount,
+              )
+            : await this.buildEntriesFromJsonlFiles(
+                projectDir,
+                project.encoded,
+              );
 
           for (const entry of entries) {
+            const normalizedEntry = this.normalizeSessionEntryForList(entry);
             const extended: ExtendedSessionEntry = {
-              ...entry,
-              source: await this.detectSource(entry),
+              ...normalizedEntry,
+              source: "claude-cli",
               projectEncoded: project.encoded,
               qraftAiSessionId: deriveQraftAiSessionIdFromClaude(
-                entry.sessionId as ClaudeSessionId,
+                normalizedEntry.sessionId as ClaudeSessionId,
               ),
               aiAgent: AIAgent.CLAUDE,
             };
+            if (requiresSourceFiltering) {
+              extended.source = await this.detectSource(normalizedEntry);
+            }
 
             // Apply additional filters
             if (this.matchesFilters(extended, options)) {
@@ -265,9 +340,21 @@ export class ClaudeSessionReader {
     });
 
     // Paginate
-    const offset = options.offset ?? 0;
-    const limit = options.limit ?? 50;
+    const offset = effectiveOffset;
+    const limit = effectiveLimit;
     const paginated = allSessions.slice(offset, offset + limit);
+    const shouldRecoverFirstPromptFromJsonl =
+      options.recoverFirstPromptFromJsonl ?? true;
+    if (shouldRecoverFirstPromptFromJsonl) {
+      for (const session of paginated) {
+        await this.fixSystemTagFirstPrompt(session);
+      }
+    }
+    if (!requiresSourceFiltering) {
+      for (const session of paginated) {
+        session.source = await this.detectSource(session);
+      }
+    }
 
     return {
       sessions: paginated,
@@ -278,12 +365,60 @@ export class ClaudeSessionReader {
   }
 
   /**
+   * Lightweight normalization for list views.
+   * Avoids JSONL reads so large session lists remain responsive.
+   */
+  private normalizeSessionEntryForList(
+    entry: ClaudeSessionEntry,
+  ): ClaudeSessionEntry {
+    if (this.isInternalSessionPrompt(entry.firstPrompt)) {
+      return {
+        ...entry,
+        firstPrompt: "",
+        summary: "",
+        hasUserPrompt: false,
+      };
+    }
+
+    const strippedFirstPrompt = stripSystemTags(entry.firstPrompt);
+    if (strippedFirstPrompt.length > 0) {
+      return {
+        ...entry,
+        firstPrompt: strippedFirstPrompt,
+      };
+    }
+
+    const strippedSummary = stripSystemTags(entry.summary);
+    const hasUserPrompt =
+      strippedFirstPrompt.length > 0 || strippedSummary.length > 0
+        ? entry.hasUserPrompt
+        : false;
+    return {
+      ...entry,
+      firstPrompt: strippedFirstPrompt,
+      summary: strippedSummary,
+      ...(hasUserPrompt !== undefined ? { hasUserPrompt } : {}),
+    };
+  }
+
+  /**
    * Get a specific session by ID
    */
   async getSession(sessionId: string): Promise<ExtendedSessionEntry | null> {
-    const codexSession = await this.getCodexSessionById(sessionId);
-    if (codexSession !== null) {
-      return codexSession;
+    const cached = this.getCachedSessionEntry(sessionId);
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const looksLikeCodexSessionId =
+      sessionId.startsWith("codex-session-") ||
+      sessionId.startsWith("pending-");
+    if (looksLikeCodexSessionId) {
+      const codexSession = await this.getCodexSessionById(sessionId);
+      if (codexSession !== null) {
+        this.cacheSessionEntry(codexSession);
+        return codexSession;
+      }
     }
 
     const projects = await this.listProjects();
@@ -301,7 +436,7 @@ export class ClaudeSessionReader {
           // Strip system tags and fix empty firstPrompt
           await this.fixSystemTagFirstPrompt(entry);
 
-          return {
+          const built: ExtendedSessionEntry = {
             ...entry,
             source: await this.detectSource(entry),
             projectEncoded: project.encoded,
@@ -310,6 +445,8 @@ export class ClaudeSessionReader {
             ),
             aiAgent: AIAgent.CLAUDE,
           };
+          this.cacheSessionEntry(built);
+          return built;
         }
       } catch (error: unknown) {
         // If index doesn't exist, build entries from JSONL files
@@ -321,7 +458,7 @@ export class ClaudeSessionReader {
           const entry = entries.find((e) => e.sessionId === sessionId);
 
           if (entry) {
-            return {
+            const built: ExtendedSessionEntry = {
               ...entry,
               source: await this.detectSource(entry),
               projectEncoded: project.encoded,
@@ -330,12 +467,20 @@ export class ClaudeSessionReader {
               ),
               aiAgent: AIAgent.CLAUDE,
             };
+            this.cacheSessionEntry(built);
+            return built;
           }
         } catch (buildError: unknown) {
           // Skip projects that can't be processed
           continue;
         }
       }
+    }
+
+    const codexSession = await this.getCodexSessionById(sessionId);
+    if (codexSession !== null) {
+      this.cacheSessionEntry(codexSession);
+      return codexSession;
     }
 
     return null;
@@ -348,18 +493,16 @@ export class ClaudeSessionReader {
       return [];
     }
 
-    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
-    const sessions: ExtendedSessionEntry[] = [];
-    for (const file of files) {
-      const session = await this.readCodexSessionEntry(file);
-      if (session === null) {
-        continue;
-      }
-      if (this.matchesFilters(session, options)) {
-        sessions.push(session);
-      }
-    }
-    return sessions;
+    const files = await this.listCodexJsonlFilesCached();
+    const sessions = await this.mapWithConcurrency(
+      files,
+      SESSION_PARSE_CONCURRENCY,
+      async (file) => this.readCodexSessionEntry(file),
+    );
+    return sessions.filter(
+      (session): session is ExtendedSessionEntry =>
+        session !== null && this.matchesFilters(session, options),
+    );
   }
 
   private async getCodexSessionById(
@@ -369,14 +512,66 @@ export class ClaudeSessionReader {
       return null;
     }
 
-    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    const normalizedTarget = sessionId.startsWith("codex-session-")
+      ? sessionId.slice("codex-session-".length)
+      : sessionId;
+
+    // Fast path: resolve rollout file by filename suffix and parse that one file.
+    const directPath = await this.findCodexRolloutPathBySessionId(
+      this.codexSessionsDir,
+      normalizedTarget,
+    );
+    if (directPath !== undefined) {
+      const parsed = await this.readCodexSessionEntry(directPath);
+      if (parsed !== null) {
+        return parsed;
+      }
+    }
+
+    const files = await this.listCodexJsonlFilesCached();
     for (const file of files) {
       const session = await this.readCodexSessionEntry(file);
-      if (session?.sessionId === sessionId) {
+      if (session === null) {
+        continue;
+      }
+      const normalizedSessionId = session.sessionId.startsWith("codex-session-")
+        ? session.sessionId.slice("codex-session-".length)
+        : session.sessionId;
+      if (
+        session.sessionId === sessionId ||
+        normalizedSessionId === normalizedTarget
+      ) {
         return session;
       }
     }
     return null;
+  }
+
+  private async findCodexRolloutPathBySessionId(
+    dir: string,
+    sessionId: string,
+  ): Promise<string | undefined> {
+    void dir;
+    const files = await this.listCodexJsonlFilesCached();
+    for (const fullPath of files) {
+      if (fullPath.includes(sessionId)) {
+        return fullPath;
+      }
+    }
+    return undefined;
+  }
+
+  private async listCodexJsonlFilesCached(): Promise<readonly string[]> {
+    if (
+      this.codexJsonlFilesCache !== undefined &&
+      Date.now() - this.codexJsonlFilesCache.cachedAtMs <
+        CODEX_FILE_INDEX_CACHE_TTL_MS
+    ) {
+      return this.codexJsonlFilesCache.files;
+    }
+    const files = await this.listCodexJsonlFiles(this.codexSessionsDir);
+    this.codexJsonlFilesCache = { cachedAtMs: Date.now(), files };
+    return files;
   }
 
   private async listCodexJsonlFiles(dir: string): Promise<string[]> {
@@ -418,14 +613,90 @@ export class ClaudeSessionReader {
     return textParts.join("\n").trim();
   }
 
-  private isCodexBootstrapPrompt(text: string): boolean {
-    const normalized = text.trim();
+  private readCodexProvenance(raw: Record<string, unknown>): {
+    origin?: string;
+    displayDefault?: boolean;
+    sourceTag?: string;
+  } {
+    const payload =
+      typeof raw["payload"] === "object" && raw["payload"] !== null
+        ? (raw["payload"] as Record<string, unknown>)
+        : undefined;
+
+    const originCandidate =
+      typeof raw["origin"] === "string"
+        ? raw["origin"]
+        : typeof payload?.["origin"] === "string"
+          ? payload["origin"]
+          : undefined;
+    const displayDefaultCandidate =
+      typeof raw["display_default"] === "boolean"
+        ? raw["display_default"]
+        : typeof payload?.["display_default"] === "boolean"
+          ? payload["display_default"]
+          : undefined;
+    const sourceTagCandidate =
+      typeof raw["source_tag"] === "string"
+        ? raw["source_tag"]
+        : typeof payload?.["source_tag"] === "string"
+          ? payload["source_tag"]
+          : undefined;
+
+    const provenance: {
+      origin?: string;
+      displayDefault?: boolean;
+      sourceTag?: string;
+    } = {};
+    if (originCandidate !== undefined) {
+      provenance.origin = originCandidate;
+    }
+    if (displayDefaultCandidate !== undefined) {
+      provenance.displayDefault = displayDefaultCandidate;
+    }
+    if (sourceTagCandidate !== undefined) {
+      provenance.sourceTag = sourceTagCandidate;
+    }
+    return provenance;
+  }
+
+  private isInjectedCodexSourceTag(sourceTag: string | undefined): boolean {
+    if (sourceTag === undefined) {
+      return false;
+    }
     return (
-      normalized.startsWith("# AGENTS.md instructions") ||
-      normalized.startsWith("<environment_context>") ||
-      normalized.includes("## Rule of the Responses") ||
-      normalized.includes("## Autonomous Operation Policy")
+      sourceTag === "agents_instructions" ||
+      sourceTag === "environment_context" ||
+      sourceTag === "turn_aborted"
     );
+  }
+
+  private shouldSkipCodexUserPrompt(
+    raw: Record<string, unknown>,
+    text: string,
+  ): boolean {
+    const provenance = this.readCodexProvenance(raw);
+    if (provenance.origin === "user_input") {
+      return false;
+    }
+    if (provenance.displayDefault === false) {
+      return true;
+    }
+    if (
+      provenance.origin === "system_injected" ||
+      provenance.origin === "framework_event" ||
+      this.isInjectedCodexSourceTag(provenance.sourceTag)
+    ) {
+      return true;
+    }
+    return (
+      isInjectedSessionSystemPrompt(text) || this.isInternalSessionPrompt(text)
+    );
+  }
+
+  private shouldHideCodexTranscriptUserPrompt(text: string): boolean {
+    // Internal QraftBox prompts are never user-visible in transcript views.
+    // Codex/bootstrap prompts are returned so UI can toggle them.
+    return this.isInternalSessionPrompt(text);
   }
 
   private async readCodexSessionEntry(
@@ -434,7 +705,9 @@ export class ClaudeSessionReader {
     try {
       const fileStat = await stat(jsonlPath);
       const content = await readFile(jsonlPath, "utf-8");
-      const lines = content.split("\n").filter((line) => line.trim().length > 0);
+      const lines = content
+        .split("\n")
+        .filter((line) => line.trim().length > 0);
       if (lines.length === 0) {
         return null;
       }
@@ -495,6 +768,23 @@ export class ClaudeSessionReader {
           }
         }
 
+        if (raw["type"] === "thread.started") {
+          if (
+            typeof raw["thread_id"] === "string" &&
+            raw["thread_id"].length > 0
+          ) {
+            codexId = raw["thread_id"];
+          } else if (
+            typeof raw["thread"] === "object" &&
+            raw["thread"] !== null &&
+            typeof (raw["thread"] as Record<string, unknown>)["id"] === "string"
+          ) {
+            codexId = (raw["thread"] as Record<string, unknown>)[
+              "id"
+            ] as string;
+          }
+        }
+
         if (raw["type"] === "response_item") {
           const payload =
             typeof raw["payload"] === "object" && raw["payload"] !== null
@@ -518,13 +808,35 @@ export class ClaudeSessionReader {
             role === "user" &&
             firstPrompt.length === 0 &&
             text.length > 0 &&
-            !this.isCodexBootstrapPrompt(text) &&
-            !this.isInternalSessionPrompt(text)
+            !this.shouldSkipCodexUserPrompt(raw, text)
           ) {
             firstPrompt = stripSystemTags(text);
           }
           if (role === "assistant" && text.length > 0) {
             summary = stripSystemTags(text).slice(0, 240);
+          }
+        }
+
+        if (raw["type"] === "item.completed") {
+          const item =
+            typeof raw["item"] === "object" && raw["item"] !== null
+              ? (raw["item"] as Record<string, unknown>)
+              : undefined;
+          if (item === undefined) {
+            continue;
+          }
+          const itemType = typeof item["type"] === "string" ? item["type"] : "";
+          if (itemType === "agent_message") {
+            const text =
+              typeof item["text"] === "string"
+                ? item["text"]
+                : typeof item["content"] === "string"
+                  ? item["content"]
+                  : "";
+            if (text.length > 0) {
+              messageCount += 1;
+              summary = stripSystemTags(text).slice(0, 240);
+            }
           }
         }
       }
@@ -805,29 +1117,132 @@ export class ClaudeSessionReader {
       (e) => e.isFile() && e.name.endsWith(".jsonl"),
     );
 
-    const entries: ClaudeSessionEntry[] = [];
     const decodedPath = this.decodeProjectPath(encodedName);
-
-    for (const file of jsonlFiles) {
-      const sessionId = file.name.replace(".jsonl", "");
-      const fullPath = join(projectDir, file.name);
-
-      try {
-        const entry = await this.buildEntryFromJsonl(
-          fullPath,
-          sessionId,
-          decodedPath,
-        );
-        if (entry !== null) {
-          entries.push(entry);
+    const entries = await this.mapWithConcurrency(
+      jsonlFiles,
+      SESSION_PARSE_CONCURRENCY,
+      async (file) => {
+        const sessionId = file.name.replace(".jsonl", "");
+        const fullPath = join(projectDir, file.name);
+        try {
+          return await this.buildEntryFromJsonl(
+            fullPath,
+            sessionId,
+            decodedPath,
+          );
+        } catch {
+          return null;
         }
-      } catch (error: unknown) {
-        // Skip files that can't be parsed
-        continue;
-      }
+      },
+    );
+    return entries.filter(
+      (entry): entry is ClaudeSessionEntry => entry !== null,
+    );
+  }
+
+  private async mapWithConcurrency<TInput, TOutput>(
+    items: readonly TInput[],
+    concurrency: number,
+    mapper: (item: TInput) => Promise<TOutput>,
+  ): Promise<TOutput[]> {
+    if (items.length === 0) {
+      return [];
     }
 
-    return entries;
+    const results: TOutput[] = new Array(items.length);
+    let cursor = 0;
+    const workerCount = Math.max(1, Math.min(concurrency, items.length));
+
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        const item = items[index];
+        if (item === undefined) {
+          continue;
+        }
+        results[index] = await mapper(item);
+      }
+    });
+
+    await Promise.all(workers);
+    return results;
+  }
+
+  /**
+   * Fast fallback when sessions-index.json is missing.
+   * Reads only the newest JSONL candidates needed for the requested page.
+   */
+  private async buildEntriesFromJsonlFilesFast(
+    projectDir: string,
+    encodedName: string,
+    candidateCount: number,
+  ): Promise<ClaudeSessionEntry[]> {
+    const dirEntries = await readdir(projectDir, { withFileTypes: true });
+    const jsonlFiles = dirEntries.filter(
+      (e) => e.isFile() && e.name.endsWith(".jsonl"),
+    );
+    if (jsonlFiles.length === 0) {
+      return [];
+    }
+
+    const decodedPath = this.decodeProjectPath(encodedName);
+    const candidatesWithMtime = await Promise.all(
+      jsonlFiles.map(async (file) => {
+        const fullPath = join(projectDir, file.name);
+        const fileStat = await stat(fullPath);
+        return {
+          name: file.name,
+          fullPath,
+          mtimeMs: fileStat.mtimeMs,
+        };
+      }),
+    );
+
+    candidatesWithMtime.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    const selectedCandidates = candidatesWithMtime.slice(
+      0,
+      Math.max(1, candidateCount),
+    );
+
+    const parsedEntries = await Promise.all(
+      selectedCandidates.map(async (candidate) => {
+        const sessionId = candidate.name.replace(".jsonl", "");
+        return this.buildEntryFromJsonlStatOnly(
+          candidate.fullPath,
+          sessionId,
+          decodedPath,
+          candidate.mtimeMs,
+        );
+      }),
+    );
+
+    return parsedEntries.filter((entry): entry is ClaudeSessionEntry => {
+      return entry !== null;
+    });
+  }
+
+  private buildEntryFromJsonlStatOnly(
+    jsonlPath: string,
+    sessionId: string,
+    projectPath: string,
+    mtimeMs: number,
+  ): ClaudeSessionEntry {
+    const modifiedIso = new Date(mtimeMs).toISOString();
+    return {
+      sessionId,
+      fullPath: jsonlPath,
+      fileMtime: mtimeMs,
+      firstPrompt: "(Session metadata pending index)",
+      summary: "",
+      messageCount: 0,
+      created: modifiedIso,
+      modified: modifiedIso,
+      gitBranch: "",
+      projectPath,
+      isSidechain: false,
+      hasUserPrompt: true,
+    };
   }
 
   /**
@@ -1110,6 +1525,13 @@ export class ClaudeSessionReader {
       return false;
     }
 
+    // Working directory prefix filter
+    if (options.workingDirectoryPrefix !== undefined) {
+      if (!session.projectPath.startsWith(options.workingDirectoryPrefix)) {
+        return false;
+      }
+    }
+
     // Search filter (case-insensitive, using stripped text)
     if (options.search !== undefined) {
       const searchLower = options.search.toLowerCase();
@@ -1183,6 +1605,9 @@ export class ClaudeSessionReader {
         const parsed: unknown = JSON.parse(line);
         if (typeof parsed === "object" && parsed !== null) {
           const obj = parsed as Record<string, unknown>;
+          if (this.shouldHideClaudeTranscriptEvent(obj)) {
+            continue;
+          }
           events.push({
             type: typeof obj["type"] === "string" ? obj["type"] : "unknown",
             uuid: typeof obj["uuid"] === "string" ? obj["uuid"] : undefined,
@@ -1228,33 +1653,72 @@ export class ClaudeSessionReader {
       }
 
       const raw = parsed as Record<string, unknown>;
-      if (raw["type"] !== "response_item") {
+      if (raw["type"] === "response_item") {
+        const payload =
+          typeof raw["payload"] === "object" && raw["payload"] !== null
+            ? (raw["payload"] as Record<string, unknown>)
+            : undefined;
+        if (payload === undefined || payload["type"] !== "message") {
+          continue;
+        }
+
+        const role =
+          typeof payload["role"] === "string"
+            ? payload["role"].toLowerCase()
+            : "unknown";
+        const text = this.extractCodexMessageText(payload);
+        if (text.length === 0) {
+          continue;
+        }
+        if (role === "user" && this.shouldHideCodexTranscriptUserPrompt(text)) {
+          continue;
+        }
+
+        events.push({
+          type:
+            role === "assistant"
+              ? "assistant"
+              : role === "user"
+                ? "user"
+                : role,
+          timestamp:
+            typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+          content: text,
+          raw: parsed as object,
+        });
         continue;
       }
 
-      const payload =
-        typeof raw["payload"] === "object" && raw["payload"] !== null
-          ? (raw["payload"] as Record<string, unknown>)
-          : undefined;
-      if (payload === undefined || payload["type"] !== "message") {
-        continue;
-      }
+      if (raw["type"] === "item.completed") {
+        const item =
+          typeof raw["item"] === "object" && raw["item"] !== null
+            ? (raw["item"] as Record<string, unknown>)
+            : undefined;
+        if (item === undefined) {
+          continue;
+        }
+        const itemType = typeof item["type"] === "string" ? item["type"] : "";
+        if (itemType !== "agent_message") {
+          continue;
+        }
+        const text =
+          typeof item["text"] === "string"
+            ? item["text"]
+            : typeof item["content"] === "string"
+              ? item["content"]
+              : "";
+        if (text.length === 0) {
+          continue;
+        }
 
-      const role =
-        typeof payload["role"] === "string"
-          ? payload["role"].toLowerCase()
-          : "unknown";
-      const text = this.extractCodexMessageText(payload);
-      if (text.length === 0) {
-        continue;
+        events.push({
+          type: "assistant",
+          timestamp:
+            typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
+          content: stripSystemTags(text),
+          raw: parsed as object,
+        });
       }
-
-      events.push({
-        type: role === "assistant" ? "assistant" : role === "user" ? "user" : role,
-        timestamp: typeof raw["timestamp"] === "string" ? raw["timestamp"] : undefined,
-        content: text,
-        raw: parsed as object,
-      });
     }
 
     const total = events.length;
@@ -1262,6 +1726,49 @@ export class ClaudeSessionReader {
       events: events.slice(offset, offset + limit),
       total,
     };
+  }
+
+  private extractClaudeUserMessageText(event: Record<string, unknown>): string {
+    const message =
+      typeof event["message"] === "object" && event["message"] !== null
+        ? (event["message"] as Record<string, unknown>)
+        : undefined;
+
+    const content = message?.["content"];
+    if (typeof content === "string") {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      const textParts: string[] = [];
+      for (const block of content) {
+        if (typeof block !== "object" || block === null) {
+          continue;
+        }
+        const blockObj = block as Record<string, unknown>;
+        if (
+          (blockObj["type"] === "text" || blockObj["type"] === "input_text") &&
+          typeof blockObj["text"] === "string"
+        ) {
+          textParts.push(blockObj["text"]);
+        }
+      }
+      return textParts.join(" ").trim();
+    }
+
+    if (typeof event["content"] === "string") {
+      return event["content"];
+    }
+    return "";
+  }
+
+  private shouldHideClaudeTranscriptEvent(
+    event: Record<string, unknown>,
+  ): boolean {
+    if (event["type"] !== "user") {
+      return false;
+    }
+    const text = this.extractClaudeUserMessageText(event);
+    return text.length > 0 && this.isInternalSessionPrompt(text);
   }
 
   /**

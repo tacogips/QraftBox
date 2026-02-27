@@ -109,7 +109,7 @@ describe("SideBySideDiff component", () => {
     // The component should:
     // - Use DiffLine component for rendering each line
     // - Pass change and lineNumber props to DiffLine
-    // - Attach onSelect callback to DiffLine
+    // - Attach interaction callbacks only on the new (right) pane
     // - Use unique keys for list rendering (index)
 
     // DiffLine integration verified by component source code
@@ -118,10 +118,10 @@ describe("SideBySideDiff component", () => {
 
   test("line selection callbacks", () => {
     // The component should:
-    // - Call onLineSelect("old", lineNumber) when old line is selected
+    // - Disable old-side selection/comment interactions
     // - Call onLineSelect("new", lineNumber) when new line is selected
     // - Not throw error if onLineSelect is undefined
-    // - Pass correct line numbers from change.oldLine or change.newLine
+    // - Pass correct line numbers from change.newLine
 
     // Selection handlers verified by component source code
     expect(true).toBe(true);

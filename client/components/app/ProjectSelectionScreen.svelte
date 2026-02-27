@@ -12,6 +12,7 @@
     newProjectError,
     chooseDirectoryLabel,
     availableRecentProjects,
+    canManageProjects,
     onPickDirectory,
     onNewProjectPathChange,
     onOpenProject,
@@ -24,6 +25,7 @@
     newProjectError: string | null;
     chooseDirectoryLabel: string;
     availableRecentProjects: RecentProject[];
+    canManageProjects: boolean;
     onPickDirectory: () => Promise<void>;
     onNewProjectPathChange: (value: string) => void;
     onOpenProject: (path: string) => Promise<void>;
@@ -54,7 +56,7 @@
   <div class="w-full max-w-md flex flex-col gap-3">
     <button
       type="button"
-      disabled={pickingDirectory || newProjectLoading}
+      disabled={!canManageProjects || pickingDirectory || newProjectLoading}
       onclick={() => void onPickDirectory()}
       class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium
              bg-accent-emphasis hover:brightness-110 text-white
@@ -119,10 +121,13 @@
                focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                placeholder:text-text-tertiary"
         placeholder="/path/to/project"
+        disabled={!canManageProjects || newProjectLoading}
       />
       <button
         type="submit"
-        disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+        disabled={!canManageProjects ||
+          newProjectPath.trim().length === 0 ||
+          newProjectLoading}
         class="px-4 py-2 rounded-lg text-sm font-medium
                bg-bg-tertiary hover:bg-border-default text-text-primary
                border border-border-default
@@ -163,6 +168,7 @@
           >
             <button
               type="button"
+              disabled={!canManageProjects}
               class="flex-1 text-left px-4 py-2.5 text-sm flex items-center gap-3 min-w-0"
               onclick={() => void onOpenRecentProject(recent.path)}
               title={recent.path}
@@ -189,6 +195,7 @@
             </button>
             <button
               type="button"
+              disabled={!canManageProjects}
               class="shrink-0 p-2 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
               title="Remove from recent projects"
               onclick={() => void onRemoveRecentProject(recent.path)}
@@ -208,5 +215,11 @@
         {/each}
       </div>
     </div>
+  {/if}
+
+  {#if !canManageProjects}
+    <p class="text-xs text-text-tertiary">
+      Temporary project mode is active. Project add/change is disabled.
+    </p>
   {/if}
 </div>

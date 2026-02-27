@@ -17,7 +17,9 @@
     contextId: string;
     projectPath: string;
     hasChanges?: boolean;
-    onSuccess?: (() => void) | undefined;
+    onSuccess?:
+      | ((action: "commit" | "push" | "pull" | "pr" | "init") => void)
+      | undefined;
     isGitRepo?: boolean;
   }
 
@@ -44,7 +46,12 @@
   // Operation state
   let operating = $state(false);
   let operationPhase = $state<
-    "idle" | "committing" | "pushing" | "pulling" | "creating-pr"
+    | "idle"
+    | "committing"
+    | "pushing"
+    | "pulling"
+    | "creating-pr"
+    | "initializing"
   >("idle");
   let activeActionId = $state<string | null>(null);
   let cancellingOperation = $state(false);
@@ -217,7 +224,7 @@
       }
 
       showToast("Commit completed", "success");
-      onSuccess?.();
+      onSuccess?.("commit");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Commit failed";
       showToast(msg, "error");
@@ -253,7 +260,7 @@
       }
 
       showToast("Push completed", "success");
-      onSuccess?.();
+      onSuccess?.("push");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Push failed";
       showToast(msg, "error");
@@ -287,7 +294,7 @@
       }
 
       showToast("Pull completed", "success");
-      onSuccess?.();
+      onSuccess?.("pull");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Pull failed";
       showToast(msg, "error");
@@ -334,7 +341,7 @@
       }
 
       showToast("Commit completed", "success");
-      onSuccess?.();
+      onSuccess?.("commit");
       customCtxAction = null;
       customCtxText = "";
       menuOpen = false;
@@ -434,7 +441,7 @@
           ? `PR ${isUpdate ? "updated" : "created"}: ${prUrl}`
           : `PR ${isUpdate ? "updated" : "created"}`;
       showToast(toastMsg, "success");
-      onSuccess?.();
+      onSuccess?.("pr");
     } catch (e) {
       const msg =
         e instanceof Error
@@ -480,6 +487,41 @@
       const msg = e instanceof Error ? e.message : "Failed to cancel operation";
       showToast(msg, "error");
       cancellingOperation = false;
+    }
+  }
+
+  /**
+   * Initialize git repository in current directory.
+   */
+  async function handleInitRepo(): Promise<void> {
+    operating = true;
+    operationPhase = "initializing";
+    try {
+      const resp = await fetch("/api/git-actions/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+      if (!resp.ok) {
+        const errData = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(errData.error ?? `Git init failed: ${resp.status}`);
+      }
+      const result = (await resp.json()) as GitActionResult;
+      if (!result.success) {
+        throw new Error(result.error ?? "Git init failed");
+      }
+
+      showToast("Git repository initialized", "success");
+      menuOpen = false;
+      onSuccess?.("init");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Git init failed";
+      showToast(msg, "error");
+    } finally {
+      operating = false;
+      operationPhase = "idle";
     }
   }
 
@@ -649,8 +691,8 @@
            disabled:opacity-50 disabled:cursor-not-allowed"
     onclick={toggleMenu}
     aria-label="More git actions"
-    disabled={!isGitRepo}
-    title={!isGitRepo ? "Not a git repository" : ""}
+    disabled={operating}
+    title={operating ? "Git operation in progress" : ""}
   >
     <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
       <circle cx="8" cy="3" r="1.5" />
@@ -670,129 +712,144 @@
     onkeydown={(e) => e.stopPropagation()}
     role="menu"
   >
-    <!-- Commit with custom ctx -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             text-text-primary {customCtxAction === 'commit'
-        ? 'bg-bg-tertiary'
-        : ''}"
-      onclick={(e) => {
-        e.stopPropagation();
-        customCtxAction = customCtxAction === "commit" ? null : "commit";
-        customCtxText = "";
-      }}
-      disabled={operating}
-    >
-      Commit with custom ctx
-    </button>
-
-    {#if customCtxAction === "commit"}
-      <div
-        class="px-3 py-2 border-t border-border-default bg-bg-primary"
-        role="presentation"
+    {#if !isGitRepo}
+      <button
+        type="button"
+        role="menuitem"
+        class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+               text-text-primary disabled:opacity-50 disabled:cursor-not-allowed"
+        onclick={() => void handleInitRepo()}
+        disabled={operating}
       >
-        <textarea
-          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
-                 rounded text-text-primary font-mono resize-y
-                 focus:outline-none focus:border-accent-emphasis"
-          placeholder="Enter additional context for commit..."
-          bind:value={customCtxText}
-          disabled={operating}
-        ></textarea>
-        <button
-          type="button"
-          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
-                 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handleCustomCtxSubmit()}
-          disabled={operating}
+        {operating && operationPhase === "initializing"
+          ? "Initializing..."
+          : "Initialize Git Repository"}
+      </button>
+    {:else}
+      <!-- Commit with custom ctx -->
+      <button
+        type="button"
+        role="menuitem"
+        class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+               text-text-primary {customCtxAction === 'commit'
+          ? 'bg-bg-tertiary'
+          : ''}"
+        onclick={(e) => {
+          e.stopPropagation();
+          customCtxAction = customCtxAction === "commit" ? null : "commit";
+          customCtxText = "";
+        }}
+        disabled={operating}
+      >
+        Commit with custom ctx
+      </button>
+
+      {#if customCtxAction === "commit"}
+        <div
+          class="px-3 py-2 border-t border-border-default bg-bg-primary"
+          role="presentation"
         >
-          {operating ? "Running..." : "Commit"}
-        </button>
-      </div>
-    {/if}
-
-    <!-- Separator -->
-    <div class="border-t border-border-default"></div>
-
-    <!-- Create/Update PR -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             {prCanCreate || prNumber !== null
-        ? 'text-text-primary'
-        : 'text-text-tertiary cursor-not-allowed'}
-             {showCreatePR ? 'bg-bg-tertiary' : ''}"
-      onclick={(e) => {
-        e.stopPropagation();
-        showCreatePR = !showCreatePR;
-      }}
-      disabled={(!prCanCreate && prNumber === null) || prLoading}
-    >
-      {prPrimaryActionLabel}
-      {#if prNumber !== null}
-        <span class="text-xs text-text-tertiary ml-1">(#{prNumber})</span>
-      {:else if !prCanCreate && !prLoading}
-        <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
+          <textarea
+            class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
+                   rounded text-text-primary font-mono resize-y
+                   focus:outline-none focus:border-accent-emphasis"
+            placeholder="Enter additional context for commit..."
+            bind:value={customCtxText}
+            disabled={operating}
+          ></textarea>
+          <button
+            type="button"
+            class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
+                   hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={() => void handleCustomCtxSubmit()}
+            disabled={operating}
+          >
+            {operating ? "Running..." : "Commit"}
+          </button>
+        </div>
       {/if}
-    </button>
 
-    {#if showCreatePR && (prCanCreate || prNumber !== null)}
-      <div
-        class="px-3 py-2 border-t border-border-default bg-bg-primary"
-        role="presentation"
+      <!-- Separator -->
+      <div class="border-t border-border-default"></div>
+
+      <!-- Create/Update PR -->
+      <button
+        type="button"
+        role="menuitem"
+        class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+               {prCanCreate || prNumber !== null
+          ? 'text-text-primary'
+          : 'text-text-tertiary cursor-not-allowed'}
+               {showCreatePR ? 'bg-bg-tertiary' : ''}"
+        onclick={(e) => {
+          e.stopPropagation();
+          showCreatePR = !showCreatePR;
+        }}
+        disabled={(!prCanCreate && prNumber === null) || prLoading}
       >
-        {#if prNumber === null}
-          <div class="flex items-center gap-2 mb-2">
-            <label for="create-pr-base" class="text-xs text-text-secondary"
-              >Base:</label
-            >
-            <select
-              id="create-pr-base"
-              class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
-              bind:value={selectedCreateBaseBranch}
-            >
-              {#each prAvailableBranches as branch}
-                <option value={branch}>{branch}</option>
-              {/each}
-            </select>
-          </div>
+        {prPrimaryActionLabel}
+        {#if prNumber !== null}
+          <span class="text-xs text-text-tertiary ml-1">(#{prNumber})</span>
+        {:else if !prCanCreate && !prLoading}
+          <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
         {/if}
-        <button
-          type="button"
-          class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={() => void handlePRDropdownAction()}
-          disabled={operating ||
-            (prNumber === null && selectedCreateBaseBranch === "")}
+      </button>
+
+      {#if showCreatePR && (prCanCreate || prNumber !== null)}
+        <div
+          class="px-3 py-2 border-t border-border-default bg-bg-primary"
+          role="presentation"
         >
-          {operating && operationPhase === "creating-pr"
-            ? "AI generating..."
-            : prPrimaryActionLabel}
-        </button>
-      </div>
-    {/if}
-
-    <!-- Separator -->
-    <div class="border-t border-border-default"></div>
-
-    <!-- Open current PR in Browser -->
-    <button
-      type="button"
-      role="menuitem"
-      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
-             {currentPRUrl !== null
-        ? 'text-text-primary'
-        : 'text-text-tertiary cursor-not-allowed'}"
-      onclick={handleOpenPR}
-      disabled={currentPRUrl === null || prLoading}
-    >
-      Open current PR in Browser
-      {#if currentPRUrl === null && !prLoading}
-        <span class="text-xs text-text-tertiary ml-1">(no PR)</span>
+          {#if prNumber === null}
+            <div class="flex items-center gap-2 mb-2">
+              <label for="create-pr-base" class="text-xs text-text-secondary"
+                >Base:</label
+              >
+              <select
+                id="create-pr-base"
+                class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
+                bind:value={selectedCreateBaseBranch}
+              >
+                {#each prAvailableBranches as branch}
+                  <option value={branch}>{branch}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
+          <button
+            type="button"
+            class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={() => void handlePRDropdownAction()}
+            disabled={operating ||
+              (prNumber === null && selectedCreateBaseBranch === "")}
+          >
+            {operating && operationPhase === "creating-pr"
+              ? "AI generating..."
+              : prPrimaryActionLabel}
+          </button>
+        </div>
       {/if}
-    </button>
+
+      <!-- Separator -->
+      <div class="border-t border-border-default"></div>
+
+      <!-- Open current PR in Browser -->
+      <button
+        type="button"
+        role="menuitem"
+        class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+               {currentPRUrl !== null
+          ? 'text-text-primary'
+          : 'text-text-tertiary cursor-not-allowed'}"
+        onclick={handleOpenPR}
+        disabled={currentPRUrl === null || prLoading}
+      >
+        Open current PR in Browser
+        {#if currentPRUrl === null && !prLoading}
+          <span class="text-xs text-text-tertiary ml-1">(no PR)</span>
+        {/if}
+      </button>
+    {/if}
   </div>
 {/if}
 

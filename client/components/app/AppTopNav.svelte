@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ScreenType } from "../../src/lib/app-routing";
   import type { ServerTab, RecentProject } from "../../src/lib/app-api";
-  import GitPushButton from "../git-actions/GitPushButton.svelte";
   import HeaderStatusBadges from "../HeaderStatusBadges.svelte";
   import WorktreeButton from "../worktree/WorktreeButton.svelte";
 
@@ -11,12 +10,12 @@
     contextId,
     projectPath,
     activeTabIsGitRepo,
-    hasChanges,
     availableRecentProjects,
     newProjectPath,
     newProjectError,
     newProjectLoading,
     pickingDirectory,
+    canManageProjects,
     onNavigateToScreen,
     onSwitchProject,
     onCloseProjectTab,
@@ -34,12 +33,12 @@
     contextId: string | null;
     projectPath: string;
     activeTabIsGitRepo: boolean;
-    hasChanges: boolean;
     availableRecentProjects: RecentProject[];
     newProjectPath: string;
     newProjectError: string | null;
     newProjectLoading: boolean;
     pickingDirectory: boolean;
+    canManageProjects: boolean;
     onNavigateToScreen: (screen: ScreenType) => void;
     onSwitchProject: (tabId: string) => Promise<void>;
     onCloseProjectTab: (tabId: string, event: MouseEvent) => Promise<void>;
@@ -50,13 +49,17 @@
     onRemoveRecentProject: (path: string) => Promise<void>;
     onPickDirectory: () => Promise<void>;
     onWorktreeSwitch: () => Promise<void>;
-    onPushSuccess: () => Promise<void>;
+    onPushSuccess: (
+      action: "commit" | "push" | "pull" | "pr" | "init",
+    ) => Promise<void>;
   } = $props();
 
   let headerMenuOpen = $state(false);
   let addProjectMenuOpen = $state(false);
   let projectPanelOpen = $state(false);
   let projectTreeExpanded = $state(true);
+  let initializingRepo = $state(false);
+  let initRepoError = $state<string | null>(null);
 
   const activeProjectTab = $derived(
     workspaceTabs.find((tab) => tab.id === contextId) ?? null,
@@ -70,85 +73,48 @@
     }
     return "..." + path.slice(-maxLength);
   }
+
+  async function handleInitRepositoryFromMenu(): Promise<void> {
+    if (contextId === null || activeTabIsGitRepo || initializingRepo) {
+      return;
+    }
+
+    initializingRepo = true;
+    initRepoError = null;
+    try {
+      const resp = await fetch("/api/git-actions/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectPath }),
+      });
+
+      if (!resp.ok) {
+        const errData = (await resp.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        throw new Error(
+          errData.error ?? `Git init failed with status ${resp.status}`,
+        );
+      }
+
+      await onPushSuccess("init");
+      headerMenuOpen = false;
+    } catch (e) {
+      initRepoError = e instanceof Error ? e.message : "Git init failed";
+    } finally {
+      initializingRepo = false;
+    }
+  }
 </script>
 
 <header
   class="h-12 border-b border-border-default flex items-center px-4 bg-bg-secondary gap-4"
 >
-  <h1 class="text-lg font-semibold">QraftBox</h1>
-  <div class="flex items-center min-w-0 flex-1 gap-2 overflow-hidden">
-    {#if contextId !== null}
-      <WorktreeButton
-        {contextId}
-        {projectPath}
-        {onWorktreeSwitch}
-        disabled={!activeTabIsGitRepo}
-      />
-    {/if}
-
-    {#if contextId !== null && activeTabIsGitRepo}
-      <HeaderStatusBadges {contextId} {projectPath} />
-      <span class="text-border-default mx-1 shrink-0">|</span>
-    {/if}
-
-    <nav class="flex items-center gap-0 h-full overflow-x-auto">
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'files'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("files")}
-      >
-        Files
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'ai-session'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("ai-session")}
-      >
-        AI Session
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'commits'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("commits")}
-      >
-        Commits
-      </button>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
-               {currentScreen === 'terminal'
-          ? 'text-text-primary font-semibold border-accent-emphasis'
-          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
-        onclick={() => onNavigateToScreen("terminal")}
-      >
-        Terminal
-      </button>
-    </nav>
-  </div>
-
-  <div class="ml-auto flex items-center gap-2">
-    {#if contextId !== null}
-      <GitPushButton
-        {contextId}
-        {projectPath}
-        {hasChanges}
-        onSuccess={onPushSuccess}
-        isGitRepo={activeTabIsGitRepo}
-      />
-    {/if}
-
+  <div class="flex items-center gap-2 shrink-0">
+    <h1 class="text-lg font-semibold">QraftBox</h1>
     <button
       type="button"
-      class="h-9 max-w-[280px] px-3 rounded border border-border-default bg-bg-primary text-sm
+      class="h-9 max-w-[240px] px-3 rounded border border-border-default bg-bg-primary text-sm
              text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors
              flex items-center gap-2"
       onclick={() => {
@@ -178,6 +144,66 @@
       <span class="truncate">{activeProjectLabel}</span>
       <span class="text-xs text-text-tertiary">({workspaceTabs.length})</span>
     </button>
+  </div>
+  <div class="flex items-center min-w-0 flex-1 gap-2 overflow-hidden">
+    <nav class="flex items-center gap-0 h-full overflow-x-auto">
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'files'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("files")}
+      >
+        Files
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'ai-session'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("ai-session")}
+      >
+        Sessions
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'commits'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("commits")}
+      >
+        Commits
+      </button>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm transition-colors h-full border-b-2 whitespace-nowrap
+               {currentScreen === 'terminal'
+          ? 'text-text-primary font-semibold border-accent-emphasis'
+          : 'text-text-secondary border-transparent hover:text-text-primary hover:border-border-emphasis'}"
+        onclick={() => onNavigateToScreen("terminal")}
+      >
+        Terminal
+      </button>
+    </nav>
+  </div>
+
+  <div class="ml-auto flex items-center gap-2">
+    {#if contextId !== null}
+      <WorktreeButton
+        {contextId}
+        {projectPath}
+        {onWorktreeSwitch}
+        disabled={!activeTabIsGitRepo}
+      />
+    {/if}
+
+    {#if contextId !== null && activeTabIsGitRepo}
+      <HeaderStatusBadges {contextId} {projectPath} />
+      <span class="text-border-default mx-1 shrink-0">|</span>
+    {/if}
 
     <div class="relative">
       <button
@@ -206,19 +232,6 @@
           <button
             type="button"
             class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                 {currentScreen === 'tools'
-              ? 'text-text-primary font-semibold'
-              : 'text-text-secondary'}"
-            onclick={() => {
-              onNavigateToScreen("tools");
-              headerMenuOpen = false;
-            }}
-          >
-            Tools
-          </button>
-          <button
-            type="button"
-            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
                  {currentScreen === 'system-info'
               ? 'text-text-primary font-semibold'
               : 'text-text-secondary'}"
@@ -232,16 +245,46 @@
           <button
             type="button"
             class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
-                 {currentScreen === 'model-config'
+                 {currentScreen === 'model-profiles'
               ? 'text-text-primary font-semibold'
               : 'text-text-secondary'}"
             onclick={() => {
-              onNavigateToScreen("model-config");
+              onNavigateToScreen("model-profiles");
               headerMenuOpen = false;
             }}
           >
-            Model Config
+            Model Profiles
           </button>
+          <button
+            type="button"
+            class="w-full text-left px-4 py-2 text-sm hover:bg-bg-tertiary transition-colors
+                 {currentScreen === 'action-defaults'
+              ? 'text-text-primary font-semibold'
+              : 'text-text-secondary'}"
+            onclick={() => {
+              onNavigateToScreen("action-defaults");
+              headerMenuOpen = false;
+            }}
+          >
+            Action Defaults
+          </button>
+          {#if contextId !== null && !activeTabIsGitRepo}
+            <div class="border-t border-border-default my-1"></div>
+            <button
+              type="button"
+              class="w-full text-left px-4 py-2 text-sm text-text-secondary hover:bg-bg-tertiary
+                     hover:text-text-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              onclick={() => void handleInitRepositoryFromMenu()}
+              disabled={initializingRepo}
+            >
+              {initializingRepo
+                ? "Initializing Git Repository..."
+                : "Initialize Git Repository"}
+            </button>
+            {#if initRepoError !== null}
+              <p class="px-4 py-2 text-xs text-danger-fg">{initRepoError}</p>
+            {/if}
+          {/if}
         </div>
       {/if}
     </div>
@@ -262,7 +305,7 @@
 
 {#if projectPanelOpen}
   <aside
-    class="fixed top-12 right-0 bottom-0 z-50 w-[22rem] max-w-[92vw] border-l border-border-default bg-bg-secondary shadow-xl flex flex-col"
+    class="fixed top-12 left-0 bottom-0 z-50 w-[22rem] max-w-[92vw] border-r border-border-default bg-bg-secondary shadow-xl flex flex-col"
   >
     <div
       class="h-10 px-3 border-b border-border-default flex items-center justify-between"
@@ -290,7 +333,9 @@
             height="12"
             viewBox="0 0 16 16"
             fill="currentColor"
-            class="transition-transform {projectTreeExpanded ? 'rotate-90' : ''}"
+            class="transition-transform {projectTreeExpanded
+              ? 'rotate-90'
+              : ''}"
           >
             <path
               d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 1 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"
@@ -305,8 +350,10 @@
         </button>
         <button
           type="button"
-          class="h-8 w-8 rounded border border-border-default text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
+          class="h-8 w-8 rounded border border-border-default text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!canManageProjects}
           onclick={() => {
+            if (!canManageProjects) return;
             addProjectMenuOpen = true;
             onNewProjectPathChange("");
             void onFetchRecentProjects();
@@ -326,14 +373,23 @@
             </div>
           {:else}
             {#each workspaceTabs as tab (tab.id)}
-              <div class="group flex items-center rounded">
+              <div
+                class="group flex items-center rounded"
+                onclick={() => {
+                  if (!canManageProjects) return;
+                  projectPanelOpen = false;
+                  void onSwitchProject(tab.id);
+                }}
+              >
                 <button
                   type="button"
                   class="flex-1 min-w-0 px-2 py-1.5 text-sm rounded text-left flex items-center gap-2 transition-colors
                          {tab.id === contextId
                     ? 'bg-bg-tertiary text-text-primary font-semibold'
                     : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'}"
-                  onclick={() => {
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    if (!canManageProjects) return;
                     projectPanelOpen = false;
                     void onSwitchProject(tab.id);
                   }}
@@ -348,7 +404,10 @@
                          {tab.id === contextId
                     ? 'project-tab-close-active'
                     : ''}"
-                  onclick={(e) => void onCloseProjectTab(tab.id, e)}
+                  onclick={(e) => {
+                    if (!canManageProjects) return;
+                    void onCloseProjectTab(tab.id, e);
+                  }}
                   title="Close {tab.name}"
                 >
                   <svg
@@ -415,6 +474,11 @@
       </div>
 
       <div class="p-3">
+        {#if !canManageProjects}
+          <p class="mb-2 text-xs text-text-tertiary">
+            Temporary project mode is active. Project add/change is disabled.
+          </p>
+        {/if}
         <label
           for="project-popup-open-directory-input"
           class="text-xs text-text-tertiary font-semibold uppercase tracking-wider mb-1.5 block"
@@ -435,17 +499,23 @@
             type="text"
             value={newProjectPath}
             oninput={(e) =>
-              onNewProjectPathChange((e.currentTarget as HTMLInputElement).value)}
+              onNewProjectPathChange(
+                (e.currentTarget as HTMLInputElement).value,
+              )}
             class="flex-1 px-2 py-1.5 text-sm rounded border border-border-default
                    bg-bg-primary text-text-primary font-mono
                    focus:outline-none focus:ring-2 focus:ring-accent-emphasis
                    placeholder:text-text-tertiary"
             placeholder="/path/to/project"
-            disabled={newProjectLoading || pickingDirectory}
+            disabled={!canManageProjects ||
+              newProjectLoading ||
+              pickingDirectory}
           />
           <button
             type="button"
-            disabled={pickingDirectory || newProjectLoading}
+            disabled={!canManageProjects ||
+              pickingDirectory ||
+              newProjectLoading}
             onclick={() => void onPickDirectory()}
             class="p-1.5 rounded text-text-secondary hover:text-accent-fg hover:bg-bg-tertiary
                    disabled:opacity-50 disabled:cursor-not-allowed
@@ -460,7 +530,9 @@
           </button>
           <button
             type="submit"
-            disabled={newProjectPath.trim().length === 0 || newProjectLoading}
+            disabled={!canManageProjects ||
+              newProjectPath.trim().length === 0 ||
+              newProjectLoading}
             class="px-2 py-1.5 rounded text-sm font-medium
                    bg-bg-tertiary text-text-primary hover:bg-border-default
                    disabled:opacity-50 disabled:cursor-not-allowed
@@ -483,11 +555,15 @@
           </div>
           <div class="max-h-60 overflow-y-auto">
             {#each availableRecentProjects as recent (recent.path)}
-              <div class="flex items-center hover:bg-bg-tertiary transition-colors">
+              <div
+                class="flex items-center hover:bg-bg-tertiary transition-colors"
+              >
                 <button
                   type="button"
+                  disabled={!canManageProjects}
                   class="flex-1 text-left px-4 py-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors flex items-center gap-2 min-w-0"
                   onclick={async () => {
+                    if (!canManageProjects) return;
                     await onOpenRecentProject(recent.path);
                     addProjectMenuOpen = false;
                     projectPanelOpen = false;
@@ -508,20 +584,28 @@
                     />
                   </svg>
                   <span class="truncate flex-1">{recent.name}</span>
-                  <span class="text-xs text-text-tertiary truncate max-w-[120px]"
+                  <span
+                    class="text-xs text-text-tertiary truncate max-w-[120px]"
                     >{truncatePath(recent.path, 20)}</span
                   >
                 </button>
                 <button
                   type="button"
+                  disabled={!canManageProjects}
                   class="shrink-0 p-1 mr-2 rounded text-text-tertiary hover:text-danger-fg hover:bg-danger-subtle transition-colors"
                   title="Remove from history"
                   onclick={(e) => {
                     e.stopPropagation();
+                    if (!canManageProjects) return;
                     void onRemoveRecentProject(recent.path);
                   }}
                 >
-                  <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                  >
                     <path
                       d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.75.75 0 1 1 1.06 1.06L9.06 8l3.22 3.22a.75.75 0 1 1-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 0 1-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z"
                     />

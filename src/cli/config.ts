@@ -75,6 +75,7 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
       overrides?.assistantAdditionalArgs ??
       DEFAULT_CONFIG.ASSISTANT_ADDITIONAL_ARGS,
     projectDirs,
+    temporaryProjectMode: overrides?.temporaryProjectMode ?? false,
   };
 }
 

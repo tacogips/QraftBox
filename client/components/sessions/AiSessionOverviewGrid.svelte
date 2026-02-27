@@ -1,10 +1,18 @@
 <script lang="ts">
-  import type { AISession, AISessionSubmitResult } from "../../../src/types/ai";
+  import {
+    generateQraftAiSessionId,
+    type AISession,
+    type AISessionSubmitResult,
+  } from "../../../src/types/ai";
+  import type { FileReference } from "../../../src/types/ai";
   import { AIAgent } from "../../../src/types/ai-agent";
   import type { ModelProfile } from "../../../src/types/model-config";
   import type { PromptQueueItem } from "../../src/lib/app-api";
   import type { ExtendedSessionEntry } from "../../../src/types/claude-session";
-  import { stripSystemTags } from "../../../src/utils/strip-system-tags";
+  import {
+    stripSystemTags,
+    wrapQraftboxInternalPrompt,
+  } from "../../../src/utils/strip-system-tags";
   import {
     defaultLatestActivity,
     deriveSessionStatus,
@@ -12,6 +20,7 @@
     type SessionStatus,
   } from "../../src/lib/session-status";
   import {
+    fetchGitActionPromptApi,
     fetchHiddenAISessionIdsApi,
     setAISessionHiddenApi,
   } from "../../src/lib/app-api";
@@ -19,23 +28,34 @@
 
   interface OverviewSessionCard {
     readonly qraftAiSessionId: string;
+    readonly cliSessionId: string | null;
     readonly purpose: string;
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
+    readonly modelProfileId?: string | undefined;
+    readonly modelVendor?: "anthropics" | "openai" | undefined;
+    readonly modelName?: string | undefined;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
+    readonly failureMessage?: string | undefined;
     readonly updatedAt: string;
   }
 
   interface SelectedSessionMeta {
     readonly title: string;
+    readonly qraftAiSessionId: string | null;
+    readonly cliSessionId: string | null;
     readonly purpose: string;
     readonly latestResponse: string;
     readonly source: "qraftbox" | "claude-cli" | "codex-cli" | "unknown";
     readonly aiAgent: AIAgent;
+    readonly modelProfileId?: string | undefined;
+    readonly modelVendor?: "anthropics" | "openai" | undefined;
+    readonly modelName?: string | undefined;
     readonly status: SessionStatus;
     readonly queuedPromptCount: number;
+    readonly failureMessage?: string | undefined;
   }
 
   interface TranscriptEvent {
@@ -54,6 +74,7 @@
     newSessionSeedId?: string | null;
     runningSessions: readonly AISession[];
     queuedSessions: readonly AISession[];
+    recentTerminalSessions?: readonly AISession[];
     pendingPrompts: readonly PromptQueueItem[];
     newSessionModelProfiles?: readonly ModelProfile[];
     selectedNewSessionModelProfileId?: string | undefined;
@@ -62,12 +83,17 @@
     onStartNewSessionPrompt?: (
       message: string,
       immediate: boolean,
+      references: readonly FileReference[],
+      sessionIdOverride?: string | undefined,
     ) => Promise<AISessionSubmitResult | null>;
     onCancelActiveSession?: (sessionId: string) => Promise<void>;
     onSubmitPrompt: (
       sessionId: string,
       message: string,
       immediate: boolean,
+      references: readonly FileReference[],
+      modelProfileId?: string | undefined,
+      forceNewSession?: boolean | undefined,
     ) => Promise<AISessionSubmitResult | null>;
   }
 
@@ -87,6 +113,7 @@
     newSessionSeedId = null,
     runningSessions,
     queuedSessions,
+    recentTerminalSessions = [],
     pendingPrompts,
     newSessionModelProfiles = [],
     selectedNewSessionModelProfileId = undefined,
@@ -97,23 +124,37 @@
     onSubmitPrompt,
   }: Props = $props();
 
+  const SESSIONS_PAGE_SIZE = 20;
+  const ACTIVE_REFRESH_INTERVAL_MS = 4000;
+  const IDLE_REFRESH_INTERVAL_MS = 20000;
   let sessions = $state<readonly ExtendedSessionEntry[]>([]);
   let sessionsLoading = $state(false);
+  let sessionsLoadingMore = $state(false);
+  let hasMoreSessions = $state(true);
+  let requestedSessionLimit = $state(SESSIONS_PAGE_SIZE);
   let sessionsError = $state<string | null>(null);
   let selectedSessionId = $state<string | null>(null);
   let creatingNewSession = $state(false);
+  let hasHydratedSessionSelection = $state(false);
   let fallbackPendingPromptBySessionId = $state<
     ReadonlyMap<string, FallbackPendingPromptMessage>
   >(new Map());
   const FALLBACK_PENDING_PROMPT_TTL_MS = 20_000;
+  let fallbackPendingPromptNowMs = $state(Date.now());
   let selectedSessionMeta = $state<SelectedSessionMeta>({
     title: "Session",
+    qraftAiSessionId: null,
+    cliSessionId: null,
     purpose: "No purpose available",
     latestResponse: "Waiting for next user input",
     source: "unknown",
     aiAgent: AIAgent.CLAUDE,
+    modelProfileId: undefined,
+    modelVendor: undefined,
+    modelName: undefined,
     status: "awaiting_input",
     queuedPromptCount: 0,
+    failureMessage: undefined,
   });
 
   let searchQueryInput = $state("");
@@ -127,10 +168,18 @@
   let latestTranscriptSearchToken = 0;
   let latestHiddenFetchToken = 0;
   const SESSION_QUERY_KEY = "ai_session_id";
+  let lastSessionScopeKey = $state<string | null>(null);
+  let lastPollingMode = $state<"active" | "idle" | null>(null);
   let hiddenSessionIds = $state<ReadonlySet<string>>(new Set());
   let includeHiddenSessions = $state(false);
   let cancellingPrompt = $state(false);
   let cancelPromptError = $state<string | null>(null);
+  const runningSessionCount = $derived(runningSessions.length);
+  const queuedSessionCount = $derived(queuedSessions.length);
+  const pendingPromptCount = $derived(pendingPrompts.length);
+  const hasActiveWork = $derived(
+    runningSessionCount > 0 || queuedSessionCount > 0 || pendingPromptCount > 0,
+  );
 
   function openSessionById(
     sessionId: string,
@@ -142,6 +191,15 @@
       ...selectedSessionMeta,
       ...fallbackMeta,
     };
+  }
+
+  function applySessionSelectionFromUrl(sessionId: string | null): void {
+    selectedSessionId = sessionId;
+    // URL-selected sessions must always be treated as existing sessions.
+    if (sessionId !== null) {
+      creatingNewSession = false;
+    }
+    hasHydratedSessionSelection = true;
   }
 
   function setFallbackPendingPrompt(
@@ -223,42 +281,80 @@
     return session.clientSessionId ?? session.id;
   }
 
+  const runningSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const runningSession of runningSessions) {
+      grouped.set(sessionGroupId(runningSession), runningSession);
+    }
+    return grouped;
+  });
+
+  const queuedSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const queuedSession of queuedSessions) {
+      grouped.set(sessionGroupId(queuedSession), queuedSession);
+    }
+    return grouped;
+  });
+
+  const failedSessionByGroupId = $derived.by(() => {
+    const grouped = new Map<string, AISession>();
+    for (const terminalSession of recentTerminalSessions) {
+      if (terminalSession.state !== "failed") {
+        continue;
+      }
+      grouped.set(sessionGroupId(terminalSession), terminalSession);
+    }
+    return grouped;
+  });
+
+  const activePromptMessagesBySessionId = $derived.by(() => {
+    const grouped = new Map<string, PendingPromptMessage[]>();
+    for (const pendingPrompt of pendingPrompts) {
+      if (
+        pendingPrompt.status !== "queued" &&
+        pendingPrompt.status !== "running"
+      ) {
+        continue;
+      }
+      const sessionId = pendingPrompt.qraft_ai_session_id;
+      const existing = grouped.get(sessionId);
+      const promptMessage: PendingPromptMessage = {
+        message: pendingPrompt.message,
+        status: pendingPrompt.status,
+        ai_agent: pendingPrompt.ai_agent,
+      };
+      if (existing === undefined) {
+        grouped.set(sessionId, [promptMessage]);
+        continue;
+      }
+      existing.push(promptMessage);
+    }
+    return grouped;
+  });
+
   function findSessionRuntimeByGroupId(sessionId: string): {
     runningMatch: AISession | undefined;
     queuedMatch: AISession | undefined;
+    failedMatch: AISession | undefined;
   } {
-    const runningMatch = runningSessions.find(
-      (runningSession) => sessionGroupId(runningSession) === sessionId,
-    );
-    const queuedMatch = queuedSessions.find(
-      (queuedSession) => sessionGroupId(queuedSession) === sessionId,
-    );
-    return { runningMatch, queuedMatch };
+    const runningMatch = runningSessionByGroupId.get(sessionId);
+    const queuedMatch = queuedSessionByGroupId.get(sessionId);
+    const failedMatch = failedSessionByGroupId.get(sessionId);
+    return { runningMatch, queuedMatch, failedMatch };
   }
 
   function activePromptMessagesForSession(
     sessionId: string,
   ): readonly PendingPromptMessage[] {
-    return pendingPrompts
-      .filter(
-        (pendingPrompt) =>
-          pendingPrompt.qraft_ai_session_id === sessionId &&
-          (pendingPrompt.status === "queued" ||
-            pendingPrompt.status === "running"),
-      )
-      .map((pendingPrompt) => ({
-        message: pendingPrompt.message,
-        status: pendingPrompt.status,
-        ai_agent: pendingPrompt.ai_agent,
-      }));
+    return activePromptMessagesBySessionId.get(sessionId) ?? [];
   }
 
   function buildCardFromSession(
     entry: ExtendedSessionEntry,
   ): OverviewSessionCard {
-    const { runningMatch, queuedMatch } = findSessionRuntimeByGroupId(
-      entry.qraftAiSessionId,
-    );
+    const { runningMatch, queuedMatch, failedMatch } =
+      findSessionRuntimeByGroupId(entry.qraftAiSessionId);
 
     const activePromptMessages = activePromptMessagesForSession(
       entry.qraftAiSessionId,
@@ -268,6 +364,7 @@
       hasRunningTask: runningMatch !== undefined,
       hasQueuedTask:
         queuedMatch !== undefined || activePromptMessages.length > 0,
+      hasFailedTask: failedMatch !== undefined,
     });
 
     const normalizedSummary = normalizeText(entry.summary);
@@ -284,8 +381,11 @@
         runningMatch?.lastAssistantMessage ??
         queuedMatch?.currentActivity ??
         queuedMatch?.lastAssistantMessage ??
+        failedMatch?.error ??
         "",
     );
+
+    const failureMessage = failedMatch?.error;
 
     const queuedHead = normalizeText(activePromptMessages[0]?.message ?? "");
 
@@ -297,6 +397,7 @@
 
     return {
       qraftAiSessionId: entry.qraftAiSessionId,
+      cliSessionId: entry.sessionId,
       purpose: truncate(purposeCandidate || "No purpose available", 90),
       latestResponse: truncate(latestResponseCandidate, 160),
       source: entry.source,
@@ -305,8 +406,19 @@
         runningMatch?.aiAgent ??
         queuedMatch?.aiAgent ??
         AIAgent.CLAUDE,
+      modelProfileId:
+        entry.modelProfileId ??
+        runningMatch?.modelProfileId ??
+        queuedMatch?.modelProfileId,
+      modelVendor:
+        entry.modelVendor ??
+        runningMatch?.modelVendor ??
+        queuedMatch?.modelVendor,
+      modelName:
+        entry.modelName ?? runningMatch?.modelName ?? queuedMatch?.modelName,
       status,
       queuedPromptCount: activePromptMessages.length,
+      failureMessage,
       updatedAt: entry.modified,
     };
   }
@@ -327,10 +439,12 @@
         hasRunningTask: sessionEntry.state === "running",
         hasQueuedTask:
           activePromptMessages.length > 0 || sessionEntry.state === "queued",
+        hasFailedTask: sessionEntry.state === "failed",
       });
 
       fallbackCards.push({
         qraftAiSessionId: groupId,
+        cliSessionId: sessionEntry.claudeSessionId ?? null,
         purpose: truncate(
           normalizeText(sessionEntry.prompt) || "No purpose available",
           90,
@@ -339,6 +453,7 @@
           normalizeText(
             sessionEntry.currentActivity ??
               sessionEntry.lastAssistantMessage ??
+              sessionEntry.error ??
               activePromptMessages[0]?.message ??
               defaultLatestActivity(status),
           ),
@@ -349,8 +464,12 @@
           sessionEntry.aiAgent ??
           activePromptMessages[0]?.ai_agent ??
           AIAgent.CLAUDE,
+        modelProfileId: sessionEntry.modelProfileId,
+        modelVendor: sessionEntry.modelVendor,
+        modelName: sessionEntry.modelName,
         status,
         queuedPromptCount: activePromptMessages.length,
+        failureMessage: sessionEntry.error,
         updatedAt:
           sessionEntry.completedAt ??
           sessionEntry.startedAt ??
@@ -523,7 +642,23 @@
     );
     const fallbackCards =
       buildFallbackCardsForActiveOnlySessions(sessionCardIds);
-    return [...sessionCards, ...fallbackCards].sort((cardA, cardB) => {
+    const mergedCards = [...sessionCards, ...fallbackCards];
+    const dedupedCards = new Map<string, OverviewSessionCard>();
+    for (const card of mergedCards) {
+      const existingCard = dedupedCards.get(card.qraftAiSessionId);
+      if (existingCard === undefined) {
+        dedupedCards.set(card.qraftAiSessionId, card);
+        continue;
+      }
+
+      const existingUpdatedAt = new Date(existingCard.updatedAt).getTime();
+      const candidateUpdatedAt = new Date(card.updatedAt).getTime();
+      if (candidateUpdatedAt >= existingUpdatedAt) {
+        dedupedCards.set(card.qraftAiSessionId, card);
+      }
+    }
+
+    return [...dedupedCards.values()].sort((cardA, cardB) => {
       const timeA = new Date(cardA.updatedAt).getTime();
       const timeB = new Date(cardB.updatedAt).getTime();
       return timeB - timeA;
@@ -556,17 +691,47 @@
     );
   });
 
+  const cardBySessionId = $derived.by(() => {
+    const grouped = new Map<string, OverviewSessionCard>();
+    for (const card of cards) {
+      grouped.set(card.qraftAiSessionId, card);
+    }
+    return grouped;
+  });
+
   const selectedCard = $derived.by(() => {
     if (selectedSessionId === null) {
       return null;
     }
-    const card = cards.find(
-      (sessionCard) => sessionCard.qraftAiSessionId === selectedSessionId,
-    );
+    const card = cardBySessionId.get(selectedSessionId);
     return card ?? null;
   });
 
+  const selectedModelLabel = $derived.by(() => {
+    const modelProfileId =
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId;
+    const modelVendor =
+      selectedCard?.modelVendor ?? selectedSessionMeta.modelVendor;
+    const modelName = selectedCard?.modelName ?? selectedSessionMeta.modelName;
+
+    if (modelProfileId !== undefined) {
+      const profile = newSessionModelProfiles.find(
+        (p) => p.id === modelProfileId,
+      );
+      if (profile !== undefined) {
+        return `${profile.name} (${profile.vendor} / ${profile.model})`;
+      }
+      return modelProfileId;
+    }
+    if (modelVendor !== undefined && modelName !== undefined) {
+      return `${modelVendor} / ${modelName}`;
+    }
+    return undefined;
+  });
+
   const selectedSessionPendingPromptMessages = $derived.by(() => {
+    const nowMs = fallbackPendingPromptNowMs;
+    void nowMs;
     if (selectedSessionId === null) {
       return [] as readonly PendingPromptMessage[];
     }
@@ -580,13 +745,16 @@
     }
 
     const isFallbackExpired =
-      Date.now() - fallbackPendingPrompt.createdAtMs >
+      nowMs - fallbackPendingPrompt.createdAtMs >
       FALLBACK_PENDING_PROMPT_TTL_MS;
     if (isFallbackExpired) {
       return activePromptMessages;
     }
 
-    if (selectedCard?.status === "awaiting_input") {
+    if (
+      selectedCard?.status === "awaiting_input" ||
+      selectedCard?.status === "failed"
+    ) {
       return activePromptMessages;
     }
 
@@ -603,8 +771,24 @@
     return [fallbackPendingPrompt, ...activePromptMessages];
   });
 
+  const selectedSessionOptimisticAssistantMessage = $derived.by(() => {
+    if (selectedSessionId === null) {
+      return undefined;
+    }
+    const runningSession = runningSessionByGroupId.get(selectedSessionId);
+    if (runningSession === undefined) {
+      return undefined;
+    }
+    const message = runningSession.lastAssistantMessage;
+    if (typeof message !== "string" || message.trim().length === 0) {
+      return undefined;
+    }
+    return message;
+  });
+
   $effect(() => {
-    const nowMs = Date.now();
+    const nowMs = fallbackPendingPromptNowMs;
+    void nowMs;
     const nextFallbackMap = new Map(fallbackPendingPromptBySessionId);
     let hasUpdates = false;
 
@@ -614,12 +798,12 @@
     ] of fallbackPendingPromptBySessionId) {
       const fallbackExpired =
         nowMs - fallbackPrompt.createdAtMs > FALLBACK_PENDING_PROMPT_TTL_MS;
-      const sessionCard = cards.find(
-        (card) => card.qraftAiSessionId === sessionId,
-      );
-      const sessionIsWaitingForInput = sessionCard?.status === "awaiting_input";
+      const sessionCard = cardBySessionId.get(sessionId);
+      const sessionIsTerminal =
+        sessionCard?.status === "awaiting_input" ||
+        sessionCard?.status === "failed";
 
-      if (fallbackExpired || sessionIsWaitingForInput) {
+      if (fallbackExpired || sessionIsTerminal) {
         nextFallbackMap.delete(sessionId);
         hasUpdates = true;
       }
@@ -630,11 +814,24 @@
     }
   });
 
-  async function fetchOverviewSessions(): Promise<void> {
+  $effect(() => {
+    const timerId = setInterval(() => {
+      fallbackPendingPromptNowMs = Date.now();
+    }, 1000);
+    return () => clearInterval(timerId);
+  });
+
+  async function fetchOverviewSessions(options?: {
+    readonly bypassCache?: boolean;
+  }): Promise<void> {
+    if (sessionsLoading && options?.bypassCache !== true) {
+      return;
+    }
     const fetchToken = ++latestFetchToken;
 
     if (contextId === null || contextId.length === 0) {
       sessions = [];
+      hasMoreSessions = false;
       sessionsError = null;
       return;
     }
@@ -645,18 +842,16 @@
     try {
       const query = new URLSearchParams({
         offset: "0",
-        limit: "200",
+        limit: String(requestedSessionLimit),
         sortBy: "modified",
         sortOrder: "desc",
       });
+      if (options?.bypassCache === true) {
+        query.set("_", String(Date.now()));
+      }
 
       if (projectPath.length > 0) {
         query.set("workingDirectoryPrefix", projectPath);
-      }
-
-      const trimmedSearch = searchQuery.trim();
-      if (trimmedSearch.length > 0 && !searchInTranscript) {
-        query.set("search", trimmedSearch);
       }
 
       const response = await fetch(
@@ -676,24 +871,13 @@
       }
 
       sessions = data.sessions;
-
-      if (trimmedSearch.length > 0 && searchInTranscript) {
-        latestTranscriptSearchToken += 1;
-        const transcriptSearchToken = latestTranscriptSearchToken;
-        void runTranscriptSearch(
-          data.sessions,
-          trimmedSearch,
-          transcriptSearchToken,
-        );
-      } else {
-        transcriptMatchedSessionIds = new Set();
-        transcriptSearchRunning = false;
-      }
+      hasMoreSessions = data.sessions.length === requestedSessionLimit;
     } catch (error: unknown) {
       if (fetchToken !== latestFetchToken) {
         return;
       }
       sessions = [];
+      hasMoreSessions = false;
       sessionsError =
         error instanceof Error ? error.message : "Failed to load sessions";
       transcriptMatchedSessionIds = new Set();
@@ -702,6 +886,30 @@
       if (fetchToken === latestFetchToken) {
         sessionsLoading = false;
       }
+    }
+  }
+
+  async function loadMoreSessions(): Promise<void> {
+    if (
+      contextId === null ||
+      contextId.length === 0 ||
+      sessionsLoadingMore ||
+      !hasMoreSessions
+    ) {
+      return;
+    }
+
+    sessionsLoadingMore = true;
+    sessionsError = null;
+
+    try {
+      requestedSessionLimit += SESSIONS_PAGE_SIZE;
+      await fetchOverviewSessions({ bypassCache: true });
+    } catch (error: unknown) {
+      sessionsError =
+        error instanceof Error ? error.message : "Failed to load more sessions";
+    } finally {
+      sessionsLoadingMore = false;
     }
   }
 
@@ -744,8 +952,10 @@
   }
 
   $effect(() => {
+    const activeSearchQueryInput = searchQueryInput;
+    void activeSearchQueryInput;
     const debounceTimer = setTimeout(() => {
-      searchQuery = searchQueryInput.trim();
+      searchQuery = activeSearchQueryInput.trim();
     }, 250);
 
     return () => {
@@ -755,10 +965,10 @@
 
   $effect(() => {
     const onPopState = (): void => {
-      selectedSessionId = readSelectedSessionIdFromUrl();
+      applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     };
 
-    selectedSessionId = readSelectedSessionIdFromUrl();
+    applySessionSelectionFromUrl(readSelectedSessionIdFromUrl());
     window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("popstate", onPopState);
@@ -768,26 +978,81 @@
   $effect(() => {
     const activeContextId = contextId;
     const activeProjectPath = projectPath;
-    const activeSearchQuery = searchQuery;
-    const activeSearchInTranscript = searchInTranscript;
-    void activeContextId;
-    void activeProjectPath;
-    void activeSearchQuery;
-    void activeSearchInTranscript;
+    const scopeKey = `${activeContextId ?? ""}::${activeProjectPath}`;
 
-    void fetchOverviewSessions();
+    if (scopeKey === lastSessionScopeKey) {
+      return;
+    }
+    lastSessionScopeKey = scopeKey;
+    lastPollingMode = null;
+
+    requestedSessionLimit = SESSIONS_PAGE_SIZE;
+    hasMoreSessions = true;
+    void fetchOverviewSessions({ bypassCache: true });
     void fetchHiddenSessionIds();
+  });
+
+  $effect(() => {
+    const activeContextId = contextId;
+    const hasActiveSessionWork = hasActiveWork;
+    void activeContextId;
+    void hasActiveSessionWork;
 
     if (activeContextId === null) {
       return;
     }
 
+    const refreshIntervalMs = hasActiveSessionWork
+      ? ACTIVE_REFRESH_INTERVAL_MS
+      : IDLE_REFRESH_INTERVAL_MS;
+    const pollingMode: "active" | "idle" = hasActiveSessionWork
+      ? "active"
+      : "idle";
+    const pollingModeChanged = pollingMode !== lastPollingMode;
+    lastPollingMode = pollingMode;
+
+    // Refresh once when polling mode changes (idle<->active) so list state
+    // updates immediately without waiting for the next interval tick.
+    if (pollingModeChanged) {
+      void fetchOverviewSessions();
+    }
+
     const refreshTimerId = setInterval(() => {
       void fetchOverviewSessions();
-      void fetchHiddenSessionIds();
-    }, 4000);
+      // Hidden session state changes only on explicit hide/unhide actions.
+      // Poll it only in idle mode to reduce extra network traffic.
+      if (!hasActiveSessionWork) {
+        void fetchHiddenSessionIds();
+      }
+    }, refreshIntervalMs);
 
     return () => clearInterval(refreshTimerId);
+  });
+
+  $effect(() => {
+    const activeContextId = contextId;
+    const sessionEntries = sessions;
+    const trimmedSearchQuery = searchQuery.trim();
+    const includeTranscript = searchInTranscript;
+    void activeContextId;
+    void sessionEntries;
+    void trimmedSearchQuery;
+    void includeTranscript;
+
+    latestTranscriptSearchToken += 1;
+    const searchToken = latestTranscriptSearchToken;
+
+    if (
+      activeContextId === null ||
+      trimmedSearchQuery.length === 0 ||
+      !includeTranscript
+    ) {
+      transcriptMatchedSessionIds = new Set();
+      transcriptSearchRunning = false;
+      return;
+    }
+
+    void runTranscriptSearch(sessionEntries, trimmedSearchQuery, searchToken);
   });
 
   $effect(() => {
@@ -796,12 +1061,18 @@
     }
     selectedSessionMeta = {
       title: selectedCard.purpose,
+      qraftAiSessionId: selectedCard.qraftAiSessionId,
+      cliSessionId: selectedCard.cliSessionId,
       purpose: selectedCard.purpose,
       latestResponse: selectedCard.latestResponse,
       source: selectedCard.source,
       status: selectedCard.status,
       aiAgent: selectedCard.aiAgent,
+      modelProfileId: selectedCard.modelProfileId,
+      modelVendor: selectedCard.modelVendor,
+      modelName: selectedCard.modelName,
       queuedPromptCount: selectedCard.queuedPromptCount,
+      failureMessage: selectedCard.failureMessage,
     };
   });
 
@@ -820,50 +1091,153 @@
   });
 
   $effect(() => {
+    if (!hasHydratedSessionSelection) {
+      return;
+    }
     writeSelectedSessionIdToUrl(selectedSessionId);
   });
 
   async function handlePopupSubmit(
     message: string,
     immediate: boolean,
+    references: readonly FileReference[],
   ): Promise<void> {
     if (creatingNewSession) {
       if (onStartNewSessionPrompt === undefined) {
-        return;
+        throw new Error("Unable to start a new session.");
       }
-      const result = await onStartNewSessionPrompt(message, immediate);
-      if (result !== null) {
-        const stableSessionId =
-          selectedSessionId ?? newSessionSeedId ?? result.sessionId;
-        setFallbackPendingPrompt(
-          stableSessionId,
-          message,
-          immediate ? "running" : "queued",
-        );
-        openSessionById(stableSessionId, {
-          title: "New Session",
-          purpose: "New session",
-          latestResponse: message,
-          source: "qraftbox",
-          aiAgent: AIAgent.CLAUDE,
-          status: immediate ? "running" : "queued",
-        });
-        await fetchOverviewSessions();
+      const result = await onStartNewSessionPrompt(
+        message,
+        immediate,
+        references,
+      );
+      if (result === null) {
+        throw new Error("Prompt submission failed. Please retry.");
       }
+      const stableSessionId =
+        selectedSessionId ?? newSessionSeedId ?? result.sessionId;
+      setFallbackPendingPrompt(
+        stableSessionId,
+        message,
+        immediate ? "running" : "queued",
+      );
+      openSessionById(stableSessionId, {
+        title: "New Session",
+        qraftAiSessionId: stableSessionId,
+        cliSessionId: result.claudeSessionId ?? null,
+        purpose: "New session",
+        latestResponse: message,
+        source: "qraftbox",
+        aiAgent: AIAgent.CLAUDE,
+        modelProfileId: selectedNewSessionModelProfileId,
+        modelVendor: undefined,
+        modelName: undefined,
+        status: immediate ? "running" : "queued",
+      });
+      await fetchOverviewSessions({ bypassCache: true });
       return;
     }
 
     if (selectedSessionId === null) {
-      return;
+      throw new Error("Session is not selected.");
     }
 
-    await onSubmitPrompt(selectedSessionId, message, immediate);
+    const result = await onSubmitPrompt(
+      selectedSessionId,
+      message,
+      immediate,
+      references,
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
+    );
+    if (result === null) {
+      throw new Error("Prompt submission failed. Please retry.");
+    }
     setFallbackPendingPrompt(
       selectedSessionId,
       message,
       immediate ? "running" : "queued",
     );
-    await fetchOverviewSessions();
+    await fetchOverviewSessions({ bypassCache: true });
+  }
+
+  async function handlePopupSubmitAsNewSession(
+    message: string,
+    immediate: boolean,
+    references: readonly FileReference[],
+  ): Promise<void> {
+    if (onStartNewSessionPrompt === undefined) {
+      throw new Error("Unable to start a new session.");
+    }
+
+    const newSessionId = generateQraftAiSessionId();
+    const result = await onStartNewSessionPrompt(
+      message,
+      immediate,
+      references,
+      newSessionId,
+    );
+    if (result === null) {
+      throw new Error("Prompt submission failed. Please retry.");
+    }
+
+    setFallbackPendingPrompt(
+      newSessionId,
+      message,
+      immediate ? "running" : "queued",
+    );
+    openSessionById(newSessionId, {
+      title: "New Session",
+      qraftAiSessionId: newSessionId,
+      cliSessionId: result.claudeSessionId ?? null,
+      purpose: "New session",
+      latestResponse: message,
+      source: "qraftbox",
+      aiAgent: AIAgent.CLAUDE,
+      modelProfileId:
+        selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
+      modelVendor: undefined,
+      modelName: undefined,
+      status: immediate ? "running" : "queued",
+    });
+    await fetchOverviewSessions({ bypassCache: true });
+  }
+
+  async function handleRestartSessionFromBeginning(
+    message: string,
+  ): Promise<void> {
+    const editedMessage = message.trim();
+    if (selectedSessionId === null || editedMessage.length === 0) {
+      throw new Error("Session is not selected.");
+    }
+
+    const result = await onSubmitPrompt(
+      selectedSessionId,
+      editedMessage,
+      true,
+      [],
+      selectedCard?.modelProfileId ?? selectedSessionMeta.modelProfileId,
+      true,
+    );
+    if (result === null) {
+      throw new Error("Restart failed. Please retry.");
+    }
+    setFallbackPendingPrompt(selectedSessionId, editedMessage, "running");
+    await fetchOverviewSessions({ bypassCache: true });
+  }
+
+  async function runSessionDefaultPrompt(
+    promptName: "ai-session-refresh-purpose" | "ai-session-resume",
+  ): Promise<void> {
+    if (creatingNewSession || selectedSessionId === null) {
+      return;
+    }
+    const prompt = await fetchGitActionPromptApi(promptName);
+    const internalPrompt = wrapQraftboxInternalPrompt(
+      promptName,
+      prompt.content,
+      "session-action-v1",
+    );
+    await handlePopupSubmit(internalPrompt, true);
   }
 
   const canCancelSelectedPrompt = $derived.by(() => {
@@ -891,7 +1265,7 @@
     cancelPromptError = null;
     try {
       await onCancelActiveSession(selectedSessionId);
-      await fetchOverviewSessions();
+      await fetchOverviewSessions({ bypassCache: true });
     } catch (error: unknown) {
       cancelPromptError =
         error instanceof Error ? error.message : "Failed to cancel prompt";
@@ -902,21 +1276,6 @@
 </script>
 
 <div class="h-full flex flex-col min-h-0 bg-bg-primary">
-  <div
-    class="px-4 py-2 border-b border-border-default bg-bg-secondary
-           flex items-center justify-between gap-4"
-  >
-    <div class="min-w-0">
-      <h2 class="text-sm font-semibold text-text-primary">Session Overview</h2>
-      <p class="text-xs text-text-tertiary truncate">
-        Monitor and search sessions across parallel terminals
-      </p>
-    </div>
-    <div class="text-xs text-text-secondary shrink-0">
-      {filteredCards.length} / {visibleCards.length} sessions
-    </div>
-  </div>
-
   <div class="px-4 py-2 border-b border-border-default bg-bg-primary">
     <div class="flex flex-col md:flex-row gap-2 md:items-center">
       <input
@@ -967,12 +1326,15 @@
               creatingNewSession = true;
               selectedSessionMeta = {
                 title: "New Session",
+                qraftAiSessionId: null,
+                cliSessionId: null,
                 purpose: "New session",
                 latestResponse: "Submit the first prompt to start this session",
                 source: "qraftbox",
                 aiAgent: AIAgent.CLAUDE,
                 status: "awaiting_input",
                 queuedPromptCount: 0,
+                failureMessage: undefined,
               };
               onNewSession?.();
             }}
@@ -994,12 +1356,15 @@
               onclick={() => {
                 openSessionById(card.qraftAiSessionId, {
                   title: card.purpose,
+                  qraftAiSessionId: card.qraftAiSessionId,
+                  cliSessionId: card.cliSessionId,
                   purpose: card.purpose,
                   latestResponse: card.latestResponse,
                   source: card.source,
                   aiAgent: card.aiAgent,
                   status: card.status,
                   queuedPromptCount: card.queuedPromptCount,
+                  failureMessage: card.failureMessage,
                 });
               }}
               onkeydown={(event) => {
@@ -1007,12 +1372,15 @@
                   event.preventDefault();
                   openSessionById(card.qraftAiSessionId, {
                     title: card.purpose,
+                    qraftAiSessionId: card.qraftAiSessionId,
+                    cliSessionId: card.cliSessionId,
                     purpose: card.purpose,
                     latestResponse: card.latestResponse,
                     source: card.source,
                     aiAgent: card.aiAgent,
                     status: card.status,
                     queuedPromptCount: card.queuedPromptCount,
+                    failureMessage: card.failureMessage,
                   });
                 }
               }}
@@ -1032,7 +1400,7 @@
                         ? 'bg-accent-muted text-accent-fg'
                         : card.source === 'codex-cli'
                           ? 'bg-attention-emphasis/20 text-attention-fg'
-                        : 'bg-bg-tertiary text-text-secondary'}"
+                          : 'bg-bg-tertiary text-text-secondary'}"
                   >
                     {card.source}
                   </span>
@@ -1107,6 +1475,22 @@
           {/each}
         </div>
 
+        {#if hasMoreSessions}
+          <div class="pt-2 flex justify-center">
+            <button
+              type="button"
+              class="px-4 py-2 rounded border border-border-default text-sm text-text-primary
+                     bg-bg-secondary hover:bg-bg-hover disabled:opacity-60 disabled:cursor-not-allowed"
+              onclick={() => void loadMoreSessions()}
+              disabled={sessionsLoadingMore}
+            >
+              {sessionsLoadingMore
+                ? "Loading more..."
+                : `Load ${SESSIONS_PAGE_SIZE} more`}
+            </button>
+          </div>
+        {/if}
+
         {#if filteredCards.length === 0}
           <div class="text-sm text-text-secondary">
             {searchQuery.length > 0
@@ -1124,6 +1508,11 @@
     open={true}
     {contextId}
     sessionId={selectedSessionId ?? null}
+    qraftSessionId={selectedCard?.qraftAiSessionId ??
+      selectedSessionMeta.qraftAiSessionId ??
+      selectedSessionId}
+    cliSessionId={selectedCard?.cliSessionId ??
+      selectedSessionMeta.cliSessionId}
     title={selectedCard?.purpose ?? selectedSessionMeta.title}
     status={selectedCard?.status ?? selectedSessionMeta.status}
     purpose={selectedCard?.purpose ?? selectedSessionMeta.purpose}
@@ -1133,7 +1522,10 @@
     aiAgent={selectedCard?.aiAgent ?? selectedSessionMeta.aiAgent}
     queuedPromptCount={selectedCard?.queuedPromptCount ??
       selectedSessionMeta.queuedPromptCount}
+    failureMessage={selectedCard?.failureMessage ??
+      selectedSessionMeta.failureMessage}
     pendingPromptMessages={selectedSessionPendingPromptMessages}
+    optimisticAssistantMessage={selectedSessionOptimisticAssistantMessage}
     isHidden={selectedSessionId !== null &&
       hiddenSessionIds.has(selectedSessionId)}
     onToggleHidden={async () => {
@@ -1148,16 +1540,26 @@
       cancellingPrompt = false;
       cancelPromptError = null;
     }}
-    onSubmitPrompt={(message, immediate) =>
-      handlePopupSubmit(message, immediate)}
+    onSubmitPrompt={(message, immediate, references) =>
+      handlePopupSubmit(message, immediate, references)}
+    onSubmitPromptAsNewSession={(message, immediate, references) =>
+      handlePopupSubmitAsNewSession(message, immediate, references)}
     showModelProfileSelector={creatingNewSession}
     modelProfiles={newSessionModelProfiles}
     selectedModelProfileId={selectedNewSessionModelProfileId}
     onModelProfileChange={onSelectNewSessionModelProfile}
+    activeModelLabel={selectedModelLabel}
     canCancelPrompt={canCancelSelectedPrompt}
     cancelPromptInProgress={cancellingPrompt}
     {cancelPromptError}
     onCancelPrompt={handleCancelSelectedPrompt}
+    canRunSessionDefaultPrompts={!creatingNewSession &&
+      selectedSessionId !== null}
+    onRunRefreshPurposePrompt={() =>
+      runSessionDefaultPrompt("ai-session-refresh-purpose")}
+    onRunResumeSessionPrompt={() =>
+      runSessionDefaultPrompt("ai-session-resume")}
+    onRestartSessionFromBeginning={handleRestartSessionFromBeginning}
   />
 {/if}
 

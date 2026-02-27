@@ -41,6 +41,10 @@ interface ErrorResponse {
  */
 interface WorkspaceResponse {
   readonly workspace: Workspace;
+  readonly metadata?: {
+    readonly temporaryProjectMode: boolean;
+    readonly canManageProjects: boolean;
+  };
 }
 
 /**
@@ -148,6 +152,7 @@ export function createWorkspaceRoutes(
   openTabsStore?: OpenTabsStore | undefined,
   activeTabPath?: string | undefined,
   watcherManager?: ProjectWatcherManager | undefined,
+  temporaryProjectMode = false,
 ): Hono {
   // Initialize workspace with initial tabs if provided
   if (initialTabs !== undefined && initialTabs.length > 0) {
@@ -180,9 +185,24 @@ export function createWorkspaceRoutes(
   app.get("/", (c) => {
     const response: WorkspaceResponse = {
       workspace: currentWorkspace,
+      metadata: {
+        temporaryProjectMode,
+        canManageProjects: !temporaryProjectMode,
+      },
     };
     return c.json(response);
   });
+
+  const ensureProjectManagementEnabled = (): ErrorResponse | null => {
+    if (!temporaryProjectMode) {
+      return null;
+    }
+    return {
+      error:
+        "Project management is disabled in temporary project mode (qraftbox <path>)",
+      code: 403,
+    };
+  };
 
   /**
    * POST /api/workspace/tabs
@@ -202,6 +222,11 @@ export function createWorkspaceRoutes(
    * - 500: Failed to create context (directory inaccessible, not a directory, etc.)
    */
   app.post("/tabs", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     let requestBody: unknown;
     try {
       requestBody = await c.req.json();
@@ -320,6 +345,112 @@ export function createWorkspaceRoutes(
   });
 
   /**
+   * POST /api/workspace/tabs/by-slug/:slug
+   *
+   * Open or activate a workspace tab by registered project slug.
+   *
+   * Path parameters:
+   * - slug: Project slug (e.g. qraftbox-dd412c)
+   *
+   * Returns:
+   * - tab: The opened or activated workspace tab
+   * - workspace: Updated workspace state
+   *
+   * Error cases:
+   * - 400: Missing/invalid slug
+   * - 404: Slug is not registered
+   * - 409: Workspace is full
+   * - 500: Failed to create context
+   */
+  app.post("/tabs/by-slug/:slug", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
+    const slug = c.req.param("slug").trim();
+    if (slug.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "slug must be a non-empty string",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const resolvedPath = await contextManager
+      .getProjectRegistry()
+      .resolveSlug(slug);
+    if (resolvedPath === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Unknown project slug: ${slug}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    // Check if path is already open
+    const existingTab = findTabByPath(currentWorkspace, resolvedPath);
+    if (existingTab !== undefined) {
+      const updatedTab = updateTabAccessTime(existingTab);
+      currentWorkspace = {
+        ...currentWorkspace,
+        tabs: currentWorkspace.tabs.map((tab) =>
+          tab.id === updatedTab.id ? updatedTab : tab,
+        ),
+        activeTabId: updatedTab.id,
+      };
+
+      await addToRecentDirectories(updatedTab, recentStore);
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
+
+      const response: OpenTabResponse = {
+        tab: updatedTab,
+        workspace: currentWorkspace,
+      };
+      return c.json(response);
+    }
+
+    if (isWorkspaceFull(currentWorkspace)) {
+      const errorResponse: ErrorResponse = {
+        error: `Workspace is full (maximum ${currentWorkspace.maxTabs} tabs)`,
+        code: 409,
+      };
+      return c.json(errorResponse, 409);
+    }
+
+    try {
+      const tab: WorkspaceTab =
+        await contextManager.createContext(resolvedPath);
+      currentWorkspace = {
+        ...currentWorkspace,
+        tabs: [...currentWorkspace.tabs, tab],
+        activeTabId: tab.id,
+      };
+
+      await addToRecentDirectories(tab, recentStore);
+      await persistWorkspaceState(currentWorkspace, openTabsStore);
+
+      if (watcherManager !== undefined) {
+        await watcherManager.addProject(tab.path);
+      }
+
+      const response: OpenTabResponse = {
+        tab,
+        workspace: currentWorkspace,
+      };
+      return c.json(response);
+    } catch (e) {
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to create context";
+      const errorResponse: ErrorResponse = {
+        error: errorMessage,
+        code: 500,
+      };
+      return c.json(errorResponse, 500);
+    }
+  });
+
+  /**
    * DELETE /api/workspace/tabs/:id
    *
    * Close a workspace tab and remove its context.
@@ -335,6 +466,11 @@ export function createWorkspaceRoutes(
    * - 404: Tab not found
    */
   app.delete("/tabs/:id", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -412,6 +548,11 @@ export function createWorkspaceRoutes(
    * - 404: Tab not found
    */
   app.post("/tabs/:id/activate", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     const id = c.req.param("id");
 
     // Validate context ID format
@@ -479,6 +620,11 @@ export function createWorkspaceRoutes(
    * - path (required): Absolute path to remove
    */
   app.delete("/recent", async (c) => {
+    const managementError = ensureProjectManagementEnabled();
+    if (managementError !== null) {
+      return c.json(managementError, 403);
+    }
+
     let requestBody: unknown;
     try {
       requestBody = await c.req.json();

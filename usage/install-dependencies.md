@@ -1,7 +1,7 @@
 # Installing Dependencies for QraftBox
 
-QraftBox requires **Git** and **Claude Code** to be installed on your system.
-This guide walks you through installing both tools on macOS, Linux, and Windows using various package managers.
+QraftBox requires **Git**. For AI features, install **Claude Code** and/or **Codex CLI** depending on which model/vendor profile you use.
+This guide focuses on Git and Claude Code installation on macOS, Linux, and Windows using various package managers.
 
 > [Japanese / 日本語はこちら](#日本語-japanese)
 
@@ -237,7 +237,9 @@ You should see the version number printed. On first run, Claude Code will guide 
 
 ## Next Steps
 
-Once both Git and Claude Code are installed, you can proceed with setting up and running QraftBox.
+Once Git and your selected AI CLI are installed, you can proceed with setting up and running QraftBox.
+
+If you plan to use OpenAI/Codex profiles, make sure the `codex` command is available in your `PATH`.
 
 ---
 
@@ -245,8 +247,8 @@ Once both Git and Claude Code are installed, you can proceed with setting up and
 
 ## 日本語 (Japanese)
 
-QraftBox を使用するには **Git** と **Claude Code** のインストールが必要です。
-このガイドでは、macOS、Linux、Windows での各種パッケージマネージャーを使った両ツールのインストール方法を初心者向けに説明します。
+QraftBox の実行には **Git** が必要です。AI機能を使う場合は、利用するモデル/ベンダープロファイルに応じて **Claude Code** または **Codex CLI** をインストールしてください。
+このガイドでは、macOS、Linux、Windows での各種パッケージマネージャーを使った Git と Claude Code のインストール方法を初心者向けに説明します。
 
 > [English / 英語版はこちら](#installing-dependencies-for-qraftbox)
 
@@ -479,4 +481,6 @@ claude --version
 
 ### 次のステップ
 
-Git と Claude Code の両方がインストールできたら、QraftBox のセットアップと実行に進むことができます。
+Git と利用するAI CLIの準備ができたら、QraftBox のセットアップと実行に進むことができます。
+
+OpenAI/Codex プロファイルを使用する場合は、`codex` コマンドが `PATH` から実行できる状態にしてください。

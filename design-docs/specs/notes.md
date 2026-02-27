@@ -24,12 +24,13 @@ This file captures as-built constraints, operational considerations, and known g
 
 ## AI Integration
 
-- AI execution is delegated to `claude-code-agent` via `AgentRunner`.
+- AI execution is delegated by `AgentRunner` to local AI CLIs (Claude/Codex).
 - Prompt queue and session mapping are persisted to allow recovery after restarts.
 
 ## Known Gaps (As-Built)
 
 - GitHub/PR routes are implemented but not mounted in `mountAllRoutes`. The context routes currently use stub Hono apps.
+- Comment routes are implemented in `src/server/routes/comments.ts` but are not mounted in the active API registry.
 - The CLI uses `-h` for host, so help is only available as `--help`.
 
 ## Document Coverage Notes

@@ -1012,6 +1012,53 @@ describe("createSessionManager", () => {
       mappingStore.close();
     });
 
+    test("force_new_session bypasses resume mapping for an existing qraft session", async () => {
+      const mappingStore = createInMemorySessionMappingStore();
+      const clientQraftId = "qs_force_new_session_1" as QraftAiSessionId;
+      mappingStore.upsert(
+        "claude-existing-123" as ClaudeSessionId,
+        "/tmp/test",
+        "worktree_test" as WorktreeId,
+        "qraftbox",
+        clientQraftId,
+      );
+
+      let capturedResumeSessionId: ClaudeSessionId | undefined;
+      const captureRunner: AgentRunner = {
+        execute(params) {
+          capturedResumeSessionId = params.resumeSessionId;
+          return {
+            async *events() {
+              yield { type: "completed", success: true } as AgentEvent;
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        mappingStore,
+        undefined,
+        captureRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "restart with edited first prompt",
+        project_path: "/tmp/test",
+        qraft_ai_session_id: clientQraftId,
+        force_new_session: true,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(capturedResumeSessionId).toBeUndefined();
+      mappingStore.close();
+    });
+
     test("does not dispatch same clientSessionId concurrently", async () => {
       const config: AIConfig = {
         ...DEFAULT_AI_CONFIG,

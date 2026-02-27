@@ -33,9 +33,9 @@
   import ProjectSelectionScreen from "../components/app/ProjectSelectionScreen.svelte";
   import CommitsScreen from "../components/commits/CommitsScreen.svelte";
   import TerminalScreen from "../components/terminal/TerminalScreen.svelte";
-  import ToolsScreen from "../components/tools/ToolsScreen.svelte";
   import SystemInfoScreen from "../components/system-info/SystemInfoScreen.svelte";
-  import ModelConfigScreen from "../components/model-config/ModelConfigScreen.svelte";
+  import ModelProfilesScreen from "../components/model-config/ModelProfilesScreen.svelte";
+  import ActionDefaultsScreen from "../components/model-config/ActionDefaultsScreen.svelte";
   import MergeBranchDialog from "../components/MergeBranchDialog.svelte";
 
   function shouldDefaultToCollapsedSidebar(): boolean {
@@ -83,6 +83,7 @@
   let workspaceTabs = $state<ServerTab[]>([]);
   let currentScreen = $state<ScreenType>(screenFromHash(window.location.hash));
   let recentProjects = $state<RecentProject[]>([]);
+  let canManageProjects = $state(true);
   // Add-project state
   let newProjectPath = $state("");
   let newProjectError = $state<string | null>(null);
@@ -169,6 +170,14 @@
     selectedPath !== null
       ? (diffFiles.find((f) => f.path === selectedPath) ?? null)
       : (diffFiles[0] ?? null),
+  );
+
+  /**
+   * Active file path for content loading and view-mode decisions.
+   * Falls back to the currently selected diff file when selectedPath is null.
+   */
+  const activePath = $derived(
+    selectedPath ?? (selectedFile !== null ? selectedFile.path : null),
   );
 
   /**
@@ -276,7 +285,7 @@
    * Whether the selected path has a diff entry
    */
   const selectedHasDiff = $derived(
-    selectedPath !== null && diffFiles.some((f) => f.path === selectedPath),
+    activePath !== null && diffFiles.some((f) => f.path === activePath),
   );
 
   /**
@@ -321,12 +330,15 @@
     setNewProjectLoading: (value) => (newProjectLoading = value),
     setPickingDirectory: (value) => (pickingDirectory = value),
     setDirectoryPickerOpen: (value) => (directoryPickerOpen = value),
+    getCanManageProjects: () => canManageProjects,
+    setCanManageProjects: (value) => (canManageProjects = value),
     isMobileDirectoryPickerClient: () => shouldUseBrowserDirectoryPicker(),
     setLoading: (value) => (loading = value),
     getFileTreeMode: () => fileTreeMode,
     setFileTreeMode: (value) => (fileTreeMode = value),
     setShowAllFiles: (value) => (showAllFiles = value),
     setDiffFiles: (value) => (diffFiles = value),
+    getSelectedPath: () => selectedPath,
     setSelectedPath: (value) => (selectedPath = value),
     setAllFilesTree: (value) => (allFilesTree = value as FileNode | null),
     setAllFilesTreeStale: (value) => (allFilesTreeStale = value),
@@ -397,6 +409,22 @@
       sidebarWidth + SIDEBAR_WIDTH_STEP,
     );
     saveSidebarWidth("qraftbox-sidebar-width", sidebarWidth);
+  }
+
+  async function handleGitActionSuccess(
+    action: "commit" | "push" | "pull" | "pr" | "init",
+  ): Promise<void> {
+    if (action === "init") {
+      await init();
+      return;
+    }
+    if (contextId !== null) {
+      await fetchDiff(contextId);
+      // Pull may change the full filesystem snapshot; refresh all-files tree when visible.
+      if (action === "pull" && fileTreeMode === "all") {
+        await refreshAllFiles(contextId);
+      }
+    }
   }
 
   const aiFeatureController = createAIFeatureController({
@@ -546,11 +574,11 @@
 
   // Fetch file content when selecting a non-diff file OR when full-file mode is active
   $effect(() => {
-    if (selectedPath !== null && contextId !== null) {
+    if (activePath !== null && contextId !== null) {
       if (effectiveViewMode === "full-file") {
-        void fetchFileContent(contextId, selectedPath);
+        void fetchFileContent(contextId, activePath);
       } else if (!selectedHasDiff && fileTreeMode === "all") {
-        void fetchFileContent(contextId, selectedPath);
+        void fetchFileContent(contextId, activePath);
       } else {
         fileContent = null;
       }
@@ -568,6 +596,48 @@
       sidebarCollapsed = true;
     }
   });
+
+  // Keep diff/file tree in sync even when git state changes outside file writes
+  // (e.g. commits from terminal update .git metadata but not working files).
+  $effect(() => {
+    if (contextId === null || !activeTabIsGitRepo) {
+      return;
+    }
+
+    const refreshGitState = (): void => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+      if (currentScreen !== "files" && currentScreen !== "ai-session") {
+        return;
+      }
+      const currentContextId = contextId;
+      if (currentContextId === null) {
+        return;
+      }
+      // Poll only git-derived state for external terminal git operations.
+      void fetchDiff(currentContextId);
+    };
+
+    const handleWindowFocus = (): void => {
+      refreshGitState();
+    };
+    const handleVisibilityChange = (): void => {
+      if (document.visibilityState === "visible") {
+        refreshGitState();
+      }
+    };
+
+    const pollTimer = setInterval(refreshGitState, 15000);
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(pollTimer);
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  });
 </script>
 
 <div class="flex flex-col h-[100dvh] bg-bg-primary text-text-primary">
@@ -577,12 +647,12 @@
     {contextId}
     {projectPath}
     {activeTabIsGitRepo}
-    hasChanges={diffFiles.length > 0}
     {availableRecentProjects}
     {newProjectPath}
     {newProjectError}
     {newProjectLoading}
     {pickingDirectory}
+    {canManageProjects}
     onNavigateToScreen={navigateToScreen}
     onSwitchProject={switchProject}
     onCloseProjectTab={closeProjectTab}
@@ -596,11 +666,7 @@
     onRemoveRecentProject={removeRecentProject}
     onPickDirectory={pickDirectory}
     onWorktreeSwitch={init}
-    onPushSuccess={async () => {
-      if (contextId !== null) {
-        await fetchDiff(contextId);
-      }
-    }}
+    onPushSuccess={handleGitActionSuccess}
   />
 
   <!-- Main Area -->
@@ -612,11 +678,13 @@
         {sidebarCollapsed}
         {sidebarWidth}
         {allFilesLoading}
+        {projectPath}
         {fileTree}
         {fileTreeMode}
         {selectedPath}
         {diffFiles}
         {contextId}
+        isGitRepo={activeTabIsGitRepo}
         {selectedFile}
         {effectiveViewMode}
         {selectedHasDiff}
@@ -671,6 +739,7 @@
         onWidenSidebar={widenSidebar}
         onSetViewMode={setViewMode}
         onSubmitPrompt={submitPrompt}
+        onGitActionSuccess={handleGitActionSuccess}
       />
     {:else if currentScreen === "ai-session"}
       <AiSessionScreen
@@ -769,6 +838,7 @@
           {newProjectError}
           {chooseDirectoryLabel}
           {availableRecentProjects}
+          {canManageProjects}
           onPickDirectory={pickDirectory}
           onNewProjectPathChange={(value) => {
             newProjectPath = value;
@@ -778,20 +848,20 @@
           onRemoveRecentProject={removeRecentProject}
         />
       </main>
-    {:else if currentScreen === "tools"}
-      <!-- Tools Screen -->
-      <main class="flex-1 overflow-hidden">
-        <ToolsScreen />
-      </main>
     {:else if currentScreen === "system-info"}
       <!-- System Info Screen -->
       <main class="flex-1 overflow-hidden">
         <SystemInfoScreen />
       </main>
-    {:else if currentScreen === "model-config"}
-      <!-- Model Config Screen -->
+    {:else if currentScreen === "model-profiles"}
+      <!-- Model Profiles Screen -->
       <main class="flex-1 overflow-hidden">
-        <ModelConfigScreen />
+        <ModelProfilesScreen />
+      </main>
+    {:else if currentScreen === "action-defaults"}
+      <!-- Action Defaults Screen -->
+      <main class="flex-1 overflow-hidden">
+        <ActionDefaultsScreen {contextId} />
       </main>
     {/if}
   </div>

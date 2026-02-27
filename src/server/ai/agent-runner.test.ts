@@ -7,13 +7,18 @@
 
 import { describe, test, expect } from "vitest";
 import {
+  buildCodexMessageSnapshots,
+  buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
+  parseCodexJsonLine,
+  shouldEmitCodexSessionDetected,
   type AgentEvent,
   type AgentRunParams,
 } from "./agent-runner.js";
 import type { ClaudeSessionId } from "../../types/ai.js";
 import { DEFAULT_AI_CONFIG } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 
 /**
  * Create test agent run parameters
@@ -91,6 +96,139 @@ describe("extractClaudeSessionIdFromMessage()", () => {
       sessionId: "sdk-session-1",
     });
     expect(result).toBeUndefined();
+  });
+});
+
+describe("buildCodexExecCommand()", () => {
+  test("builds codex exec --json command for new sessions", () => {
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Investigate latency",
+        aiAgent: AIAgent.CODEX,
+        model: "gpt-5.3-codex",
+        additionalArgs: ["--dangerously-bypass-approvals-and-sandbox"],
+      }),
+    );
+
+    expect(command.slice(0, 3)).toEqual(["codex", "exec", "--json"]);
+    expect(command).toContain("--model");
+    expect(command).toContain("gpt-5.3-codex");
+    expect(command).toContain("--dangerously-bypass-approvals-and-sandbox");
+    expect(command).not.toContain("--print");
+    expect(command).not.toContain("--output-format");
+    expect(command[command.length - 1]).toBe("Investigate latency");
+  });
+
+  test("builds codex exec resume --json command for resumed sessions", () => {
+    const resumeId = "0dc4ee1f-2e78-462f-a400-16d14ab6a418" as ClaudeSessionId;
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Continue from previous task",
+        aiAgent: AIAgent.CODEX,
+        resumeSessionId: resumeId,
+        model: "gpt-5.3-codex",
+      }),
+    );
+
+    expect(command.slice(0, 4)).toEqual(["codex", "exec", "resume", "--json"]);
+    expect(command).toContain(resumeId);
+    expect(command[command.length - 1]).toBe("Continue from previous task");
+  });
+
+  test("adds --image args when image paths are provided", () => {
+    const command = buildCodexExecCommand(
+      createTestRunParams({
+        prompt: "Inspect screenshot",
+        aiAgent: AIAgent.CODEX,
+      }),
+      ["/tmp/one.png", "/tmp/two.jpg"],
+    );
+
+    expect(command).toContain("--image");
+    expect(command).toContain("/tmp/one.png");
+    expect(command).toContain("/tmp/two.jpg");
+  });
+});
+
+describe("parseCodexJsonLine()", () => {
+  test("parses session from thread.started", () => {
+    const line =
+      '{"type":"thread.started","thread_id":"019c8ded-ecd4-7db2-a89e-450cb3445c6e"}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "session_detected",
+      sessionId: "019c8ded-ecd4-7db2-a89e-450cb3445c6e",
+    });
+  });
+
+  test("parses assistant text from item.completed agent_message", () => {
+    const line =
+      '{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"hello from codex"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses delta assistant text from item.delta", () => {
+    const line =
+      '{"type":"item.delta","item":{"id":"item_1","type":"agent_message"},"delta":{"text":"partial"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "partial",
+      isDelta: true,
+    });
+  });
+});
+
+describe("shouldEmitCodexSessionDetected()", () => {
+  test("emits when no session was previously detected", () => {
+    const nextSessionId = "codex-session-1" as ClaudeSessionId;
+    expect(shouldEmitCodexSessionDetected(undefined, nextSessionId)).toBe(true);
+  });
+
+  test("does not emit duplicate detection for same session ID", () => {
+    const sessionId = "codex-session-1" as ClaudeSessionId;
+    expect(shouldEmitCodexSessionDetected(sessionId, sessionId)).toBe(false);
+  });
+
+  test("emits when resumed session resolves to a different session ID", () => {
+    const resumeSessionId = "codex-session-old" as ClaudeSessionId;
+    const detectedSessionId = "codex-session-new" as ClaudeSessionId;
+    expect(
+      shouldEmitCodexSessionDetected(resumeSessionId, detectedSessionId),
+    ).toBe(true);
+  });
+});
+
+describe("buildCodexMessageSnapshots()", () => {
+  test("builds character-by-character snapshots for an initial full message", () => {
+    const snapshots = buildCodexMessageSnapshots("", "hi", false);
+    expect(snapshots).toEqual(["h", "hi"]);
+  });
+
+  test("builds character-by-character snapshots for delta content", () => {
+    const snapshots = buildCodexMessageSnapshots("hel", "lo", true);
+    expect(snapshots).toEqual(["hell", "hello"]);
+  });
+
+  test("builds character-by-character suffix snapshots for full content updates", () => {
+    const snapshots = buildCodexMessageSnapshots("hello", "hello world", false);
+    expect(snapshots).toEqual([
+      "hello ",
+      "hello w",
+      "hello wo",
+      "hello wor",
+      "hello worl",
+      "hello world",
+    ]);
+  });
+
+  test("falls back to a single snapshot when content is not a monotonic extension", () => {
+    const snapshots = buildCodexMessageSnapshots("hello world", "hi", false);
+    expect(snapshots).toEqual(["hi"]);
   });
 });
 
