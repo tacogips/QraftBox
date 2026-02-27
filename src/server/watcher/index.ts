@@ -141,7 +141,9 @@ export function createFileWatcher(
     }
 
     const normalizedPath = relativePath.replace(/\\/g, "/");
-    const segments = normalizedPath.split("/").filter((segment) => segment.length > 0);
+    const segments = normalizedPath
+      .split("/")
+      .filter((segment) => segment.length > 0);
 
     for (const segment of segments) {
       if (SKIP_WATCH_DIR_NAMES.has(segment)) {
