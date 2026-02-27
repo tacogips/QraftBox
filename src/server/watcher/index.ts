@@ -33,22 +33,37 @@ import { createEventCollector } from "./debounce.js";
 import { createLogger } from "../logger.js";
 
 /**
- * Directories to skip during directory walking and watching.
- * These directories are never watched to avoid ENOSPC errors from excessive inotify watches.
+ * Directory names to skip during directory walking and watching.
+ * These directories are never watched at any depth to avoid FD/inotify exhaustion.
  */
-const SKIP_WATCH_PREFIXES = [
-  "node_modules/",
-  ".git/",
-  "dist/",
-  ".direnv/",
-  ".next/",
-  ".nuxt/",
-  ".svelte-kit/",
-  ".cache/",
-  "build/",
-  ".vscode/",
-  ".idea/",
-] as const;
+const SKIP_WATCH_DIR_NAMES = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  ".direnv",
+  ".venv",
+  "venv",
+  "__pycache__",
+  ".pytest_cache",
+  ".mypy_cache",
+  ".ruff_cache",
+  ".tox",
+  ".nox",
+  ".eggs",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".gradle",
+  ".cache",
+  "build",
+  "bin",
+  "out",
+  "target",
+  ".metadata",
+  ".settings",
+  ".vscode",
+  ".idea",
+]);
 
 /**
  * File watcher interface for monitoring file system changes
@@ -121,18 +136,19 @@ export function createFileWatcher(
    * Check if a relative path should be skipped during directory walking
    */
   function shouldSkipDirectory(relativePath: string): boolean {
-    const normalizedPath =
-      relativePath === "" ? "" : `${relativePath.replace(/\\/g, "/")}/`;
+    if (relativePath === "") {
+      return false;
+    }
 
-    for (const prefix of SKIP_WATCH_PREFIXES) {
-      if (
-        normalizedPath === prefix ||
-        normalizedPath.startsWith(prefix) ||
-        prefix.startsWith(normalizedPath)
-      ) {
+    const normalizedPath = relativePath.replace(/\\/g, "/");
+    const segments = normalizedPath.split("/").filter((segment) => segment.length > 0);
+
+    for (const segment of segments) {
+      if (SKIP_WATCH_DIR_NAMES.has(segment)) {
         return true;
       }
     }
+
     return false;
   }
 
