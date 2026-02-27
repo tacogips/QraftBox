@@ -88,6 +88,22 @@ test('second prompt continues current session id', async ({ page }) => {
       return;
     }
 
+    if (
+      path === `/api/ctx/${contextId}/claude-sessions/sessions` &&
+      method === 'GET'
+    ) {
+      await route.fulfill({
+        status: 200,
+        json: {
+          sessions: [],
+          total: 0,
+          offset: 0,
+          limit: 20,
+        },
+      });
+      return;
+    }
+
     if (path === '/api/ai/submit' && method === 'POST') {
       const body = req.postDataJSON();
       submitBodies.push(body);
@@ -107,7 +123,7 @@ test('second prompt continues current session id', async ({ page }) => {
 
   await page.goto('/');
   await page.getByRole('button', { name: 'Sessions' }).click();
-  await page.getByRole('button', { name: 'Create new session' }).click();
+  await page.getByRole('button', { name: /create new session/i }).click();
 
   const promptInput = page.getByPlaceholder('Add the next instruction for this session');
   await expect(promptInput).toBeVisible();
