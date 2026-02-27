@@ -490,7 +490,14 @@
           {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={(startLine, endLine, side, filePath, prompt, immediate) =>
+          onCommentSubmit={(
+            startLine,
+            endLine,
+            side,
+            filePath,
+            prompt,
+            immediate,
+          ) =>
             handleInlineCommentSubmit(
               startLine,
               endLine,
@@ -527,7 +534,14 @@
           {onSetViewMode}
           onNavigatePrev={navigatePrev}
           onNavigateNext={navigateNext}
-          onCommentSubmit={(startLine, endLine, side, filePath, prompt, immediate) =>
+          onCommentSubmit={(
+            startLine,
+            endLine,
+            side,
+            filePath,
+            prompt,
+            immediate,
+          ) =>
             handleInlineCommentSubmit(
               startLine,
               endLine,
