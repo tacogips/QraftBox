@@ -52,7 +52,9 @@ tmp/
 temp/
 .cache/
 .tmp-*
+tmp-*
 tmp-codex/
+tmp-codex-*.mts
 
 # Implementation progress lock file
 impl-plans/.progress.lock

@@ -57,6 +57,7 @@ When a user asks to commit changes, automatically proceed with staging and commi
 **Automatic Commit Process**: When the user requests a commit, automatically:
 
 0) Run a mandatory pre-commit scrub before staging:
+- When creating temporary files/directories that should not be git-managed, always use the `tmp-` prefix in their names
 - Remove development junk files/directories regardless of name prefix by cleaning ignored local artifacts from repository root (for example `git clean -fdX` after preview), plus explicit known scratch paths when needed
 - Remove or redact credential-like content from tracked changes (API keys, tokens, secrets, private keys, auth headers, cookies, `.env`-style secret values)
 - Remove or redact machine-specific absolute paths that should not be published (for example `/home/<user>/...`, `/Users/<user>/...`, `C:\Users\<user>\...`; generic system paths like `/var/...` are allowed when non-sensitive)
