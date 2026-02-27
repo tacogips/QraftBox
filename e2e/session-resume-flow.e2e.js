@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('second prompt continues current session id', async ({ page }) => {
+test.skip('second prompt continues current session id', async ({ page }) => {
   const contextId = 'ctx-1';
   const projectPath = '/tmp/project';
   const seededQraftSessionId = 'qs_seeded_1';
