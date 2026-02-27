@@ -346,6 +346,18 @@ Then access it using your computer's IP address from the other device (e.g., `ht
 
   ![AI session history](usage/resource/session_history.png)
 
+- Session list
+
+  ![Session list](usage/resource/session_list_2026-02-27.png)
+
+- AI session detail
+
+  ![AI session detail](usage/resource/ai_session_2026-02-27.png)
+
+- Ask AI for code lines
+
+  ![Ask AI for code lines](usage/resource/ask_ai_for_code_lines_2026-02-27.png)
+
 - Browser terminal
 
   ![Browser terminal](usage/resource/terminal.png)
@@ -807,6 +819,18 @@ qraftbox --host 0.0.0.0
 - AIセッション履歴
 
   ![AIセッション履歴](usage/resource/session_history.png)
+
+- セッション一覧
+
+  ![セッション一覧](usage/resource/session_list_2026-02-27.png)
+
+- AIセッション詳細
+
+  ![AIセッション詳細](usage/resource/ai_session_2026-02-27.png)
+
+- AIにコード行を依頼
+
+  ![AIにコード行を依頼](usage/resource/ask_ai_for_code_lines_2026-02-27.png)
 
 - ブラウザターミナル
 
