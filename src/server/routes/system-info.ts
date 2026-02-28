@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { SdkManager } from "claude-code-agent/src/sdk/agent.js";
 import { createProductionContainer } from "claude-code-agent/src/container.js";
+import { getCodexCliVersion } from "codex-agent";
 import type {
   SystemInfo,
   VersionInfo,
@@ -108,33 +109,10 @@ async function getClaudeCodeVersion(): Promise<VersionInfo> {
  */
 async function getCodexCodeVersion(): Promise<VersionInfo> {
   try {
-    const codexAgentModule = (await import("codex-agent")) as {
-      readonly getCodexCliVersion?:
-        | (() => Promise<{
-            readonly version: string | null;
-            readonly error: string | null;
-          }>)
-        | undefined;
-    };
-
-    if (typeof codexAgentModule.getCodexCliVersion === "function") {
-      const result = await codexAgentModule.getCodexCliVersion();
-      return {
-        version: result.version,
-        error: result.error,
-      };
-    }
-
-    const fallback = await $`codex --version`.quiet().nothrow();
-    if (fallback.exitCode !== 0) {
-      return {
-        version: null,
-        error: "codex command failed or not found",
-      };
-    }
+    const result = await getCodexCliVersion();
     return {
-      version: fallback.stdout.toString().trim(),
-      error: null,
+      version: result.version,
+      error: result.error,
     };
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
