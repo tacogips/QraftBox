@@ -6,8 +6,8 @@
       "name": "qraftbox",
       "dependencies": {
         "@octokit/rest": "22.0.1",
-        "claude-code-agent": "github:tacogips/claude-code-agent#4f9d8f0debc8b195124de020f76e0cbbfccb3684",
-        "codex-agent": "github:tacogips/codex-agent#ea567f282d3ecd5aa06abf68e408f7403d69ebc9",
+        "claude-code-agent": "github:tacogips/claude-code-agent#b02ed68494f3385e1ddb20106b1f10e41daa021b",
+        "codex-agent": "github:tacogips/codex-agent#edd20841a5c9e3f1f344fb349db49499a6a9c84d",
         "commander": "14.0.3",
         "hono": "4.11.7",
       },
@@ -223,11 +223,11 @@
 
     "check-error": ["check-error@2.1.3", "", {}, "sha512-PAJdDJusoxnwm1VwW07VWwUN1sl7smmC3OKggvndJFadxxDRyFJBX/ggnu/KE4kQAB7a3Dp8f/YXC1FlUprWmA=="],
 
-    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#4f9d8f0", { "dependencies": { "@elysiajs/cors": "1.4.1", "@elysiajs/static": "1.4.7", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-4f9d8f0"],
+    "claude-code-agent": ["claude-code-agent@github:tacogips/claude-code-agent#b02ed68", { "dependencies": { "@elysiajs/cors": "1.4.1", "@elysiajs/static": "1.4.7", "commander": "14.0.2", "consola": "3.4.2", "elysia": "1.4.20", "minimatch": "10.1.1", "mitt": "3.0.1", "mustache": "4.2.0", "nanoid": "5.1.6", "neverthrow": "8.2.0", "perfect-debounce": "2.0.0", "slugify": "1.6.6" }, "bin": { "claude-code-agent": "./bin/claude-code-agent" } }, "tacogips-claude-code-agent-b02ed68"],
 
     "clsx": ["clsx@2.1.1", "", {}, "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA=="],
 
-    "codex-agent": ["codex-agent@github:tacogips/codex-agent#ea567f2", {}, "tacogips-codex-agent-ea567f2"],
+    "codex-agent": ["codex-agent@github:tacogips/codex-agent#edd2084", {}, "tacogips-codex-agent-edd2084"],
 
     "commander": ["commander@14.0.3", "", {}, "sha512-H+y0Jo/T1RZ9qPP4Eh1pkcQcLRglraJaSLoyOtHxu6AapkjWVCy2Sit1QQ4x3Dng8qDlSsZEet7g5Pq06MvTgw=="],
 

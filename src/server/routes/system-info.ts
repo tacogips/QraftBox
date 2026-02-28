@@ -9,6 +9,8 @@ import { Hono } from "hono";
 import { $ } from "bun";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { SdkManager } from "claude-code-agent/src/sdk/agent.js";
+import { createProductionContainer } from "claude-code-agent/src/container.js";
 import type {
   SystemInfo,
   VersionInfo,
@@ -24,6 +26,15 @@ import type {
 interface ErrorResponse {
   readonly error: string;
   readonly code: number;
+}
+
+let claudeAgentPromise: Promise<SdkManager> | null = null;
+
+async function getClaudeAgent(): Promise<SdkManager> {
+  if (claudeAgentPromise === null) {
+    claudeAgentPromise = SdkManager.create(createProductionContainer());
+  }
+  return await claudeAgentPromise;
 }
 
 /**
@@ -77,21 +88,11 @@ async function getGitVersion(): Promise<VersionInfo> {
  */
 async function getClaudeCodeVersion(): Promise<VersionInfo> {
   try {
-    const result = await $`claude --version`.quiet().nothrow();
-
-    if (result.exitCode !== 0) {
-      return {
-        version: null,
-        error: "claude command failed or not found",
-      };
-    }
-
-    const output = result.stdout.toString().trim();
-
-    // Return the full output as version string
+    const agent = await getClaudeAgent();
+    const versions = await agent.getToolVersions();
     return {
-      version: output,
-      error: null,
+      version: versions.claude.version,
+      error: versions.claude.error,
     };
   } catch (e) {
     const errorMessage = e instanceof Error ? e.message : "Unknown error";
@@ -107,17 +108,32 @@ async function getClaudeCodeVersion(): Promise<VersionInfo> {
  */
 async function getCodexCodeVersion(): Promise<VersionInfo> {
   try {
-    const result = await $`codex --version`.quiet().nothrow();
+    const codexAgentModule = (await import("codex-agent")) as {
+      readonly getCodexCliVersion?:
+        | (() => Promise<{
+            readonly version: string | null;
+            readonly error: string | null;
+          }>)
+        | undefined;
+    };
 
-    if (result.exitCode !== 0) {
+    if (typeof codexAgentModule.getCodexCliVersion === "function") {
+      const result = await codexAgentModule.getCodexCliVersion();
+      return {
+        version: result.version,
+        error: result.error,
+      };
+    }
+
+    const fallback = await $`codex --version`.quiet().nothrow();
+    if (fallback.exitCode !== 0) {
       return {
         version: null,
         error: "codex command failed or not found",
       };
     }
-
     return {
-      version: result.stdout.toString().trim(),
+      version: fallback.stdout.toString().trim(),
       error: null,
     };
   } catch (e) {
