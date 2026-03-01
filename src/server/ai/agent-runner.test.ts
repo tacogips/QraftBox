@@ -8,6 +8,7 @@
 import { describe, test, expect } from "vitest";
 import {
   buildCodexMessageSnapshots,
+  downsampleCodexMessageSnapshots,
   buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
@@ -229,6 +230,21 @@ describe("buildCodexMessageSnapshots()", () => {
   test("falls back to a single snapshot when content is not a monotonic extension", () => {
     const snapshots = buildCodexMessageSnapshots("hello world", "hi", false);
     expect(snapshots).toEqual(["hi"]);
+  });
+});
+
+describe("downsampleCodexMessageSnapshots()", () => {
+  test("returns original snapshots when below maxUpdates", () => {
+    const snapshots = ["a", "ab", "abc"];
+    expect(downsampleCodexMessageSnapshots(snapshots, 10)).toEqual(snapshots);
+  });
+
+  test("keeps first and last snapshots while reducing count", () => {
+    const snapshots = Array.from({ length: 200 }, (_, i) => `m${i + 1}`);
+    const sampled = downsampleCodexMessageSnapshots(snapshots, 80);
+    expect(sampled.length).toBe(80);
+    expect(sampled[0]).toBe("m1");
+    expect(sampled[sampled.length - 1]).toBe("m200");
   });
 });
 

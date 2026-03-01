@@ -30,6 +30,7 @@ describe("System Info Routes", () => {
       expect(body).toHaveProperty("codexCode");
       expect(body).toHaveProperty("models");
       expect(body).toHaveProperty("claudeCodeUsage");
+      expect(body).toHaveProperty("codexCodeUsage");
 
       // Verify git version info structure
       expect(body.git).toHaveProperty("version");
@@ -157,6 +158,35 @@ describe("System Info Routes", () => {
             expect(typeof firstEntry.date).toBe("string");
           }
         }
+      }
+    });
+
+    test("codexCodeUsage has correct structure when available", async () => {
+      const response = await app.request("/");
+      const body = (await response.json()) as SystemInfo;
+
+      if (body.codexCodeUsage !== null) {
+        expect(body.codexCodeUsage).toHaveProperty("totalSessions");
+        expect(body.codexCodeUsage).toHaveProperty("totalMessages");
+        expect(body.codexCodeUsage).toHaveProperty("firstSessionDate");
+        expect(body.codexCodeUsage).toHaveProperty("lastComputedDate");
+        expect(body.codexCodeUsage).toHaveProperty("modelUsage");
+        expect(body.codexCodeUsage).toHaveProperty("recentDailyActivity");
+
+        expect(typeof body.codexCodeUsage.totalSessions).toBe("number");
+        expect(typeof body.codexCodeUsage.totalMessages).toBe("number");
+        expect(
+          body.codexCodeUsage.firstSessionDate === null ||
+            typeof body.codexCodeUsage.firstSessionDate === "string",
+        ).toBe(true);
+        expect(
+          body.codexCodeUsage.lastComputedDate === null ||
+            typeof body.codexCodeUsage.lastComputedDate === "string",
+        ).toBe(true);
+        expect(typeof body.codexCodeUsage.modelUsage).toBe("object");
+        expect(Array.isArray(body.codexCodeUsage.recentDailyActivity)).toBe(
+          true,
+        );
       }
     });
   });

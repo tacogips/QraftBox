@@ -66,4 +66,5 @@ export interface SystemInfo {
   readonly codexCode: VersionInfo;
   readonly models: ModelConfig;
   readonly claudeCodeUsage: ClaudeCodeUsage | null;
+  readonly codexCodeUsage: ClaudeCodeUsage | null;
 }

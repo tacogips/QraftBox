@@ -894,6 +894,8 @@
               followLatest={shouldLiveRefreshTranscript}
               {focusTailNonce}
               showAssistantThinking={shouldShowAssistantThinking}
+              enableAssistantStream={aiAgent === "codex" ||
+                source === "codex-cli"}
               {optimisticUserMessage}
               {optimisticUserStatus}
               {optimisticUserImageAttachments}

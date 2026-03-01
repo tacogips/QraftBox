@@ -29,6 +29,8 @@
     optimisticAssistantMessage?: string | undefined;
     /** Show assistant thinking placeholder while waiting for first response */
     showAssistantThinking?: boolean | undefined;
+    /** Enable live assistant stream updates via transcript SSE endpoint */
+    enableAssistantStream?: boolean | undefined;
     /** Queued user prompts not yet persisted to transcript */
     pendingUserMessages?:
       | readonly {
@@ -69,6 +71,7 @@
     optimisticUserStatus = "queued",
     optimisticAssistantMessage = undefined,
     showAssistantThinking = false,
+    enableAssistantStream = false,
     pendingUserMessages = [],
     optimisticUserImageAttachments = [],
     onRestartSeedChange = undefined,
@@ -178,6 +181,7 @@
   let followLatestWhileNearTail = $state(true);
   let pendingProgrammaticScrollFrames = $state(0);
   let copiedEventId: string | null = $state(null);
+  let streamedAssistantMessage = $state<string | undefined>(undefined);
   let lastInitializedSessionId: string | null = $state(null);
   let optimisticUserMessageSticky: string | undefined = $state(undefined);
   let optimisticUserStatusSticky: "queued" | "running" = $state("queued");
@@ -345,7 +349,9 @@
   );
 
   const normalizedOptimisticAssistant = $derived(
-    normalizeMessageText(optimisticAssistantMessage ?? ""),
+    normalizeMessageText(
+      streamedAssistantMessage ?? optimisticAssistantMessage ?? "",
+    ),
   );
 
   const normalizedChatTextSet = $derived.by(() => {
@@ -458,7 +464,9 @@
 
   const showFilteredOptimisticAssistant = $derived(
     showOptimisticAssistant &&
-      messageMatchesFilter(optimisticAssistantMessage ?? ""),
+      messageMatchesFilter(
+        streamedAssistantMessage ?? optimisticAssistantMessage ?? "",
+      ),
   );
 
   const latestChatEventType = $derived.by(() => {
@@ -497,7 +505,8 @@
    */
   const hasOptimisticContent = $derived(
     (optimisticUserMessageSticky ?? "").length > 0 ||
-      (optimisticAssistantMessage ?? "").length > 0 ||
+      (streamedAssistantMessage ?? optimisticAssistantMessage ?? "").length >
+        0 ||
       pendingQueuedUserMessages.length > 0 ||
       showAssistantThinkingPlaceholder,
   );
@@ -605,8 +614,56 @@
   );
 
   const optimisticAssistantMarkdownHtml = $derived(
-    renderMarkdownCached(stripSystemTags(optimisticAssistantMessage ?? "")),
+    renderMarkdownCached(
+      stripSystemTags(
+        streamedAssistantMessage ?? optimisticAssistantMessage ?? "",
+      ),
+    ),
   );
+
+  $effect(() => {
+    if (lastStickySessionId !== sessionId) {
+      streamedAssistantMessage = undefined;
+    }
+  });
+
+  $effect(() => {
+    if (
+      !enableAssistantStream ||
+      contextId.length === 0 ||
+      sessionId.length === 0
+    ) {
+      return;
+    }
+
+    const stream = new EventSource(
+      `/api/ctx/${contextId}/claude-sessions/sessions/${sessionId}/transcript/stream`,
+    );
+
+    const onAssistantMessage = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+      try {
+        const payload = JSON.parse(event.data) as { content?: unknown };
+        if (
+          typeof payload.content === "string" &&
+          payload.content.trim().length > 0
+        ) {
+          streamedAssistantMessage = payload.content;
+        }
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    };
+
+    stream.addEventListener("assistant_message", onAssistantMessage);
+
+    return () => {
+      stream.removeEventListener("assistant_message", onAssistantMessage);
+      stream.close();
+    };
+  });
 
   /**
    * Fetch transcript events from API

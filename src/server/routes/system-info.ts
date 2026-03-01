@@ -11,7 +11,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { SdkManager } from "claude-code-agent/src/sdk/agent.js";
 import { createProductionContainer } from "claude-code-agent/src/container.js";
-import { getCodexCliVersion } from "codex-agent";
+import { getCodexCliVersion, getCodexUsageStats } from "codex-agent";
 import type {
   SystemInfo,
   VersionInfo,
@@ -278,6 +278,32 @@ async function getClaudeCodeUsage(): Promise<ClaudeCodeUsage | null> {
 }
 
 /**
+ * Get Codex usage statistics from codex-agent SDK.
+ *
+ * Uses codex-agent's native usage aggregation over ~/.codex/sessions.
+ *
+ * @returns Codex usage statistics or null if unavailable
+ */
+async function getCodexCodeUsage(): Promise<ClaudeCodeUsage | null> {
+  try {
+    const stats = await getCodexUsageStats();
+    if (stats === null) {
+      return null;
+    }
+    return {
+      totalSessions: stats.totalSessions,
+      totalMessages: stats.totalMessages,
+      firstSessionDate: stats.firstSessionDate,
+      lastComputedDate: stats.lastComputedDate,
+      modelUsage: stats.modelUsage,
+      recentDailyActivity: stats.recentDailyActivity,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Create system info routes
  *
  * Routes:
@@ -300,16 +326,19 @@ export function createSystemInfoRoutes(modelConfig: ModelConfig): Hono {
    * - codexCode: Codex version information (version string or error)
    * - models: Model configuration (promptModel and assistantModel)
    * - claudeCodeUsage: Claude Code usage statistics (or null if unavailable)
+   * - codexCodeUsage: Codex usage statistics (or null if unavailable)
    */
   app.get("/", async (c) => {
     try {
       // Fetch versions and usage data in parallel
-      const [git, claudeCode, codexCode, claudeCodeUsage] = await Promise.all([
-        getGitVersion(),
-        getClaudeCodeVersion(),
-        getCodexCodeVersion(),
-        getClaudeCodeUsage(),
-      ]);
+      const [git, claudeCode, codexCode, claudeCodeUsage, codexCodeUsage] =
+        await Promise.all([
+          getGitVersion(),
+          getClaudeCodeVersion(),
+          getCodexCodeVersion(),
+          getClaudeCodeUsage(),
+          getCodexCodeUsage(),
+        ]);
 
       const response: SystemInfo = {
         git,
@@ -317,6 +346,7 @@ export function createSystemInfoRoutes(modelConfig: ModelConfig): Hono {
         codexCode,
         models: modelConfig,
         claudeCodeUsage,
+        codexCodeUsage,
       };
 
       return c.json(response);
