@@ -1042,14 +1042,6 @@ class CodexAgentRunner implements AgentRunner {
     const channel = new EventChannel<AgentEvent>();
     let started = false;
     let cancelled = false;
-    let codexProcess:
-      | {
-          readonly stdout: ReadableStream<Uint8Array>;
-          readonly stderr: ReadableStream<Uint8Array>;
-          readonly exited: Promise<number>;
-          kill(): void;
-        }
-      | undefined;
     let runningSession: CodexStreamingSession | undefined;
 
     const startExecution = async (): Promise<void> => {
@@ -1057,80 +1049,6 @@ class CodexAgentRunner implements AgentRunner {
         let streamedAssistantContent = "";
         let detectedSessionId: ClaudeSessionId | undefined =
           params.resumeSessionId;
-        const emitParsedEvent = async (
-          parsed: CodexParsedEvent,
-        ): Promise<void> => {
-          if (parsed === null) {
-            return;
-          }
-          if (parsed.type === "session_detected") {
-            if (
-              shouldEmitCodexSessionDetected(
-                detectedSessionId,
-                parsed.sessionId,
-              )
-            ) {
-              channel.push({
-                type: "claude_session_detected",
-                claudeSessionId: parsed.sessionId,
-              });
-            }
-            detectedSessionId = parsed.sessionId;
-            return;
-          }
-          if (parsed.type === "message") {
-            const snapshots = downsampleCodexMessageSnapshots(
-              buildCodexMessageSnapshots(
-                streamedAssistantContent,
-                parsed.content,
-                parsed.isDelta,
-              ),
-              80,
-            );
-            const shouldPace = parsed.isDelta !== true && snapshots.length > 1;
-            for (let index = 0; index < snapshots.length; index += 1) {
-              const snapshot = snapshots[index];
-              if (snapshot === undefined) {
-                continue;
-              }
-              streamedAssistantContent = snapshot;
-              channel.push({
-                type: "message",
-                role: "assistant",
-                content: snapshot,
-              });
-              channel.push({ type: "activity", activity: undefined });
-              if (shouldPace && index < snapshots.length - 1) {
-                await Bun.sleep(16);
-              }
-            }
-            return;
-          }
-          if (parsed.type === "tool_call") {
-            channel.push({
-              type: "tool_call",
-              toolName: parsed.toolName,
-              input: {},
-            });
-            channel.push({
-              type: "activity",
-              activity: `Using ${parsed.toolName}...`,
-            });
-            return;
-          }
-          if (parsed.type === "tool_result") {
-            channel.push({
-              type: "tool_result",
-              toolName: parsed.toolName,
-              output: undefined,
-              isError: parsed.isError,
-            });
-            channel.push({
-              type: "activity",
-              activity: `Processing ${parsed.toolName} result...`,
-            });
-          }
-        };
 
         const codexAttachments = toCodexAgentAttachments(params.attachments);
         const imagePaths = codexAttachments
@@ -1138,110 +1056,35 @@ class CodexAgentRunner implements AgentRunner {
             attachment.type === "path",
           )
           .map((attachment) => attachment.path);
-        const streamToText = async (
-          stream: ReadableStream<Uint8Array>,
-        ): Promise<string> => {
-          const decoder = new TextDecoder();
-          let text = "";
-          for await (const chunk of stream) {
-            text += decoder.decode(chunk, { stream: true });
-          }
-          text += decoder.decode();
-          return text;
-        };
-
-        const runViaCodexCliJson = async (): Promise<{
-          readonly exitCode: number;
-          readonly stderrText: string;
-        }> => {
-          const command = buildCodexExecCommand(params, imagePaths);
-          const spawned = Bun.spawn({
-            cmd: command,
-            cwd: params.projectPath,
-            env: {
-              ...process.env,
-              ...buildAgentAuthEnv("openai", params.authMode),
-            },
-            stdout: "pipe",
-            stderr: "pipe",
-          });
-          codexProcess = spawned;
-          const stderrPromise = streamToText(spawned.stderr);
-          const decoder = new TextDecoder();
-          let buffered = "";
-
-          for await (const chunk of spawned.stdout) {
-            if (cancelled) {
-              break;
-            }
-            buffered += decoder.decode(chunk, { stream: true });
-            let newlineIndex = buffered.indexOf("\n");
-            while (newlineIndex >= 0) {
-              const line = buffered.slice(0, newlineIndex);
-              buffered = buffered.slice(newlineIndex + 1);
-              await emitParsedEvent(parseCodexJsonLine(line));
-              newlineIndex = buffered.indexOf("\n");
-            }
-          }
-
-          buffered += decoder.decode();
-          if (buffered.trim().length > 0) {
-            await emitParsedEvent(parseCodexJsonLine(buffered));
-          }
-
-          const exitCode = await spawned.exited;
-          const stderrText = (await stderrPromise).trim();
-          codexProcess = undefined;
-          return { exitCode, stderrText };
-        };
-
-        if (params.resumeSessionId !== undefined) {
-          const directResult = await runViaCodexCliJson();
-
-          if (cancelled) {
-            channel.push({ type: "completed", success: false });
-            return;
-          }
-
-          if (directResult.exitCode === 0) {
-            channel.push({ type: "activity", activity: undefined });
-            channel.push({
-              type: "completed",
-              success: true,
-              lastAssistantMessage: streamedAssistantContent,
-            });
-            return;
-          }
-
-          const fallbackError = `Codex execution failed (exit ${directResult.exitCode})`;
-          const errorMessage =
-            directResult.stderrText.length > 0
-              ? directResult.stderrText
-              : fallbackError;
-          channel.push({ type: "error", message: errorMessage });
-          channel.push({ type: "activity", activity: undefined });
-          channel.push({
-            type: "completed",
-            success: false,
-            error: errorMessage,
-            lastAssistantMessage: streamedAssistantContent,
-          });
-          return;
-        }
 
         const codexRunner = new CodexSessionRunner();
         runningSession =
-          await codexRunner.startSession({
-            prompt: params.prompt,
-            cwd: params.projectPath,
-            model: params.model,
-            additionalArgs:
-              params.additionalArgs !== undefined
-                ? [...params.additionalArgs]
-                : undefined,
-            streamGranularity: "char",
-            images: imagePaths,
-          });
+          params.resumeSessionId !== undefined
+            ? await codexRunner.resumeSession(
+                params.resumeSessionId,
+                params.prompt,
+                {
+                  cwd: params.projectPath,
+                  model: params.model,
+                  additionalArgs:
+                    params.additionalArgs !== undefined
+                      ? [...params.additionalArgs]
+                      : undefined,
+                  streamGranularity: "char",
+                  images: imagePaths,
+                },
+              )
+            : await codexRunner.startSession({
+                prompt: params.prompt,
+                cwd: params.projectPath,
+                model: params.model,
+                additionalArgs:
+                  params.additionalArgs !== undefined
+                    ? [...params.additionalArgs]
+                    : undefined,
+                streamGranularity: "char",
+                images: imagePaths,
+              });
         const activeSession = runningSession;
         if (activeSession === undefined) {
           throw new Error("Failed to start codex session");
@@ -1433,10 +1276,6 @@ class CodexAgentRunner implements AgentRunner {
 
       async cancel(): Promise<void> {
         cancelled = true;
-        if (codexProcess !== undefined) {
-          codexProcess.kill();
-          codexProcess = undefined;
-        }
         if (runningSession !== undefined) {
           await runningSession.cancel();
           runningSession = undefined;
@@ -1445,10 +1284,6 @@ class CodexAgentRunner implements AgentRunner {
 
       async abort(): Promise<void> {
         cancelled = true;
-        if (codexProcess !== undefined) {
-          codexProcess.kill();
-          codexProcess = undefined;
-        }
         if (runningSession !== undefined) {
           await runningSession.cancel();
           runningSession = undefined;
