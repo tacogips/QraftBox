@@ -105,6 +105,26 @@ describe("SessionMappingStore", () => {
       const found = store.findClaudeSessionId(qraftId);
       expect(found).toBe(claudeSessionId);
     });
+
+    test("prefers latest inserted mapping when timestamps tie", () => {
+      const projectPath = "/test/project";
+      const worktreeId = "main" as WorktreeId;
+      const qraftId = "qs_shared_group_001" as QraftAiSessionId;
+      const firstSessionId = "tie-claude-session-1" as ClaudeSessionId;
+      const secondSessionId = "tie-claude-session-2" as ClaudeSessionId;
+
+      store.upsert(firstSessionId, projectPath, worktreeId, "qraftbox", qraftId);
+      store.upsert(
+        secondSessionId,
+        projectPath,
+        worktreeId,
+        "qraftbox",
+        qraftId,
+      );
+
+      const found = store.findClaudeSessionId(qraftId);
+      expect(found).toBe(secondSessionId);
+    });
   });
 
   describe("findByClaudeSessionId", () => {

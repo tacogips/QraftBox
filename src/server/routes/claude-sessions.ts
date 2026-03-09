@@ -235,6 +235,41 @@ export function createClaudeSessionsRoutes(
   function resolveClaudeSessionId(
     qraftAiSessionId: string,
   ): string | undefined {
+    if (sessionManager !== undefined) {
+      // Prefer in-memory runtime/session-store state first when available.
+      // It is deterministic for a clientSession group and avoids stale SQL ties.
+      const direct = sessionManager.getSession(
+        qraftAiSessionId as QraftAiSessionId,
+      );
+      if (direct?.claudeSessionId !== undefined) {
+        return direct.claudeSessionId;
+      }
+
+      // qraftAiSessionId is typically the client session group ID,
+      // while actual session rows have distinct generated ids.
+      let bestMatch: AISessionInfo | undefined;
+      let bestTime = Number.NEGATIVE_INFINITY;
+      for (const session of sessionManager.listSessions()) {
+        if (
+          session.claudeSessionId === undefined ||
+          (session.clientSessionId !== qraftAiSessionId &&
+            session.id !== qraftAiSessionId)
+        ) {
+          continue;
+        }
+        const sessionTime = Date.parse(
+          session.completedAt ?? session.startedAt ?? session.createdAt,
+        );
+        if (sessionTime > bestTime) {
+          bestTime = sessionTime;
+          bestMatch = session;
+        }
+      }
+      if (bestMatch?.claudeSessionId !== undefined) {
+        return bestMatch.claudeSessionId;
+      }
+    }
+
     if (mappingStore !== undefined) {
       const mappedClaudeSessionId = mappingStore.findClaudeSessionIdSqlOnly(
         qraftAiSessionId as QraftAiSessionId,
@@ -244,39 +279,7 @@ export function createClaudeSessionsRoutes(
       }
     }
 
-    if (sessionManager === undefined) {
-      return undefined;
-    }
-
-    // Direct lookup (when qraftAiSessionId matches a concrete session row id)
-    const direct = sessionManager.getSession(
-      qraftAiSessionId as QraftAiSessionId,
-    );
-    if (direct?.claudeSessionId !== undefined) {
-      return direct.claudeSessionId;
-    }
-
-    // Fallback: qraftAiSessionId is typically the client session group ID,
-    // while actual session rows have distinct generated ids.
-    let bestMatch: AISessionInfo | undefined;
-    let bestTime = Number.NEGATIVE_INFINITY;
-    for (const session of sessionManager.listSessions()) {
-      if (
-        session.claudeSessionId === undefined ||
-        (session.clientSessionId !== qraftAiSessionId &&
-          session.id !== qraftAiSessionId)
-      ) {
-        continue;
-      }
-      const sessionTime = Date.parse(
-        session.completedAt ?? session.startedAt ?? session.createdAt,
-      );
-      if (sessionTime > bestTime) {
-        bestTime = sessionTime;
-        bestMatch = session;
-      }
-    }
-    return bestMatch?.claudeSessionId;
+    return undefined;
   }
 
   function resolveBestQraftSessionInfo(
@@ -441,7 +444,10 @@ export function createClaudeSessionsRoutes(
         type?: unknown;
         message?: unknown;
       };
-      if (payload.type !== "AgentMessage") {
+      if (
+        payload.type !== "AgentMessage" &&
+        payload.type !== "agent_message"
+      ) {
         return undefined;
       }
 
@@ -1293,6 +1299,118 @@ export function createClaudeSessionsRoutes(
         code: 400,
       };
       return c.json(errorResponse, 400);
+    }
+
+    const runtimeSession = resolveBestQraftSessionInfo(qraftId);
+    if (
+      sessionManager !== undefined &&
+      runtimeSession !== undefined &&
+      runtimeSession.state === "running" &&
+      runtimeSession.aiAgent === AIAgent.CODEX
+    ) {
+      return streamSSE(c, async (stream) => {
+        const pendingMessages: CodexTranscriptStreamEvent[] = [];
+        let lastAssistantContent = "";
+        let resolveWait: (() => void) | null = null;
+        let terminal = false;
+
+        const enqueueAssistantMessage = (content: string): void => {
+          if (content.length === 0 || content === lastAssistantContent) {
+            return;
+          }
+          lastAssistantContent = content;
+          pendingMessages.push({
+            content,
+            timestamp: new Date().toISOString(),
+          });
+          if (resolveWait !== null) {
+            resolveWait();
+            resolveWait = null;
+          }
+        };
+
+        if (
+          typeof runtimeSession.lastAssistantMessage === "string" &&
+          runtimeSession.lastAssistantMessage.length > 0
+        ) {
+          enqueueAssistantMessage(runtimeSession.lastAssistantMessage);
+        }
+
+        const unsubscribe = sessionManager.subscribe(
+          runtimeSession.id as QraftAiSessionId,
+          (event) => {
+            if (event.type === "message") {
+              const payload =
+                typeof event.data === "object" && event.data !== null
+                  ? (event.data as { content?: unknown })
+                  : undefined;
+              if (typeof payload?.content === "string") {
+                enqueueAssistantMessage(payload.content);
+              }
+              return;
+            }
+
+            if (
+              event.type === "completed" ||
+              event.type === "error" ||
+              event.type === "cancelled"
+            ) {
+              terminal = true;
+              if (resolveWait !== null) {
+                resolveWait();
+                resolveWait = null;
+              }
+            }
+          },
+        );
+
+        await stream.writeSSE({
+          event: "connected",
+          data: JSON.stringify({ qraftAiSessionId: qraftId }),
+        });
+
+        try {
+          while (true) {
+            let timedOutWaiting = false;
+            if (pendingMessages.length === 0 && !terminal) {
+              await new Promise<void>((resolve) => {
+                resolveWait = resolve;
+                setTimeout(() => {
+                  timedOutWaiting = true;
+                  resolve();
+                }, 5000);
+              });
+            }
+
+            if (timedOutWaiting && pendingMessages.length === 0 && !terminal) {
+              await stream.writeSSE({
+                event: "ping",
+                data: JSON.stringify({
+                  qraftAiSessionId: qraftId,
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+            }
+
+            while (pendingMessages.length > 0) {
+              const msg = pendingMessages.shift();
+              if (msg === undefined) {
+                continue;
+              }
+              await stream.writeSSE({
+                event: "assistant_message",
+                data: JSON.stringify(msg),
+              });
+            }
+
+            if (terminal && pendingMessages.length === 0) {
+              return;
+            }
+          }
+        } finally {
+          unsubscribe();
+        }
+      });
     }
 
     const claudeSessionId = resolveClaudeSessionId(qraftId);

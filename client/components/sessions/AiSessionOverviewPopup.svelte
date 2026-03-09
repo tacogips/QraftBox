@@ -27,6 +27,7 @@
       status: "queued" | "running";
     }[];
     optimisticAssistantMessage?: string | undefined;
+    liveAssistantSessionId?: string | undefined;
     showModelProfileSelector?: boolean;
     modelProfiles?: readonly ModelProfile[];
     selectedModelProfileId?: string | undefined;
@@ -70,6 +71,7 @@
     failureMessage = undefined,
     pendingPromptMessages,
     optimisticAssistantMessage = undefined,
+    liveAssistantSessionId = undefined,
     showModelProfileSelector = false,
     modelProfiles = [],
     selectedModelProfileId = undefined,
@@ -896,6 +898,7 @@
               showAssistantThinking={shouldShowAssistantThinking}
               enableAssistantStream={aiAgent === "codex" ||
                 source === "codex-cli"}
+              {liveAssistantSessionId}
               {optimisticUserMessage}
               {optimisticUserStatus}
               {optimisticUserImageAttachments}

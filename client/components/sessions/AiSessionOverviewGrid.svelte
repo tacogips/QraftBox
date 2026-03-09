@@ -693,6 +693,17 @@
     return message;
   });
 
+  const selectedLiveSessionRuntimeId = $derived.by(() => {
+    if (selectedSessionId === null) {
+      return undefined;
+    }
+    const runningSession = runningSessionByGroupId.get(selectedSessionId);
+    if (runningSession === undefined) {
+      return undefined;
+    }
+    return runningSession.id;
+  });
+
   $effect(() => {
     const nowMs = fallbackPendingPromptNowMs;
     void nowMs;
@@ -1304,10 +1315,10 @@
                      p-2.5 min-h-[142px] flex flex-col gap-2 animate-pulse"
               aria-label="Searching sessions"
             >
-              <div class="h-3 w-24 rounded bg-bg-tertiary" />
-              <div class="h-4 w-3/4 rounded bg-bg-tertiary" />
-              <div class="h-3 w-full rounded bg-bg-tertiary" />
-              <div class="h-3 w-5/6 rounded bg-bg-tertiary" />
+              <div class="h-3 w-24 rounded bg-bg-tertiary"></div>
+              <div class="h-4 w-3/4 rounded bg-bg-tertiary"></div>
+              <div class="h-3 w-full rounded bg-bg-tertiary"></div>
+              <div class="h-3 w-5/6 rounded bg-bg-tertiary"></div>
             </div>
           {/if}
 
@@ -1505,6 +1516,7 @@
       selectedSessionMeta.failureMessage}
     pendingPromptMessages={selectedSessionPendingPromptMessages}
     optimisticAssistantMessage={selectedSessionOptimisticAssistantMessage}
+    liveAssistantSessionId={selectedLiveSessionRuntimeId}
     isHidden={selectedSessionId !== null &&
       hiddenSessionIds.has(selectedSessionId)}
     onToggleHidden={async () => {

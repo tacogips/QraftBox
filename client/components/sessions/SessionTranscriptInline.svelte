@@ -31,6 +31,8 @@
     showAssistantThinking?: boolean | undefined;
     /** Enable live assistant stream updates via transcript SSE endpoint */
     enableAssistantStream?: boolean | undefined;
+    /** Running QraftBox runtime session ID for direct live assistant stream */
+    liveAssistantSessionId?: string | undefined;
     /** Queued user prompts not yet persisted to transcript */
     pendingUserMessages?:
       | readonly {
@@ -72,6 +74,7 @@
     optimisticAssistantMessage = undefined,
     showAssistantThinking = false,
     enableAssistantStream = false,
+    liveAssistantSessionId = undefined,
     pendingUserMessages = [],
     optimisticUserImageAttachments = [],
     onRestartSeedChange = undefined,
@@ -628,10 +631,47 @@
   });
 
   $effect(() => {
+    const activeLiveSessionId = liveAssistantSessionId;
+    if (
+      activeLiveSessionId === undefined ||
+      activeLiveSessionId.length === 0
+    ) {
+      return;
+    }
+
+    const stream = new EventSource(`/api/ai/sessions/${activeLiveSessionId}/stream`);
+
+    const onLiveMessage = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+      try {
+        const payload = JSON.parse(event.data) as {
+          data?: { content?: unknown };
+        };
+        const content = payload.data?.content;
+        if (typeof content === "string" && content.length > 0) {
+          streamedAssistantMessage = content;
+        }
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    };
+
+    stream.addEventListener("message", onLiveMessage);
+
+    return () => {
+      stream.removeEventListener("message", onLiveMessage);
+      stream.close();
+    };
+  });
+
+  $effect(() => {
     if (
       !enableAssistantStream ||
       contextId.length === 0 ||
-      sessionId.length === 0
+      sessionId.length === 0 ||
+      (liveAssistantSessionId !== undefined && liveAssistantSessionId.length > 0)
     ) {
       return;
     }
@@ -1616,7 +1656,7 @@
             class="flex w-full {getMessageRowAlignment(event.type)}"
             data-chat-index={index}
             data-chat-tail-anchor="true"
-            tabindex={currentIndex === index ? 0 : -1}
+            tabindex="-1"
           >
             <div
               class="w-fit max-w-[92%] md:max-w-[85%] {getMessageBubbleShape(
@@ -1867,8 +1907,16 @@
                 </span>
               </div>
               <div class="px-3 py-2">
-                <div class="text-sm leading-6 font-mono text-text-secondary">
-                  Thinking...
+                <div
+                  class="text-sm leading-6 font-mono text-text-secondary thinking-indicator"
+                  aria-live="polite"
+                >
+                  <span>Thinking</span>
+                  <span class="thinking-dots" aria-hidden="true">
+                    <span class="thinking-dot">.</span>
+                    <span class="thinking-dot">.</span>
+                    <span class="thinking-dot">.</span>
+                  </span>
                 </div>
               </div>
             </div>
@@ -2182,5 +2230,50 @@
       var(--color-bg-secondary) 100%
     );
     pointer-events: none;
+  }
+
+  .thinking-indicator {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.1rem;
+    animation: thinking-text-fade 1.5s ease-in-out infinite;
+  }
+
+  .thinking-dots {
+    display: inline-flex;
+    min-width: 1.15rem;
+  }
+
+  .thinking-dot {
+    opacity: 0.2;
+    animation: thinking-dot-blink 1.2s ease-in-out infinite;
+  }
+
+  .thinking-dot:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .thinking-dot:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  @keyframes thinking-dot-blink {
+    0%,
+    100% {
+      opacity: 0.2;
+    }
+    45% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes thinking-text-fade {
+    0%,
+    100% {
+      color: var(--color-text-secondary);
+    }
+    50% {
+      color: var(--color-text-primary);
+    }
   }
 </style>

@@ -272,7 +272,7 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
     const payload = asRecord(obj["payload"]);
     if (payload === undefined) return null;
     const eventType = readStringField(payload, "type");
-    if (eventType === "AgentMessage") {
+    if (eventType === "AgentMessage" || eventType === "agent_message") {
       const messageValue = payload["message"];
       if (typeof messageValue === "string" && messageValue.trim().length > 0) {
         return { type: "message", content: messageValue };

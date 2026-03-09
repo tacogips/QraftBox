@@ -18,6 +18,7 @@ import type {
 } from "../../types/ai.js";
 import type { AgentRunner, AgentEvent } from "./agent-runner.js";
 import { DEFAULT_AI_CONFIG } from "../../types/ai.js";
+import { AIAgent } from "../../types/ai-agent.js";
 
 /**
  * Create a test AI prompt request
@@ -1056,6 +1057,55 @@ describe("createSessionManager", () => {
 
       await new Promise((resolve) => setTimeout(resolve, 100));
       expect(capturedResumeSessionId).toBeUndefined();
+      mappingStore.close();
+    });
+
+    test("normalizes codex-session-* mapping before passing resumeSessionId to runner", async () => {
+      const mappingStore = createInMemorySessionMappingStore();
+      const clientQraftId = "qs_codex_prefix_resume_1" as QraftAiSessionId;
+      mappingStore.upsert(
+        "codex-session-019ca8d0-3e9d-79f0-961f-ef3c325ae70e" as ClaudeSessionId,
+        "/tmp/test",
+        "worktree_test" as WorktreeId,
+        "qraftbox",
+        clientQraftId,
+      );
+
+      let capturedResumeSessionId: ClaudeSessionId | undefined;
+      const captureRunner: AgentRunner = {
+        execute(params) {
+          capturedResumeSessionId = params.resumeSessionId;
+          return {
+            async *events() {
+              yield { type: "completed", success: true } as AgentEvent;
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        mappingStore,
+        undefined,
+        captureRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "resume codex session",
+        project_path: "/tmp/test",
+        qraft_ai_session_id: clientQraftId,
+        ai_agent: AIAgent.CODEX,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(capturedResumeSessionId).toBe(
+        "019ca8d0-3e9d-79f0-961f-ef3c325ae70e",
+      );
       mappingStore.close();
     });
 

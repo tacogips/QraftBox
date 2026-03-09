@@ -41,7 +41,7 @@ import {
   type AgentExecution,
   type AgentEvent,
 } from "./agent-runner.js";
-import { resolveAIAgentFromVendor } from "../../types/ai-agent.js";
+import { AIAgent, resolveAIAgentFromVendor } from "../../types/ai-agent.js";
 import type { ModelAuthMode } from "../../types/model-config.js";
 
 /**
@@ -221,6 +221,24 @@ function createProgressEvent(
     timestamp: new Date().toISOString(),
     data,
   };
+}
+
+function normalizeResumeSessionIdForAgent(
+  resumeSessionId: ClaudeSessionId | undefined,
+  aiAgent: AIAgent,
+): ClaudeSessionId | undefined {
+  if (resumeSessionId === undefined || resumeSessionId.length === 0) {
+    return undefined;
+  }
+
+  if (
+    aiAgent === AIAgent.CODEX &&
+    resumeSessionId.startsWith("codex-session-")
+  ) {
+    return resumeSessionId.slice("codex-session-".length) as ClaudeSessionId;
+  }
+
+  return resumeSessionId;
 }
 
 /**
@@ -757,14 +775,24 @@ export function createSessionManager(
       emitEvent(sessionId, createProgressEvent("session_started", sessionId));
 
       // 2. Start execution
+      const aiAgent =
+        session.aiAgent ?? resolveAIAgentFromVendor(handle.modelOverride?.vendor);
+      const normalizedResumeSessionId = normalizeResumeSessionIdForAgent(
+        session.currentClaudeSessionId,
+        aiAgent,
+      );
+      if (
+        normalizedResumeSessionId !== undefined &&
+        normalizedResumeSessionId !== session.currentClaudeSessionId
+      ) {
+        store.updateClaudeSessionId(sessionId, normalizedResumeSessionId);
+      }
       const execution = runner.execute({
         prompt: handle.fullPrompt,
         projectPath: session.projectPath,
-        resumeSessionId: session.currentClaudeSessionId,
+        resumeSessionId: normalizedResumeSessionId,
         attachments: handle.attachments,
-        aiAgent:
-          session.aiAgent ??
-          resolveAIAgentFromVendor(handle.modelOverride?.vendor),
+        aiAgent,
         vendor: handle.modelOverride?.vendor,
         authMode: handle.modelOverride?.authMode,
         model: handle.modelOverride?.model,
@@ -868,7 +896,14 @@ export function createSessionManager(
         if (handle?.forceNewSession !== true) {
           const resumeId = resolveResumeSessionId(session);
           if (resumeId !== undefined) {
-            store.updateClaudeSessionId(nextSessionId, resumeId);
+            const normalizedResumeId = normalizeResumeSessionIdForAgent(
+              resumeId,
+              session.aiAgent ?? resolveAIAgentFromVendor(session.modelVendor),
+            );
+            store.updateClaudeSessionId(
+              nextSessionId,
+              normalizedResumeId ?? resumeId,
+            );
           }
         }
       }
