@@ -2,31 +2,76 @@
  * Tests for HTTP Server
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createServer, startServer, stopServer } from "./index";
 import type { CLIConfig } from "../types/index";
 import { createContextManager } from "./workspace/context-manager";
 import { createRecentDirectoryStore } from "./workspace/recent-store";
 import { createInMemoryOpenTabsStore } from "./workspace/open-tabs-store";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+interface MockBunServer {
+  readonly port: number;
+  readonly hostname: string;
+  stop(): void;
+}
+
+function createFrontendFixtureDir(
+  baseDir: string,
+  frontendDirName: string,
+  html: string,
+): string {
+  const assetDir = join(baseDir, frontendDirName);
+  mkdirSync(assetDir, { recursive: true });
+  writeFileSync(join(assetDir, "index.html"), html);
+  return assetDir;
+}
+
+async function withMockedBunServe<T>(
+  mockServer: MockBunServer,
+  runTest: (
+    serveMock: ReturnType<typeof mock<() => MockBunServer>>,
+  ) => Promise<T> | T,
+): Promise<T> {
+  const originalServe = Bun.serve;
+  const serveMock = mock(() => mockServer);
+
+  (Bun as unknown as { serve: typeof Bun.serve }).serve =
+    serveMock as unknown as typeof Bun.serve;
+
+  try {
+    return await runTest(serveMock);
+  } finally {
+    (Bun as unknown as { serve: typeof Bun.serve }).serve = originalServe;
+  }
+}
 
 describe("createServer", () => {
   let config: CLIConfig;
   let testDir: string;
   let originalClientDir: string | undefined;
+  let originalLegacyClientDir: string | undefined;
 
   beforeEach(() => {
     testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
 
     // Save and clear QRAFTBOX_CLIENT_DIR to ensure tests don't pick up stale env var
     originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    originalLegacyClientDir = process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
     delete process.env["QRAFTBOX_CLIENT_DIR"];
+    delete process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
+    process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>Default Solid Fixture</body></html>",
+    );
 
     config = {
       port: 7144,
       host: "localhost",
+      frontend: "solid",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -45,6 +90,12 @@ describe("createServer", () => {
       process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
     } else {
       delete process.env["QRAFTBOX_CLIENT_DIR"];
+    }
+
+    if (originalLegacyClientDir !== undefined) {
+      process.env["QRAFTBOX_CLIENT_LEGACY_DIR"] = originalLegacyClientDir;
+    } else {
+      delete process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
     }
   });
 
@@ -111,11 +162,7 @@ describe("createServer", () => {
     expect(response.status).toBe(404);
   });
 
-  test("should serve static files with correct MIME type", async () => {
-    // Set QRAFTBOX_CLIENT_DIR to a non-existent directory to make test deterministic
-    const nonExistentClientDir = join(testDir, "nonexistent-client");
-    process.env["QRAFTBOX_CLIENT_DIR"] = nonExistentClientDir;
-
+  test("should return 404 for missing static files", async () => {
     const contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
       dbPath: join(testDir, "recent.db"),
@@ -128,23 +175,92 @@ describe("createServer", () => {
       openTabsStore,
     });
 
-    // Request static file - since QRAFTBOX_CLIENT_DIR points to non-existent dir,
-    // static file serving will always 404
-    const response = await app.request("/index.html");
+    const response = await app.request("/missing-asset.js");
 
     expect(response.status).toBe(404);
+  });
 
-    // Clean up env var (will also be cleaned up by afterEach)
-    delete process.env["QRAFTBOX_CLIENT_DIR"];
+  test("should fail startup when solid frontend assets are missing", () => {
+    const emptySolidClientDir = join(testDir, "client-missing");
+    mkdirSync(emptySolidClientDir, { recursive: true });
+    process.env["QRAFTBOX_CLIENT_DIR"] = emptySolidClientDir;
+
+    const contextManager = createContextManager();
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+
+    expect(() =>
+      createServer({
+        config: {
+          ...config,
+          frontend: "solid",
+        },
+        contextManager,
+        recentStore,
+        openTabsStore,
+      }),
+    ).toThrow("Frontend assets for 'solid' were not found.");
+  });
+
+  test("should serve the selected solid frontend bundle when assets are configured", async () => {
+    const solidClientDir = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>Solid Fixture</body></html>",
+    );
+    process.env["QRAFTBOX_CLIENT_DIR"] = solidClientDir;
+
+    const contextManager = createContextManager();
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config: {
+        ...config,
+        frontend: "solid",
+      },
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
+
+    const rootResponse = await app.request("/");
+    expect(rootResponse.status).toBe(200);
+    await expect(rootResponse.text()).resolves.toContain("Solid Fixture");
+
+    const nestedRouteResponse = await app.request("/projects/demo/files");
+    expect(nestedRouteResponse.status).toBe(200);
+    await expect(nestedRouteResponse.text()).resolves.toContain(
+      "Solid Fixture",
+    );
+
+    const frontendStatusResponse = await app.request("/api/frontend-status");
+    expect(frontendStatusResponse.status).toBe(200);
+    await expect(frontendStatusResponse.json()).resolves.toEqual(
+      expect.objectContaining({
+        selectedFrontend: "solid",
+        solidCutoverEnvironmentStatus: expect.any(Object),
+      }),
+    );
   });
 });
 
 describe("startServer and stopServer", () => {
-  test("should start and stop server", () => {
+  test("should start and stop server", async () => {
     const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+    const originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>StartServer Fixture</body></html>",
+    );
     const config: CLIConfig = {
-      port: 0, // Let OS assign port
-      host: "localhost",
+      port: 7145,
+      host: "127.0.0.1",
+      frontend: "solid",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -168,23 +284,48 @@ describe("startServer and stopServer", () => {
       openTabsStore,
     });
 
-    // Start server
-    const server = startServer(app, config);
+    const stopMock = mock(() => {});
+    try {
+      await withMockedBunServe(
+        {
+          port: config.port,
+          hostname: config.host,
+          stop: stopMock,
+        },
+        (serveMock) => {
+          const server = startServer(app, config);
 
-    expect(server).toBeDefined();
-    expect(server.port).toBeGreaterThan(0);
-    expect(server.hostname).toBe("localhost");
-    expect(typeof server.stop).toBe("function");
+          expect(server).toBeDefined();
+          expect(server.port).toBe(config.port);
+          expect(server.hostname).toBe(config.host);
+          expect(typeof server.stop).toBe("function");
+          expect(serveMock).toHaveBeenCalledTimes(1);
 
-    // Stop server
-    stopServer(server);
+          stopServer(server);
+          expect(stopMock).toHaveBeenCalledTimes(1);
+        },
+      );
+    } finally {
+      if (originalClientDir === undefined) {
+        delete process.env["QRAFTBOX_CLIENT_DIR"];
+      } else {
+        process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+      }
+    }
   });
 
-  test("should be able to make requests to running server", async () => {
+  test("should be able to make requests via app.fetch", async () => {
     const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+    const originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>App Fetch Fixture</body></html>",
+    );
     const config: CLIConfig = {
-      port: 0, // Let OS assign port
+      port: 7146,
       host: "localhost",
+      frontend: "solid",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -208,13 +349,8 @@ describe("startServer and stopServer", () => {
       openTabsStore,
     });
 
-    const server = startServer(app, config);
-
     try {
-      // Make HTTP request to health check
-      const response = await fetch(
-        `http://${server.hostname}:${server.port}/api/health`,
-      );
+      const response = await app.request("/api/health");
       expect(response.status).toBe(200);
 
       const data = (await response.json()) as {
@@ -223,17 +359,28 @@ describe("startServer and stopServer", () => {
       };
       expect(data.status).toBe("ok");
     } finally {
-      stopServer(server);
+      if (originalClientDir === undefined) {
+        delete process.env["QRAFTBOX_CLIENT_DIR"];
+      } else {
+        process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+      }
     }
   });
 });
 
 describe("Server integration", () => {
-  test("should handle multiple requests", async () => {
+  test("should handle multiple in-process requests", async () => {
     const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+    const originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>Integration Fixture</body></html>",
+    );
     const config: CLIConfig = {
-      port: 0,
+      port: 7147,
       host: "localhost",
+      frontend: "solid",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -257,28 +404,36 @@ describe("Server integration", () => {
       openTabsStore,
     });
 
-    const server = startServer(app, config);
-
     try {
-      // Make multiple requests
       const responses = await Promise.all([
-        fetch(`http://${server.hostname}:${server.port}/api/health`),
-        fetch(`http://${server.hostname}:${server.port}/api/health`),
-        fetch(`http://${server.hostname}:${server.port}/api/health`),
+        app.request("/api/health"),
+        app.request("/api/health"),
+        app.request("/api/health"),
       ]);
 
       expect(responses).toHaveLength(3);
-      expect(responses.every((r) => r.status === 200)).toBe(true);
+      expect(responses.every((response) => response.status === 200)).toBe(true);
     } finally {
-      stopServer(server);
+      if (originalClientDir === undefined) {
+        delete process.env["QRAFTBOX_CLIENT_DIR"];
+      } else {
+        process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+      }
     }
   });
 
-  test("should return 404 for non-existent API routes", async () => {
+  test("should return 404 for non-existent API routes in-process", async () => {
     const testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
+    const originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
+    process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
+      testDir,
+      "client",
+      "<html><body>404 Fixture</body></html>",
+    );
     const config: CLIConfig = {
-      port: 0,
+      port: 7148,
       host: "localhost",
+      frontend: "solid",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -302,15 +457,15 @@ describe("Server integration", () => {
       openTabsStore,
     });
 
-    const server = startServer(app, config);
-
     try {
-      const response = await fetch(
-        `http://${server.hostname}:${server.port}/api/nonexistent`,
-      );
+      const response = await app.request("/api/nonexistent");
       expect(response.status).toBe(404);
     } finally {
-      stopServer(server);
+      if (originalClientDir === undefined) {
+        delete process.env["QRAFTBOX_CLIENT_DIR"];
+      } else {
+        process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
+      }
     }
   });
 });

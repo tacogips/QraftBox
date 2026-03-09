@@ -17,7 +17,6 @@ import { createSessionManager } from "./ai/session-manager";
 import { createPromptStore } from "./prompts/prompt-store";
 import { ensureDefaultPromptConfig } from "./prompts/loader";
 import { ensureSystemPromptFiles } from "./git-actions/system-prompt";
-import { join } from "path";
 import { createQraftBoxToolRegistry } from "./tools/registry";
 import { DEFAULT_AI_CONFIG } from "../types/ai";
 import { createLogger } from "./logger";
@@ -25,10 +24,10 @@ import type { RecentDirectoryStore } from "./workspace/recent-store";
 import type { OpenTabsStore } from "./workspace/open-tabs-store";
 import { createSessionMappingStore } from "./ai/session-mapping-store";
 import { createModelConfigStore } from "./model-config/store.js";
-import { resolveClientDir } from "./client-dir";
 import type { ProjectWatcherManager } from "./watcher/manager";
 import { ensurePurposePromptFile } from "./claude/session-purpose";
 import { createAiCommentQueueStore } from "./ai/comment-queue-store.js";
+import { requireFrontendAssets } from "../config/frontend";
 import type {
   TerminalSessionManager,
   TerminalSocketData,
@@ -209,12 +208,14 @@ export function createServer(options: ServerOptions): Hono {
     temporaryProjectMode:
       options.temporaryProjectMode ?? options.config.temporaryProjectMode,
     aiCommentStore,
+    selectedFrontend: options.config.frontend,
   });
 
   // Static file serving and SPA fallback
   // Resolves client build directory from multiple candidate locations
-  const clientDir = resolveClientDir();
-  const indexPath = join(clientDir, "index.html");
+  const frontendAssets = requireFrontendAssets(options.config.frontend);
+  const clientDir = frontendAssets.assetRoot;
+  const indexPath = frontendAssets.indexPath;
 
   app.use("*", createStaticMiddleware(clientDir));
   app.use("*", createSPAFallback(indexPath));

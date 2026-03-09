@@ -1361,6 +1361,59 @@ describe("ClaudeSessionReader", () => {
       expect(transcript?.events[1]?.content).toBe("Assistant reply");
     });
 
+    it("normalizes codex transcript aliases across field names and event types", async () => {
+      const dayDir = join(codexSessionsDir, "2026", "02", "27");
+      await mkdir(dayDir, { recursive: true });
+
+      const codexPath = join(
+        dayDir,
+        "rollout-2026-02-27T10-00-00-normalized-aliases.jsonl",
+      );
+      const codexJsonl = [
+        JSON.stringify({
+          timestamp: "2026-02-27T10:00:00.000Z",
+          type: "thread.started",
+          threadId: "codex-alias-id",
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-27T10:00:01.000Z",
+          type: "response_item",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Alias user prompt" }],
+          },
+        }),
+        JSON.stringify({
+          timestamp: "2026-02-27T10:00:02.000Z",
+          type: "item.completed",
+          item: {
+            id: "item_1",
+            type: "AgentMessage",
+            message: "Alias assistant reply",
+          },
+        }),
+      ].join("\n");
+      await writeFile(codexPath, codexJsonl);
+
+      const session = await reader.getSession("codex-session-codex-alias-id");
+      expect(session).not.toBeNull();
+      expect(session?.firstPrompt).toBe("Alias user prompt");
+      expect(session?.summary).toBe("Alias assistant reply");
+
+      const transcript = await reader.readTranscript(
+        "codex-session-codex-alias-id",
+        0,
+        100,
+      );
+      expect(transcript).not.toBeNull();
+      expect(transcript?.events).toHaveLength(2);
+      expect(transcript?.events[0]?.type).toBe("user");
+      expect(transcript?.events[0]?.content).toBe("Alias user prompt");
+      expect(transcript?.events[1]?.type).toBe("assistant");
+      expect(transcript?.events[1]?.content).toBe("Alias assistant reply");
+    });
+
     it("prefers provenance metadata over text heuristics for first prompt", async () => {
       const dayDir = join(codexSessionsDir, "2026", "02", "25");
       await mkdir(dayDir, { recursive: true });

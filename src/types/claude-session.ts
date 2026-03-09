@@ -92,6 +92,8 @@ export interface SessionFilters {
   branch?: string;
   /** Search in firstPrompt and summary */
   searchQuery?: string;
+  /** Search the full transcript instead of only summary metadata */
+  searchInTranscript?: boolean;
   /** Filter by date range */
   dateRange?: {
     /** Start date (ISO 8601) */

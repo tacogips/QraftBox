@@ -182,6 +182,45 @@ describe("parseCodexJsonLine()", () => {
       isDelta: true,
     });
   });
+
+  test("parses assistant text from item.completed AgentMessage", () => {
+    const line =
+      '{"type":"item.completed","item":{"id":"item_1","type":"AgentMessage","text":"hello from codex"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses assistant text from event_msg AgentMessage", () => {
+    const line =
+      '{"type":"event_msg","payload":{"type":"AgentMessage","message":{"content":[{"text":"hello from codex"}]}}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses tool events from normalized event_msg aliases", () => {
+    const begin = parseCodexJsonLine(
+      '{"type":"event_msg","payload":{"type":"exec_command_begin"}}',
+    );
+    expect(begin).toEqual({
+      type: "tool_call",
+      toolName: "local_shell_call",
+    });
+
+    const end = parseCodexJsonLine(
+      '{"type":"event_msg","payload":{"type":"exec_command_end","exit_code":1}}',
+    );
+    expect(end).toEqual({
+      type: "tool_result",
+      toolName: "local_shell_call",
+      isError: true,
+    });
+  });
 });
 
 describe("shouldEmitCodexSessionDetected()", () => {

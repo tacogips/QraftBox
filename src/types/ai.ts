@@ -248,9 +248,11 @@ export interface AISessionInfo {
   readonly id: QraftAiSessionId;
   readonly state: SessionState;
   readonly prompt: string;
+  readonly projectPath: string;
   readonly createdAt: string;
   readonly startedAt?: string | undefined;
   readonly completedAt?: string | undefined;
+  readonly worktreeId?: WorktreeId | undefined;
   readonly context: AIPromptContext;
   readonly lastAssistantMessage?: string | undefined;
   readonly currentActivity?: string | undefined;
@@ -434,6 +436,8 @@ export interface QueuedPromptInfo {
   /** Error message if failed */
   readonly error?: string | undefined;
   readonly created_at: string;
+  /** Absolute project path used to scope queue entries to a workspace */
+  readonly project_path: string;
   /** Worktree identifier for queue partitioning */
   readonly worktree_id: WorktreeId;
   /** Client-generated session group ID for prompt continuity */

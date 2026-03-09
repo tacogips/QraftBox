@@ -429,6 +429,7 @@ export function createSessionManager(
       current_activity: row.currentActivity,
       error: row.error,
       created_at: row.createdAt,
+      project_path: row.projectPath,
       worktree_id: row.worktreeId ?? ("" as WorktreeId),
       qraft_ai_session_id: row.clientSessionId,
       ai_agent: row.aiAgent ?? resolveAIAgentFromVendor(row.modelVendor),

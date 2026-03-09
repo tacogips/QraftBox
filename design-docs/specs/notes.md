@@ -40,3 +40,15 @@ This file captures as-built constraints, operational considerations, and known g
 ## Testing/Dev Overrides
 
 - `QRAFTBOX_TEST_CONFIG_DIR` and `QRAFTBOX_TEST_TOOLS_DIR` are used in tests to isolate filesystem state.
+
+## Planned Frontend Migration Notes
+
+- The Svelte frontend remains the baseline reference implementation until Solid parity is achieved.
+- Migration validation should compare both frontends against the same backend and repository state.
+- Shared frontend logic should move into framework-neutral TypeScript modules before complex screens are ported.
+- Workspace API DTO normalization belongs in the shared migration layer, not in framework-local API adapters.
+- Hash-driven navigation parity is part of the migration foundation; the Solid shell must react to later `hashchange` events, not just the initial URL.
+- Browser verification should be run for both frontends after each significant migrated UI milestone.
+- Current blocker state as of 2026-03-09:
+  `client-solid/node_modules` is missing, `bun install --cwd client-solid` fails in this workspace with `bun is unable to write files to tempdir: AccessDenied`, and `dist/client-solid/index.html` is still unbuilt. `agent-browser` is present on `PATH`, but the verification loop still cannot proceed until the Solid dependencies and build output exist.
+- The recorded full Solid migration check status is now stored in the ignored workspace-local marker `tmp-solid-migration-check.json`, which is cleared before each `bun run check:frontend:migration` run and rewritten only after the full command succeeds.

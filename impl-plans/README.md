@@ -4,9 +4,10 @@ This directory contains implementation plans that describe the current as-built 
 
 ## Current Plan
 
-| Plan | Status | Design Reference | Last Updated |
-| --- | --- | --- | --- |
-| current-system | Completed | design-docs/specs/architecture.md#overview | 2026-02-17 |
+| Plan                     | Status      | Design Reference                                              | Last Updated |
+| ------------------------ | ----------- | ------------------------------------------------------------- | ------------ |
+| current-system           | Completed   | design-docs/specs/architecture.md#overview                    | 2026-02-17   |
+| solid-frontend-migration | In Progress | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
 
 ## Directory Structure
 

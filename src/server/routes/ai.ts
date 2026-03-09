@@ -168,11 +168,18 @@ export function createAIRoutes(context: AIServerContext): Hono {
    */
   app.get("/prompt-queue", (c) => {
     const worktreeId = c.req.query("worktree_id");
-    const prompts = context.sessionManager.getPromptQueue(
+    const projectPath = c.req.query("projectPath");
+    const prompts = context.sessionManager
+      .getPromptQueue(
       typeof worktreeId === "string" && worktreeId.length > 0
         ? (worktreeId as WorktreeId)
         : undefined,
-    );
+    )
+      .filter((prompt) =>
+        typeof projectPath === "string" && projectPath.length > 0
+          ? prompt.project_path === projectPath
+          : true,
+      );
     return c.json({ prompts });
   });
 
@@ -214,7 +221,27 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * List all sessions.
    */
   app.get("/sessions", (c) => {
-    const sessions = context.sessionManager.listSessions();
+    const projectPath = c.req.query("projectPath");
+    const worktreeId = c.req.query("worktree_id");
+    const sessions = context.sessionManager.listSessions().filter((session) => {
+      if (
+        typeof projectPath === "string" &&
+        projectPath.length > 0 &&
+        session.projectPath !== projectPath
+      ) {
+        return false;
+      }
+
+      if (
+        typeof worktreeId === "string" &&
+        worktreeId.length > 0 &&
+        session.worktreeId !== worktreeId
+      ) {
+        return false;
+      }
+
+      return true;
+    });
     return c.json({ sessions });
   });
 

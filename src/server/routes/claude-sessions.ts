@@ -49,6 +49,7 @@ import type { ModelConfigStore } from "../model-config/store.js";
 import type { AISessionInfo } from "../../types/ai.js";
 import { buildAgentAuthEnv } from "../ai/claude-env.js";
 import { RolloutWatcher } from "codex-agent";
+import { isCodexType } from "../codex/event-normalization.js";
 
 interface ClaudeSessionReaderLike {
   listProjects(pathFilter?: string): Promise<ProjectInfo[]>;
@@ -444,10 +445,7 @@ export function createClaudeSessionsRoutes(
         type?: unknown;
         message?: unknown;
       };
-      if (
-        payload.type !== "AgentMessage" &&
-        payload.type !== "agent_message"
-      ) {
+      if (!isCodexType(payload.type, "agent_message")) {
         return undefined;
       }
 

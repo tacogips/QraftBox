@@ -42,6 +42,8 @@ import type { ModelConfigStore } from "../model-config/store.js";
 import { createModelConfigRoutes } from "./model-config.js";
 import { createAiCommentRoutes } from "./ai-comments.js";
 import type { AiCommentQueueStore } from "../ai/comment-queue-store.js";
+import { createFrontendStatusRoutes } from "./frontend-status.js";
+import type { FrontendTarget } from "../../config/frontend.js";
 
 /**
  * Route group definition
@@ -76,6 +78,7 @@ export interface MountRoutesConfig {
   readonly modelConfigStore?: ModelConfigStore | undefined;
   readonly temporaryProjectMode?: boolean | undefined;
   readonly aiCommentStore?: AiCommentQueueStore | undefined;
+  readonly selectedFrontend?: FrontendTarget | undefined;
 }
 
 /**
@@ -287,6 +290,13 @@ export function getNonContextRouteGroups(
         },
       ),
     },
+    // Frontend selection and Solid migration status - GET /api/frontend-status
+    {
+      prefix: "/frontend-status",
+      routes: createFrontendStatusRoutes({
+        selectedFrontend: config.selectedFrontend ?? "svelte",
+      }),
+    },
   ];
 }
 
@@ -303,6 +313,7 @@ export function getNonContextRouteGroups(
  * - /api/workspace - Workspace management
  * - /api/browse - Directory browsing
  * - /api/ai - AI operations
+ * - /api/frontend-status - Selected frontend plus Solid migration status
  * - /api/ctx/:contextId/diff - Diff viewing
  * - /api/ctx/:contextId/files - File tree and content
  * - /api/ctx/:contextId/status - Working tree status

@@ -36,6 +36,14 @@ import {
 import { AIAgent } from "../../types/ai-agent";
 import { SessionReader as AgentSessionReader } from "claude-code-agent/src/sdk/index";
 import { createProductionContainer } from "claude-code-agent/src/container";
+import {
+  asCodexRecord,
+  CODEX_MESSAGE_TEXT_KEYS,
+  CODEX_SESSION_ID_KEYS,
+  CODEX_THREAD_ID_KEYS,
+  isCodexType,
+  readFirstCodexStringField,
+} from "../codex/event-normalization.js";
 
 const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 const CODEX_SESSIONS_DIR = join(homedir(), ".codex", "sessions");
@@ -786,20 +794,17 @@ export class ClaudeSessionReader {
         }
 
         if (raw["type"] === "thread.started") {
-          if (
-            typeof raw["thread_id"] === "string" &&
-            raw["thread_id"].length > 0
-          ) {
-            codexId = raw["thread_id"];
-          } else if (
-            typeof raw["thread"] === "object" &&
-            raw["thread"] !== null &&
-            typeof (raw["thread"] as Record<string, unknown>)["id"] === "string"
-          ) {
-            codexId = (raw["thread"] as Record<string, unknown>)[
-              "id"
-            ] as string;
-          }
+          codexId =
+            readFirstCodexStringField(raw, CODEX_SESSION_ID_KEYS) ??
+            (() => {
+              const thread = asCodexRecord(raw["thread"]);
+              if (thread === undefined) {
+                return "";
+              }
+              return (
+                readFirstCodexStringField(thread, CODEX_THREAD_ID_KEYS) ?? ""
+              );
+            })();
         }
 
         if (raw["type"] === "response_item") {
@@ -835,21 +840,13 @@ export class ClaudeSessionReader {
         }
 
         if (raw["type"] === "item.completed") {
-          const item =
-            typeof raw["item"] === "object" && raw["item"] !== null
-              ? (raw["item"] as Record<string, unknown>)
-              : undefined;
+          const item = asCodexRecord(raw["item"]);
           if (item === undefined) {
             continue;
           }
-          const itemType = typeof item["type"] === "string" ? item["type"] : "";
-          if (itemType === "agent_message") {
+          if (isCodexType(item["type"], "agent_message")) {
             const text =
-              typeof item["text"] === "string"
-                ? item["text"]
-                : typeof item["content"] === "string"
-                  ? item["content"]
-                  : "";
+              readFirstCodexStringField(item, CODEX_MESSAGE_TEXT_KEYS) ?? "";
             if (text.length > 0) {
               messageCount += 1;
               summary = stripSystemTags(text).slice(0, 240);
@@ -1833,23 +1830,15 @@ export class ClaudeSessionReader {
       }
 
       if (raw["type"] === "item.completed") {
-        const item =
-          typeof raw["item"] === "object" && raw["item"] !== null
-            ? (raw["item"] as Record<string, unknown>)
-            : undefined;
+        const item = asCodexRecord(raw["item"]);
         if (item === undefined) {
           continue;
         }
-        const itemType = typeof item["type"] === "string" ? item["type"] : "";
-        if (itemType !== "agent_message") {
+        if (!isCodexType(item["type"], "agent_message")) {
           continue;
         }
         const text =
-          typeof item["text"] === "string"
-            ? item["text"]
-            : typeof item["content"] === "string"
-              ? item["content"]
-              : "";
+          readFirstCodexStringField(item, CODEX_MESSAGE_TEXT_KEYS) ?? "";
         if (text.length === 0) {
           continue;
         }

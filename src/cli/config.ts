@@ -7,7 +7,12 @@
 
 import { existsSync } from "node:fs";
 import path from "node:path";
-import type { CLIConfig, SyncMode, ValidationResult } from "../types/index";
+import type {
+  CLIConfig,
+  FrontendTarget,
+  SyncMode,
+  ValidationResult,
+} from "../types/index";
 
 /**
  * Default configuration constants
@@ -17,6 +22,7 @@ import type { CLIConfig, SyncMode, ValidationResult } from "../types/index";
 export interface ConfigDefaults {
   readonly PORT: number;
   readonly HOST: string;
+  readonly FRONTEND: FrontendTarget;
   readonly OPEN: boolean;
   readonly WATCH: boolean;
   readonly SYNC_MODE: SyncMode;
@@ -32,6 +38,7 @@ export interface ConfigDefaults {
 export const DEFAULT_CONFIG: ConfigDefaults = {
   PORT: 7144,
   HOST: "localhost",
+  FRONTEND: "solid",
   OPEN: false,
   WATCH: true,
   SYNC_MODE: "manual",
@@ -64,6 +71,7 @@ export function loadConfig(overrides?: Partial<CLIConfig>): CLIConfig {
   return {
     port: overrides?.port ?? DEFAULT_CONFIG.PORT,
     host: overrides?.host ?? DEFAULT_CONFIG.HOST,
+    frontend: overrides?.frontend ?? DEFAULT_CONFIG.FRONTEND,
     open: overrides?.open ?? DEFAULT_CONFIG.OPEN,
     watch: overrides?.watch ?? DEFAULT_CONFIG.WATCH,
     syncMode: overrides?.syncMode ?? DEFAULT_CONFIG.SYNC_MODE,
@@ -128,6 +136,13 @@ export function validateConfig(config: CLIConfig): ValidationResult {
     return {
       valid: false,
       error: `syncMode must be one of: ${validSyncModes.join(", ")}`,
+    };
+  }
+
+  if (config.frontend !== "svelte" && config.frontend !== "solid") {
+    return {
+      valid: false,
+      error: "frontend must be one of: svelte, solid",
     };
   }
 

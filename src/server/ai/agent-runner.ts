@@ -22,6 +22,16 @@ import {
 } from "codex-agent";
 import type { ModelAuthMode } from "../../types/model-config.js";
 import { buildAgentAuthEnv } from "./claude-env.js";
+import {
+  asCodexRecord,
+  CODEX_MESSAGE_TEXT_KEYS,
+  CODEX_SESSION_ID_KEYS,
+  CODEX_THREAD_ID_KEYS,
+  CODEX_TOOL_NAME_KEYS,
+  isCodexType,
+  readCodexStringField,
+  readFirstCodexStringField,
+} from "../codex/event-normalization.js";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
@@ -29,22 +39,14 @@ const UUID_PATTERN =
 const AWAITING_INPUT_POLL_INTERVAL_MS = 100;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
+  return asCodexRecord(value);
 }
 
 function readStringField(
   obj: Record<string, unknown>,
   key: string,
 ): string | undefined {
-  const value = obj[key];
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return readCodexStringField(obj, key);
 }
 
 function readRawStringField(
@@ -87,19 +89,6 @@ type CodexParsedEvent =
   | CodexToolResultEvent
   | CodexSessionDetectedEvent
   | null;
-
-function readFirstStringField(
-  obj: Record<string, unknown>,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = readStringField(obj, key);
-    if (value !== undefined) {
-      return value;
-    }
-  }
-  return undefined;
-}
 
 /**
  * Build a Codex CLI command for non-interactive JSONL execution.
@@ -154,24 +143,19 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
     return null;
   }
 
-  const obj = asRecord(parsed);
+  const obj = asCodexRecord(parsed);
   if (obj === undefined) {
     return null;
   }
 
-  const lineType = readStringField(obj, "type");
+  const lineType = readCodexStringField(obj, "type");
   if (lineType === "thread.started") {
     const sessionId =
-      readFirstStringField(obj, [
-        "thread_id",
-        "threadId",
-        "session_id",
-        "sessionId",
-      ]) ??
+      readFirstCodexStringField(obj, CODEX_SESSION_ID_KEYS) ??
       (() => {
-        const thread = asRecord(obj["thread"]);
+        const thread = asCodexRecord(obj["thread"]);
         if (thread === undefined) return undefined;
-        return readFirstStringField(thread, ["id", "thread_id", "threadId"]);
+        return readFirstCodexStringField(thread, CODEX_THREAD_ID_KEYS);
       })();
     if (sessionId !== undefined) {
       return {
@@ -183,15 +167,10 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.started") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    const itemType = readStringField(item, "type");
-    if (itemType === "command_execution") {
-      const toolName = readFirstStringField(item, [
-        "tool_name",
-        "toolName",
-        "name",
-      ]);
+    if (isCodexType(item["type"], "command_execution")) {
+      const toolName = readFirstCodexStringField(item, CODEX_TOOL_NAME_KEYS);
       return {
         type: "tool_call",
         toolName: toolName ?? "local_shell_call",
@@ -201,28 +180,23 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.completed") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    const itemType = readStringField(item, "type");
 
-    if (itemType === "agent_message") {
-      const text = readFirstStringField(item, ["text", "content", "message"]);
+    if (isCodexType(item["type"], "agent_message")) {
+      const text = readFirstCodexStringField(item, CODEX_MESSAGE_TEXT_KEYS);
       if (text !== undefined) {
         return { type: "message", content: text };
       }
       return null;
     }
 
-    if (itemType === "command_execution") {
-      const toolName = readFirstStringField(item, [
-        "tool_name",
-        "toolName",
-        "name",
-      ]);
+    if (isCodexType(item["type"], "command_execution")) {
+      const toolName = readFirstCodexStringField(item, CODEX_TOOL_NAME_KEYS);
       const exitCodeRaw = item["exit_code"];
       const isError =
         (typeof exitCodeRaw === "number" && exitCodeRaw !== 0) ||
-        readStringField(item, "status") === "failed";
+        readCodexStringField(item, "status") === "failed";
       return {
         type: "tool_result",
         toolName: toolName ?? "local_shell_call",
@@ -234,16 +208,16 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.delta") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    if (readStringField(item, "type") !== "agent_message") {
+    if (!isCodexType(item["type"], "agent_message")) {
       return null;
     }
-    const delta = asRecord(obj["delta"]);
+    const delta = asCodexRecord(obj["delta"]);
     const text =
       (delta !== undefined
-        ? readFirstStringField(delta, ["text", "content"])
-        : undefined) ?? readFirstStringField(item, ["text"]);
+        ? readFirstCodexStringField(delta, ["text", "content"])
+        : undefined) ?? readFirstCodexStringField(item, ["text"]);
     if (text !== undefined) {
       return { type: "message", content: text, isDelta: true };
     }
@@ -251,13 +225,14 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "session_meta") {
-    const payload = asRecord(obj["payload"]);
-    const meta = payload !== undefined ? asRecord(payload["meta"]) : undefined;
+    const payload = asCodexRecord(obj["payload"]);
+    const meta =
+      payload !== undefined ? asCodexRecord(payload["meta"]) : undefined;
     const sessionId =
       meta !== undefined
-        ? readStringField(meta, "id")
+        ? readCodexStringField(meta, "id")
         : payload !== undefined
-          ? readStringField(payload, "id")
+          ? readCodexStringField(payload, "id")
           : undefined;
     if (sessionId !== undefined) {
       return {
@@ -269,15 +244,14 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "event_msg") {
-    const payload = asRecord(obj["payload"]);
+    const payload = asCodexRecord(obj["payload"]);
     if (payload === undefined) return null;
-    const eventType = readStringField(payload, "type");
-    if (eventType === "AgentMessage" || eventType === "agent_message") {
+    if (isCodexType(payload["type"], "agent_message")) {
       const messageValue = payload["message"];
       if (typeof messageValue === "string" && messageValue.trim().length > 0) {
         return { type: "message", content: messageValue };
       }
-      const messageObj = asRecord(messageValue);
+      const messageObj = asCodexRecord(messageValue);
       const nestedContent =
         messageObj !== undefined ? messageObj["content"] : undefined;
       if (
@@ -289,9 +263,9 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
       if (Array.isArray(nestedContent)) {
         const parts: string[] = [];
         for (const item of nestedContent) {
-          const block = asRecord(item);
+          const block = asCodexRecord(item);
           if (block === undefined) continue;
-          const text = readStringField(block, "text");
+          const text = readCodexStringField(block, "text");
           if (text !== undefined) {
             parts.push(text);
           }
@@ -303,10 +277,10 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
       }
       return null;
     }
-    if (eventType === "ExecCommandBegin") {
+    if (isCodexType(payload["type"], "exec_command_begin")) {
       return { type: "tool_call", toolName: "local_shell_call" };
     }
-    if (eventType === "ExecCommandEnd") {
+    if (isCodexType(payload["type"], "exec_command_end")) {
       const exitCodeRaw = payload["exit_code"];
       const isError =
         typeof exitCodeRaw === "number" ? exitCodeRaw !== 0 : false;
@@ -320,22 +294,22 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "response_item") {
-    const payload = asRecord(obj["payload"]);
+    const payload = asCodexRecord(obj["payload"]);
     if (payload === undefined) return null;
-    const responseType = readStringField(payload, "type");
+    const responseType = readCodexStringField(payload, "type");
     if (
       responseType === "message" &&
-      readStringField(payload, "role") === "assistant"
+      readCodexStringField(payload, "role") === "assistant"
     ) {
       const content = payload["content"];
       if (!Array.isArray(content)) return null;
       const parts: string[] = [];
       for (const item of content) {
-        const block = asRecord(item);
+        const block = asCodexRecord(item);
         if (block === undefined) continue;
-        const blockType = readStringField(block, "type");
+        const blockType = readCodexStringField(block, "type");
         if (blockType !== "output_text" && blockType !== "input_text") continue;
-        const text = readStringField(block, "text");
+        const text = readCodexStringField(block, "text");
         if (text !== undefined) parts.push(text);
       }
       const combined = parts.join("\n").trim();
@@ -460,7 +434,9 @@ interface CodexAgentBase64Attachment {
   readonly mediaType?: string | undefined;
 }
 
-type CodexAgentAttachment = CodexAgentPathAttachment | CodexAgentBase64Attachment;
+type CodexAgentAttachment =
+  | CodexAgentPathAttachment
+  | CodexAgentBase64Attachment;
 
 function toCodexAgentAttachments(
   attachments: readonly AgentSessionAttachment[] | undefined,
@@ -1052,8 +1028,9 @@ class CodexAgentRunner implements AgentRunner {
 
         const codexAttachments = toCodexAgentAttachments(params.attachments);
         const imagePaths = codexAttachments
-          .filter((attachment): attachment is CodexAgentPathAttachment =>
-            attachment.type === "path",
+          .filter(
+            (attachment): attachment is CodexAgentPathAttachment =>
+              attachment.type === "path",
           )
           .map((attachment) => attachment.path);
 
@@ -1125,10 +1102,7 @@ class CodexAgentRunner implements AgentRunner {
             if (sessionId !== undefined) {
               const castSessionId = sessionId as ClaudeSessionId;
               if (
-                shouldEmitCodexSessionDetected(
-                  detectedSessionId,
-                  castSessionId,
-                )
+                shouldEmitCodexSessionDetected(detectedSessionId, castSessionId)
               ) {
                 channel.push({
                   type: "claude_session_detected",

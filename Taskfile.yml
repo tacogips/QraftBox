@@ -14,6 +14,7 @@ tasks:
     cmds:
       - bun install
       - cd client && bun install
+      - cd client-legacy && bun install
 
   dev:
     desc: Run backend + client dev servers with hot reload
@@ -41,6 +42,25 @@ tasks:
       - test -d node_modules/vite || bun install
       - rm -rf node_modules/.vite/deps node_modules/.vite/deps_temp
       - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}}
+
+  dev:client-legacy:
+    desc: Run the legacy Svelte Vite dev server with HMR
+    dir: client-legacy
+    vars:
+      PORT: '{{.PORT | default "5174"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      API_TARGET_HOST: '{{.API_TARGET_HOST | default "127.0.0.1"}}'
+      API_TARGET_PORT: '{{.API_TARGET_PORT | default "7144"}}'
+    cmds:
+      - test -d node_modules/vite || bun install
+      - rm -rf node_modules/.vite/deps node_modules/.vite/deps_temp
+      - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}}
+
+  dev-legacy:
+    desc: Run backend + legacy Svelte dev servers with hot reload
+    deps:
+      - dev:server
+      - dev:client-legacy
 
   build:
     desc: Build the project
@@ -184,7 +204,7 @@ tasks:
       - rm -rf release
 
   build:client:
-    desc: Build client assets (Svelte SPA)
+    desc: Build client assets (Solid SPA)
     cmds:
       - cd client && bun install && bun run build
 

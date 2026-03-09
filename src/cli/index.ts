@@ -9,6 +9,7 @@ import { Command } from "commander";
 import packageJson from "../../package.json" with { type: "json" };
 import type { CLIConfig, SyncMode } from "../types/index";
 import { loadConfig, validateConfig } from "./config";
+import { resolveConfiguredFrontend } from "../config/frontend";
 import { createContextManager } from "../server/workspace/context-manager";
 import { createServer, startServer } from "../server/index";
 import { createWebSocketManager } from "../server/websocket/index.js";
@@ -54,6 +55,10 @@ export function parseArgs(args: string[]): CLIConfig {
     .argument("[projectPath]", "Path to project directory")
     .option("-p, --port <number>", "Server port", "7144")
     .option("-h, --host <string>", "Server host", "localhost")
+    .option(
+      "--frontend <target>",
+      "Frontend target: solid (default) or svelte (legacy)",
+    )
     .option("--open", "Open browser automatically")
     .option("--watch", "Enable file watching (default: true)")
     .option("--no-watch", "Disable file watching")
@@ -110,6 +115,7 @@ export function parseArgs(args: string[]): CLIConfig {
   return {
     port,
     host: options["host"],
+    frontend: resolveConfiguredFrontend(options["frontend"]),
     open: options["open"] ?? false,
     watch: options["watch"] ?? true,
     syncMode,
@@ -256,6 +262,7 @@ export async function main(): Promise<void> {
 
     logger.info("qraftbox - All You Need Is Diff");
     logger.info(`Starting server on ${config.host}:${config.port}...`);
+    logger.info(`Frontend target: ${config.frontend}`);
     logger.info(`Project path: ${config.projectPath}`);
     logger.info(`Sync mode: ${config.syncMode}`);
     logger.info(`AI features: ${config.ai ? "enabled" : "disabled"}`);

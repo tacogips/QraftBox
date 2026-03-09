@@ -315,6 +315,86 @@ describe("AI Routes", () => {
 
       expect(getPromptQueueMock).toHaveBeenCalledWith(undefined);
     });
+
+    test("filters prompt queue entries by projectPath when requested", async () => {
+      (sessionManager.getPromptQueue as Mock).mockReturnValue([
+        {
+          id: "prompt-a",
+          message: "Queued for alpha",
+          status: "queued",
+          created_at: "2026-03-09T06:00:00.000Z",
+          project_path: "/repo/alpha",
+          worktree_id: "alpha_123",
+        },
+        {
+          id: "prompt-b",
+          message: "Queued for beta",
+          status: "queued",
+          created_at: "2026-03-09T06:05:00.000Z",
+          project_path: "/repo/beta",
+          worktree_id: "beta_456",
+        },
+      ]);
+
+      const res = await app.request("/prompt-queue?projectPath=/repo/alpha", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        prompts: [
+          {
+            id: "prompt-a",
+            message: "Queued for alpha",
+            status: "queued",
+            created_at: "2026-03-09T06:00:00.000Z",
+            project_path: "/repo/alpha",
+            worktree_id: "alpha_123",
+          },
+        ],
+      });
+    });
+  });
+
+  describe("GET /sessions", () => {
+    test("filters active sessions by projectPath when requested", async () => {
+      (sessionManager.listSessions as Mock).mockReturnValue([
+        {
+          id: "qs_alpha",
+          state: "running",
+          prompt: "Alpha task",
+          projectPath: "/repo/alpha",
+          createdAt: "2026-03-09T06:00:00.000Z",
+          context: {},
+        },
+        {
+          id: "qs_beta",
+          state: "running",
+          prompt: "Beta task",
+          projectPath: "/repo/beta",
+          createdAt: "2026-03-09T06:05:00.000Z",
+          context: {},
+        },
+      ]);
+
+      const res = await app.request("/sessions?projectPath=/repo/alpha", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        sessions: [
+          {
+            id: "qs_alpha",
+            state: "running",
+            prompt: "Alpha task",
+            projectPath: "/repo/alpha",
+            createdAt: "2026-03-09T06:00:00.000Z",
+            context: {},
+          },
+        ],
+      });
+    });
   });
 
   describe("session hidden routes", () => {
