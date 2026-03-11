@@ -4,6 +4,7 @@ import {
   type AISessionSubmitResult,
   type QraftAiSessionId,
 } from "../../../src/types/ai";
+import type { AIAgent } from "../../../src/types/ai-agent";
 import type {
   ExtendedSessionEntry,
   SessionFilters,
@@ -38,6 +39,10 @@ export interface AISessionInfo {
   readonly currentActivity?: string | undefined;
   readonly error?: string | undefined;
   readonly clientSessionId?: QraftAiSessionId | undefined;
+  readonly modelProfileId?: string | undefined;
+  readonly aiAgent?: AIAgent | undefined;
+  readonly modelVendor?: "anthropics" | "openai" | undefined;
+  readonly modelName?: string | undefined;
 }
 
 export interface AiSessionTranscriptEvent {
@@ -219,6 +224,10 @@ function normalizeActiveSession(activeSession: AISessionInfo): AISessionInfo {
     projectPath: activeSession.projectPath,
     worktreeId: activeSession.worktreeId,
     clientSessionId: activeSession.clientSessionId,
+    modelProfileId: activeSession.modelProfileId,
+    aiAgent: activeSession.aiAgent,
+    modelVendor: activeSession.modelVendor,
+    modelName: activeSession.modelName,
   };
 }
 

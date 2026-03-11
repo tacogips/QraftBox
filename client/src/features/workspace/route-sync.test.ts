@@ -8,6 +8,8 @@ const INITIAL_ROUTE: ScreenRouteState = {
   screen: "files",
   contextId: null,
   selectedPath: null,
+  selectedViewMode: null,
+  selectedLineNumber: null,
 };
 
 const UPDATED_ROUTE: ScreenRouteState = {
@@ -15,6 +17,8 @@ const UPDATED_ROUTE: ScreenRouteState = {
   screen: "commits",
   contextId: null,
   selectedPath: null,
+  selectedViewMode: null,
+  selectedLineNumber: null,
 };
 
 describe("initializeWorkspaceRouteSync", () => {

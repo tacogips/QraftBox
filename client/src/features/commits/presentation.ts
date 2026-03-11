@@ -39,6 +39,16 @@ export function formatCommitRelativeDate(timestamp: number): string {
   });
 }
 
+export function formatCommitAbsoluteDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function formatCommitStatusLabel(
   status: CommitFileChange["status"],
 ): string {
@@ -60,6 +70,15 @@ export function formatCommitStatusLabel(
 
 export function getCommitHeadline(message: string): string {
   return message.split("\n")[0] ?? message;
+}
+
+export function getCommitPreviewText(commit: CommitInfo): string {
+  const trimmedBody = commit.body.trim();
+  if (trimmedBody.length > 0) {
+    return trimmedBody;
+  }
+
+  return `Authored by ${commit.author.name} on ${formatCommitAbsoluteDate(commit.date)}`;
 }
 
 export function getCommitListSummary(

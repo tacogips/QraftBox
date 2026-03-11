@@ -15,6 +15,17 @@ export type DiffViewMode =
   | "current-state"
   | "full-file";
 
+export const DIFF_VIEW_MODES = [
+  "side-by-side",
+  "inline",
+  "current-state",
+  "full-file",
+] as const satisfies readonly DiffViewMode[];
+
+export function isDiffViewMode(value: string): value is DiffViewMode {
+  return DIFF_VIEW_MODES.includes(value as DiffViewMode);
+}
+
 export interface DiffChange {
   readonly type: DiffChangeType;
   readonly content: string;

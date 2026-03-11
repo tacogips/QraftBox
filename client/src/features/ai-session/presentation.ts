@@ -1,4 +1,6 @@
 import type { QraftAiSessionId } from "../../../../src/types/ai";
+import type { AIAgent } from "../../../../src/types/ai-agent";
+import type { SessionSource } from "../../../../src/types/claude-session";
 import type {
   AISessionInfo,
   AiSessionTranscriptEvent,
@@ -15,13 +17,15 @@ export interface AiSessionListEntry {
   readonly detail: string;
   readonly status: string;
   readonly qraftAiSessionId: QraftAiSessionId;
-  readonly source: "active" | "history" | "queued";
+  readonly lifecycleState: "active" | "history" | "queued";
+  readonly sessionSource?: SessionSource | undefined;
   readonly updatedAt: string;
   readonly queuedPromptCount: number;
   readonly queuedPromptId: string | null;
   readonly activeSessionId: string | null;
   readonly historySessionId: string | null;
   readonly latestPrompt: string;
+  readonly aiAgent?: AIAgent | undefined;
   readonly modelProfileId?: string | undefined;
   readonly modelVendor?: string | undefined;
   readonly modelName?: string | undefined;
@@ -111,7 +115,8 @@ export function buildAiSessionListEntries(
       detail: detailCandidate,
       status: activeSession.state,
       qraftAiSessionId,
-      source: "active",
+      lifecycleState: "active",
+      sessionSource: historicalSession?.source ?? "qraftbox",
       updatedAt:
         activeSession.completedAt ??
         activeSession.startedAt ??
@@ -121,9 +126,11 @@ export function buildAiSessionListEntries(
       activeSessionId: activeSession.id,
       historySessionId: historicalSession?.sessionId ?? null,
       latestPrompt,
-      modelProfileId: undefined,
-      modelVendor: undefined,
-      modelName: undefined,
+      aiAgent: activeSession.aiAgent ?? historicalSession?.aiAgent,
+      modelProfileId:
+        activeSession.modelProfileId ?? historicalSession?.modelProfileId,
+      modelVendor: activeSession.modelVendor ?? historicalSession?.modelVendor,
+      modelName: activeSession.modelName ?? historicalSession?.modelName,
       canCancel:
         activeSession.state === "running" || activeSession.state === "queued",
     });
@@ -152,7 +159,8 @@ export function buildAiSessionListEntries(
         `${historicalSession.source} | ${historicalSession.gitBranch}`,
       status: latestQueuedPromptItem?.status ?? "history",
       qraftAiSessionId: historicalSession.qraftAiSessionId,
-      source: latestQueuedPromptItem === null ? "history" : "queued",
+      lifecycleState: latestQueuedPromptItem === null ? "history" : "queued",
+      sessionSource: historicalSession.source,
       updatedAt:
         latestQueuedPromptItem?.created_at ?? historicalSession.modified,
       queuedPromptCount: queuedPromptItems.length,
@@ -160,6 +168,7 @@ export function buildAiSessionListEntries(
       activeSessionId: null,
       historySessionId: historicalSession.sessionId,
       latestPrompt,
+      aiAgent: historicalSession.aiAgent,
       modelProfileId: historicalSession.modelProfileId,
       modelVendor: historicalSession.modelVendor,
       modelName: historicalSession.modelName,
@@ -185,13 +194,15 @@ export function buildAiSessionListEntries(
       detail: `Queued prompt for ${qraftAiSessionId}`,
       status: latestPromptQueueItem.status,
       qraftAiSessionId,
-      source: "queued",
+      lifecycleState: "queued",
+      sessionSource: "qraftbox",
       updatedAt: latestPromptQueueItem.created_at,
       queuedPromptCount: queuedPromptItems.length,
       queuedPromptId: latestPromptQueueItem.id,
       activeSessionId: null,
       historySessionId: null,
       latestPrompt: latestPromptQueueItem.message,
+      aiAgent: undefined,
       modelProfileId: undefined,
       modelVendor: undefined,
       modelName: undefined,
@@ -368,9 +379,7 @@ export function buildAiSessionTranscriptLines(
       }
 
       return {
-        id:
-          event.uuid ??
-          `${event.type}:${(options.offset ?? 0) + eventIndex}`,
+        id: event.uuid ?? `${event.type}:${(options.offset ?? 0) + eventIndex}`,
         role:
           event.type === "user"
             ? "user"
@@ -476,6 +485,45 @@ export function describeAiSessionEntryModel(
   }
 
   return "Server default";
+}
+
+export function describeAiSessionEntryOrigin(
+  entry: Pick<AiSessionListEntry, "sessionSource">,
+): string | null {
+  if (entry.sessionSource === "qraftbox") {
+    return "QRAFTBOX";
+  }
+
+  if (
+    entry.sessionSource === "claude-cli" ||
+    entry.sessionSource === "codex-cli"
+  ) {
+    return "CLIENT";
+  }
+
+  return null;
+}
+
+export function describeAiSessionEntryAgent(
+  entry: Pick<AiSessionListEntry, "aiAgent" | "sessionSource" | "modelVendor">,
+): string | null {
+  if (entry.aiAgent === "codex" || entry.sessionSource === "codex-cli") {
+    return "CODEX";
+  }
+
+  if (entry.aiAgent === "claude" || entry.sessionSource === "claude-cli") {
+    return "CLAUDE-CODE";
+  }
+
+  if (entry.modelVendor === "openai") {
+    return "CODEX";
+  }
+
+  if (entry.modelVendor === "anthropics") {
+    return "CLAUDE-CODE";
+  }
+
+  return null;
 }
 
 export function describeAiSessionPromptContext(

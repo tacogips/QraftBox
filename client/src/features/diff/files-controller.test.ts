@@ -101,6 +101,50 @@ describe("createFilesController", () => {
     );
   });
 
+  test("loads file content for diff-backed paths outside full-file mode", async () => {
+    let fetchFileContentCalls = 0;
+    const filesApiClient: FilesApiClient = {
+      fetchAllFilesTree: async () => ({
+        tree: {
+          name: "",
+          path: "",
+          isDirectory: true,
+          children: [],
+        },
+        totalFiles: 0,
+        changedFiles: 0,
+      }),
+      fetchDirectoryChildren: async () => [],
+      fetchFileContent: async (_contextId, filePath) => {
+        fetchFileContentCalls += 1;
+        return {
+          path: filePath,
+          content: "diff-backed body",
+          language: "typescript",
+          mimeType: "text/typescript",
+        };
+      },
+    };
+    const filesController = createFilesController({ filesApiClient });
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-diff-preview",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview: DIFF_OVERVIEW,
+      preferredViewMode: "side-by-side",
+    });
+
+    expect(fetchFileContentCalls).toBe(1);
+    expect(filesController.getState().selectedPath).toBe("src/main.ts");
+    expect(filesController.getState().fileContent).toEqual({
+      path: "src/main.ts",
+      content: "diff-backed body",
+      language: "typescript",
+      mimeType: "text/typescript",
+    });
+  });
+
   test("marks the all-files tree stale and refreshes it on demand", async () => {
     let fetchCount = 0;
     const filesApiClient: FilesApiClient = {

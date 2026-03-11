@@ -42,6 +42,10 @@ describe("navigation contracts", () => {
     expect(parseAppHash("#/repo-slug/commits")).toEqual({
       projectSlug: "repo-slug",
       screen: "commits",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 
@@ -49,6 +53,10 @@ describe("navigation contracts", () => {
     expect(parseAppHash("#/terminal")).toEqual({
       projectSlug: null,
       screen: "terminal",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 
@@ -56,6 +64,10 @@ describe("navigation contracts", () => {
     expect(parseAppHash("#/repo-slug")).toEqual({
       projectSlug: "repo-slug",
       screen: DEFAULT_APP_SCREEN,
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 
@@ -63,6 +75,10 @@ describe("navigation contracts", () => {
     expect(parseAppHash("#/repo-slug/unknown-screen")).toEqual({
       projectSlug: "repo-slug",
       screen: DEFAULT_APP_SCREEN,
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 
@@ -71,6 +87,42 @@ describe("navigation contracts", () => {
     expect(buildScreenHash("repo-slug", "ai-session")).toBe(
       "#/repo-slug/ai-session",
     );
+  });
+
+  test("parses file-selection query state from the hash", () => {
+    expect(
+      parseAppHash("#/repo-slug/files?path=src%2Fmain.ts&view=inline&line=42"),
+    ).toEqual({
+      projectSlug: "repo-slug",
+      screen: "files",
+      contextId: null,
+      selectedPath: "src/main.ts",
+      selectedViewMode: "inline",
+      selectedLineNumber: 42,
+    });
+  });
+
+  test("ignores invalid file-selection query values", () => {
+    expect(parseAppHash("#/repo-slug/files?path=&view=unknown&line=0")).toEqual(
+      {
+        projectSlug: "repo-slug",
+        screen: "files",
+        contextId: null,
+        selectedPath: null,
+        selectedViewMode: null,
+        selectedLineNumber: null,
+      },
+    );
+  });
+
+  test("builds screen hashes with file-selection query state", () => {
+    expect(
+      buildScreenHash("repo-slug", "files", {
+        selectedPath: "src/main.ts",
+        selectedViewMode: "current-state",
+        selectedLineNumber: 17,
+      }),
+    ).toBe("#/repo-slug/files?path=src%2Fmain.ts&view=current-state&line=17");
   });
 
   test("derives the active screen from a hash", () => {

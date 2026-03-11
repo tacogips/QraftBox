@@ -1,4 +1,11 @@
-import { createEffect, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  type JSX,
+  onCleanup,
+  Show,
+} from "solid-js";
 import {
   createModelConfigApiClient,
   type GitActionPromptName,
@@ -10,6 +17,7 @@ import type {
   OperationModelBindings,
 } from "../../../../src/types/model-config";
 import type { PromptTemplate } from "../../../../src/types/prompt-config";
+import { ScreenHeader } from "../../components/ScreenHeader";
 import { profileSummary } from "./forms";
 import { createLatestActionDefaultsRequestGuard } from "./state";
 
@@ -26,6 +34,64 @@ const LANGUAGE_OPTIONS = [
   "German",
   "Chinese",
   "Korean",
+] as const;
+
+const SCREEN_SHELL_CLASS =
+  "mx-auto flex h-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6";
+const PANEL_CLASS =
+  "rounded-2xl border border-border-default bg-bg-secondary p-5";
+const FIELD_CLASS =
+  "mt-2 w-full rounded-xl border border-border-default bg-bg-primary px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-accent-emphasis";
+const SAVE_BUTTON_CLASS =
+  "rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+
+interface BindingControlDefinition {
+  readonly key: keyof OperationModelBindings;
+  readonly label: string;
+  readonly helperLabel: string;
+}
+
+interface LanguageControlDefinition {
+  readonly key: keyof OperationLanguageSettings;
+  readonly label: string;
+}
+
+interface PromptEditorDefinition {
+  readonly key:
+    | "commit"
+    | "create-pr"
+    | "ai-session-purpose"
+    | "ai-session-refresh-purpose"
+    | "ai-session-resume";
+  readonly title: string;
+  readonly description: string;
+  readonly getValue: () => string;
+  readonly setValue: (nextValue: string) => void;
+  readonly getPath: () => string;
+}
+
+const BINDING_CONTROL_DEFINITIONS: readonly BindingControlDefinition[] = [
+  {
+    key: "gitCommitProfileId",
+    label: "Git Commit",
+    helperLabel: "Profile used for commit message generation.",
+  },
+  {
+    key: "gitPrProfileId",
+    label: "Git PR",
+    helperLabel: "Profile used when drafting pull requests.",
+  },
+  {
+    key: "aiDefaultProfileId",
+    label: "AI Ask",
+    helperLabel: "Fallback profile for general AI session work.",
+  },
+] as const;
+
+const LANGUAGE_CONTROL_DEFINITIONS: readonly LanguageControlDefinition[] = [
+  { key: "gitCommitLanguage", label: "Git Commit" },
+  { key: "gitPrLanguage", label: "Git PR" },
+  { key: "aiSessionPurposeLanguage", label: "AI Session Purpose Summary" },
 ] as const;
 
 export function ActionDefaultsScreen(
@@ -81,6 +147,56 @@ export function ActionDefaultsScreen(
     createSignal("");
   const loadRequestGuard = createLatestActionDefaultsRequestGuard();
   let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function promptEditorDefinitions(): readonly PromptEditorDefinition[] {
+    return [
+      {
+        key: "commit",
+        title: "Commit prompt",
+        description:
+          "Instructions used when generating commit messages from local changes.",
+        getValue: commitPromptText,
+        setValue: setCommitPromptText,
+        getPath: commitPromptPath,
+      },
+      {
+        key: "create-pr",
+        title: "PR prompt",
+        description:
+          "Instructions used when creating pull request summaries from the current branch.",
+        getValue: prPromptText,
+        setValue: setPrPromptText,
+        getPath: prPromptPath,
+      },
+      {
+        key: "ai-session-purpose",
+        title: "AI session purpose prompt",
+        description:
+          "Template used to summarize the initial goal of a coding session.",
+        getValue: sessionPurposePromptText,
+        setValue: setSessionPurposePromptText,
+        getPath: sessionPurposePromptPath,
+      },
+      {
+        key: "ai-session-refresh-purpose",
+        title: "AI refresh purpose prompt",
+        description:
+          "Template used when refreshing a session purpose after context changes.",
+        getValue: sessionRefreshPurposePromptText,
+        setValue: setSessionRefreshPurposePromptText,
+        getPath: sessionRefreshPurposePromptPath,
+      },
+      {
+        key: "ai-session-resume",
+        title: "AI resume prompt",
+        description:
+          "Template used when re-entering an existing session and restoring context.",
+        getValue: sessionResumePromptText,
+        setValue: setSessionResumePromptText,
+        getPath: sessionResumePromptPath,
+      },
+    ];
+  }
 
   function resetLoadedState(): void {
     setProfiles([]);
@@ -327,6 +443,10 @@ export function ActionDefaultsScreen(
     }
   }
 
+  function getTemplateCountSummary(): string {
+    return `${commitTemplates().length} commit templates | ${prTemplates().length} PR templates`;
+  }
+
   createEffect(() => {
     void load(props.contextId);
   });
@@ -339,290 +459,271 @@ export function ActionDefaultsScreen(
   });
 
   return (
-    <section>
-      <h2>Action Defaults</h2>
-      <p>
-        Assign default profiles and execution prompts for AI-driven actions.
-      </p>
+    <section class={SCREEN_SHELL_CLASS}>
+      <ScreenHeader
+        title="Action Defaults"
+        subtitle="Bind profiles, prompt templates, language preferences, and editable prompt sources for AI-driven commit, PR, and session workflows."
+      />
+
       <Show when={errorMessage() !== null}>
-        <p role="alert">{errorMessage()}</p>
+        <div class="rounded-2xl border border-danger-emphasis/40 bg-danger-muted/10 p-4 text-sm text-danger-fg">
+          {errorMessage()}
+        </div>
       </Show>
+
       <Show when={notice() !== null}>
-        <p>{notice()}</p>
+        <div class="rounded-2xl border border-success-emphasis/40 bg-success-muted/10 p-4 text-sm text-success-fg">
+          {notice()}
+        </div>
       </Show>
+
       <Show when={isLoading()}>
-        <p>Loading action defaults...</p>
+        <div class="rounded-2xl border border-border-default bg-bg-secondary p-6 text-sm text-text-secondary">
+          Loading action defaults...
+        </div>
       </Show>
+
       <Show when={!isLoading()}>
-        <section>
-          <h3>Default profiles</h3>
-          <label>
-            Git Commit
-            <select
-              value={bindings().gitCommitProfileId ?? ""}
-              onInput={(event) =>
-                setBindings({
-                  ...bindings(),
-                  gitCommitProfileId:
-                    event.currentTarget.value.length > 0
-                      ? event.currentTarget.value
-                      : null,
-                })
-              }
-            >
-              <option value="">No profile selected</option>
-              <For each={profiles()}>
-                {(profile) => (
-                  <option value={profile.id}>{profile.name}</option>
+        <div class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
+          <div class="space-y-4">
+            <section class={`${PANEL_CLASS} space-y-4`}>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                    Default profiles
+                  </p>
+                  <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                    Action to profile bindings
+                  </h3>
+                </div>
+                <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1 text-xs text-text-secondary">
+                  {profiles().length} profiles
+                </span>
+              </div>
+
+              <For each={BINDING_CONTROL_DEFINITIONS}>
+                {(bindingDefinition) => (
+                  <label class="block text-sm">
+                    <span class="text-text-secondary">
+                      {bindingDefinition.label}
+                    </span>
+                    <select
+                      class={FIELD_CLASS}
+                      value={bindings()[bindingDefinition.key] ?? ""}
+                      onInput={(event) =>
+                        setBindings({
+                          ...bindings(),
+                          [bindingDefinition.key]:
+                            event.currentTarget.value.length > 0
+                              ? event.currentTarget.value
+                              : null,
+                        })
+                      }
+                    >
+                      <option value="">No profile selected</option>
+                      <For each={profiles()}>
+                        {(profile) => (
+                          <option value={profile.id}>{profile.name}</option>
+                        )}
+                      </For>
+                    </select>
+                    <p class="mt-2 text-xs leading-5 text-text-tertiary">
+                      {bindingDefinition.helperLabel}
+                    </p>
+                    <p class="mt-1 break-words text-xs font-medium text-text-secondary">
+                      {profileSummary(
+                        bindings()[bindingDefinition.key],
+                        profiles(),
+                      )}
+                    </p>
+                  </label>
                 )}
               </For>
-            </select>
-          </label>
-          <p>{profileSummary(bindings().gitCommitProfileId, profiles())}</p>
-          <label>
-            Git PR
-            <select
-              value={bindings().gitPrProfileId ?? ""}
-              onInput={(event) =>
-                setBindings({
-                  ...bindings(),
-                  gitPrProfileId:
-                    event.currentTarget.value.length > 0
-                      ? event.currentTarget.value
-                      : null,
-                })
-              }
-            >
-              <option value="">No profile selected</option>
-              <For each={profiles()}>
-                {(profile) => (
-                  <option value={profile.id}>{profile.name}</option>
+
+              <button
+                type="button"
+                disabled={isSaving() || profiles().length === 0}
+                class={SAVE_BUTTON_CLASS}
+                onClick={() => void saveBindings()}
+              >
+                Save default profiles
+              </button>
+            </section>
+
+            <section class={`${PANEL_CLASS} space-y-4`}>
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                    Default prompt templates
+                  </p>
+                  <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                    Workspace prompt selection
+                  </h3>
+                </div>
+                <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1 text-xs text-text-secondary">
+                  {getTemplateCountSummary()}
+                </span>
+              </div>
+
+              <label class="block text-sm">
+                <span class="text-text-secondary">Git Commit</span>
+                <select
+                  class={FIELD_CLASS}
+                  value={selectedCommitPromptTemplateId()}
+                  onInput={(event) =>
+                    setSelectedCommitPromptTemplateId(event.currentTarget.value)
+                  }
+                >
+                  <option value="">No template selected</option>
+                  <For each={commitTemplates()}>
+                    {(template) => (
+                      <option value={template.id}>{template.name}</option>
+                    )}
+                  </For>
+                </select>
+              </label>
+
+              <label class="block text-sm">
+                <span class="text-text-secondary">Git PR</span>
+                <select
+                  class={FIELD_CLASS}
+                  value={selectedPrPromptTemplateId()}
+                  onInput={(event) =>
+                    setSelectedPrPromptTemplateId(event.currentTarget.value)
+                  }
+                >
+                  <option value="">No template selected</option>
+                  <For each={prTemplates()}>
+                    {(template) => (
+                      <option value={template.id}>{template.name}</option>
+                    )}
+                  </For>
+                </select>
+              </label>
+
+              <button
+                type="button"
+                disabled={
+                  isSaving() ||
+                  commitTemplates().length === 0 ||
+                  prTemplates().length === 0
+                }
+                class={SAVE_BUTTON_CLASS}
+                onClick={() => void savePromptDefaults()}
+              >
+                Save prompt template defaults
+              </button>
+            </section>
+
+            <section class={`${PANEL_CLASS} space-y-4`}>
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                  Output language
+                </p>
+                <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                  Generated text language
+                </h3>
+              </div>
+
+              <For each={LANGUAGE_CONTROL_DEFINITIONS}>
+                {(languageDefinition) => (
+                  <label class="block text-sm">
+                    <span class="text-text-secondary">
+                      {languageDefinition.label}
+                    </span>
+                    <input
+                      list="action-language-options"
+                      class={FIELD_CLASS}
+                      value={operationLanguages()[languageDefinition.key]}
+                      onInput={(event) =>
+                        setOperationLanguages({
+                          ...operationLanguages(),
+                          [languageDefinition.key]: event.currentTarget.value,
+                        })
+                      }
+                    />
+                  </label>
                 )}
               </For>
-            </select>
-          </label>
-          <p>{profileSummary(bindings().gitPrProfileId, profiles())}</p>
-          <label>
-            AI Ask
-            <select
-              value={bindings().aiDefaultProfileId ?? ""}
-              onInput={(event) =>
-                setBindings({
-                  ...bindings(),
-                  aiDefaultProfileId:
-                    event.currentTarget.value.length > 0
-                      ? event.currentTarget.value
-                      : null,
-                })
-              }
-            >
-              <option value="">No profile selected</option>
-              <For each={profiles()}>
-                {(profile) => (
-                  <option value={profile.id}>{profile.name}</option>
+
+              <button
+                type="button"
+                disabled={isSaving()}
+                class={SAVE_BUTTON_CLASS}
+                onClick={() => void saveLanguages()}
+              >
+                Save output languages
+              </button>
+            </section>
+          </div>
+
+          <section class={`${PANEL_CLASS} min-h-0`}>
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                  Prompt sources
+                </p>
+                <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                  Editable action prompts
+                </h3>
+              </div>
+              <Show when={props.contextId !== null}>
+                <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1 text-xs text-text-secondary">
+                  Context attached
+                </span>
+              </Show>
+            </div>
+
+            <div class="mt-5 space-y-4 overflow-auto">
+              <For each={promptEditorDefinitions()}>
+                {(promptEditor) => (
+                  <article class="rounded-2xl border border-border-default bg-bg-primary/60 p-4">
+                    <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <h4 class="text-base font-semibold text-text-primary">
+                          {promptEditor.title}
+                        </h4>
+                        <p class="mt-1 text-sm leading-6 text-text-secondary">
+                          {promptEditor.description}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={isSaving()}
+                        class={SAVE_BUTTON_CLASS}
+                        onClick={() => void saveActionPrompt(promptEditor.key)}
+                      >
+                        Save prompt
+                      </button>
+                    </div>
+
+                    <Show when={promptEditor.getPath().length > 0}>
+                      <p class="mt-3 break-all rounded-xl border border-border-default bg-bg-secondary px-3 py-2 font-mono text-xs text-text-secondary">
+                        {promptEditor.getPath()}
+                      </p>
+                    </Show>
+
+                    <textarea
+                      rows={8}
+                      class={`${FIELD_CLASS} mt-4 min-h-[180px] resize-y font-mono`}
+                      value={promptEditor.getValue()}
+                      onInput={(event) =>
+                        promptEditor.setValue(event.currentTarget.value)
+                      }
+                    />
+                  </article>
                 )}
               </For>
-            </select>
-          </label>
-          <p>{profileSummary(bindings().aiDefaultProfileId, profiles())}</p>
-          <button
-            type="button"
-            disabled={isSaving() || profiles().length === 0}
-            onClick={() => void saveBindings()}
-          >
-            Save default profiles
-          </button>
-        </section>
-        <section>
-          <h3>Default prompt templates</h3>
-          <label>
-            Git Commit
-            <select
-              value={selectedCommitPromptTemplateId()}
-              onInput={(event) =>
-                setSelectedCommitPromptTemplateId(event.currentTarget.value)
-              }
-            >
-              <For each={commitTemplates()}>
-                {(template) => (
-                  <option value={template.id}>{template.name}</option>
-                )}
-              </For>
-            </select>
-          </label>
-          <label>
-            Git PR
-            <select
-              value={selectedPrPromptTemplateId()}
-              onInput={(event) =>
-                setSelectedPrPromptTemplateId(event.currentTarget.value)
-              }
-            >
-              <For each={prTemplates()}>
-                {(template) => (
-                  <option value={template.id}>{template.name}</option>
-                )}
-              </For>
-            </select>
-          </label>
-          <button
-            type="button"
-            disabled={
-              isSaving() ||
-              commitTemplates().length === 0 ||
-              prTemplates().length === 0
-            }
-            onClick={() => void savePromptDefaults()}
-          >
-            Save prompt template defaults
-          </button>
-        </section>
-        <section>
-          <h3>Output language</h3>
-          <label>
-            Git Commit
-            <input
-              list="action-language-options"
-              value={operationLanguages().gitCommitLanguage}
-              onInput={(event) =>
-                setOperationLanguages({
-                  ...operationLanguages(),
-                  gitCommitLanguage: event.currentTarget.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            Git PR
-            <input
-              list="action-language-options"
-              value={operationLanguages().gitPrLanguage}
-              onInput={(event) =>
-                setOperationLanguages({
-                  ...operationLanguages(),
-                  gitPrLanguage: event.currentTarget.value,
-                })
-              }
-            />
-          </label>
-          <label>
-            AI Session Purpose Summary
-            <input
-              list="action-language-options"
-              value={operationLanguages().aiSessionPurposeLanguage}
-              onInput={(event) =>
-                setOperationLanguages({
-                  ...operationLanguages(),
-                  aiSessionPurposeLanguage: event.currentTarget.value,
-                })
-              }
-            />
-          </label>
-          <datalist id="action-language-options">
-            <For each={LANGUAGE_OPTIONS}>
-              {(language) => <option value={language} />}
-            </For>
-          </datalist>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveLanguages()}
-          >
-            Save output languages
-          </button>
-        </section>
-        <section>
-          <h3>Action execution prompts</h3>
-          <label>
-            Git Commit prompt
-            <p>{commitPromptPath()}</p>
-            <textarea
-              rows={8}
-              value={commitPromptText()}
-              onInput={(event) =>
-                setCommitPromptText(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveActionPrompt("commit")}
-          >
-            Save commit execution prompt
-          </button>
-          <label>
-            Git PR prompt
-            <p>{prPromptPath()}</p>
-            <textarea
-              rows={8}
-              value={prPromptText()}
-              onInput={(event) => setPrPromptText(event.currentTarget.value)}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveActionPrompt("create-pr")}
-          >
-            Save PR execution prompt
-          </button>
-          <label>
-            AI Session Purpose prompt
-            <p>{sessionPurposePromptPath()}</p>
-            <textarea
-              rows={8}
-              value={sessionPurposePromptText()}
-              onInput={(event) =>
-                setSessionPurposePromptText(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveActionPrompt("ai-session-purpose")}
-          >
-            Save session-purpose prompt
-          </button>
-          <label>
-            AI Session Refresh Purpose prompt
-            <p>{sessionRefreshPurposePromptPath()}</p>
-            <textarea
-              rows={4}
-              value={sessionRefreshPurposePromptText()}
-              onInput={(event) =>
-                setSessionRefreshPurposePromptText(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveActionPrompt("ai-session-refresh-purpose")}
-          >
-            Save refresh-purpose prompt
-          </button>
-          <label>
-            AI Session Resume prompt
-            <p>{sessionResumePromptPath()}</p>
-            <textarea
-              rows={3}
-              value={sessionResumePromptText()}
-              onInput={(event) =>
-                setSessionResumePromptText(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void saveActionPrompt("ai-session-resume")}
-          >
-            Save resume-session prompt
-          </button>
-        </section>
+            </div>
+          </section>
+        </div>
       </Show>
+
+      <datalist id="action-language-options">
+        <For each={LANGUAGE_OPTIONS}>
+          {(languageOption) => <option value={languageOption} />}
+        </For>
+      </datalist>
     </section>
   );
 }

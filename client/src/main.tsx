@@ -13,11 +13,7 @@ if (rootElement === null) {
 }
 
 const parsedRoute = parseAppHash(window.location.hash);
-const initialRoute: ScreenRouteState = {
-  ...parsedRoute,
-  contextId: null,
-  selectedPath: null,
-};
+const initialRoute: ScreenRouteState = parsedRoute;
 
 const bootstrapOptions: SolidAppBootstrapOptions = {
   initialRoute,

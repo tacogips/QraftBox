@@ -12,6 +12,8 @@ import type {
 import {
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
+  describeAiSessionEntryAgent,
+  describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
@@ -133,13 +135,15 @@ describe("ai-session presentation helpers", () => {
         detail: "Queued prompt for qs-queued-only",
         status: "queued",
         qraftAiSessionId: asQraftAiSessionId("qs-queued-only"),
-        source: "queued",
+        lifecycleState: "queued",
+        sessionSource: "qraftbox",
         updatedAt: "2026-03-09T07:00:00.000Z",
         queuedPromptCount: 1,
         queuedPromptId: "prompt-2",
         activeSessionId: null,
         historySessionId: null,
         latestPrompt: "Queued only session",
+        aiAgent: undefined,
         modelProfileId: undefined,
         modelVendor: undefined,
         modelName: undefined,
@@ -151,13 +155,15 @@ describe("ai-session presentation helpers", () => {
         detail: "Follow up on files parity",
         status: "queued",
         qraftAiSessionId: asQraftAiSessionId("qs-history"),
-        source: "queued",
+        lifecycleState: "queued",
+        sessionSource: "claude-cli",
         updatedAt: "2026-03-09T06:30:00.000Z",
         queuedPromptCount: 1,
         queuedPromptId: "prompt-1",
         activeSessionId: null,
         historySessionId: "claude-2",
         latestPrompt: "Follow up on files parity",
+        aiAgent: undefined,
         modelProfileId: "profile-history",
         modelVendor: "anthropics",
         modelName: "claude-sonnet",
@@ -169,13 +175,15 @@ describe("ai-session presentation helpers", () => {
         detail: "Applying patch",
         status: "running",
         qraftAiSessionId: asQraftAiSessionId("qs-active"),
-        source: "active",
+        lifecycleState: "active",
+        sessionSource: "qraftbox",
         updatedAt: "2026-03-09T06:00:00.000Z",
         queuedPromptCount: 0,
         queuedPromptId: null,
         activeSessionId: "qs-active",
         historySessionId: "claude-1",
         latestPrompt: "Continue migration",
+        aiAgent: undefined,
         modelProfileId: undefined,
         modelVendor: undefined,
         modelName: undefined,
@@ -267,13 +275,15 @@ describe("ai-session presentation helpers", () => {
         detail: "Newest queued follow-up",
         status: "running",
         qraftAiSessionId: asQraftAiSessionId("qs-history"),
-        source: "queued",
+        lifecycleState: "queued",
+        sessionSource: "claude-cli",
         updatedAt: "2026-03-09T06:45:00.000Z",
         queuedPromptCount: 2,
         queuedPromptId: "prompt-new",
         activeSessionId: null,
         historySessionId: "claude-2",
         latestPrompt: "Newest queued follow-up",
+        aiAgent: undefined,
         modelProfileId: undefined,
         modelVendor: undefined,
         modelName: undefined,
@@ -285,13 +295,15 @@ describe("ai-session presentation helpers", () => {
         detail: "Active session duplicate",
         status: "running",
         qraftAiSessionId: asQraftAiSessionId("qs-active"),
-        source: "active",
+        lifecycleState: "active",
+        sessionSource: "qraftbox",
         updatedAt: "2026-03-09T06:00:00.000Z",
         queuedPromptCount: 1,
         queuedPromptId: "prompt-old",
         activeSessionId: "qs-active",
         historySessionId: "claude-1",
         latestPrompt: "Continue migration",
+        aiAgent: undefined,
         modelProfileId: undefined,
         modelVendor: undefined,
         modelName: undefined,
@@ -435,6 +447,33 @@ describe("ai-session presentation helpers", () => {
         [],
       ),
     ).toBe("openai/gpt-5");
+  });
+
+  test("describes session origin and agent badges", () => {
+    expect(
+      describeAiSessionEntryOrigin({
+        sessionSource: "qraftbox",
+      }),
+    ).toBe("QRAFTBOX");
+    expect(
+      describeAiSessionEntryOrigin({
+        sessionSource: "claude-cli",
+      }),
+    ).toBe("CLIENT");
+    expect(
+      describeAiSessionEntryAgent({
+        aiAgent: "codex",
+        sessionSource: "qraftbox",
+        modelVendor: "openai",
+      }),
+    ).toBe("CODEX");
+    expect(
+      describeAiSessionEntryAgent({
+        aiAgent: undefined,
+        sessionSource: "claude-cli",
+        modelVendor: "anthropics",
+      }),
+    ).toBe("CLAUDE-CODE");
   });
 
   test("describes the current prompt context from the files screen", () => {

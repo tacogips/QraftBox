@@ -161,13 +161,20 @@ function collectCurrentStateLinePreview(
 ): readonly string[] {
   const previewLines: string[] = [];
   if (currentStateLine.deletedBefore !== undefined) {
+    const deletedLineCount = currentStateLine.deletedBefore.lines.length;
+    const lineLabel = deletedLineCount === 1 ? "line" : "lines";
     previewLines.push(
-      `deleted ${currentStateLine.deletedBefore.originalStart}-${currentStateLine.deletedBefore.originalEnd}: ${currentStateLine.deletedBefore.lines.join(" | ")}`,
+      `deleted ${currentStateLine.deletedBefore.originalStart}-${currentStateLine.deletedBefore.originalEnd}: ${deletedLineCount} ${lineLabel} folded`,
     );
   }
-  previewLines.push(
-    `${currentStateLine.lineNumber}: [${currentStateLine.changeType}] ${currentStateLine.content}`,
-  );
+  if (
+    currentStateLine.content !== "" ||
+    currentStateLine.changeType !== "unchanged"
+  ) {
+    previewLines.push(
+      `${currentStateLine.lineNumber}: [${currentStateLine.changeType}] ${currentStateLine.content}`,
+    );
+  }
   return previewLines;
 }
 

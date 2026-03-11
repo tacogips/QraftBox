@@ -77,6 +77,14 @@ function toErrorMessage(error: unknown, fallbackMessage: string): string {
   return fallbackMessage;
 }
 
+function serializeFileTree(tree: FileTreeNode | null): string {
+  return JSON.stringify(tree);
+}
+
+function serializeFileContent(fileContent: FileContent | null): string {
+  return JSON.stringify(fileContent);
+}
+
 export function createInitialFilesControllerState(): FilesControllerState {
   return {
     fileTreeMode: "diff",
@@ -111,18 +119,10 @@ function expandDirectoriesForSelection(
 
 function shouldLoadFileContent(
   selectedPath: string | null,
-  diffOverview: DiffOverviewState,
-  preferredViewMode: DiffViewMode,
+  _diffOverview: DiffOverviewState,
+  _preferredViewMode: DiffViewMode,
 ): boolean {
-  if (selectedPath === null) {
-    return false;
-  }
-
-  if (preferredViewMode === "full-file") {
-    return true;
-  }
-
-  return !diffOverview.files.some((diffFile) => diffFile.path === selectedPath);
+  return selectedPath !== null;
 }
 
 export function createFilesController(
@@ -205,6 +205,9 @@ export function createFilesController(
     activeContextId: string,
     forceReload = false,
   ): Promise<void> {
+    const isBackgroundRefresh =
+      state.allFilesTree !== null &&
+      loadedAllFilesContextId === activeContextId;
     if (!forceReload) {
       const canReuseLoadedTree =
         state.allFilesTree !== null &&
@@ -220,11 +223,13 @@ export function createFilesController(
     const requestedShowIgnored = state.showIgnored;
     const requestedShowAllFiles = state.showAllFiles;
 
-    updateState((currentState) => ({
-      ...currentState,
-      isAllFilesLoading: true,
-      allFilesError: null,
-    }));
+    if (!isBackgroundRefresh || state.allFilesError !== null) {
+      updateState((currentState) => ({
+        ...currentState,
+        isAllFilesLoading: !isBackgroundRefresh,
+        allFilesError: null,
+      }));
+    }
 
     try {
       const allFilesResponse = await filesApiClient.fetchAllFilesTree(
@@ -245,12 +250,21 @@ export function createFilesController(
       }
 
       loadedAllFilesContextId = activeContextId;
-      updateState((currentState) => ({
-        ...currentState,
-        allFilesTree: allFilesResponse.tree,
-        isAllFilesLoading: false,
-        isAllFilesTreeStale: false,
-      }));
+      if (
+        serializeFileTree(state.allFilesTree) !==
+          serializeFileTree(allFilesResponse.tree) ||
+        state.isAllFilesLoading ||
+        state.isAllFilesTreeStale ||
+        state.allFilesError !== null
+      ) {
+        updateState((currentState) => ({
+          ...currentState,
+          allFilesTree: allFilesResponse.tree,
+          isAllFilesLoading: false,
+          isAllFilesTreeStale: false,
+          allFilesError: null,
+        }));
+      }
     } catch (error) {
       if (
         requestId !== lastAllFilesTreeRequestId ||
@@ -293,12 +307,16 @@ export function createFilesController(
     lastFileContentRequestId = requestId;
     const requestedContextId = synchronizationOptions.activeContextId;
     const requestedPath = selectedPath;
+    const isBackgroundRefresh =
+      state.fileContent !== null && state.fileContent.path === requestedPath;
 
-    updateState((currentState) => ({
-      ...currentState,
-      isFileContentLoading: true,
-      fileContentError: null,
-    }));
+    if (!isBackgroundRefresh || state.fileContentError !== null) {
+      updateState((currentState) => ({
+        ...currentState,
+        isFileContentLoading: !isBackgroundRefresh,
+        fileContentError: null,
+      }));
+    }
 
     try {
       const fileContent = await filesApiClient.fetchFileContent(
@@ -313,11 +331,19 @@ export function createFilesController(
         return;
       }
 
-      updateState((currentState) => ({
-        ...currentState,
-        fileContent,
-        isFileContentLoading: false,
-      }));
+      if (
+        serializeFileContent(state.fileContent) !==
+          serializeFileContent(fileContent) ||
+        state.isFileContentLoading ||
+        state.fileContentError !== null
+      ) {
+        updateState((currentState) => ({
+          ...currentState,
+          fileContent,
+          isFileContentLoading: false,
+          fileContentError: null,
+        }));
+      }
     } catch (error) {
       if (
         requestId !== lastFileContentRequestId ||
@@ -393,17 +419,39 @@ export function createFilesController(
         synchronizationOptions.diffOverview,
         state.selectedPath,
       );
-      updateState((currentState) => ({
-        ...currentState,
-        selectedPath: nextSelectedPath,
-        expandedPaths:
-          currentState.fileTreeMode === "diff"
-            ? expandDirectoriesForSelection(
-                currentState.expandedPaths,
-                nextSelectedPath,
-              )
-            : currentState.expandedPaths,
-      }));
+      const nextExpandedPaths =
+        state.fileTreeMode === "diff"
+          ? expandDirectoriesForSelection(state.expandedPaths, nextSelectedPath)
+          : state.expandedPaths;
+      if (
+        state.selectedPath !== nextSelectedPath ||
+        serializeFileTree({
+          name: "",
+          path: "",
+          isDirectory: true,
+          children: Array.from(nextExpandedPaths).map((path) => ({
+            name: path,
+            path,
+            isDirectory: true,
+          })),
+        } as FileTreeNode) !==
+          serializeFileTree({
+            name: "",
+            path: "",
+            isDirectory: true,
+            children: Array.from(state.expandedPaths).map((path) => ({
+              name: path,
+              path,
+              isDirectory: true,
+            })),
+          } as FileTreeNode)
+      ) {
+        updateState((currentState) => ({
+          ...currentState,
+          selectedPath: nextSelectedPath,
+          expandedPaths: nextExpandedPaths,
+        }));
+      }
       selectedPathContextId =
         nextSelectedPath !== null ? activeContextId : null;
 

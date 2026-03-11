@@ -7,6 +7,9 @@ import {
   Show,
   untrack,
 } from "solid-js";
+import { CheckboxField } from "../../components/CheckboxField";
+import { SummaryCard } from "../../components/SummaryCard";
+import { ToolbarIconButton } from "../../components/ToolbarIconButton";
 import {
   createAiSessionsApiClient,
   type AISessionInfo,
@@ -25,6 +28,8 @@ import {
   type AiSessionTranscriptLine,
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
+  describeAiSessionEntryAgent,
+  describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
@@ -47,6 +52,7 @@ import {
   hasAiSessionActivityEntry,
   createAiSessionHistoryFilters,
   createAiSessionDefaultPromptMessage,
+  createAiSessionDetailRequestKey,
   createAiSessionHiddenStateMessage,
   createAiSessionScopeKey,
   createAiSessionScopeResetLoadingState,
@@ -77,6 +83,66 @@ export interface AiSessionScreenProps {
 const ACTIVE_SESSION_POLL_MS = 5000;
 const SESSION_HISTORY_PAGE_SIZE = 50;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
+
+function renderPlusIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="M10 4v12" stroke-linecap="round" />
+      <path d="M4 10h12" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderSearchIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <circle cx="8.5" cy="8.5" r="4.5" />
+      <path d="m12 12 4 4" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderRefreshIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="M15.5 9.5a5.5 5.5 0 1 1-1.2-3.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path d="M12.5 3.5h3v3" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+function renderClearIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="m5 5 10 10" stroke-linecap="round" />
+      <path d="M15 5 5 15" stroke-linecap="round" />
+    </svg>
+  );
+}
 
 export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const initialOverviewRouteState = parseAiSessionOverviewRouteState(
@@ -163,6 +229,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activeScopeKey: string | null = null;
+  let activeSelectedSessionDetailKey: string | null = null;
   const activityRequestGuard = createLatestAiSessionRequestGuard();
   const hiddenSessionsRequestGuard = createLatestAiSessionRequestGuard();
   const modelProfilesRequestGuard = createLatestAiSessionRequestGuard();
@@ -192,15 +259,18 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         sessionEntry.qraftAiSessionId === selectedQraftAiSessionId(),
     ) ?? null;
   const selectedSessionDetailTarget = () => {
-    const sessionEntry = selectedSessionEntry();
-    if (props.contextId === null || sessionEntry === null) {
+    const qraftAiSessionId = selectedQraftAiSessionId();
+    if (props.contextId === null || qraftAiSessionId === null) {
       return null;
     }
 
     return {
       contextId: props.contextId,
-      qraftAiSessionId: sessionEntry.qraftAiSessionId,
-      hasHistoricalSession: sessionEntry.historySessionId !== null,
+      qraftAiSessionId,
+      hasHistoricalSession: historicalSessions().some(
+        (historicalSession) =>
+          historicalSession.qraftAiSessionId === qraftAiSessionId,
+      ),
     };
   };
   const selectedSessionCancelAction = () => {
@@ -564,9 +634,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
   createEffect(() => {
     const detailTarget = selectedSessionDetailTarget();
-    selectedSessionRequestGuard.invalidate();
 
     if (detailTarget === null) {
+      activeSelectedSessionDetailKey = null;
+      selectedSessionRequestGuard.invalidate();
       setSelectedSessionDetail(null);
       setSelectedSessionTranscript([]);
       setSelectedSessionTranscriptLoadedEventCount(0);
@@ -577,6 +648,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       return;
     }
 
+    const nextDetailKey = createAiSessionDetailRequestKey(detailTarget);
+    if (activeSelectedSessionDetailKey === nextDetailKey) {
+      return;
+    }
+
+    activeSelectedSessionDetailKey = nextDetailKey;
+    selectedSessionRequestGuard.invalidate();
     void refreshSelectedSessionArtifacts({
       ...detailTarget,
       appendTranscript: false,
@@ -1111,24 +1189,24 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     return "bg-bg-tertiary text-text-secondary";
   }
 
-  function getSessionSourceBadgeClass(source: string): string {
-    if (source === "active") {
+  function getSessionOriginBadgeClass(origin: string | null): string {
+    if (origin === "QRAFTBOX") {
       return "bg-accent-muted text-accent-fg";
     }
-    if (source === "queued") {
-      return "bg-attention-emphasis/20 text-attention-fg";
+    if (origin === "CLIENT") {
+      return "bg-bg-tertiary text-text-primary";
     }
     return "bg-bg-tertiary text-text-secondary";
   }
 
-  function getSessionSourceLabel(source: string): string {
-    if (source === "active") {
-      return "LIVE";
+  function getSessionAgentBadgeClass(agent: string | null): string {
+    if (agent === "CODEX") {
+      return "bg-success-muted text-success-fg";
     }
-    if (source === "queued") {
-      return "QUEUED";
+    if (agent === "CLAUDE-CODE") {
+      return "bg-attention-emphasis/20 text-attention-fg";
     }
-    return "HISTORY";
+    return "bg-bg-tertiary text-text-secondary";
   }
 
   function dismissSessionDetail(): void {
@@ -1139,14 +1217,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   return (
     <section class="mx-auto flex h-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
       <div class="flex flex-col gap-2">
-        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-accent-fg">
-          Sessions
-        </p>
-        <h2 class="text-3xl font-semibold text-text-primary">AI Sessions</h2>
-        <p class="max-w-3xl text-sm leading-6 text-text-secondary">
-          Browse project-scoped session history, monitor active work, and submit
-          prompts into either a new or existing AI session.
-        </p>
+        <h2 class="text-2xl font-semibold text-text-primary">AiSession</h2>
       </div>
       <Show
         when={props.contextId !== null}
@@ -1207,46 +1278,39 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                   setSearchDraftQuery(event.currentTarget.value)
                 }
               />
-              <button
-                type="button"
-                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover"
-                onClick={startNewSession}
-              >
-                New session
-              </button>
-              <button
+              <ToolbarIconButton label="New session" onClick={startNewSession}>
+                {renderPlusIcon()}
+              </ToolbarIconButton>
+              <ToolbarIconButton
                 type="submit"
-                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                label={
+                  historyLoading() ? "Searching sessions" : "Search sessions"
+                }
                 disabled={historyLoading() || activityLoading()}
               >
-                {historyLoading() ? "Searching..." : "Search"}
-              </button>
+                {renderSearchIcon()}
+              </ToolbarIconButton>
             </div>
-            <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
-              <input
-                type="checkbox"
-                class="rounded border-border-default"
-                checked={searchDraftInTranscript()}
-                onInput={(event) =>
-                  setSearchDraftInTranscript(event.currentTarget.checked)
-                }
-              />
-              Include chat transcript
-            </label>
-            <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
-              <input
-                type="checkbox"
-                class="rounded border-border-default"
-                checked={includeHiddenSessions()}
-                onInput={(event) =>
-                  setIncludeHiddenSessions(event.currentTarget.checked)
-                }
-              />
-              Include hidden sessions
-            </label>
-            <button
-              type="button"
-              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+            <CheckboxField
+              checked={searchDraftInTranscript()}
+              label="Include chat transcript"
+              labelClass="text-xs text-text-secondary"
+              onInput={(event) =>
+                setSearchDraftInTranscript(event.currentTarget.checked)
+              }
+            />
+            <CheckboxField
+              checked={includeHiddenSessions()}
+              label="Include hidden sessions"
+              labelClass="text-xs text-text-secondary"
+              onInput={(event) =>
+                setIncludeHiddenSessions(event.currentTarget.checked)
+              }
+            />
+            <ToolbarIconButton
+              label={
+                activityLoading() ? "Refreshing sessions" : "Refresh sessions"
+              }
               disabled={activityLoading()}
               onClick={() => {
                 if (props.contextId === null) {
@@ -1257,11 +1321,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                 void refreshActivity(props.contextId, props.projectPath);
               }}
             >
-              {activityLoading() ? "Refreshing..." : "Refresh"}
-            </button>
-            <button
-              type="button"
-              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+              {renderRefreshIcon()}
+            </ToolbarIconButton>
+            <ToolbarIconButton
+              label="Clear session search"
               disabled={
                 historyLoading() ||
                 activityLoading() ||
@@ -1274,8 +1337,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
               }
               onClick={() => void clearSearch()}
             >
-              Clear search
-            </button>
+              {renderClearIcon()}
+            </ToolbarIconButton>
           </form>
 
           <div class="px-4 pt-3">
@@ -1326,112 +1389,110 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                 </button>
 
                 <For each={visibleSessionEntries()}>
-                  {(sessionEntry) => (
-                    <div
-                      role="button"
-                      tabindex={0}
-                      class="flex min-h-[164px] flex-col gap-3 rounded-xl border border-border-default bg-bg-secondary p-4 text-left transition hover:border-accent-emphasis/60 hover:bg-bg-hover"
-                      aria-pressed={
-                        selectedQraftAiSessionId() ===
-                        sessionEntry.qraftAiSessionId
-                      }
-                      onClick={() =>
-                        setSelectedQraftAiSessionId(
-                          sessionEntry.qraftAiSessionId,
-                        )
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
+                  {(sessionEntry) => {
+                    const originLabel =
+                      describeAiSessionEntryOrigin(sessionEntry);
+                    const agentLabel =
+                      describeAiSessionEntryAgent(sessionEntry);
+
+                    return (
+                      <SummaryCard
+                        selected={
+                          selectedQraftAiSessionId() ===
+                          sessionEntry.qraftAiSessionId
+                        }
+                        ariaLabel={`Open session ${sessionEntry.qraftAiSessionId}`}
+                        onActivate={() =>
                           setSelectedQraftAiSessionId(
                             sessionEntry.qraftAiSessionId,
-                          );
+                          )
                         }
-                      }}
-                    >
-                      <div class="flex items-start justify-between gap-3">
-                        <div class="flex flex-wrap items-center gap-2">
-                          <span
-                            class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
-                              sessionEntry.status,
-                            )}`}
-                          >
-                            {sessionEntry.status}
-                          </span>
-                          <span
-                            class={`rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${getSessionSourceBadgeClass(
-                              sessionEntry.source,
-                            )}`}
-                          >
-                            {getSessionSourceLabel(sessionEntry.source)}
-                          </span>
-                          <Show
-                            when={hiddenSessionIds().includes(
-                              sessionEntry.qraftAiSessionId,
-                            )}
-                          >
-                            <span class="rounded bg-danger-emphasis/20 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-danger-fg">
-                              Hidden
-                            </span>
-                          </Show>
-                        </div>
-                        <div class="flex items-center gap-2">
-                          <span class="text-[11px] text-text-tertiary">
-                            {getRelativeSessionTime(sessionEntry.updatedAt)}
-                          </span>
-                          <button
-                            type="button"
-                            class="rounded border border-border-default px-2 py-1 text-[10px] text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void toggleSessionHidden(
-                                sessionEntry.qraftAiSessionId,
-                                hiddenSessionIds().includes(
+                        topSlot={
+                          <div class="flex items-start justify-between gap-3">
+                            <div class="flex flex-wrap items-center gap-2">
+                              <span
+                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
+                                  sessionEntry.status,
+                                )}`}
+                              >
+                                {sessionEntry.status}
+                              </span>
+                              <Show when={originLabel !== null}>
+                                <span
+                                  class={`rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${getSessionOriginBadgeClass(
+                                    originLabel,
+                                  )}`}
+                                >
+                                  {originLabel}
+                                </span>
+                              </Show>
+                              <Show when={agentLabel !== null}>
+                                <span
+                                  class={`rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${getSessionAgentBadgeClass(
+                                    agentLabel,
+                                  )}`}
+                                >
+                                  {agentLabel}
+                                </span>
+                              </Show>
+                              <Show
+                                when={hiddenSessionIds().includes(
                                   sessionEntry.qraftAiSessionId,
-                                ) === false,
-                              );
-                            }}
-                          >
-                            {hiddenSessionIds().includes(
-                              sessionEntry.qraftAiSessionId,
-                            )
-                              ? "Show"
-                              : "Hide"}
-                          </button>
-                        </div>
-                      </div>
-
-                      <div class="space-y-1">
-                        <p class="text-[10px] uppercase tracking-wide text-text-tertiary">
-                          Purpose
-                        </p>
-                        <p class="line-clamp-2 text-sm text-text-primary">
-                          {sessionEntry.title}
-                        </p>
-                      </div>
-
-                      <div class="mt-auto space-y-1">
-                        <p class="text-[10px] uppercase tracking-wide text-text-tertiary">
-                          Latest activity
-                        </p>
-                        <p class="line-clamp-3 text-xs leading-5 text-text-secondary">
-                          {sessionEntry.detail}
-                        </p>
-                      </div>
-
-                      <div class="flex flex-wrap items-center gap-2 border-t border-border-default/60 pt-2 text-[11px] text-text-tertiary">
-                        <Show when={sessionEntry.queuedPromptCount > 0}>
-                          <span>{sessionEntry.queuedPromptCount} queued</span>
-                        </Show>
-                        <span>
-                          {describeAiSessionEntryModel(
-                            sessionEntry,
-                            modelProfiles(),
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+                                )}
+                              >
+                                <span class="rounded bg-danger-emphasis/20 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-danger-fg">
+                                  Hidden
+                                </span>
+                              </Show>
+                            </div>
+                            <div class="flex items-center gap-2">
+                              <span class="text-[11px] text-text-tertiary">
+                                {getRelativeSessionTime(sessionEntry.updatedAt)}
+                              </span>
+                              <button
+                                type="button"
+                                class="rounded border border-border-default px-2 py-1 text-[10px] text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void toggleSessionHidden(
+                                    sessionEntry.qraftAiSessionId,
+                                    hiddenSessionIds().includes(
+                                      sessionEntry.qraftAiSessionId,
+                                    ) === false,
+                                  );
+                                }}
+                              >
+                                {hiddenSessionIds().includes(
+                                  sessionEntry.qraftAiSessionId,
+                                )
+                                  ? "Show"
+                                  : "Hide"}
+                              </button>
+                            </div>
+                          </div>
+                        }
+                        titleLabel="Purpose"
+                        title={sessionEntry.title}
+                        bodyLabel="Latest activity"
+                        body={sessionEntry.detail}
+                        footerSlot={
+                          <>
+                            <Show when={sessionEntry.queuedPromptCount > 0}>
+                              <span>
+                                {sessionEntry.queuedPromptCount} queued
+                              </span>
+                            </Show>
+                            <span>
+                              {describeAiSessionEntryModel(
+                                sessionEntry,
+                                modelProfiles(),
+                              )}
+                            </span>
+                          </>
+                        }
+                      />
+                    );
+                  }}
                 </For>
               </div>
             </Show>

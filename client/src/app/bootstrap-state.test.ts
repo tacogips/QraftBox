@@ -9,6 +9,8 @@ describe("createSolidBootstrapState", () => {
         screen: "project",
         contextId: null,
         selectedPath: null,
+        selectedViewMode: null,
+        selectedLineNumber: null,
       },
       "/api",
     );

@@ -5,10 +5,68 @@ import type {
   ModelProfile,
   ModelVendor,
 } from "../../../../src/types/model-config";
+import { ScreenHeader } from "../../components/ScreenHeader";
 import { parseArgumentLines, suggestModelId } from "./forms";
 
 export interface ModelProfilesScreenProps {
   readonly apiBaseUrl: string;
+}
+
+const SCREEN_SHELL_CLASS =
+  "mx-auto flex h-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6";
+const PANEL_CLASS =
+  "rounded-2xl border border-border-default bg-bg-secondary p-5";
+const FIELD_CLASS =
+  "mt-2 w-full rounded-xl border border-border-default bg-bg-primary px-3 py-2.5 text-sm text-text-primary outline-none transition focus:border-accent-emphasis";
+const ACTION_BUTTON_CLASS =
+  "rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50";
+
+function getVendorBadgeClass(vendor: ModelVendor): string {
+  return vendor === "anthropics"
+    ? "border-accent-emphasis/30 bg-accent-muted/15 text-accent-fg"
+    : "border-success-emphasis/30 bg-success-muted/15 text-success-fg";
+}
+
+function getAuthModeLabel(authMode: ModelAuthMode): string {
+  return authMode === "api_key" ? "API key env vars" : "CLI auth";
+}
+
+function renderProfileSummary(profile: ModelProfile): JSX.Element {
+  return (
+    <div class="space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="text-lg font-semibold text-text-primary">
+              {profile.name}
+            </h3>
+            <span
+              class={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${getVendorBadgeClass(
+                profile.vendor,
+              )}`}
+            >
+              {profile.vendor}
+            </span>
+            <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
+              {getAuthModeLabel(profile.authMode)}
+            </span>
+          </div>
+          <p class="mt-2 break-all font-mono text-sm text-text-secondary">
+            {profile.model}
+          </p>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-border-default bg-bg-primary/70 px-4 py-3">
+        <p class="text-[11px] uppercase tracking-wide text-text-tertiary">
+          Arguments
+        </p>
+        <p class="mt-2 break-words font-mono text-xs leading-6 text-text-secondary">
+          {profile.arguments.length > 0 ? profile.arguments.join(" ") : "None"}
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export function ModelProfilesScreen(
@@ -157,196 +215,277 @@ export function ModelProfilesScreen(
   });
 
   return (
-    <section>
-      <h2>Model Profiles</h2>
-      <p>Register and manage reusable model profiles for AI actions.</p>
+    <section class={SCREEN_SHELL_CLASS}>
+      <ScreenHeader
+        title="Model Profiles"
+        subtitle="Register reusable model definitions for commit generation, PR creation, and AI session work. Profiles capture vendor, auth mode, model id, and CLI arguments."
+      />
+
       <Show when={errorMessage() !== null}>
-        <p role="alert">{errorMessage()}</p>
+        <div class="rounded-2xl border border-danger-emphasis/40 bg-danger-muted/10 p-4 text-sm text-danger-fg">
+          {errorMessage()}
+        </div>
       </Show>
+
       <Show when={isLoading()}>
-        <p>Loading model profiles...</p>
+        <div class="rounded-2xl border border-border-default bg-bg-secondary p-6 text-sm text-text-secondary">
+          Loading model profiles...
+        </div>
       </Show>
+
       <Show when={!isLoading()}>
-        <section>
-          <h3>Register profile</h3>
-          <label>
-            Name
-            <input
-              value={draftName()}
-              onInput={(event) => setDraftName(event.currentTarget.value)}
-            />
-          </label>
-          <label>
-            Vendor
-            <select
-              value={draftVendor()}
-              onInput={(event) => {
-                const vendor = event.currentTarget.value as ModelVendor;
-                setDraftVendor(vendor);
-                setDraftModel(suggestModelId(vendor));
-              }}
+        <div class="grid min-h-0 grid-cols-1 gap-4 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.3fr)]">
+          <section class={`${PANEL_CLASS} space-y-4`}>
+            <div>
+              <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                Register profile
+              </p>
+              <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                Add a reusable runtime target
+              </h3>
+            </div>
+
+            <label class="block text-sm">
+              <span class="text-text-secondary">Name</span>
+              <input
+                class={FIELD_CLASS}
+                value={draftName()}
+                placeholder="e.g. Fast OpenAI"
+                onInput={(event) => setDraftName(event.currentTarget.value)}
+              />
+            </label>
+
+            <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <label class="block text-sm">
+                <span class="text-text-secondary">Vendor</span>
+                <select
+                  class={FIELD_CLASS}
+                  value={draftVendor()}
+                  onInput={(event) => {
+                    const vendor = event.currentTarget.value as ModelVendor;
+                    setDraftVendor(vendor);
+                    setDraftModel(suggestModelId(vendor));
+                  }}
+                >
+                  <option value="anthropics">anthropics</option>
+                  <option value="openai">openai</option>
+                </select>
+              </label>
+
+              <label class="block text-sm">
+                <span class="text-text-secondary">Authentication</span>
+                <select
+                  class={FIELD_CLASS}
+                  value={draftAuthMode()}
+                  onInput={(event) =>
+                    setDraftAuthMode(event.currentTarget.value as ModelAuthMode)
+                  }
+                >
+                  <option value="cli_auth">Use logged-in CLI auth</option>
+                  <option value="api_key">Use API key env vars</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="block text-sm">
+              <span class="text-text-secondary">Model</span>
+              <input
+                class={FIELD_CLASS}
+                value={draftModel()}
+                placeholder="claude-opus-4-6 / gpt-5.3-codex"
+                onInput={(event) => setDraftModel(event.currentTarget.value)}
+              />
+            </label>
+
+            <label class="block text-sm">
+              <span class="text-text-secondary">
+                Arguments, one token per line
+              </span>
+              <textarea
+                rows={6}
+                class={`${FIELD_CLASS} resize-y font-mono`}
+                value={draftArgumentsText()}
+                onInput={(event) =>
+                  setDraftArgumentsText(event.currentTarget.value)
+                }
+              />
+            </label>
+
+            <div class="rounded-xl border border-border-default bg-bg-primary/70 px-4 py-3 text-sm text-text-secondary">
+              Suggested default for {draftVendor()}:{" "}
+              <span class="font-mono text-text-primary">
+                {suggestModelId(draftVendor())}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              disabled={isSaving()}
+              class="rounded-md border border-success-emphasis/40 bg-success-muted/20 px-3 py-2 text-sm font-medium text-success-fg transition hover:bg-success-muted/30 disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => void createProfile()}
             >
-              <option value="anthropics">anthropics</option>
-              <option value="openai">openai</option>
-            </select>
-          </label>
-          <label>
-            Model
-            <input
-              value={draftModel()}
-              onInput={(event) => setDraftModel(event.currentTarget.value)}
-            />
-          </label>
-          <label>
-            Authentication
-            <select
-              value={draftAuthMode()}
-              onInput={(event) =>
-                setDraftAuthMode(event.currentTarget.value as ModelAuthMode)
+              {isSaving() ? "Saving..." : "Register profile"}
+            </button>
+          </section>
+
+          <section class={`${PANEL_CLASS} min-h-0`}>
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-[11px] font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                  Registered profiles
+                </p>
+                <h3 class="mt-1 text-lg font-semibold text-text-primary">
+                  Available model targets
+                </h3>
+              </div>
+              <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1 text-xs text-text-secondary">
+                {profiles().length} profiles
+              </span>
+            </div>
+
+            <Show
+              when={profiles().length > 0}
+              fallback={
+                <div class="mt-6 rounded-2xl border border-dashed border-border-default bg-bg-primary/50 px-6 py-12 text-center text-sm text-text-secondary">
+                  No profiles are registered yet.
+                </div>
               }
             >
-              <option value="cli_auth">Use logged-in CLI auth</option>
-              <option value="api_key">Use API key env vars</option>
-            </select>
-          </label>
-          <label>
-            Arguments
-            <textarea
-              rows={4}
-              value={draftArgumentsText()}
-              onInput={(event) =>
-                setDraftArgumentsText(event.currentTarget.value)
-              }
-            />
-          </label>
-          <button
-            type="button"
-            disabled={isSaving()}
-            onClick={() => void createProfile()}
-          >
-            Register profile
-          </button>
-        </section>
-        <section>
-          <h3>Registered profiles</h3>
-          <Show
-            when={profiles().length > 0}
-            fallback={<p>No profiles registered.</p>}
-          >
-            <For each={profiles()}>
-              {(profile) => (
-                <article>
-                  <Show
-                    when={editingProfileId() === profile.id}
-                    fallback={
-                      <>
-                        <p>{profile.name}</p>
-                        <p>
-                          {profile.vendor} / {profile.model}
-                        </p>
-                        <p>
-                          auth:{" "}
-                          {profile.authMode === "api_key"
-                            ? "API key env vars"
-                            : "CLI authenticated session"}
-                        </p>
-                        <p>{profile.arguments.join(" ")}</p>
-                        <button
-                          type="button"
-                          disabled={isSaving()}
-                          onClick={() => startEditing(profile)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isSaving()}
-                          onClick={() => void removeProfile(profile.id)}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    }
-                  >
-                    <label>
-                      Name
-                      <input
-                        value={editName()}
-                        onInput={(event) =>
-                          setEditName(event.currentTarget.value)
-                        }
-                      />
-                    </label>
-                    <label>
-                      Vendor
-                      <select
-                        value={editVendor()}
-                        onInput={(event) => {
-                          const vendor = event.currentTarget
-                            .value as ModelVendor;
-                          setEditVendor(vendor);
-                          if (editModel().trim().length === 0) {
-                            setEditModel(suggestModelId(vendor));
-                          }
-                        }}
-                      >
-                        <option value="anthropics">anthropics</option>
-                        <option value="openai">openai</option>
-                      </select>
-                    </label>
-                    <label>
-                      Model
-                      <input
-                        value={editModel()}
-                        onInput={(event) =>
-                          setEditModel(event.currentTarget.value)
-                        }
-                      />
-                    </label>
-                    <label>
-                      Authentication
-                      <select
-                        value={editAuthMode()}
-                        onInput={(event) =>
-                          setEditAuthMode(
-                            event.currentTarget.value as ModelAuthMode,
-                          )
+              <div class="mt-5 space-y-4 overflow-auto">
+                <For each={profiles()}>
+                  {(profile) => (
+                    <article class="rounded-2xl border border-border-default bg-bg-primary/60 p-4">
+                      <Show
+                        when={editingProfileId() === profile.id}
+                        fallback={
+                          <>
+                            {renderProfileSummary(profile)}
+                            <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-border-default/60 pt-4">
+                              <button
+                                type="button"
+                                disabled={isSaving()}
+                                class={ACTION_BUTTON_CLASS}
+                                onClick={() => startEditing(profile)}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSaving()}
+                                class="rounded-md border border-danger-emphasis/30 bg-danger-muted/10 px-3 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-muted/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                onClick={() => void removeProfile(profile.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </>
                         }
                       >
-                        <option value="cli_auth">Use logged-in CLI auth</option>
-                        <option value="api_key">Use API key env vars</option>
-                      </select>
-                    </label>
-                    <label>
-                      Arguments
-                      <textarea
-                        rows={3}
-                        value={editArgumentsText()}
-                        onInput={(event) =>
-                          setEditArgumentsText(event.currentTarget.value)
-                        }
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      disabled={isSaving()}
-                      onClick={() => void saveEdit(profile.id)}
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isSaving()}
-                      onClick={() => cancelEditing()}
-                    >
-                      Cancel
-                    </button>
-                  </Show>
-                </article>
-              )}
-            </For>
-          </Show>
-        </section>
+                        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <label class="block text-sm">
+                            <span class="text-text-secondary">Name</span>
+                            <input
+                              class={FIELD_CLASS}
+                              value={editName()}
+                              onInput={(event) =>
+                                setEditName(event.currentTarget.value)
+                              }
+                            />
+                          </label>
+
+                          <label class="block text-sm">
+                            <span class="text-text-secondary">Model</span>
+                            <input
+                              class={FIELD_CLASS}
+                              value={editModel()}
+                              onInput={(event) =>
+                                setEditModel(event.currentTarget.value)
+                              }
+                            />
+                          </label>
+                        </div>
+
+                        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <label class="block text-sm">
+                            <span class="text-text-secondary">Vendor</span>
+                            <select
+                              class={FIELD_CLASS}
+                              value={editVendor()}
+                              onInput={(event) => {
+                                const vendor = event.currentTarget
+                                  .value as ModelVendor;
+                                setEditVendor(vendor);
+                                if (editModel().trim().length === 0) {
+                                  setEditModel(suggestModelId(vendor));
+                                }
+                              }}
+                            >
+                              <option value="anthropics">anthropics</option>
+                              <option value="openai">openai</option>
+                            </select>
+                          </label>
+
+                          <label class="block text-sm">
+                            <span class="text-text-secondary">
+                              Authentication
+                            </span>
+                            <select
+                              class={FIELD_CLASS}
+                              value={editAuthMode()}
+                              onInput={(event) =>
+                                setEditAuthMode(
+                                  event.currentTarget.value as ModelAuthMode,
+                                )
+                              }
+                            >
+                              <option value="cli_auth">
+                                Use logged-in CLI auth
+                              </option>
+                              <option value="api_key">
+                                Use API key env vars
+                              </option>
+                            </select>
+                          </label>
+                        </div>
+
+                        <label class="mt-3 block text-sm">
+                          <span class="text-text-secondary">Arguments</span>
+                          <textarea
+                            rows={5}
+                            class={`${FIELD_CLASS} resize-y font-mono`}
+                            value={editArgumentsText()}
+                            onInput={(event) =>
+                              setEditArgumentsText(event.currentTarget.value)
+                            }
+                          />
+                        </label>
+
+                        <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-border-default/60 pt-4">
+                          <button
+                            type="button"
+                            disabled={isSaving()}
+                            class="rounded-md border border-success-emphasis/40 bg-success-muted/20 px-3 py-2 text-sm font-medium text-success-fg transition hover:bg-success-muted/30 disabled:cursor-not-allowed disabled:opacity-50"
+                            onClick={() => void saveEdit(profile.id)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isSaving()}
+                            class={ACTION_BUTTON_CLASS}
+                            onClick={() => cancelEditing()}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </Show>
+                    </article>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </section>
+        </div>
       </Show>
     </section>
   );

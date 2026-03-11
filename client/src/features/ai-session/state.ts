@@ -512,6 +512,14 @@ export function resolveLoadedAiSessionTranscriptEventCount(params: {
   return Math.max(params.currentLoadedEventCount, nextLoadedEventCount);
 }
 
+export function createAiSessionDetailRequestKey(params: {
+  readonly contextId: string;
+  readonly qraftAiSessionId: QraftAiSessionId;
+  readonly hasHistoricalSession: boolean;
+}): string {
+  return `${params.contextId}:${params.qraftAiSessionId}:${params.hasHistoricalSession ? "history" : "live"}`;
+}
+
 export function createLatestAiSessionRequestGuard(): LatestAiSessionRequestGuard {
   let latestRequestId = 0;
 

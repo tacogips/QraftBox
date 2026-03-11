@@ -10,6 +10,8 @@ const BASE_ROUTE: ScreenRouteState = {
   screen: "commits",
   contextId: "ctx-commits",
   selectedPath: "src/main.ts",
+  selectedViewMode: null,
+  selectedLineNumber: null,
 };
 
 describe("workspace routing contracts", () => {
@@ -39,6 +41,8 @@ describe("workspace routing contracts", () => {
       screen: "commits",
       contextId: "ctx-commits",
       selectedPath: "src/main.ts",
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 
@@ -53,6 +57,8 @@ describe("workspace routing contracts", () => {
       screen: "commits",
       contextId: "ctx-commits",
       selectedPath: "src/main.ts",
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 

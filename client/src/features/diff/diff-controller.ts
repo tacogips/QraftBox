@@ -48,6 +48,15 @@ function toErrorMessage(error: unknown): string {
   return "Failed to load diff";
 }
 
+function serializeDiffOverviewSnapshot(options: {
+  readonly files: readonly DiffOverviewState["files"][number][];
+  readonly stats: DiffOverviewState["stats"];
+  readonly selectedPath: string | null;
+  readonly preferredViewMode: DiffViewMode;
+}): string {
+  return JSON.stringify(options);
+}
+
 export function createInitialDiffControllerState(
   preferredViewMode: DiffViewMode,
 ): DiffControllerState {
@@ -118,12 +127,17 @@ export function createDiffController(
       }
 
       const requestToken = diffRequestGuard.issue(diffLoadDecision.contextId);
-      updateState((currentState) => ({
-        ...currentState,
-        isLoading: true,
-        unsupportedMessage: null,
-        errorMessage: null,
-      }));
+      const shouldShowLoading =
+        loadedDiffContextId !== diffLoadDecision.contextId &&
+        state.diffOverview.files.length === 0;
+      if (shouldShowLoading || state.unsupportedMessage !== null) {
+        updateState((currentState) => ({
+          ...currentState,
+          isLoading: shouldShowLoading,
+          unsupportedMessage: null,
+          errorMessage: shouldShowLoading ? null : currentState.errorMessage,
+        }));
+      }
 
       try {
         const diffResponse = await diffApiClient.fetchContextDiff(
@@ -133,26 +147,44 @@ export function createDiffController(
           return;
         }
 
-        let nextDiffOverview = state.diffOverview;
-        updateState((currentState) => {
-          const requestedSelectedPath = resolveRememberedDiffSelection({
-            activeContextId: diffLoadDecision.contextId,
-            loadedContextId: loadedDiffContextId,
-            currentSelectedPath: currentState.diffOverview.selectedPath,
-            rememberedSelections: rememberedDiffSelections,
-          });
-          nextDiffOverview = createDiffOverviewState(
-            diffResponse.files,
-            requestedSelectedPath,
-            preferredViewMode,
-            diffResponse.stats,
-          );
+        const requestedSelectedPath = resolveRememberedDiffSelection({
+          activeContextId: diffLoadDecision.contextId,
+          loadedContextId: loadedDiffContextId,
+          currentSelectedPath: state.diffOverview.selectedPath,
+          rememberedSelections: rememberedDiffSelections,
+        });
+        const nextDiffOverview = createDiffOverviewState(
+          diffResponse.files,
+          requestedSelectedPath,
+          preferredViewMode,
+          diffResponse.stats,
+        );
+        const currentSnapshot = serializeDiffOverviewSnapshot({
+          files: state.diffOverview.files,
+          stats: state.diffOverview.stats,
+          selectedPath: state.diffOverview.selectedPath,
+          preferredViewMode: state.diffOverview.preferredViewMode,
+        });
+        const nextSnapshot = serializeDiffOverviewSnapshot({
+          files: nextDiffOverview.files,
+          stats: nextDiffOverview.stats,
+          selectedPath: nextDiffOverview.selectedPath,
+          preferredViewMode: nextDiffOverview.preferredViewMode,
+        });
 
-          return {
+        if (
+          currentSnapshot !== nextSnapshot ||
+          state.errorMessage !== null ||
+          state.unsupportedMessage !== null ||
+          state.isLoading
+        ) {
+          updateState((currentState) => ({
             ...currentState,
             diffOverview: nextDiffOverview,
-          };
-        });
+            errorMessage: null,
+            unsupportedMessage: null,
+          }));
+        }
 
         const selectedPath = nextDiffOverview.selectedPath;
         if (selectedPath !== null) {
@@ -175,7 +207,7 @@ export function createDiffController(
           errorMessage: toErrorMessage(error),
         }));
       } finally {
-        if (diffRequestGuard.isCurrent(requestToken)) {
+        if (diffRequestGuard.isCurrent(requestToken) && state.isLoading) {
           updateState((currentState) => ({
             ...currentState,
             isLoading: false,

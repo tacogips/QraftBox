@@ -9,6 +9,7 @@ import {
   canClearAiSessionSearch,
   canLoadMoreAiSessionTranscript,
   createAiSessionScopeResetLoadingState,
+  createAiSessionDetailRequestKey,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
   hasAiSessionActivityEntry,
@@ -559,6 +560,24 @@ describe("ai-session state helpers", () => {
         responseEventCount: 10,
       }),
     ).toBe(50);
+  });
+
+  test("creates a stable selected-session detail request key", () => {
+    expect(
+      createAiSessionDetailRequestKey({
+        contextId: "ctx-1",
+        qraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        hasHistoricalSession: true,
+      }),
+    ).toBe("ctx-1:qs-existing:history");
+
+    expect(
+      createAiSessionDetailRequestKey({
+        contextId: "ctx-1",
+        qraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        hasHistoricalSession: false,
+      }),
+    ).toBe("ctx-1:qs-existing:live");
   });
 
   test("omits prompt file references when no file is selected", () => {

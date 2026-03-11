@@ -1,36 +1,43 @@
-import {
-  createEffect,
-  createSignal,
-  type JSX,
-  onCleanup,
-  onMount,
-  Show,
-} from "solid-js";
+import { FitAddon } from "@xterm/addon-fit";
+import { Terminal } from "@xterm/xterm";
+import "@xterm/xterm/css/xterm.css";
+import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import type { JSX } from "solid-js";
 import {
   createTerminalApiClient,
   type TerminalConnectResponse,
 } from "../../../../client-shared/src/api/terminal";
-import {
-  appendTerminalOutput,
-  buildTerminalWebSocketUrl,
-  parseTerminalServerMessage,
-} from "./state";
+import { ScreenHeader } from "../../components/ScreenHeader";
+import { ToolbarIconButton } from "../../components/ToolbarIconButton";
+import { buildTerminalWebSocketUrl, parseTerminalServerMessage } from "./state";
 
 export interface TerminalScreenProps {
   readonly apiBaseUrl: string;
   readonly contextId: string | null;
 }
 
-const DEFAULT_TERMINAL_HEIGHT = 480;
-const MIN_TERMINAL_HEIGHT = 320;
-const MAX_TERMINAL_HEIGHT = 920;
-
-function createDisconnectedMessage(contextId: string): string {
-  return `[terminal ready for ${contextId}]\n`;
+interface TerminalDimensions {
+  readonly rows: number;
+  readonly cols: number;
 }
 
-function clampTerminalHeight(height: number): number {
-  return Math.max(MIN_TERMINAL_HEIGHT, Math.min(MAX_TERMINAL_HEIGHT, height));
+const DEFAULT_TERMINAL_HEIGHT = 480;
+const PHONE_TERMINAL_HEIGHT_RATIO = 0.55;
+const PHONE_INITIAL_HEIGHT_RATIO = 0.96;
+const DESKTOP_INITIAL_HEIGHT_RATIO = 0.75;
+const PHONE_MIN_TERMINAL_HEIGHT = 160;
+const DESKTOP_MIN_TERMINAL_HEIGHT = 220;
+
+function detectPhoneViewport(): boolean {
+  return window.innerWidth <= 768;
+}
+
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      resolve();
+    });
+  });
 }
 
 export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
@@ -38,8 +45,6 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
     apiBaseUrl: props.apiBaseUrl,
   });
 
-  const [output, setOutput] = createSignal("");
-  const [inputValue, setInputValue] = createSignal("");
   const [isCheckingStatus, setIsCheckingStatus] = createSignal(false);
   const [isConnecting, setIsConnecting] = createSignal(false);
   const [isConnected, setIsConnected] = createSignal(false);
@@ -49,13 +54,25 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
   const [activeSessionId, setActiveSessionId] = createSignal<string | null>(
     null,
   );
-  const [terminalHeight, setTerminalHeight] = createSignal(
-    DEFAULT_TERMINAL_HEIGHT,
+  const [isPhoneViewport, setIsPhoneViewport] = createSignal(false);
+  const [terminalHeightPx, setTerminalHeightPx] = createSignal<number | null>(
+    null,
   );
 
   let activeSocket: WebSocket | null = null;
   let activeContextId: string | null = null;
-  let terminalViewportRef: HTMLPreElement | undefined;
+  let terminalInstance: Terminal | null = null;
+  let fitAddon: FitAddon | null = null;
+  let terminalHostRef: HTMLDivElement | undefined;
+  let terminalContainerRef: HTMLDivElement | undefined;
+  let terminalControlsRef: HTMLDivElement | undefined;
+  let terminalResizeHandleRef: HTMLDivElement | undefined;
+  let terminalSessionMetaRef: HTMLParagraphElement | undefined;
+  let isResizingTerminal = false;
+  let terminalDragStartY = 0;
+  let terminalDragStartHeightPx = 0;
+  let lastObservedContextId: string | null | undefined = undefined;
+  let pendingTerminalOutputChunks: string[] = [];
 
   function disposeSocket(): void {
     if (activeSocket === null) {
@@ -66,21 +83,323 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
     activeSocket.onmessage = null;
     activeSocket.onerror = null;
     activeSocket.onclose = null;
-    activeSocket.close();
+    if (
+      activeSocket.readyState === WebSocket.OPEN ||
+      activeSocket.readyState === WebSocket.CONNECTING
+    ) {
+      activeSocket.close();
+    }
     activeSocket = null;
   }
 
-  function resetForContext(contextId: string | null): void {
+  function stopTerminalResizeDrag(): void {
+    isResizingTerminal = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    window.removeEventListener("mousemove", handleTerminalResizeMouseMove);
+    window.removeEventListener("mouseup", handleTerminalResizeMouseUp);
+  }
+
+  function disposeTerminalResources(): void {
+    stopTerminalResizeDrag();
     disposeSocket();
-    activeContextId = contextId;
+
+    terminalInstance?.dispose();
+    terminalInstance = null;
+    fitAddon = null;
+    pendingTerminalOutputChunks = [];
+
     setIsCheckingStatus(false);
     setIsConnecting(false);
     setIsConnected(false);
-    setConnectionError(null);
     setActiveSessionId(null);
-    setInputValue("");
-    setTerminalHeight(DEFAULT_TERMINAL_HEIGHT);
-    setOutput(contextId === null ? "" : createDisconnectedMessage(contextId));
+    setTerminalHeightPx(null);
+  }
+
+  function hostHasMountedTerminal(): boolean {
+    return terminalHostRef?.querySelector(".xterm") !== null;
+  }
+
+  function ensureTerminalInitialized(): void {
+    if (terminalHostRef === undefined) {
+      return;
+    }
+
+    if (terminalInstance !== null && hostHasMountedTerminal()) {
+      return;
+    }
+
+    if (terminalInstance !== null) {
+      terminalInstance.dispose();
+      terminalInstance = null;
+      fitAddon = null;
+    }
+
+    const createdTerminal = new Terminal({
+      convertEol: false,
+      cursorBlink: true,
+      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+      fontSize: 13,
+      scrollback: 5_000,
+      theme: {
+        background: "#0f172a",
+        foreground: "#e2e8f0",
+        cursor: "#93c5fd",
+      },
+    });
+    const createdFitAddon = new FitAddon();
+
+    createdTerminal.loadAddon(createdFitAddon);
+    createdTerminal.open(terminalHostRef);
+    createdFitAddon.fit();
+    createdTerminal.onData((typedData) => {
+      if (activeSocket === null || activeSocket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+
+      activeSocket.send(
+        JSON.stringify({
+          type: "input",
+          data: typedData,
+        }),
+      );
+    });
+
+    terminalInstance = createdTerminal;
+    fitAddon = createdFitAddon;
+    flushPendingTerminalOutput();
+  }
+
+  function writeTerminalOutput(outputChunk: string): void {
+    if (terminalInstance === null) {
+      pendingTerminalOutputChunks.push(outputChunk);
+      return;
+    }
+
+    terminalInstance.write(outputChunk);
+  }
+
+  function flushPendingTerminalOutput(): void {
+    if (terminalInstance === null || pendingTerminalOutputChunks.length === 0) {
+      return;
+    }
+
+    for (const pendingOutputChunk of pendingTerminalOutputChunks) {
+      terminalInstance.write(pendingOutputChunk);
+    }
+    pendingTerminalOutputChunks = [];
+  }
+
+  function focusTerminal(): void {
+    terminalInstance?.focus();
+  }
+
+  function sendResize(dimensions: TerminalDimensions): void {
+    if (activeSocket === null || activeSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    activeSocket.send(
+      JSON.stringify({
+        type: "resize",
+        rows: dimensions.rows,
+        cols: dimensions.cols,
+      }),
+    );
+  }
+
+  function fitAndResizeTerminal(): void {
+    if (fitAddon === null || terminalInstance === null) {
+      return;
+    }
+
+    fitAddon.fit();
+    const terminalDimensions = fitAddon.proposeDimensions();
+    if (terminalDimensions !== undefined) {
+      sendResize(terminalDimensions);
+    }
+  }
+
+  function getMinimumTerminalHeightPx(): number {
+    return isPhoneViewport()
+      ? PHONE_MIN_TERMINAL_HEIGHT
+      : DESKTOP_MIN_TERMINAL_HEIGHT;
+  }
+
+  function getMaxTerminalHeightPx(): number {
+    const minimumTerminalHeightPx = getMinimumTerminalHeightPx();
+    if (terminalContainerRef === undefined) {
+      return Math.max(
+        minimumTerminalHeightPx,
+        Math.floor(window.innerHeight * 0.8),
+      );
+    }
+
+    const controlsHeightPx = terminalControlsRef?.offsetHeight ?? 0;
+    const resizeHandleHeightPx = terminalResizeHandleRef?.offsetHeight ?? 0;
+    const rowGapValue = window.getComputedStyle(terminalContainerRef).rowGap;
+    const rowGapPx = Number.parseFloat(rowGapValue);
+    const safeRowGapPx = Number.isFinite(rowGapPx) ? rowGapPx : 0;
+    const reservedInsideContainerPx =
+      controlsHeightPx + resizeHandleHeightPx + safeRowGapPx * 2;
+    const sessionMetaHeightPx =
+      terminalSessionMetaRef !== undefined
+        ? terminalSessionMetaRef.offsetHeight + 8
+        : 0;
+    const parentHeightPx =
+      terminalContainerRef.parentElement?.clientHeight ?? window.innerHeight;
+
+    return Math.max(
+      minimumTerminalHeightPx,
+      parentHeightPx - sessionMetaHeightPx - reservedInsideContainerPx,
+    );
+  }
+
+  function clampTerminalHeight(heightPx: number): number {
+    return Math.max(
+      getMinimumTerminalHeightPx(),
+      Math.min(getMaxTerminalHeightPx(), heightPx),
+    );
+  }
+
+  function ensureTerminalHeight(): void {
+    if (terminalHeightPx() !== null) {
+      return;
+    }
+
+    const initialRatio = isPhoneViewport()
+      ? PHONE_INITIAL_HEIGHT_RATIO
+      : DESKTOP_INITIAL_HEIGHT_RATIO;
+    setTerminalHeightPx(
+      clampTerminalHeight(Math.floor(getMaxTerminalHeightPx() * initialRatio)),
+    );
+  }
+
+  function resizeTerminalHeight(deltaPx: number): void {
+    ensureTerminalHeight();
+    const currentHeightPx = terminalHeightPx();
+    if (currentHeightPx === null) {
+      return;
+    }
+
+    setTerminalHeightPx(clampTerminalHeight(currentHeightPx + deltaPx));
+    window.requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  }
+
+  function resetTerminalHeight(): void {
+    setTerminalHeightPx(null);
+    ensureTerminalHeight();
+    window.requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  }
+
+  function handleTerminalResizeMouseDown(mouseEvent: MouseEvent): void {
+    mouseEvent.preventDefault();
+    ensureTerminalHeight();
+
+    const currentHeightPx = terminalHeightPx();
+    if (currentHeightPx === null) {
+      return;
+    }
+
+    isResizingTerminal = true;
+    terminalDragStartY = mouseEvent.clientY;
+    terminalDragStartHeightPx = currentHeightPx;
+    document.body.style.cursor = "row-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handleTerminalResizeMouseMove);
+    window.addEventListener("mouseup", handleTerminalResizeMouseUp);
+  }
+
+  function handleTerminalResizeMouseMove(mouseEvent: MouseEvent): void {
+    if (!isResizingTerminal) {
+      return;
+    }
+
+    const deltaPx = mouseEvent.clientY - terminalDragStartY;
+    setTerminalHeightPx(
+      clampTerminalHeight(terminalDragStartHeightPx + deltaPx),
+    );
+    window.requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  }
+
+  function handleTerminalResizeMouseUp(): void {
+    stopTerminalResizeDrag();
+  }
+
+  function handleServerMessage(payload: string): void {
+    const serverMessage = parseTerminalServerMessage(payload);
+    if (serverMessage === null) {
+      return;
+    }
+
+    if (serverMessage.type === "output") {
+      writeTerminalOutput(serverMessage.data);
+      return;
+    }
+
+    if (serverMessage.type === "exit") {
+      writeTerminalOutput(
+        `\r\n\r\n[terminal exited with code ${serverMessage.code}]\r\n`,
+      );
+      setIsConnected(false);
+      setActiveSessionId(null);
+      return;
+    }
+
+    if (serverMessage.type === "error") {
+      writeTerminalOutput(`\r\n[error] ${serverMessage.message}\r\n`);
+      setConnectionError(serverMessage.message);
+    }
+  }
+
+  async function connect(): Promise<void> {
+    const contextId = props.contextId;
+    if (contextId === null || isConnecting() || isConnected()) {
+      return;
+    }
+
+    setIsConnecting(true);
+    setConnectionError(null);
+
+    try {
+      const connectResponse = await terminalApi.connect(contextId);
+      if (activeContextId !== contextId) {
+        return;
+      }
+
+      setActiveSessionId(connectResponse.sessionId);
+      await nextAnimationFrame();
+      await nextAnimationFrame();
+      ensureTerminalInitialized();
+
+      if (terminalInstance === null) {
+        throw new Error("Terminal UI could not be initialized");
+      }
+
+      terminalInstance.reset();
+      terminalInstance.writeln(
+        `[connected to ${contextId} in ${new Date().toLocaleTimeString()}]`,
+      );
+
+      attachSocket(contextId, connectResponse);
+    } catch (error) {
+      if (activeContextId !== contextId) {
+        return;
+      }
+
+      setIsConnecting(false);
+      setIsConnected(false);
+      setActiveSessionId(null);
+      setConnectionError(
+        error instanceof Error ? error.message : "Terminal connection failed",
+      );
+    }
   }
 
   function attachSocket(
@@ -100,52 +419,20 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
 
       setIsConnecting(false);
       setIsConnected(true);
-      setOutput((currentOutput) =>
-        appendTerminalOutput(
-          currentOutput,
-          `[connected${connectResponse.reused ? " (reused session)" : ""} ${connectResponse.sessionId}]\n`,
-        ),
-      );
+      window.requestAnimationFrame(() => {
+        ensureTerminalInitialized();
+        ensureTerminalHeight();
+        fitAndResizeTerminal();
+        focusTerminal();
+      });
     };
 
-    socket.onmessage = (event) => {
+    socket.onmessage = (messageEvent) => {
       if (activeContextId !== contextId) {
         return;
       }
 
-      const serverMessage = parseTerminalServerMessage(String(event.data));
-      if (serverMessage === null) {
-        return;
-      }
-
-      if (serverMessage.type === "output") {
-        setOutput((currentOutput) =>
-          appendTerminalOutput(currentOutput, serverMessage.data),
-        );
-        return;
-      }
-
-      if (serverMessage.type === "exit") {
-        setIsConnected(false);
-        setActiveSessionId(null);
-        setOutput((currentOutput) =>
-          appendTerminalOutput(
-            currentOutput,
-            `\n[terminal exited with code ${serverMessage.code}]\n`,
-          ),
-        );
-        return;
-      }
-
-      if (serverMessage.type === "error") {
-        setConnectionError(serverMessage.message);
-        setOutput((currentOutput) =>
-          appendTerminalOutput(
-            currentOutput,
-            `\n[error] ${serverMessage.message}\n`,
-          ),
-        );
-      }
+      handleServerMessage(String(messageEvent.data));
     };
 
     socket.onerror = () => {
@@ -171,63 +458,21 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
     };
   }
 
-  async function connect(reusedFromStatus = false): Promise<void> {
-    const contextId = props.contextId;
-    if (contextId === null || isConnecting() || isConnected()) {
+  async function tryResumeExistingSession(contextId: string): Promise<void> {
+    if (isConnecting() || isConnected() || isCheckingStatus()) {
       return;
     }
 
-    setIsConnecting(true);
-    setConnectionError(null);
-
-    try {
-      const connectResponse = await terminalApi.connect(contextId);
-      if (activeContextId !== contextId) {
-        return;
-      }
-
-      setActiveSessionId(connectResponse.sessionId);
-      if (!reusedFromStatus) {
-        setOutput((currentOutput) =>
-          appendTerminalOutput(currentOutput, "[opening terminal session]\n"),
-        );
-      }
-      attachSocket(contextId, connectResponse);
-    } catch (error) {
-      if (activeContextId !== contextId) {
-        return;
-      }
-
-      setIsConnecting(false);
-      setIsConnected(false);
-      setActiveSessionId(null);
-      setConnectionError(
-        error instanceof Error ? error.message : "Failed to connect terminal",
-      );
-    }
-  }
-
-  async function tryResumeExistingSession(contextId: string): Promise<void> {
     setIsCheckingStatus(true);
-    setConnectionError(null);
-
     try {
       const status = await terminalApi.fetchStatus(contextId);
       if (activeContextId !== contextId || !status.hasSession) {
         return;
       }
 
-      await connect(true);
-    } catch (error) {
-      if (activeContextId !== contextId) {
-        return;
-      }
-
-      setConnectionError(
-        error instanceof Error
-          ? error.message
-          : "Failed to fetch terminal status",
-      );
+      await connect();
+    } catch {
+      // Ignore background status failures to preserve reconnect behavior.
     } finally {
       if (activeContextId === contextId) {
         setIsCheckingStatus(false);
@@ -237,117 +482,81 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
 
   async function disconnect(): Promise<void> {
     const contextId = props.contextId;
-    if (contextId === null) {
-      resetForContext(null);
+    if (contextId === null || isConnecting()) {
       return;
     }
 
     try {
       await terminalApi.disconnect(contextId);
-    } catch (error) {
-      setConnectionError(
-        error instanceof Error
-          ? error.message
-          : "Failed to disconnect terminal",
-      );
+    } catch {
+      // Ignore network errors; local terminal resources still need cleanup.
     } finally {
-      resetForContext(contextId);
+      disposeTerminalResources();
+      setConnectionError(null);
     }
   }
 
-  function sendInput(text: string): void {
-    if (activeSocket === null || activeSocket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    activeSocket.send(
-      JSON.stringify({
-        type: "input",
-        data: text,
-      }),
-    );
-  }
-
-  async function handleSubmit(): Promise<void> {
-    const normalizedInput = inputValue();
-    if (normalizedInput.length === 0) {
-      return;
-    }
-
-    sendInput(`${normalizedInput}\n`);
-    setInputValue("");
-  }
-
-  function resizeTerminal(delta: number): void {
-    setTerminalHeight((currentHeight) =>
-      clampTerminalHeight(currentHeight + delta),
-    );
-  }
-
-  createEffect(() => {
-    output();
-    queueMicrotask(() => {
-      terminalViewportRef?.scrollTo({
-        top: terminalViewportRef.scrollHeight,
+  onMount(() => {
+    const handleWindowResize = (): void => {
+      setIsPhoneViewport(detectPhoneViewport());
+      const currentHeightPx = terminalHeightPx();
+      if (currentHeightPx !== null) {
+        setTerminalHeightPx(clampTerminalHeight(currentHeightPx));
+      }
+      window.requestAnimationFrame(() => {
+        fitAndResizeTerminal();
       });
+    };
+
+    handleWindowResize();
+    window.addEventListener("resize", handleWindowResize);
+
+    onCleanup(() => {
+      window.removeEventListener("resize", handleWindowResize);
     });
   });
 
-  onMount(() => {
-    resetForContext(props.contextId);
-  });
-
   createEffect(() => {
-    resetForContext(props.contextId);
+    const contextId = props.contextId;
+    if (contextId === lastObservedContextId) {
+      return;
+    }
 
-    if (props.contextId !== null) {
-      void tryResumeExistingSession(props.contextId);
+    lastObservedContextId = contextId;
+    activeContextId = contextId;
+    disposeTerminalResources();
+    setConnectionError(null);
+
+    if (contextId !== null) {
+      void tryResumeExistingSession(contextId);
     }
   });
 
+  createEffect(() => {
+    terminalHeightPx();
+    if (!(isConnected() || isConnecting())) {
+      return;
+    }
+
+    ensureTerminalInitialized();
+
+    if (!isConnected()) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      fitAndResizeTerminal();
+    });
+  });
+
   onCleanup(() => {
-    disposeSocket();
+    stopTerminalResizeDrag();
+    disposeTerminalResources();
   });
 
   return (
-    <section class="flex min-h-0 flex-1 flex-col gap-4">
-      <header class="grid gap-3 md:grid-cols-3">
-        <div class="rounded-2xl border border-border-default bg-bg-secondary p-5 shadow-lg shadow-black/15 md:col-span-2">
-          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-accent-fg">
-            Terminal
-          </p>
-          <h2 class="mt-2 text-2xl font-semibold text-text-primary">
-            Workspace Shell
-          </h2>
-          <p class="mt-2 text-sm leading-6 text-text-secondary">
-            Keep an attached backend shell session open inside the workspace,
-            with reconnect, quick interrupt, and a denser terminal surface than
-            the old migration placeholder.
-          </p>
-        </div>
-        <div class="rounded-2xl border border-border-default bg-bg-secondary p-5">
-          <p class="text-xs uppercase tracking-[0.22em] text-text-tertiary">
-            Connection
-          </p>
-          <p class="mt-3 text-lg font-semibold text-text-primary">
-            {isConnected()
-              ? "Connected"
-              : isConnecting()
-                ? "Connecting"
-                : isCheckingStatus()
-                  ? "Checking"
-                  : "Disconnected"}
-          </p>
-          <Show when={activeSessionId() !== null}>
-            <p class="mt-2 break-all font-mono text-xs text-text-secondary">
-              {activeSessionId()}
-            </p>
-          </Show>
-          <Show when={connectionError() !== null}>
-            <p class="mt-3 text-sm text-danger-fg">{connectionError()}</p>
-          </Show>
-        </div>
-      </header>
+    <section class="mx-auto flex h-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
+      <ScreenHeader title="Terminal" />
 
       <Show
         when={props.contextId !== null}
@@ -357,131 +566,238 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
           </div>
         }
       >
-        <div class="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-border-default bg-bg-secondary p-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div class="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                disabled={isConnecting() || props.contextId === null}
-                class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => void connect()}
-              >
-                {isConnected() ? "Connected" : "Connect"}
-              </button>
-              <button
-                type="button"
-                disabled={!isConnected()}
-                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => void disconnect()}
-              >
-                Disconnect
-              </button>
-              <button
-                type="button"
-                disabled={!isConnected()}
-                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
-                onClick={() => sendInput("\u0003")}
-              >
-                Send Ctrl+C
-              </button>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
-                onClick={() => resizeTerminal(120)}
-              >
-                Taller
-              </button>
-              <button
-                type="button"
-                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
-                onClick={() => resizeTerminal(-120)}
-              >
-                Shorter
-              </button>
-              <button
-                type="button"
-                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
-                onClick={() => setTerminalHeight(DEFAULT_TERMINAL_HEIGHT)}
-              >
-                Reset height
-              </button>
-            </div>
-          </div>
-
-          <Show
-            when={isConnected() || isConnecting()}
-            fallback={
-              <div class="flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-dashed border-border-default bg-bg-primary/50 p-6 text-center">
-                <div>
-                  <button
-                    type="button"
-                    class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg"
-                    onClick={() => void connect()}
+        <Show
+          when={isConnected() || isConnecting()}
+          fallback={
+            <div class="flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-border-default bg-bg-secondary p-6 text-center">
+              <div>
+                <ToolbarIconButton
+                  label="Connect terminal"
+                  onClick={() => void connect()}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    aria-hidden="true"
                   >
-                    Connect
-                  </button>
-                  <Show when={connectionError() !== null}>
-                    <p class="mt-4 text-sm text-danger-fg">
-                      {connectionError()}
-                    </p>
-                  </Show>
+                    <path
+                      d="M6 2.75h4v4h2.25a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1H10v3.25H6V10.25H3.75a1 1 0 0 1-1-1v-1.5a1 1 0 0 1 1-1H6v-4Z"
+                      stroke="currentColor"
+                      stroke-width="1.5"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </ToolbarIconButton>
+                <Show when={connectionError() !== null}>
+                  <p class="mt-4 text-sm text-danger-fg">{connectionError()}</p>
+                </Show>
+              </div>
+            </div>
+          }
+        >
+          <div class="flex min-h-0 flex-1 flex-col gap-2 rounded-2xl border border-border-default bg-bg-secondary p-3">
+            <div
+              ref={(element) => {
+                terminalContainerRef = element;
+              }}
+              class="flex h-full min-h-0 w-full flex-col gap-2"
+            >
+              <div
+                ref={(element) => {
+                  terminalControlsRef = element;
+                }}
+                class="flex flex-wrap items-center justify-between gap-2"
+              >
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary">
+                    {isConnected()
+                      ? "Connected"
+                      : isConnecting()
+                        ? "Connecting"
+                        : isCheckingStatus()
+                          ? "Checking"
+                          : "Disconnected"}
+                  </span>
+                  <ToolbarIconButton
+                    label="Send Ctrl+C"
+                    disabled={!isConnected()}
+                    onClick={() => {
+                      if (
+                        activeSocket !== null &&
+                        activeSocket.readyState === WebSocket.OPEN
+                      ) {
+                        activeSocket.send(
+                          JSON.stringify({
+                            type: "input",
+                            data: "\u0003",
+                          }),
+                        );
+                      }
+                    }}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8 3v10M3 8h10"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        d="M4 4l8 8"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </ToolbarIconButton>
+                  <ToolbarIconButton
+                    label="Disconnect terminal"
+                    disabled={isConnecting()}
+                    onClick={() => void disconnect()}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M6 4.5A4.5 4.5 0 1 0 10 12"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                      />
+                      <path
+                        d="M10 3.5h3v3M13 3.5l-4 4"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </ToolbarIconButton>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <ToolbarIconButton
+                    label="Increase terminal height"
+                    onClick={() => resizeTerminalHeight(120)}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M8 3v10M3 8h10"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </ToolbarIconButton>
+                  <ToolbarIconButton
+                    label="Decrease terminal height"
+                    onClick={() => resizeTerminalHeight(-120)}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M3 8h10"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </ToolbarIconButton>
+                  <ToolbarIconButton
+                    label="Reset terminal height"
+                    onClick={resetTerminalHeight}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M3 8a5 5 0 1 0 1.5-3.6M3 3v3h3"
+                        stroke="currentColor"
+                        stroke-width="1.8"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </ToolbarIconButton>
                 </div>
               </div>
-            }
-          >
-            <div class="flex min-h-0 flex-1 flex-col gap-3">
-              <div
-                class="overflow-hidden rounded-xl border border-border-default bg-[#020817] shadow-inner shadow-black/30"
-                style={{
-                  height: `${terminalHeight()}px`,
-                }}
-              >
-                <pre
-                  ref={terminalViewportRef}
-                  class="h-full overflow-auto px-4 py-4 font-mono text-[13px] leading-6 text-slate-100"
-                >
-                  {output()}
-                </pre>
-              </div>
-              <Show when={activeSessionId() !== null}>
-                <p class="text-xs text-text-tertiary">
-                  session: {activeSessionId()}
-                </p>
-              </Show>
-            </div>
-          </Show>
 
-          <div class="rounded-xl border border-border-default bg-bg-primary p-4">
-            <label class="flex flex-col gap-3 text-sm text-text-secondary">
-              Command input
-              <div class="flex flex-col gap-3 lg:flex-row">
-                <input
-                  value={inputValue()}
-                  disabled={!isConnected()}
-                  class="min-w-0 flex-1 rounded-md border border-border-default bg-bg-secondary px-3 py-2 font-mono text-sm text-text-primary outline-none transition focus:border-accent-emphasis disabled:cursor-not-allowed disabled:opacity-60"
-                  onInput={(event) => setInputValue(event.currentTarget.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSubmit();
-                    }
+              <Show when={connectionError() !== null}>
+                <p class="text-sm text-danger-fg">{connectionError()}</p>
+              </Show>
+
+              <div
+                class="min-h-0 w-full shrink-0 overflow-hidden rounded-md border border-border-default bg-slate-900"
+                style={{
+                  height: `${terminalHeightPx() ?? (isPhoneViewport() ? Math.floor(window.innerHeight * PHONE_TERMINAL_HEIGHT_RATIO) : DEFAULT_TERMINAL_HEIGHT)}px`,
+                }}
+                onClick={focusTerminal}
+                onKeyDown={focusTerminal}
+                role="button"
+                tabindex="0"
+              >
+                <div
+                  ref={(element) => {
+                    terminalHostRef = element;
+                    ensureTerminalInitialized();
                   }}
+                  class="terminal-host h-full w-full"
                 />
-                <button
-                  type="button"
-                  disabled={!isConnected() || inputValue().length === 0}
-                  class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={() => void handleSubmit()}
-                >
-                  Send
-                </button>
               </div>
-            </label>
+
+              <div
+                ref={(element) => {
+                  terminalResizeHandleRef = element;
+                }}
+                class="group flex h-5 cursor-row-resize items-center justify-center rounded-sm transition-colors hover:bg-accent-muted/40"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="Resize terminal height"
+                onMouseDown={handleTerminalResizeMouseDown}
+              >
+                <div class="h-0.5 w-8 rounded-full bg-border-default transition-colors group-hover:bg-accent-emphasis" />
+              </div>
+            </div>
+
+            <Show when={activeSessionId() !== null}>
+              <p
+                ref={(element) => {
+                  terminalSessionMetaRef = element;
+                }}
+                class="text-xs text-text-tertiary"
+              >
+                session: {activeSessionId()}
+              </p>
+            </Show>
           </div>
-        </div>
+        </Show>
       </Show>
     </section>
   );

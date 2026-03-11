@@ -9,8 +9,8 @@ export interface WorkspaceShellPresentation {
   readonly managementModeText: string;
   readonly showTemporaryProjectMode: boolean;
   readonly showEmptyWorkspaceNotice: boolean;
-  readonly openTabsHeading: string;
-  readonly openTabsEmptyText: string;
+  readonly openProjectsHeading: string;
+  readonly openProjectsEmptyText: string;
   readonly showOpenProjectControls: boolean;
   readonly openProjectHeading: string;
   readonly recentProjectsHeading: string;
@@ -28,8 +28,8 @@ export function createWorkspaceShellPresentation(
     }`,
     showTemporaryProjectMode: workspaceState.temporaryProjectMode,
     showEmptyWorkspaceNotice: workspaceState.isEmpty,
-    openTabsHeading: "Open tabs",
-    openTabsEmptyText: "No tabs are open yet.",
+    openProjectsHeading: "Open projects",
+    openProjectsEmptyText: "No projects are open yet.",
     showOpenProjectControls: workspaceState.canManageProjects,
     openProjectHeading: "Open project",
     recentProjectsHeading: "Recent projects",
@@ -46,12 +46,12 @@ export function collectWorkspaceShellText(
     presentation.heading,
     presentation.activeProjectText,
     presentation.managementModeText,
-    presentation.openTabsHeading,
+    presentation.openProjectsHeading,
     presentation.recentProjectsHeading,
   ];
 
   if (presentation.showEmptyWorkspaceNotice) {
-    text.push("No open workspace tabs.");
+    text.push("No open workspace projects.");
   }
 
   if (presentation.showTemporaryProjectMode) {
@@ -59,7 +59,7 @@ export function collectWorkspaceShellText(
   }
 
   if (workspaceState.tabs.length === 0) {
-    text.push(presentation.openTabsEmptyText);
+    text.push(presentation.openProjectsEmptyText);
   } else {
     for (const workspaceTab of workspaceState.tabs) {
       text.push(workspaceTab.name, workspaceTab.path);

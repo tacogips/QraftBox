@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import {
   getFileTree,
   getAllFiles,
+  getDirectoryChildren,
   mergeStatusIntoTree,
   buildTreeFromPaths,
   markBinaryFiles,
@@ -362,6 +363,37 @@ describe("getFileTree (integration)", () => {
     expect(children.some((c) => c.name === "file2.txt")).toBe(true);
   });
 
+  test("annotates tracked changes in all-files tree", async () => {
+    await execGit(["init"], { cwd: testDir });
+    await execGit(["config", "user.name", "Test User"], { cwd: testDir });
+    await execGit(["config", "user.email", "test@example.com"], {
+      cwd: testDir,
+    });
+
+    await writeFile(join(testDir, "modified.txt"), "before");
+    await writeFile(join(testDir, "deleted.txt"), "remove me");
+    await execGit(["add", "."], { cwd: testDir });
+    await execGit(["commit", "-m", "Initial commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "modified.txt"), "after");
+    await writeFile(join(testDir, "added.txt"), "new file");
+    await execGit(["add", "added.txt"], { cwd: testDir });
+    await rm(join(testDir, "deleted.txt"));
+
+    const tree = await getFileTree(testDir, false);
+    const children = tree.children ?? [];
+
+    expect(
+      children.find((child) => child.name === "modified.txt")?.status,
+    ).toBe("modified");
+    expect(children.find((child) => child.name === "added.txt")?.status).toBe(
+      "added",
+    );
+    expect(children.find((child) => child.name === "deleted.txt")?.status).toBe(
+      "deleted",
+    );
+  });
+
   test("handles new repository with no HEAD", async () => {
     // Initialize empty git repo (no commits)
     await execGit(["init"], { cwd: testDir });
@@ -371,6 +403,39 @@ describe("getFileTree (integration)", () => {
 
     expect(tree.type).toBe("directory");
     expect(tree.children).toEqual([]);
+  });
+
+  test("shows modified, added, and deleted statuses in all-files directory children", async () => {
+    await execGit(["init"], { cwd: testDir });
+    await execGit(["config", "user.name", "Test User"], { cwd: testDir });
+    await execGit(["config", "user.email", "test@example.com"], {
+      cwd: testDir,
+    });
+
+    await mkdir(join(testDir, "src"));
+    await writeFile(join(testDir, "src", "modified.ts"), "before");
+    await writeFile(join(testDir, "src", "deleted.ts"), "remove me");
+    await execGit(["add", "."], { cwd: testDir });
+    await execGit(["commit", "-m", "Initial commit"], { cwd: testDir });
+
+    await writeFile(join(testDir, "src", "modified.ts"), "after");
+    await writeFile(join(testDir, "src", "added.ts"), "new file");
+    await execGit(["add", "src/added.ts"], { cwd: testDir });
+    await rm(join(testDir, "src", "deleted.ts"));
+
+    const children = await getDirectoryChildren(testDir, "src", {
+      showAllFiles: true,
+    });
+
+    expect(children.find((child) => child.name === "modified.ts")?.status).toBe(
+      "modified",
+    );
+    expect(children.find((child) => child.name === "added.ts")?.status).toBe(
+      "added",
+    );
+    expect(children.find((child) => child.name === "deleted.ts")?.status).toBe(
+      "deleted",
+    );
   });
 });
 

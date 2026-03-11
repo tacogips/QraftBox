@@ -12,6 +12,10 @@ describe("app-routing compatibility adapter", () => {
       projectSlug: "repo-slug",
       slug: "repo-slug",
       screen: "commits",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      selectedLineNumber: null,
     });
   });
 

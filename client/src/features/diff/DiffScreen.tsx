@@ -1,4 +1,12 @@
-import { createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  For,
+  type JSX,
+  Match,
+  Show,
+  Switch,
+} from "solid-js";
 import {
   transformToCurrentState,
   type CurrentStateLine,
@@ -41,8 +49,10 @@ export interface DiffScreenProps {
   readonly allFilesError: string | null;
   readonly fileContentError: string | null;
   readonly fileContent: FileContent | null;
+  readonly selectedLineNumber: number | null;
   onChangeViewMode(mode: DiffViewMode): void;
   onSelectPath(path: string): void;
+  onSelectLine(lineNumber: number): void;
   onChangeFileTreeMode(mode: FileTreeMode): void;
   onToggleDirectory(path: string): void;
   onToggleShowIgnored(value: boolean): void;
@@ -388,6 +398,16 @@ function getCurrentStateLineClass(
   return "border-border-default/50 bg-bg-primary";
 }
 
+function getSelectedLineClass(isSelected: boolean): string {
+  return isSelected
+    ? "ring-1 ring-inset ring-accent-emphasis bg-accent-muted/15"
+    : "";
+}
+
+function resolveDisplayedLineNumber(diffChange: DiffChange): number | null {
+  return diffChange.newLine ?? diffChange.oldLine ?? null;
+}
+
 function getDeletedBlockIndicatorText(
   currentStateLine: CurrentStateLine,
 ): string {
@@ -475,6 +495,7 @@ function splitFileContentLines(
 
 export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
+  let previewContainerElement: HTMLDivElement | undefined;
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
   const visibleTreeEntries = () =>
@@ -532,6 +553,21 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     return transformToCurrentState(diffFile);
   };
   const fullFileLines = () => splitFileContentLines(props.fileContent);
+
+  createEffect(() => {
+    const selectedLineNumber = props.selectedLineNumber;
+    if (selectedLineNumber === null) {
+      return;
+    }
+
+    const selectedLineElement =
+      previewContainerElement?.querySelector<HTMLElement>(
+        `[data-qraftbox-line="${selectedLineNumber}"]`,
+      );
+    selectedLineElement?.scrollIntoView({
+      block: "center",
+    });
+  });
 
   return (
     <section class="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -897,7 +933,10 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                   </div>
                 </Show>
 
-                <div class="min-h-0 flex-1 overflow-auto bg-bg-primary">
+                <div
+                  ref={previewContainerElement}
+                  class="min-h-0 flex-1 overflow-auto bg-bg-primary"
+                >
                   <Show when={props.isFileContentLoading}>
                     <div class="border-b border-border-default px-4 py-3 text-sm text-text-secondary">
                       Loading file preview...
@@ -938,12 +977,29 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                 >
                                   <div class="grid grid-cols-[84px_minmax(0,1fr)_84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6">
                                     <div
+                                      data-qraftbox-line={
+                                        row.kind === "change"
+                                          ? (row.left?.oldLine ?? undefined)
+                                          : undefined
+                                      }
                                       class={`border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
                                         row.kind === "change" &&
                                           row.left !== null
                                           ? row.left.type
                                           : "blank",
+                                      )} ${getSelectedLineClass(
+                                        row.kind === "change" &&
+                                          row.left?.oldLine ===
+                                            props.selectedLineNumber,
                                       )}`}
+                                      onClick={() => {
+                                        if (
+                                          row.kind === "change" &&
+                                          row.left?.oldLine !== undefined
+                                        ) {
+                                          props.onSelectLine(row.left.oldLine);
+                                        }
+                                      }}
                                     >
                                       {row.kind === "change" &&
                                       row.left?.oldLine !== undefined
@@ -963,12 +1019,29 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                         : ""}
                                     </div>
                                     <div
+                                      data-qraftbox-line={
+                                        row.kind === "change"
+                                          ? (row.right?.newLine ?? undefined)
+                                          : undefined
+                                      }
                                       class={`border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
                                         row.kind === "change" &&
                                           row.right !== null
                                           ? row.right.type
                                           : "blank",
+                                      )} ${getSelectedLineClass(
+                                        row.kind === "change" &&
+                                          row.right?.newLine ===
+                                            props.selectedLineNumber,
                                       )}`}
+                                      onClick={() => {
+                                        if (
+                                          row.kind === "change" &&
+                                          row.right?.newLine !== undefined
+                                        ) {
+                                          props.onSelectLine(row.right.newLine);
+                                        }
+                                      }}
                                     >
                                       {row.kind === "change" &&
                                       row.right?.newLine !== undefined
@@ -1006,9 +1079,29 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                 <For each={diffChunk.changes}>
                                   {(diffChange) => (
                                     <div
+                                      data-qraftbox-line={
+                                        resolveDisplayedLineNumber(
+                                          diffChange,
+                                        ) ?? undefined
+                                      }
                                       class={`grid grid-cols-[72px_72px_44px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getInlineRowAccentClass(
                                         diffChange.type,
+                                      )} ${getSelectedLineClass(
+                                        resolveDisplayedLineNumber(
+                                          diffChange,
+                                        ) === props.selectedLineNumber,
                                       )}`}
+                                      onClick={() => {
+                                        const selectedLineNumber =
+                                          resolveDisplayedLineNumber(
+                                            diffChange,
+                                          );
+                                        if (selectedLineNumber !== null) {
+                                          props.onSelectLine(
+                                            selectedLineNumber,
+                                          );
+                                        }
+                                      }}
                                     >
                                       <div class="px-4 py-1 text-right text-text-tertiary">
                                         {diffChange.oldLine ?? ""}
@@ -1077,9 +1170,20 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                     )}
                                   >
                                     <div
+                                      data-qraftbox-line={
+                                        currentStateLine.lineNumber
+                                      }
                                       class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
                                         currentStateLine.changeType,
+                                      )} ${getSelectedLineClass(
+                                        currentStateLine.lineNumber ===
+                                          props.selectedLineNumber,
                                       )}`}
+                                      onClick={() =>
+                                        props.onSelectLine(
+                                          currentStateLine.lineNumber,
+                                        )
+                                      }
                                     >
                                       <div class="px-4 py-1 text-right text-text-tertiary">
                                         {currentStateLine.lineNumber}
@@ -1117,7 +1221,16 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                             >
                               <For each={fullFileLines()}>
                                 {(lineContent, lineIndex) => (
-                                  <div class="grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6">
+                                  <div
+                                    data-qraftbox-line={lineIndex() + 1}
+                                    class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
+                                      lineIndex() + 1 ===
+                                        props.selectedLineNumber,
+                                    )}`}
+                                    onClick={() =>
+                                      props.onSelectLine(lineIndex() + 1)
+                                    }
+                                  >
                                     <div class="px-4 py-1 text-right text-text-tertiary">
                                       {lineIndex() + 1}
                                     </div>

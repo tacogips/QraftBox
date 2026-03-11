@@ -116,7 +116,7 @@ export const WORKSPACE_PARITY_SCENARIOS: readonly FrontendParityScenario[] = [
     apiFixtures: ["workspace-empty", "recent-empty"],
     expectedText: [
       "Workspace shell",
-      "No open workspace tabs.",
+      "No open workspace projects.",
       "No recent projects recorded by the server.",
     ],
     forbiddenText: ["Temporary project mode is active."],
@@ -127,10 +127,10 @@ export const WORKSPACE_PARITY_SCENARIOS: readonly FrontendParityScenario[] = [
     apiFixtures: ["workspace-populated", "recent-gamma"],
     expectedText: [
       "Workspace shell",
-      "Open tabs",
+      "Open projects",
       "Active project: /repos/alpha",
     ],
-    forbiddenText: ["No tabs are open yet."],
+    forbiddenText: ["No projects are open yet."],
   },
   {
     id: "workspace-restricted-state",

@@ -66,12 +66,7 @@ const NAVIGATION_LABELS: Readonly<Record<AppScreen, string>> = {
 };
 
 function parseWindowRoute(): ScreenRouteState {
-  const parsedRoute = parseAppHash(window.location.hash);
-  return {
-    ...parsedRoute,
-    contextId: null,
-    selectedPath: null,
-  };
+  return parseAppHash(window.location.hash);
 }
 
 function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
@@ -79,7 +74,9 @@ function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
     left.projectSlug === right.projectSlug &&
     left.screen === right.screen &&
     left.contextId === right.contextId &&
-    left.selectedPath === right.selectedPath
+    left.selectedPath === right.selectedPath &&
+    left.selectedViewMode === right.selectedViewMode &&
+    left.selectedLineNumber === right.selectedLineNumber
   );
 }
 
@@ -143,7 +140,15 @@ export function App(props: AppProps): JSX.Element {
     onRouteChange(nextRoute) {
       setActiveRoute(nextRoute);
 
-      const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen);
+      const nextHash = buildScreenHash(
+        nextRoute.projectSlug,
+        nextRoute.screen,
+        {
+          selectedPath: nextRoute.selectedPath,
+          selectedViewMode: nextRoute.selectedViewMode,
+          selectedLineNumber: nextRoute.selectedLineNumber,
+        },
+      );
       if (window.location.hash !== nextHash) {
         window.location.hash = nextHash;
       }
@@ -256,6 +261,93 @@ export function App(props: AppProps): JSX.Element {
   const activeProjectLabel = () => activeWorkspaceTab()?.name ?? "No Project";
   const activeProjectPath = () => activeWorkspaceTab()?.path ?? "";
 
+  createEffect(() => {
+    if (activeRoute().screen !== "files") {
+      return;
+    }
+
+    const routeSelectedViewMode = activeRoute().selectedViewMode;
+    if (
+      routeSelectedViewMode !== null &&
+      routeSelectedViewMode !== diffViewModel.preferredViewMode()
+    ) {
+      diffViewModel.setPreferredViewMode(routeSelectedViewMode);
+    }
+  });
+
+  createEffect(() => {
+    if (activeRoute().screen !== "files") {
+      return;
+    }
+
+    const routeSelectedPath = activeRoute().selectedPath;
+    if (
+      routeSelectedPath === null ||
+      routeSelectedPath === filesViewModel.selectedPath()
+    ) {
+      return;
+    }
+
+    if (
+      diffViewModel
+        .diffOverview()
+        .files.some((diffFile) => diffFile.path === routeSelectedPath)
+    ) {
+      diffViewModel.selectPath(activeContextId(), routeSelectedPath);
+    }
+
+    void filesViewModel.selectPath(activeContextId(), routeSelectedPath);
+  });
+
+  createEffect(() => {
+    const currentRoute = activeRoute();
+    const nextRoute: ScreenRouteState =
+      currentRoute.screen === "files"
+        ? {
+            ...currentRoute,
+            selectedPath:
+              filesViewModel.selectedPath() ?? currentRoute.selectedPath,
+            selectedViewMode:
+              currentRoute.selectedViewMode !== null &&
+              currentRoute.selectedViewMode !==
+                diffViewModel.preferredViewMode()
+                ? currentRoute.selectedViewMode
+                : diffViewModel.preferredViewMode(),
+          }
+        : {
+            ...currentRoute,
+            selectedPath: null,
+            selectedViewMode: null,
+            selectedLineNumber: null,
+          };
+
+    if (sameRoute(currentRoute, nextRoute)) {
+      const nextHash = buildScreenHash(
+        nextRoute.projectSlug,
+        nextRoute.screen,
+        {
+          selectedPath: nextRoute.selectedPath,
+          selectedViewMode: nextRoute.selectedViewMode,
+          selectedLineNumber: nextRoute.selectedLineNumber,
+        },
+      );
+      if (window.location.hash !== nextHash) {
+        window.location.hash = nextHash;
+      }
+      return;
+    }
+
+    setActiveRoute(nextRoute);
+    const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
+      selectedPath: nextRoute.selectedPath,
+      selectedViewMode: nextRoute.selectedViewMode,
+      selectedLineNumber: nextRoute.selectedLineNumber,
+    });
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
+  });
+
   function navigateToScreen(screen: ScreenRouteState["screen"]): void {
     setHeaderMenuOpen(false);
     const nextRoute: ScreenRouteState = {
@@ -264,7 +356,11 @@ export function App(props: AppProps): JSX.Element {
     };
     setActiveRoute(nextRoute);
 
-    const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen);
+    const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
+      selectedPath: nextRoute.selectedPath,
+      selectedViewMode: nextRoute.selectedViewMode,
+      selectedLineNumber: nextRoute.selectedLineNumber,
+    });
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -311,8 +407,19 @@ export function App(props: AppProps): JSX.Element {
           allFilesError={filesViewModel.allFilesError()}
           fileContentError={filesViewModel.fileContentError()}
           fileContent={filesViewModel.fileContent()}
-          onChangeViewMode={(mode) => diffViewModel.setPreferredViewMode(mode)}
+          onChangeViewMode={(mode) => {
+            setActiveRoute((currentRoute) => ({
+              ...currentRoute,
+              selectedViewMode: mode,
+            }));
+            diffViewModel.setPreferredViewMode(mode);
+          }}
           onSelectPath={async (path: string) => {
+            setActiveRoute((currentRoute) => ({
+              ...currentRoute,
+              selectedPath: path,
+              selectedLineNumber: null,
+            }));
             if (
               diffViewModel
                 .diffOverview()
@@ -354,6 +461,16 @@ export function App(props: AppProps): JSX.Element {
             });
             void filesViewModel.refreshAllFilesTree(activeContextId());
             void filesViewModel.refreshSelectedFileContent(activeContextId());
+          }}
+          selectedLineNumber={activeRoute().selectedLineNumber}
+          onSelectLine={(lineNumber) => {
+            setActiveRoute((currentRoute) => ({
+              ...currentRoute,
+              selectedLineNumber:
+                currentRoute.selectedLineNumber === lineNumber
+                  ? null
+                  : lineNumber,
+            }));
           }}
         />
       );
