@@ -418,8 +418,12 @@ function getDeletedBlockIndicatorText(
 
   const deletedLineCount = deletedBlock.lines.length;
   const lineLabel = deletedLineCount === 1 ? "line" : "lines";
+  const lineNumberText =
+    deletedBlock.originalStart === deletedBlock.originalEnd
+      ? `${deletedBlock.originalStart}`
+      : `${deletedBlock.originalStart}-${deletedBlock.originalEnd}`;
 
-  return `${deletedLineCount} deleted ${lineLabel} folded`;
+  return `${lineNumberText} ${deletedLineCount} deleted ${lineLabel} folded`;
 }
 
 function shouldRenderCurrentStateLine(
@@ -1148,18 +1152,17 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       undefined
                                     }
                                   >
-                                    <div class="grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/40 font-mono text-[13px] leading-6">
-                                      <div class="px-4 py-1 text-right text-text-tertiary/45">
-                                        {`${currentStateLine.deletedBefore?.originalStart ?? ""}-${currentStateLine.deletedBefore?.originalEnd ?? ""}`}
-                                      </div>
-                                      <div class="relative px-4 py-1.5">
-                                        <div class="absolute inset-x-4 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
-                                        <div class="relative flex justify-end">
-                                          <span class="bg-bg-primary px-2 text-[11px] tracking-[0.08em] text-danger-fg/35">
-                                            {getDeletedBlockIndicatorText(
-                                              currentStateLine,
-                                            )}
-                                          </span>
+                                    <div class="border-b border-border-default/40 pl-[84px] font-mono">
+                                      <div class="px-4 py-0">
+                                        <div class="relative">
+                                          <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
+                                          <div class="relative flex justify-end">
+                                            <span class="bg-bg-primary px-2 text-[11px] tracking-[0.08em] text-danger-fg/35">
+                                              {getDeletedBlockIndicatorText(
+                                                currentStateLine,
+                                              )}
+                                            </span>
+                                          </div>
                                         </div>
                                       </div>
                                     </div>
