@@ -78,18 +78,5 @@
     "createdAt": 1773221403307,
     "replies": [],
     "updatedAt": 1773221403315
-  },
-  {
-    "id": "7d24a3f3-0d4f-45e3-b38b-277e33001828",
-    "commitHash": "976df583adee7132861dccd983335be117abcefd",
-    "filePath": "file1.txt",
-    "lineNumber": 1,
-    "body": "Comment to delete",
-    "author": {
-      "name": "tacogips",
-      "email": "me@tacogips.me"
-    },
-    "createdAt": 1773221403324,
-    "replies": []
   }
 ]
