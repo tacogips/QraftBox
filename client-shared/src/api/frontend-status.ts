@@ -1,4 +1,5 @@
 import type { FrontendStatusResponse } from "../contracts/frontend-status";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface FrontendStatusApiClient {
   fetchFrontendStatus(): Promise<FrontendStatusResponse>;
@@ -21,7 +22,7 @@ export function createFrontendStatusApiClient(
   options: CreateFrontendStatusApiClientOptions = {},
 ): FrontendStatusApiClient {
   const apiBaseUrl = trimTrailingSlashes(options.apiBaseUrl ?? "/api");
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = resolveFetchImplementation(options.fetchImpl);
 
   return {
     async fetchFrontendStatus(): Promise<FrontendStatusResponse> {

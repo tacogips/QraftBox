@@ -290,11 +290,11 @@ export function getNonContextRouteGroups(
         },
       ),
     },
-    // Frontend selection and Solid migration status - GET /api/frontend-status
+    // Frontend selection and Solid support status - GET /api/frontend-status
     {
       prefix: "/frontend-status",
       routes: createFrontendStatusRoutes({
-        selectedFrontend: config.selectedFrontend ?? "svelte",
+        selectedFrontend: config.selectedFrontend ?? "solid",
       }),
     },
   ];
@@ -313,7 +313,7 @@ export function getNonContextRouteGroups(
  * - /api/workspace - Workspace management
  * - /api/browse - Directory browsing
  * - /api/ai - AI operations
- * - /api/frontend-status - Selected frontend plus Solid migration status
+ * - /api/frontend-status - Selected frontend plus Solid support status
  * - /api/ctx/:contextId/diff - Diff viewing
  * - /api/ctx/:contextId/files - File tree and content
  * - /api/ctx/:contextId/status - Working tree status

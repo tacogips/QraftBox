@@ -1,14 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
-  DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+  DEFAULT_SOLID_SUPPORT_STATUS,
   getImplementedSolidScreens,
   getInProgressSolidScreens,
   getNonImplementedSolidScreens,
-  getSolidCutoverReadinessReport,
-  getOutstandingSolidCutoverBlockers,
+  getOutstandingSolidSupportBlockers,
   getPlannedSolidScreens,
   getSolidScreenDefinition,
-  SOLID_CUTOVER_CRITERIA,
+  getSolidSupportReport,
+  SOLID_SUPPORT_CRITERIA,
 } from "./screen-registry";
 
 describe("screen registry", () => {
@@ -25,8 +25,8 @@ describe("screen registry", () => {
     expect(getNonImplementedSolidScreens()).toEqual([]);
   });
 
-  test("deduplicates shared cutover blockers across in-progress and implemented screens", () => {
-    expect(getOutstandingSolidCutoverBlockers()).toEqual([
+  test("deduplicates shared support blockers across in-progress and implemented screens", () => {
+    expect(getOutstandingSolidSupportBlockers()).toEqual([
       {
         id: "solid-deps-missing",
         scope: "global",
@@ -53,14 +53,14 @@ describe("screen registry", () => {
         scope: "global",
         category: "verification",
         summary:
-          "bun run check:frontend:migration has not yet been recorded as passing for the Solid migration.",
+          "bun run check:frontend:migration has not yet been recorded as passing for the current Solid support baseline.",
       },
       {
         id: "browser-verification-not-recorded",
         scope: "global",
         category: "verification",
         summary:
-          "Browser verification for the Solid migration has not yet been recorded from this workspace.",
+          "Browser verification for the Solid and legacy Svelte support baseline has not yet been recorded from this workspace.",
       },
       {
         id: "files-parity-browser-verification-pending",
@@ -124,7 +124,7 @@ describe("screen registry", () => {
   test("keeps global blockers visible even for implemented screens", () => {
     expect(getImplementedSolidScreens()).toContain("project");
     expect(getSolidScreenDefinition("project").blockers).toHaveLength(0);
-    expect(getOutstandingSolidCutoverBlockers()).toContainEqual(
+    expect(getOutstandingSolidSupportBlockers()).toContainEqual(
       expect.objectContaining({
         id: "solid-dist-missing",
         scope: "global",
@@ -134,8 +134,8 @@ describe("screen registry", () => {
 
   test("can re-evaluate global blockers from environment status instead of hardcoded workspace assumptions", () => {
     expect(
-      getOutstandingSolidCutoverBlockers({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -144,8 +144,8 @@ describe("screen registry", () => {
       }).map((blocker) => blocker.id),
     ).not.toContain("solid-deps-missing");
     expect(
-      getOutstandingSolidCutoverBlockers({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -154,8 +154,8 @@ describe("screen registry", () => {
       }).map((blocker) => blocker.id),
     ).not.toContain("solid-dist-missing");
     expect(
-      getOutstandingSolidCutoverBlockers({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -164,8 +164,8 @@ describe("screen registry", () => {
       }).map((blocker) => blocker.id),
     ).not.toContain("agent-browser-missing");
     expect(
-      getOutstandingSolidCutoverBlockers({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -174,8 +174,8 @@ describe("screen registry", () => {
       }).map((blocker) => blocker.id),
     ).not.toContain("full-migration-check-pending");
     expect(
-      getOutstandingSolidCutoverBlockers({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -185,52 +185,52 @@ describe("screen registry", () => {
     ).not.toContain("browser-verification-not-recorded");
   });
 
-  test("builds a readiness summary that stays blocked until cutover gates pass", () => {
-    expect(getSolidCutoverReadinessReport()).toEqual({
+  test("builds a support summary that stays blocked until legacy-support gates pass", () => {
+    expect(getSolidSupportReport()).toEqual({
       implementedScreenCount: 9,
       totalScreenCount: 9,
       remainingScreens: [],
-      outstandingBlockers: getOutstandingSolidCutoverBlockers(),
+      outstandingBlockers: getOutstandingSolidSupportBlockers(),
       criteria: [
         {
           id: "all-screens-implemented",
           summary:
             "All screen definitions are at implementationStatus=implemented.",
-          isSatisfied: true,
+          status: "pass",
         },
         {
           id: "full-migration-check-passes",
           summary:
             "bun run check:frontend:migration passes, including nested Solid typecheck.",
-          isSatisfied: false,
+          status: "blocked",
         },
         {
           id: "solid-bundle-built",
           summary:
             "The Solid bundle is built at dist/client/index.html and served successfully by the backend.",
-          isSatisfied: false,
+          status: "blocked",
         },
         {
           id: "browser-verification-recorded",
           summary:
             "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
-          isSatisfied: false,
+          status: "blocked",
         },
         {
           id: "no-open-blockers",
           summary:
-            "No explicit cutover blocker remains open in the screen registry or implementation plan.",
-          isSatisfied: false,
+            "No explicit legacy-support blocker remains open in the screen registry runtime status surface.",
+          status: "blocked",
         },
       ],
     });
   });
 
-  test("documents the default-frontend cutover criteria", () => {
-    expect(SOLID_CUTOVER_CRITERIA).toContain(
+  test("documents the post-cutover support criteria", () => {
+    expect(SOLID_SUPPORT_CRITERIA).toContain(
       "All screen definitions are at implementationStatus=implemented.",
     );
-    expect(SOLID_CUTOVER_CRITERIA).toContain(
+    expect(SOLID_SUPPORT_CRITERIA).toContain(
       "bun run check:frontend:migration passes, including nested Solid typecheck.",
     );
   });
@@ -251,8 +251,8 @@ describe("screen registry", () => {
 
   test("keeps the full migration check criterion separate from bundle and dependency prerequisites", () => {
     expect(
-      getSolidCutoverReadinessReport({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getSolidSupportReport({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: false,
@@ -265,12 +265,12 @@ describe("screen registry", () => {
       id: "full-migration-check-passes",
       summary:
         "bun run check:frontend:migration passes, including nested Solid typecheck.",
-      isSatisfied: false,
+      status: "blocked",
     });
 
     expect(
-      getSolidCutoverReadinessReport({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getSolidSupportReport({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: false,
@@ -283,14 +283,14 @@ describe("screen registry", () => {
       id: "full-migration-check-passes",
       summary:
         "bun run check:frontend:migration passes, including nested Solid typecheck.",
-      isSatisfied: true,
+      status: "pass",
     });
   });
 
   test("keeps browser verification recording separate from browser-tool availability", () => {
     expect(
-      getSolidCutoverReadinessReport({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getSolidSupportReport({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -303,12 +303,12 @@ describe("screen registry", () => {
       id: "browser-verification-recorded",
       summary:
         "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
-      isSatisfied: false,
+      status: "blocked",
     });
 
     expect(
-      getSolidCutoverReadinessReport({
-        ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+      getSolidSupportReport({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: true,
@@ -321,23 +321,80 @@ describe("screen registry", () => {
       id: "browser-verification-recorded",
       summary:
         "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
-      isSatisfied: true,
+      status: "pass",
     });
   });
 
-  test("clears the files-screen parity blocker once browser verification is recorded", () => {
-    const blockerIds = getOutstandingSolidCutoverBlockers({
-      ...DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
+  test("does not keep the browser-tool blocker once browser verification is already recorded", () => {
+    expect(
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
+        hasAgentBrowser: false,
+        hasRecordedBrowserVerification: true,
+      }).map((blocker) => blocker.id),
+    ).not.toContain("agent-browser-missing");
+  });
+
+  test("marks repo-only verification criteria as not applicable outside a source checkout", () => {
+    const supportReport = getSolidSupportReport({
+      ...DEFAULT_SOLID_SUPPORT_STATUS,
+      hasSourceCheckout: false,
+      hasBuiltSolidBundle: true,
+    });
+
+    expect(
+      supportReport.criteria.find(
+        (criterion) => criterion.id === "full-migration-check-passes",
+      ),
+    ).toEqual({
+      id: "full-migration-check-passes",
+      summary:
+        "bun run check:frontend:migration passes, including nested Solid typecheck.",
+      status: "not-applicable",
+    });
+    expect(
+      supportReport.criteria.find(
+        (criterion) => criterion.id === "browser-verification-recorded",
+      ),
+    ).toEqual({
+      id: "browser-verification-recorded",
+      summary:
+        "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+      status: "not-applicable",
+    });
+    expect(
+      getOutstandingSolidSupportBlockers({
+        ...DEFAULT_SOLID_SUPPORT_STATUS,
+        hasSourceCheckout: false,
+        hasBuiltSolidBundle: true,
+      }).map((blocker) => blocker.id),
+    ).not.toContain("solid-deps-missing");
+  });
+
+  test("clears only the files-screen parity blocker once browser verification is recorded", () => {
+    const blockerIds = getOutstandingSolidSupportBlockers({
+      ...DEFAULT_SOLID_SUPPORT_STATUS,
       hasRecordedBrowserVerification: true,
     }).map((blocker) => blocker.id);
 
     expect(blockerIds).not.toContain("files-parity-browser-verification-pending");
-    expect(blockerIds).not.toContain("ai-session-browser-verification-pending");
-    expect(blockerIds).not.toContain("commits-browser-verification-pending");
-    expect(blockerIds).not.toContain("terminal-browser-verification-pending");
-    expect(blockerIds).not.toContain("system-info-browser-verification-pending");
-    expect(blockerIds).not.toContain("notifications-browser-verification-pending");
-    expect(blockerIds).not.toContain("model-profiles-browser-verification-pending");
-    expect(blockerIds).not.toContain("action-defaults-browser-verification-pending");
+    expect(blockerIds).toContain("ai-session-browser-verification-pending");
+    expect(blockerIds).toContain("commits-browser-verification-pending");
+    expect(blockerIds).toContain("terminal-browser-verification-pending");
+    expect(blockerIds).toContain("system-info-browser-verification-pending");
+    expect(blockerIds).toContain("notifications-browser-verification-pending");
+    expect(blockerIds).toContain("model-profiles-browser-verification-pending");
+    expect(blockerIds).toContain("action-defaults-browser-verification-pending");
+  });
+
+  test("keeps files parity blockers visible when browser markers are not applicable", () => {
+    const blockerIds = getOutstandingSolidSupportBlockers({
+      ...DEFAULT_SOLID_SUPPORT_STATUS,
+      hasSourceCheckout: false,
+      hasBuiltSolidBundle: true,
+      hasRecordedBrowserVerification: true,
+    }).map((blocker) => blocker.id);
+
+    expect(blockerIds).toContain("files-parity-browser-verification-pending");
   });
 });

@@ -242,7 +242,7 @@ describe("createServer", () => {
     await expect(frontendStatusResponse.json()).resolves.toEqual(
       expect.objectContaining({
         selectedFrontend: "solid",
-        solidCutoverEnvironmentStatus: expect.any(Object),
+        solidSupportStatus: expect.any(Object),
       }),
     );
   });

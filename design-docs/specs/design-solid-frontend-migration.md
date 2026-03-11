@@ -1,21 +1,26 @@
 # Solid Frontend Migration Design
 
-This document defines how QraftBox will add a Solid-based frontend alongside the existing Svelte frontend so both implementations can be exercised against the same server and compared during migration.
+This document defines the Solid migration design and the post-cutover coexistence model for QraftBox. The migration is no longer hypothetical on this branch: Solid is now the primary frontend, and the legacy Svelte frontend remains available as an explicit fallback.
 
 ## Overview
 
-QraftBox currently serves a single Svelte 5 client from `client/`. The migration will introduce a second frontend implementation, tentatively rooted at `client-solid/`, without removing or destabilizing the existing Svelte UI.
+QraftBox now serves the Solid frontend from `client/` by default and preserves the older Svelte frontend in `client-legacy/` for explicit fallback and parity comparison. Earlier iterations of this document described the pre-cutover layout using `client/` for Svelte and `client-solid/` for Solid; those references should now be read as historical migration notes rather than the current directory layout.
+
+Implementation-plan guidance is split accordingly:
+
+- `impl-plans/solid-frontend-migration.md` is the archived migration record.
+- `impl-plans/solid-cutover-alignment.md` and later follow-up plans track post-cutover alignment work.
 
 The immediate goal is not a one-shot rewrite. The goal is to create a controlled coexistence period where:
 
-- Svelte remains the production baseline.
-- Solid is developed feature-by-feature against the same HTTP and WebSocket APIs.
+- Solid remains the production baseline.
+- Legacy Svelte remains available for explicit validation, fallback, and retirement tracking.
 - Shared behavior is verified by contract tests and browser-level comparison.
 - The server can select which frontend bundle to serve for local validation.
 
 ## Goals
 
-- Add a Solid frontend without interrupting current Svelte workflows.
+- Preserve a safe fallback path while Solid remains the default UI.
 - Keep API semantics identical across both frontends.
 - Introduce shared contracts for frontend state, DTOs, and behavior-oriented test fixtures.
 - Make it easy to run browser verification for both frontends against the same repository state.
@@ -30,17 +35,17 @@ The immediate goal is not a one-shot rewrite. The goal is to create a controlled
 
 ## Current Constraints
 
-- The current client is a large Svelte/Vite application with routing and state concentrated around `client/src/App.svelte` plus many feature components under `client/components/`.
-- Server static asset serving assumes one built client directory resolved from `QRAFTBOX_CLIENT_DIR`.
-- Existing client tests are Svelte-centric and do not yet provide a framework-neutral parity suite.
+- The current default client is the Solid/Vite application in `client/`, while the fallback Svelte app now lives in `client-legacy/`.
+- Server static asset serving must support both `dist/client` and `dist/client-legacy`.
+- Existing browser-parity tracking is now exposed through the post-cutover `solidSupportStatus` contract, but the recorded workspace marker currently covers only the shared `project` and `files` smoke loop.
 - UI changes require browser verification after code changes, so the migration path must support serving either frontend on demand.
 
 ## Proposed Architecture
 
 ### 1. Dual Frontend Layout
 
-- Keep the existing Svelte frontend in `client/`.
-- Add a new Solid frontend in `client-solid/`.
+- Keep the primary Solid frontend in `client/`.
+- Keep the legacy Svelte frontend in `client-legacy/`.
 - Treat each frontend as its own Vite application with isolated dependencies and build output.
 - Keep all server APIs, WebSocket endpoints, and persistence unchanged during the migration.
 
@@ -80,17 +85,17 @@ Selection precedence:
 
 - `--frontend` overrides `QRAFTBOX_FRONTEND`
 - `QRAFTBOX_FRONTEND` overrides the default
-- Default remains `svelte`
+- Default is `solid`
 
 Selection rules:
 
-- Default to `svelte` until Solid reaches release parity.
+- Default to `solid`; require explicit selection for the legacy Svelte frontend.
 - Resolve the selected frontend build directory before static asset middleware is mounted.
 - Return a startup error if the selected frontend bundle is missing.
 
 Current foundation status:
 
-- Asset-root overrides are frontend-specific: `QRAFTBOX_CLIENT_DIR` for Svelte and `QRAFTBOX_CLIENT_SOLID_DIR` for Solid.
+- Asset-root overrides are frontend-specific: `QRAFTBOX_CLIENT_DIR` for Solid and `QRAFTBOX_CLIENT_LEGACY_DIR` for legacy Svelte.
 - The runtime now validates the selected frontend bundle before static middleware is mounted and fails fast when `index.html` is missing.
 - Shared routing contracts now define canonical screen IDs, legacy hash normalization, and browser-hash parsing/building in a framework-neutral module under `client-shared/`.
 - Shared workspace contracts now define the canonical workspace snapshot shape, metadata defaults, and shell-bootstrap state derivation in `client-shared/`.
@@ -107,7 +112,7 @@ Current foundation status:
 - Shared file-change refresh rules now also live in `client-shared/src/realtime/`, so Svelte and Solid can debounce diff-affecting watcher updates from one contract without forcing both frontends through the same WebSocket shell.
 - The Solid app now treats `project` and `files` as distinct migration surfaces, with `project` rendering the live workspace shell and `files` rendering a live diff/files browser backed by shared diff, tree, viewer, and realtime state.
 - The Solid diff slice now remembers selected files per workspace context instead of reusing the previous workspace selection globally, preventing cross-repo path collisions from silently selecting the wrong file after tab switches.
-- The Solid diff workflow now owns its async loading/reset/selection lifecycle inside `client-solid/src/features/diff/`, instead of keeping request-state orchestration in `App.tsx`, so migration work can keep feature boundaries aligned with the intended architecture and regression-test stale state transitions directly.
+- The Solid diff workflow now owns its async loading/reset/selection lifecycle inside `client/src/features/diff/`, instead of keeping request-state orchestration in `App.tsx`, so migration work can keep feature boundaries aligned with the intended architecture and regression-test stale state transitions directly.
 - Shared current-state derivation now also lives in `client-shared/`, so the Solid diff workflow can reuse the same framework-neutral file-preview transform instead of recreating file-view logic inside the frontend shell.
 - A minimal shared parity helper now exists for expected/forbidden text assertions so screen-level comparisons can accumulate against one contract surface before larger browser automation is added.
 - Shared fixture-registry helpers now exist in `client-shared/` so browser verification can reference one scenario fixture catalog instead of duplicating API payload wiring per frontend.
@@ -120,14 +125,14 @@ Current foundation status:
 - The Solid diff slice now also subscribes to the shared file-change refresh rules through a Solid-owned realtime controller, so file watcher events can rehydrate the active diff screen without re-embedding the Svelte-specific refresh semantics.
 - The Solid diff workflow now also mirrors the Svelte focus/visibility/poll git-state refresh behavior through a feature-owned controller, so external git metadata changes can refresh the active `files` screen even when file-watch events do not fire.
 - The files-screen realtime refresh policy should remain feature-owned and must refresh all-files tree/file-preview state even when diff data is unavailable, so non-Git workspace parity does not silently depend on the diff endpoint.
-- The Solid screen registry should treat implementation completeness separately from parity verification. A screen can be `implemented` while still carrying browser-verification blockers, otherwise the readiness model understates actual port progress and turns `implementationStatus` into a proxy for unrelated verification work.
+- The Solid screen registry should treat implementation completeness separately from parity verification. A screen can be `implemented` while still carrying browser-verification blockers, otherwise the support-status model understates actual port progress and turns `implementationStatus` into a proxy for unrelated verification work.
 - Shared commit-history API access now also lives in `client-shared/`, so the Solid `commits` screen can reuse one framework-neutral fetch/error contract for commit lists, commit detail, and per-commit diff payloads instead of issuing ad-hoc requests from the component layer.
 - The Solid app shell now treats `commits` as a live migrated screen rather than a placeholder, while leaving an explicit browser-verification blocker in the screen registry until parity is checked against the Svelte baseline.
 - Shared terminal session API access should also live in `client-shared/`, so the Solid `terminal` screen can reuse one framework-neutral connect/status/disconnect contract before any richer terminal rendering parity work is layered on top.
 - The Solid app shell now treats `terminal` as a live migrated screen rather than a placeholder, while leaving browser parity blocked on reconnect, command input, disconnect, and output verification against the Svelte baseline.
 - Shared AI-session API access should also live in `client-shared/`, so the Solid `ai-session` screen can reuse one framework-neutral contract for active-session polling, prompt-queue state, prompt submission, and Claude-session history browsing instead of depending on Svelte-local request helpers.
 - Shared AI-session API access should also cover hidden-session persistence, so both frontends can reuse one framework-neutral contract for overview visibility state instead of leaving that behavior in the legacy Svelte app API.
-- The Solid app shell now treats `ai-session` as an in-progress live screen rather than a placeholder, with project-scoped session history, active-session monitoring, prompt submission, model-profile selection, and active-file prompt-context wiring backed by the existing APIs while browser parity and broader cutover verification remain explicit blockers.
+- The Solid app shell now treats `ai-session` as an in-progress live screen rather than a placeholder, with project-scoped session history, active-session monitoring, prompt submission, model-profile selection, and active-file prompt-context wiring backed by the existing APIs while browser parity and broader legacy-retirement verification remain explicit blockers.
 - The Solid `ai-session` composer must preserve both new-session drafts and the Svelte baseline's restart-from-beginning flow for existing sessions, because the shared AI-session API and backend already model `force_new_session` as part of the current session lifecycle rather than as a Solid-only enhancement.
 - The Solid `ai-session` screen should keep growing through pure presentation/state helpers that merge active sessions, queued prompts, and Claude-session history into one selectable overview model, so richer session-browsing parity can land without pushing orchestration back into `App.tsx`.
 - The Solid `ai-session` screen should also keep its selected-session/search route state in feature-owned helpers instead of scattering query-string parsing through the component body, so parity-sensitive navigation can be regression-tested without a browser harness.
@@ -141,16 +146,25 @@ Current foundation status:
 - Shared AI-session query contracts should carry transcript-search intent as well as summary-level search, so the Solid session browser can reuse the richer backend session-filter behavior already exposed to the Svelte baseline instead of hardcoding a reduced history search path.
 - Shared AI-session activity contracts must also carry project identity for active sessions and queued prompts, so the Solid `ai-session` screen can scope its live activity panels to the active workspace instead of leaking unrelated repositories into the current overview.
 - The lower-complexity Solid screens for `system-info`, `notifications`, `model-profiles`, and `action-defaults` are also live against the existing backend contracts, so the remaining migration work is now dominated by parity verification plus deeper completion of `ai-session`.
-- The Solid app now also owns a screen-registry contract in `client-solid/src/app/screen-registry.ts`, making implementation order, parity gates, and cutover blockers explicit instead of scattering them across `App.tsx`, navigation helpers, and plan notes.
-- Cutover blockers must be modeled in two layers: global blockers that apply regardless of screen implementation state (for example missing `client-solid` dependencies, missing build output, or missing browser-verification tooling) and screen-specific blockers that track unported or unverified flows. Global blockers must remain visible even after every screen flips to `implemented`, otherwise the cutover gate can report a false-ready state.
-- The screen registry must not hardcode the current workspace's blocker state as if it were immutable design truth. Instead, the registry should define the blocker catalog and derive active global blockers from explicit environment/verification status inputs, so readiness can flip when dependencies are installed, the Solid bundle is built, browser tooling becomes available, or the full migration gate is recorded as passing.
-- The Solid app shell must consume those environment/verification status inputs from a runtime source instead of calling the registry with defaults only, otherwise the readiness UI falls back to permanently blocked placeholder state even after the workspace conditions change.
-- The recorded `bun run check:frontend:migration` status must come from a workspace-local runtime marker written by the verification command itself, not from a manual environment variable, so the Solid cutover UI reflects a real recorded gate instead of ad hoc startup configuration.
-- Browser verification status must also be a recorded workspace-local fact rather than an inference from available tooling or cleared blockers, otherwise the cutover UI can claim parity was recorded when the browser loop never actually ran in that workspace.
+- The Solid app now also owns a screen-registry contract in `client/src/app/screen-registry.ts`, making implementation order, parity gates, and support blockers explicit instead of scattering them across `App.tsx`, navigation helpers, and plan notes.
+- Support blockers must be modeled in two layers: global blockers that apply regardless of screen implementation state (for example missing `client/node_modules`, missing build output, or missing browser-verification tooling) and screen-specific blockers that track unported or unverified flows. Global blockers must remain visible even after every screen flips to `implemented`, otherwise the support gate can report a false-ready state.
+- The screen registry must not hardcode the current workspace's blocker state as if it were immutable design truth. Instead, the registry should define the blocker catalog and derive active global blockers from explicit environment/verification status inputs, so support status can flip when dependencies are installed, the Solid bundle is built, browser tooling becomes available, or the full migration gate is recorded as passing.
+- The Solid app shell must consume those environment/verification status inputs from a runtime source instead of calling the registry with defaults only, otherwise the support-status UI falls back to permanently blocked placeholder state even after the workspace conditions change.
+- The recorded `bun run check:frontend:migration` status must come from a workspace-local runtime marker written by the verification command itself, not from a manual environment variable, so the Solid support-status UI reflects a real recorded gate instead of ad hoc startup configuration.
+- Browser verification status must also be a recorded workspace-local fact rather than an inference from available tooling or cleared blockers, otherwise the support-status UI can claim parity was recorded when the browser loop never actually ran in that workspace.
+- Browser-tool availability must not override that recorded fact after the verification marker exists. `agent-browser` blocks recording the baseline, but it should not keep the post-cutover support surface blocked once that baseline has already been recorded for the workspace.
 - The browser verification gate must be executable from the repo itself via `bun run verify:frontend:migration:browser`, which runs a scripted `agent-browser` smoke loop against both frontend URLs (`#/project` and `#/files`) and records the workspace-local browser-verification marker only when that loop succeeds.
+- The runtime support-status path must distinguish a source checkout from a packaged runtime. Release binaries and npm installs can serve built frontend bundles, but they cannot evaluate repo-local dependency installs or workspace markers and therefore must treat those criteria as not applicable instead of falsely blocked.
+- The Solid client bootstrap must preserve that packaged/runtime distinction even before the `/api/frontend-status` refresh completes or when it fails; fallback client defaults must not assume a source checkout by default.
+- Repo-only support checks must resolve the active QraftBox source root from the runtime location instead of assuming `process.cwd()` is the repo root; otherwise source-based development runs launched from another directory silently lose migration/support markers and nested-client status.
+- That source-root resolution must walk upward from runtime-derived candidate paths until it finds the QraftBox repo markers, because bundled or nested runtime directories are often below the actual repo root rather than equal to it.
+- Repo-local migration/browser markers must also stay non-authoritative outside a source checkout, so they cannot clear screen-level parity blockers or flip support status through an unrelated working-directory marker file.
+- Screen-level parity blockers outside that smoke loop must remain open until they are cleared by targeted verification work; the shared browser marker must not be treated as blanket verification for `ai-session`, `commits`, `terminal`, `system-info`, `notifications`, `model-profiles`, or `action-defaults`.
 - Repo-level migration verification now has an explicit `test:frontend:migration` target for shared-contract and dual-frontend selection coverage, rather than relying on the broader default test command to implicitly exercise the migration surface.
-- Repo-level migration verification is now intentionally two-stage: `check:frontend:migration:offline` covers root/server/shared-contract regressions without `client-solid/node_modules`, while `check:frontend:migration` remains the full gate that additionally typechecks the nested Solid app once its dependencies are installed.
-- Repo-level Solid build/typecheck scripts now fail fast with an explicit `bun install --cwd client-solid` prerequisite when the nested frontend dependencies are absent; in this workspace the install step is currently blocked because Bun cannot write to its tempdir and exits with `AccessDenied`.
+- The migration-focused test target must also include bootstrap fallback regressions such as `client/src/app/bootstrap-state.test.ts`; otherwise the packaged-safe support-default contract can drift without failing the intended offline verification gate.
+- Repo-level migration verification is now intentionally two-stage: `check:frontend:migration:offline` covers root/server/shared-contract regressions without `client/node_modules`, while `check:frontend:migration` remains the full gate that additionally typechecks the nested Solid app once its dependencies are installed.
+- Repo-level Solid build/typecheck scripts now fail fast with an explicit `bun install --cwd client` prerequisite when the nested frontend dependencies are absent.
+- Release packaging must verify the same support baseline before bundling artifacts: `release:prepare` should run `check:frontend:migration:offline` plus `typecheck:client`, then build both frontend bundles and the server bundle only after those checks pass.
 
 ### 4. Progressive Screen Porting
 
@@ -175,8 +189,8 @@ The Solid app should keep one explicit screen registry that records:
 - implementation order
 - implementation status
 - per-screen parity gate summaries
-- explicit cutover blockers that still prevent switching the default frontend
-- a readiness summary derived from the registry so the app shell and implementation plan share the same cutover truth source
+- explicit support blockers that still prevent retiring the legacy fallback
+- a support-status summary derived from the registry so the app shell and tests share one runtime truth source while implementation-plan tracking remains documentation-only
 
 Current intended order after the initial workspace shell is:
 
@@ -197,8 +211,9 @@ Behavior comparison should happen at three levels:
 - Screen-level tests: identical mocked server responses render equivalent visible states.
 - Browser verification: the operator runs both frontends against the same backend and checks targeted flows.
 - The repo-owned browser verification command should automate the minimum smoke loop needed to make the recorded browser-verification marker reproducible: open both frontend URLs, visit the migrated `project` and `files` routes, capture snapshots/screenshots, and fail if the browser cannot read non-empty page text.
+- Because that command only covers shared workspace/diff flows, the recorded marker may clear only the corresponding global criterion and the `files` screen parity blocker. Other screen blockers must stay explicit until separate verification coverage exists.
 
-During early coexistence, screen-level checks may be implemented through framework-specific presentation helpers when a full DOM test harness is not yet available, but those helpers must stay close to the rendered screen and be backed by browser verification before cutover.
+During early coexistence, screen-level checks may be implemented through framework-specific presentation helpers when a full DOM test harness is not yet available, but those helpers must stay close to the rendered screen and be backed by browser verification before the corresponding parity blocker is cleared.
 
 Parity is defined by:
 
@@ -214,6 +229,10 @@ Parity is defined by:
 Pixel-perfect equality is not required during coexistence unless the migrated feature is highly layout-sensitive.
 
 ## Implementation Phases
+
+Phases 1 through 3 are already complete on this branch. The remaining work is
+no longer a frontend-default flip; it is support-status closure and eventual
+legacy Svelte retirement once the recorded blockers are cleared.
 
 ### Phase 1: Foundation
 
@@ -243,11 +262,11 @@ Pixel-perfect equality is not required during coexistence unless the migrated fe
 - Preserve the Svelte non-Git `files` fallback by forcing all-files mode and file preview support while diff data stays explicitly unavailable.
 - Add browser verification scripts/checklists for side-by-side testing.
 
-### Phase 4: Secondary Screens and Cutover Readiness
+### Phase 4: Secondary Screens and Legacy-Retirement Closure
 
-- Port commits, AI sessions, terminal, tools, model config, and remaining screens.
-- Drive secondary-screen sequencing from the Solid screen registry so placeholder state, navigation, and cutover notes cannot drift.
-- Flip default frontend only after parity gates pass and Svelte fallback remains available temporarily.
+- Keep commits, AI sessions, terminal, tools, model config, and remaining screens aligned with the screen registry until their explicit parity blockers are cleared.
+- Drive follow-up verification and blocker burn-down from the Solid screen registry so support-status notes cannot drift from the implemented UI surface.
+- Retire the legacy Svelte frontend only after the remaining parity gates pass and the fallback path is no longer needed.
 
 ## Key Decisions
 
@@ -273,21 +292,23 @@ Reason:
 - The backend behavior must stay identical during comparison.
 - A single server process avoids configuration skew between validation runs.
 
-### Decision: Separate global cutover blockers from screen-level blockers
+### Decision: Separate global support blockers from screen-level blockers
 
 Reason:
 
 - Build and browser-verification blockers do not disappear just because a screen is marked `implemented`.
-- The registry must keep cutover status truthful after the last screen port lands.
-- A derived readiness summary gives the app shell, tests, and implementation plan one consistent source for default-frontend flip criteria.
+- The registry must keep support status truthful after the last screen port lands.
+- A derived support summary gives the app shell and tests one consistent runtime source for legacy-retirement criteria, while implementation plans remain a parallel tracking artifact.
 
-### Decision: Derive active cutover blockers from status inputs instead of hardcoded workspace assumptions
+### Decision: Derive active support blockers from status inputs instead of hardcoded workspace assumptions
 
 Reason:
 
 - Dependency installation, built bundle presence, browser-tool availability, and full-gate verification are runtime/workspace facts, not static design facts.
-- The readiness model must distinguish prerequisites like `client-solid/node_modules` from verification outcomes like `bun run check:frontend:migration` having actually passed.
-- Parameterized blocker evaluation lets the same registry stay correct across blocked sandboxes, local developer machines, and future CI-driven cutover checks.
+- The support-status model must distinguish prerequisites like `client/node_modules` from verification outcomes like `bun run check:frontend:migration` having actually passed.
+- The support-status model must also distinguish repo-only verification prerequisites from general runtime health so packaged installs do not report impossible source-workspace failures.
+- Source-checkout detection for repo-only support checks must identify the actual QraftBox checkout shape, not just any arbitrary working directory containing a `client/package.json`.
+- Parameterized blocker evaluation lets the same registry stay correct across blocked sandboxes, local developer machines, and future CI-driven support checks.
 
 ## Risks and Mitigations
 
@@ -304,7 +325,7 @@ Reason:
 For each migrated milestone:
 
 1. Run `bun run check:frontend:migration:offline` for root TypeScript, shared contracts, and server/frontend-selection regression coverage.
-2. Run `bun install --cwd client-solid` when needed, then run `bun run check:frontend:migration` for the full nested Solid typecheck gate.
+2. Run `bun install --cwd client` when needed, then run `bun run check:frontend:migration` for the full nested Solid typecheck gate.
 3. Run browser verification for Svelte and Solid against the same repository state.
 4. Record parity gaps and environment blockers in the implementation plan progress log before continuing.
 
@@ -315,13 +336,13 @@ For the initial diff milestone, browser verification should at minimum confirm:
 3. Empty, unsupported, and error states stay comprehensible when the active workspace has no diff payload or is not a Git repository.
 4. A `file-change` websocket event refreshes the active Solid diff screen against the current workspace context without mutating non-files routes.
 
-Before the default frontend can flip from Svelte to Solid, the migration must also confirm:
+Before the legacy Svelte frontend can be retired, the support baseline must also confirm:
 
 1. Every screen in the Solid screen registry is marked `implemented`.
 2. `bun run check:frontend:migration` passes, including the nested Solid typecheck.
-3. `dist/client-solid/index.html` is built and is served successfully by the backend under `QRAFTBOX_FRONTEND=solid`.
+3. `dist/client/index.html` is built and is served successfully by the backend under `QRAFTBOX_FRONTEND=solid`.
 4. Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.
-5. No explicit cutover blocker remains open in the screen registry or implementation plan.
+5. No explicit support blocker remains open in the screen registry runtime status surface.
 
 ## References
 

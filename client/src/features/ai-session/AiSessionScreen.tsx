@@ -2,6 +2,7 @@ import {
   createEffect,
   createSignal,
   For,
+  type JSX,
   onCleanup,
   Show,
   untrack,
@@ -70,6 +71,7 @@ export interface AiSessionScreenProps {
   readonly fileContent: FileContent | null;
   readonly diffOverview: DiffOverviewState;
   readonly onOpenFilesScreen: (() => void) | undefined;
+  readonly onOpenProjectScreen: (() => void) | undefined;
 }
 
 const ACTIVE_SESSION_POLL_MS = 5000;
@@ -427,6 +429,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     setHistoryLoading(true);
     void refreshActivity(contextId, projectPath);
+    if (nextScopeKey === null) {
+      return;
+    }
     void refreshHiddenSessions(nextScopeKey);
     void refreshModelProfiles(nextScopeKey);
     restartPolling(contextId, projectPath);
@@ -1059,91 +1064,204 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     await refreshActivity(props.contextId, props.projectPath);
   }
 
+  function getRelativeSessionTime(timestamp: string): string {
+    const parsedTimestamp = Date.parse(timestamp);
+    if (Number.isNaN(parsedTimestamp)) {
+      return "-";
+    }
+
+    const elapsedMilliseconds = Date.now() - parsedTimestamp;
+    const elapsedMinutes = Math.floor(elapsedMilliseconds / 60_000);
+    const elapsedHours = Math.floor(elapsedMilliseconds / 3_600_000);
+    const elapsedDays = Math.floor(elapsedMilliseconds / 86_400_000);
+
+    if (elapsedMinutes < 1) {
+      return "just now";
+    }
+    if (elapsedMinutes < 60) {
+      return `${elapsedMinutes}m ago`;
+    }
+    if (elapsedHours < 24) {
+      return `${elapsedHours}h ago`;
+    }
+    if (elapsedDays === 1) {
+      return "yesterday";
+    }
+    return `${elapsedDays}d ago`;
+  }
+
+  function getSessionStatusBadgeClass(status: string): string {
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus.includes("run")) {
+      return "bg-accent-muted text-accent-fg";
+    }
+    if (normalizedStatus.includes("queue")) {
+      return "bg-attention-emphasis/20 text-attention-fg";
+    }
+    if (
+      normalizedStatus.includes("fail") ||
+      normalizedStatus.includes("cancel") ||
+      normalizedStatus.includes("error")
+    ) {
+      return "bg-danger-emphasis/20 text-danger-fg";
+    }
+    if (normalizedStatus.includes("await")) {
+      return "bg-success-muted text-success-fg";
+    }
+    return "bg-bg-tertiary text-text-secondary";
+  }
+
+  function getSessionSourceBadgeClass(source: string): string {
+    if (source === "active") {
+      return "bg-accent-muted text-accent-fg";
+    }
+    if (source === "queued") {
+      return "bg-attention-emphasis/20 text-attention-fg";
+    }
+    return "bg-bg-tertiary text-text-secondary";
+  }
+
+  function getSessionSourceLabel(source: string): string {
+    if (source === "active") {
+      return "LIVE";
+    }
+    if (source === "queued") {
+      return "QUEUED";
+    }
+    return "HISTORY";
+  }
+
+  function dismissSessionDetail(): void {
+    setSelectedQraftAiSessionId(null);
+    setSelectedSessionError(null);
+  }
+
   return (
-    <section>
-      <h2>AI Sessions</h2>
-      <p>
-        Browse project-scoped session history, monitor active work, and submit
-        prompts into either a new or existing AI session.
-      </p>
+    <section class="mx-auto flex h-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6">
+      <div class="flex flex-col gap-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-accent-fg">
+          Sessions
+        </p>
+        <h2 class="text-3xl font-semibold text-text-primary">AI Sessions</h2>
+        <p class="max-w-3xl text-sm leading-6 text-text-secondary">
+          Browse project-scoped session history, monitor active work, and submit
+          prompts into either a new or existing AI session.
+        </p>
+      </div>
       <Show
         when={props.contextId !== null}
-        fallback={<p>Open a project tab to use the AI Sessions screen.</p>}
+        fallback={
+          <div class="flex flex-1 items-center justify-center">
+            <div class="flex max-w-xl flex-col gap-4 rounded-2xl border border-border-default bg-bg-secondary p-6 shadow-lg shadow-black/20">
+              <div class="flex flex-col gap-2">
+                <p class="text-sm font-medium text-accent-fg">
+                  Project required
+                </p>
+                <h3 class="text-2xl font-semibold text-text-primary">
+                  Open a workspace before browsing sessions
+                </h3>
+                <p class="text-sm leading-6 text-text-secondary">
+                  The legacy Svelte screen always anchored Sessions to an active
+                  project. Open or activate a project tab first, then return to
+                  this screen to inspect history, active runs, and queued
+                  prompts.
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition-colors hover:bg-accent-fg"
+                  onClick={() => props.onOpenProjectScreen?.()}
+                >
+                  Open project selector
+                </button>
+                <Show when={props.onOpenFilesScreen !== undefined}>
+                  <button
+                    type="button"
+                    class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-bg-tertiary"
+                    onClick={() => props.onOpenFilesScreen?.()}
+                  >
+                    Go to Files
+                  </button>
+                </Show>
+              </div>
+            </div>
+          </div>
+        }
       >
-        <div>
-          <button type="button" onClick={startNewSession}>
-            New session
-          </button>
-          <button
-            type="button"
-            disabled={activityLoading()}
-            onClick={() => {
-              if (props.contextId === null) {
-                return;
-              }
-              setErrorMessage(null);
-              setSubmitResultMessage(null);
-              void refreshActivity(props.contextId, props.projectPath);
-            }}
-          >
-            {activityLoading() ? "Refreshing..." : "Refresh"}
-          </button>
-        </div>
-
-        <Show when={errorMessage() !== null}>
-          <p role="alert">{errorMessage()}</p>
-        </Show>
-        <Show when={submitResultMessage() !== null}>
-          <p>{submitResultMessage()}</p>
-        </Show>
-
-        <section>
-          <h3>Session history</h3>
+        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-primary">
           <form
+            class="flex flex-col gap-3 border-b border-border-default bg-bg-primary px-4 py-3 lg:flex-row lg:items-center"
             onSubmit={(event) => {
               event.preventDefault();
               void runSearch();
             }}
           >
-            <label>
-              Search
+            <div class="flex min-w-0 flex-1 items-center gap-3">
               <input
                 type="search"
+                class="min-w-0 flex-1 rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
                 value={searchDraftQuery()}
-                placeholder="Search summaries or prompts"
+                placeholder="Search session purpose/summary/chat text"
                 onInput={(event) =>
                   setSearchDraftQuery(event.currentTarget.value)
                 }
               />
-            </label>
-            <label>
+              <button
+                type="button"
+                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover"
+                onClick={startNewSession}
+              >
+                New session
+              </button>
+              <button
+                type="submit"
+                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={historyLoading() || activityLoading()}
+              >
+                {historyLoading() ? "Searching..." : "Search"}
+              </button>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
               <input
                 type="checkbox"
+                class="rounded border-border-default"
                 checked={searchDraftInTranscript()}
                 onInput={(event) =>
                   setSearchDraftInTranscript(event.currentTarget.checked)
                 }
-              />{" "}
-              Search full transcript
+              />
+              Include chat transcript
             </label>
-            <label>
+            <label class="inline-flex items-center gap-2 text-xs text-text-secondary">
               <input
                 type="checkbox"
+                class="rounded border-border-default"
                 checked={includeHiddenSessions()}
                 onInput={(event) =>
                   setIncludeHiddenSessions(event.currentTarget.checked)
                 }
-              />{" "}
+              />
               Include hidden sessions
             </label>
             <button
-              type="submit"
-              disabled={historyLoading() || activityLoading()}
+              type="button"
+              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={activityLoading()}
+              onClick={() => {
+                if (props.contextId === null) {
+                  return;
+                }
+                setErrorMessage(null);
+                setSubmitResultMessage(null);
+                void refreshActivity(props.contextId, props.projectPath);
+              }}
             >
-              {historyLoading() ? "Searching..." : "Search history"}
+              {activityLoading() ? "Refreshing..." : "Refresh"}
             </button>
             <button
               type="button"
+              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
               disabled={
                 historyLoading() ||
                 activityLoading() ||
@@ -1159,406 +1277,60 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
               Clear search
             </button>
           </form>
-          <p>
-            {searchQuery().trim().length > 0
-              ? searchInTranscript()
-                ? "Searching session history and transcript content."
-                : "Searching session summaries and prompts."
-              : "Showing the latest project-scoped session history."}
-          </p>
-          <Show
-            when={canLoadMoreAiSessionHistory({
-              loadedCount: historicalSessions().length,
-              totalCount: historyTotal(),
-            })}
-          >
-            <p>
-              Loaded {historicalSessions().length} of {historyTotal()} recorded
-              sessions.
-            </p>
-          </Show>
-          <Show when={historyLoading() && !activityLoading()}>
-            <p>Refreshing session history...</p>
-          </Show>
-        </section>
 
-        <section>
-          <h3>Composer</h3>
-          <p>
-            {describeAiSessionTarget({
-              selectedQraftAiSessionId: selectedQraftAiSessionId(),
-              draftSessionId: draftSessionId(),
-            })}
-          </p>
-          <label>
-            Model profile
-            <select
-              value={selectedModelProfileId() ?? ""}
-              disabled={modelProfilesLoading()}
-              onChange={(event) =>
-                setSelectedModelProfileId(
-                  event.currentTarget.value.length > 0
-                    ? event.currentTarget.value
-                    : null,
-                )
-              }
-            >
-              <option value="">Server default AI profile</option>
-              <For each={modelProfiles()}>
-                {(modelProfile) => (
-                  <option value={modelProfile.id}>
-                    {modelProfile.name} ({modelProfile.vendor}/
-                    {modelProfile.model})
-                  </option>
-                )}
-              </For>
-            </select>
-          </label>
-          <p>
-            {describeAiSessionModelProfile(
-              selectedModelProfileId(),
-              modelProfiles(),
-            )}
-          </p>
-          <p>{describeAiSessionPromptContext(promptContextState())}</p>
-          <p>
-            Default session actions stay aligned with the prompts configured in
-            Action Defaults.
-          </p>
-          <Show when={props.selectedPath !== null}>
-            <button type="button" onClick={() => props.onOpenFilesScreen?.()}>
-              Open current file in Files screen
-            </button>
-          </Show>
-          <Show when={selectedSessionEntry() !== null}>
-            <div>
-              <p>
-                <strong>{selectedSessionEntry()?.title}</strong>
-              </p>
-              <p>{selectedSessionEntry()?.detail}</p>
-              <p>
-                Status: {selectedSessionEntry()?.status} | Updated:{" "}
-                {formatAiSessionTimestamp(
-                  selectedSessionEntry()?.updatedAt ?? "",
-                )}
-              </p>
-              <p>
-                Model:{" "}
-                {describeAiSessionEntryModel(
-                  selectedSessionEntry() ?? {
-                    modelProfileId: undefined,
-                    modelVendor: undefined,
-                    modelName: undefined,
-                  },
-                  modelProfiles(),
-                )}
-              </p>
-              <div>
-                <button
-                  type="button"
-                  disabled={
-                    submitting() ||
-                    runningDefaultPromptAction() !== null ||
-                    selectedQraftAiSessionId() === null
-                  }
-                  onClick={() =>
-                    void runDefaultPromptAction("ai-session-refresh-purpose")
-                  }
-                >
-                  {runningDefaultPromptAction() === "ai-session-refresh-purpose"
-                    ? "Running refresh prompt..."
-                    : "Run refresh prompt"}
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    submitting() ||
-                    runningDefaultPromptAction() !== null ||
-                    selectedQraftAiSessionId() === null
-                  }
-                  onClick={() =>
-                    void runDefaultPromptAction("ai-session-resume")
-                  }
-                >
-                  {runningDefaultPromptAction() === "ai-session-resume"
-                    ? "Running resume prompt..."
-                    : "Run resume prompt"}
-                </button>
-                <button
-                  type="button"
-                  disabled={
-                    submitting() ||
-                    runningDefaultPromptAction() !== null ||
-                    selectedQraftAiSessionId() === null ||
-                    promptInput().trim().length === 0
-                  }
-                  onClick={() => void restartSelectedSessionFromBeginning()}
-                >
-                  {submitting() ? "Submitting..." : "Restart from beginning"}
-                </button>
-              </div>
-            </div>
-          </Show>
-          <label>
-            Prompt
-            <textarea
-              rows={6}
-              value={promptInput()}
-              onInput={(event) => setPromptInput(event.currentTarget.value)}
-            />
-          </label>
-          <div>
-            <button
-              type="button"
-              disabled={
-                submitting() ||
-                modelProfilesLoading() ||
-                runningDefaultPromptAction() !== null
-              }
-              onClick={() => void runDefaultPromptAction("ai-session-purpose")}
-            >
-              {runningDefaultPromptAction() === "ai-session-purpose"
-                ? "Running purpose prompt..."
-                : "Run default purpose prompt"}
-            </button>
-            <button
-              type="button"
-              disabled={
-                submitting() ||
-                modelProfilesLoading() ||
-                runningDefaultPromptAction() !== null
-              }
-              onClick={() => void submitPrompt(true)}
-            >
-              {submitting() ? "Submitting..." : "Run now"}
-            </button>
-            <button
-              type="button"
-              disabled={
-                submitting() ||
-                modelProfilesLoading() ||
-                runningDefaultPromptAction() !== null
-              }
-              onClick={() => void submitPrompt(false)}
-            >
-              {submitting() ? "Submitting..." : "Queue prompt"}
-            </button>
-          </div>
-        </section>
-
-        <section>
-          <h3>Active work</h3>
-          <p>{getQueuedPromptSummary(promptQueue())}</p>
-          <Show
-            when={activeSessions().length > 0}
-            fallback={<p>No active AI sessions.</p>}
-          >
-            <ul>
-              <For each={activeSessions()}>
-                {(activeSession) => (
-                  <li>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedQraftAiSessionId(
-                          (activeSession.clientSessionId ??
-                            activeSession.id) as QraftAiSessionId,
-                        )
-                      }
-                    >
-                      <strong>{activeSession.state}</strong>{" "}
-                      {activeSession.prompt}
-                    </button>
-                    <div>
-                      <span>
-                        Started{" "}
-                        {formatAiSessionTimestamp(activeSession.createdAt)}
-                      </span>
-                      <Show when={activeSession.currentActivity !== undefined}>
-                        <span>{` | ${activeSession.currentActivity}`}</span>
-                      </Show>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void cancelActiveSession(activeSession.id)}
-                    >
-                      Cancel
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-          </Show>
-
-          <Show when={promptQueue().length > 0}>
-            <h4>Prompt queue</h4>
-            <ul>
-              <For each={promptQueue()}>
-                {(promptQueueItem) => (
-                  <li>
-                    <strong>{promptQueueItem.status}</strong>{" "}
-                    {promptQueueItem.message}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void cancelQueuedPrompt(promptQueueItem.id)
-                      }
-                    >
-                      Cancel queued prompt
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
-            <Show
-              when={canLoadMoreAiSessionHistory({
-                loadedCount: historicalSessions().length,
-                totalCount: historyTotal(),
-              })}
-            >
-              <button
-                type="button"
-                disabled={historyLoadingMore() || historyLoading()}
-                onClick={() => void loadMoreSessionHistory()}
+          <div class="px-4 pt-3">
+            <Show when={errorMessage() !== null}>
+              <p
+                role="alert"
+                class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-3 py-2 text-sm text-danger-fg"
               >
-                {historyLoadingMore()
-                  ? "Loading more history..."
-                  : `Load ${SESSION_HISTORY_PAGE_SIZE} more sessions`}
-              </button>
+                {errorMessage()}
+              </p>
             </Show>
-          </Show>
-        </section>
+            <Show when={submitResultMessage() !== null}>
+              <p class="rounded-md border border-success-emphasis/30 bg-success-subtle px-3 py-2 text-sm text-success-fg">
+                {submitResultMessage()}
+              </p>
+            </Show>
+          </div>
 
-        <section>
-          <h3>Sessions</h3>
-          <p>
-            Session filtering is controlled from the Session history search form
-            so polling and URL state stay aligned with the applied query.
-          </p>
-          <button
-            type="button"
-            onClick={() => setSelectedQraftAiSessionId(null)}
-          >
-            Use new draft
-          </button>
-          <Show when={selectedSessionEntry() !== null}>
-            <div>
-              <h4>Selected session</h4>
-              <p>
-                <strong>{selectedSessionEntry()?.title}</strong>
-              </p>
-              <p>{selectedSessionEntry()?.latestPrompt}</p>
-              <p>
-                {selectedSessionEntry()?.status} |{" "}
-                {formatAiSessionTimestamp(
-                  selectedSessionEntry()?.updatedAt ?? "",
-                )}
-                <Show
-                  when={(selectedSessionEntry()?.queuedPromptCount ?? 0) > 0}
-                >
-                  <span>
-                    {` | ${selectedSessionEntry()?.queuedPromptCount} queued`}
-                  </span>
-                </Show>
-              </p>
-              <Show when={selectedSessionCancelAction() !== null}>
+          <div class="min-h-0 flex-1 overflow-auto p-4">
+            <Show
+              when={historyLoading() && visibleSessionEntries().length === 0}
+            >
+              <div class="flex flex-col items-center justify-center gap-3 py-16 text-text-tertiary">
+                <div class="flex items-center gap-2">
+                  <span class="h-2 w-2 animate-pulse rounded-full bg-accent-emphasis" />
+                  <span class="h-2 w-2 animate-pulse rounded-full bg-accent-emphasis [animation-delay:120ms]" />
+                  <span class="h-2 w-2 animate-pulse rounded-full bg-accent-emphasis [animation-delay:240ms]" />
+                </div>
+                <p class="text-xs">
+                  {searchQuery().trim().length > 0
+                    ? "Searching sessions..."
+                    : "Loading sessions..."}
+                </p>
+              </div>
+            </Show>
+
+            <Show
+              when={!(historyLoading() && visibleSessionEntries().length === 0)}
+            >
+              <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 <button
                   type="button"
-                  onClick={() => {
-                    const cancelAction = selectedSessionCancelAction();
-                    if (cancelAction === null) {
-                      return;
-                    }
-                    if (cancelAction.kind === "active-session") {
-                      void cancelActiveSession(cancelAction.targetId);
-                      return;
-                    }
-                    void cancelQueuedPrompt(cancelAction.targetId);
-                  }}
+                  class="flex min-h-[164px] items-center justify-center rounded-xl border border-dashed border-accent-emphasis/60 bg-accent-muted/10 p-4 text-accent-fg transition hover:bg-accent-muted/20"
+                  aria-label="Create new session"
+                  onClick={startNewSession}
                 >
-                  {selectedSessionCancelAction()?.label}
+                  <span class="text-6xl font-light leading-none">+</span>
                 </button>
-              </Show>
-              <Show when={selectedSessionDetail() !== null}>
-                <p>
-                  Source: {selectedSessionDetail()?.source} | Branch:{" "}
-                  {selectedSessionDetail()?.gitBranch}
-                </p>
-                <p>Summary: {selectedSessionDetail()?.summary}</p>
-                <p>First prompt: {selectedSessionDetail()?.firstPrompt}</p>
-              </Show>
-              <h5>Transcript</h5>
-              <Show when={selectedSessionLoading()}>
-                <p>Loading selected session transcript...</p>
-              </Show>
-              <Show when={selectedSessionError() !== null}>
-                <p role="alert">{selectedSessionError()}</p>
-              </Show>
-              <Show
-                when={
-                  !selectedSessionLoading() &&
-                  selectedSessionError() === null &&
-                  selectedSessionTranscript().length === 0
-                }
-              >
-                <p>No transcript events are available for this session yet.</p>
-              </Show>
-              <Show when={selectedSessionTranscript().length > 0}>
-                <p>
-                  Showing {selectedSessionTranscript().length} transcript lines
-                  from {selectedSessionTranscriptLoadedEventCount()} loaded
-                  events
-                  {selectedSessionTranscriptTotal() >
-                  selectedSessionTranscriptLoadedEventCount()
-                    ? ` of ${selectedSessionTranscriptTotal()}`
-                    : ""}
-                  .
-                </p>
-                <ul>
-                  <For each={selectedSessionTranscript()}>
-                    {(transcriptLine) => (
-                      <li>
-                        <strong>{transcriptLine.role}</strong>
-                        {transcriptLine.timestamp !== null
-                          ? ` | ${formatAiSessionTimestamp(
-                              transcriptLine.timestamp,
-                            )}`
-                          : ""}
-                        <p>{transcriptLine.text}</p>
-                      </li>
-                    )}
-                  </For>
-                </ul>
-                <Show
-                  when={canLoadMoreAiSessionTranscript({
-                    loadedEventCount:
-                      selectedSessionTranscriptLoadedEventCount(),
-                    totalCount: selectedSessionTranscriptTotal(),
-                  })}
-                >
-                  <button
-                    type="button"
-                    disabled={selectedSessionLoadingMore()}
-                    onClick={() => void loadMoreSelectedSessionTranscript()}
-                  >
-                    {selectedSessionLoadingMore()
-                      ? "Loading more transcript..."
-                      : "Load more transcript"}
-                  </button>
-                </Show>
-              </Show>
-            </div>
-          </Show>
-          <Show
-            when={visibleSessionEntries().length > 0}
-            fallback={<p>No recorded sessions for this workspace.</p>}
-          >
-            <ul>
-              <For each={visibleSessionEntries()}>
-                {(sessionEntry) => (
-                  <li>
-                    <button
-                      type="button"
+
+                <For each={visibleSessionEntries()}>
+                  {(sessionEntry) => (
+                    <div
+                      role="button"
+                      tabindex={0}
+                      class="flex min-h-[164px] flex-col gap-3 rounded-xl border border-border-default bg-bg-secondary p-4 text-left transition hover:border-accent-emphasis/60 hover:bg-bg-hover"
                       aria-pressed={
                         selectedQraftAiSessionId() ===
                         sessionEntry.qraftAiSessionId
@@ -1568,47 +1340,480 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           sessionEntry.qraftAiSessionId,
                         )
                       }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedQraftAiSessionId(
+                            sessionEntry.qraftAiSessionId,
+                          );
+                        }
+                      }}
                     >
-                      <strong>{sessionEntry.title}</strong>
-                    </button>
-                    <div>
-                      <span>{sessionEntry.status}</span>
-                      <span>{` | ${sessionEntry.detail}`}</span>
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span
+                            class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
+                              sessionEntry.status,
+                            )}`}
+                          >
+                            {sessionEntry.status}
+                          </span>
+                          <span
+                            class={`rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${getSessionSourceBadgeClass(
+                              sessionEntry.source,
+                            )}`}
+                          >
+                            {getSessionSourceLabel(sessionEntry.source)}
+                          </span>
+                          <Show
+                            when={hiddenSessionIds().includes(
+                              sessionEntry.qraftAiSessionId,
+                            )}
+                          >
+                            <span class="rounded bg-danger-emphasis/20 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-danger-fg">
+                              Hidden
+                            </span>
+                          </Show>
+                        </div>
+                        <div class="flex items-center gap-2">
+                          <span class="text-[11px] text-text-tertiary">
+                            {getRelativeSessionTime(sessionEntry.updatedAt)}
+                          </span>
+                          <button
+                            type="button"
+                            class="rounded border border-border-default px-2 py-1 text-[10px] text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void toggleSessionHidden(
+                                sessionEntry.qraftAiSessionId,
+                                hiddenSessionIds().includes(
+                                  sessionEntry.qraftAiSessionId,
+                                ) === false,
+                              );
+                            }}
+                          >
+                            {hiddenSessionIds().includes(
+                              sessionEntry.qraftAiSessionId,
+                            )
+                              ? "Show"
+                              : "Hide"}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div class="space-y-1">
+                        <p class="text-[10px] uppercase tracking-wide text-text-tertiary">
+                          Purpose
+                        </p>
+                        <p class="line-clamp-2 text-sm text-text-primary">
+                          {sessionEntry.title}
+                        </p>
+                      </div>
+
+                      <div class="mt-auto space-y-1">
+                        <p class="text-[10px] uppercase tracking-wide text-text-tertiary">
+                          Latest activity
+                        </p>
+                        <p class="line-clamp-3 text-xs leading-5 text-text-secondary">
+                          {sessionEntry.detail}
+                        </p>
+                      </div>
+
+                      <div class="flex flex-wrap items-center gap-2 border-t border-border-default/60 pt-2 text-[11px] text-text-tertiary">
+                        <Show when={sessionEntry.queuedPromptCount > 0}>
+                          <span>{sessionEntry.queuedPromptCount} queued</span>
+                        </Show>
+                        <span>
+                          {describeAiSessionEntryModel(
+                            sessionEntry,
+                            modelProfiles(),
+                          )}
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <span>
-                        {formatAiSessionTimestamp(sessionEntry.updatedAt)}
-                      </span>
-                      <Show when={sessionEntry.queuedPromptCount > 0}>
-                        <span>{` | ${sessionEntry.queuedPromptCount} queued`}</span>
-                      </Show>
-                      <span>
-                        {` | ${describeAiSessionEntryModel(sessionEntry, modelProfiles())}`}
-                      </span>
+                  )}
+                </For>
+              </div>
+            </Show>
+
+            <Show
+              when={
+                visibleSessionEntries().length === 0 &&
+                !historyLoading() &&
+                searchQuery().trim().length === 0
+              }
+            >
+              <div class="py-12 text-center text-sm text-text-secondary">
+                No sessions found for this project.
+              </div>
+            </Show>
+
+            <Show
+              when={
+                visibleSessionEntries().length === 0 &&
+                !historyLoading() &&
+                searchQuery().trim().length > 0
+              }
+            >
+              <div class="py-12 text-center text-sm text-text-secondary">
+                No sessions matched your search.
+              </div>
+            </Show>
+
+            <Show
+              when={canLoadMoreAiSessionHistory({
+                loadedCount: historicalSessions().length,
+                totalCount: historyTotal(),
+              })}
+            >
+              <div class="flex justify-center pt-4">
+                <button
+                  type="button"
+                  class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={historyLoadingMore() || historyLoading()}
+                  onClick={() => void loadMoreSessionHistory()}
+                >
+                  {historyLoadingMore()
+                    ? "Loading more..."
+                    : `Load ${SESSION_HISTORY_PAGE_SIZE} more`}
+                </button>
+              </div>
+            </Show>
+          </div>
+
+          <Show when={selectedQraftAiSessionId() !== null}>
+            <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
+              <div class="flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+                <div class="flex min-w-0 flex-1 flex-col border-r border-border-default">
+                  <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
+                    <div class="min-w-0">
+                      <div class="flex flex-wrap items-center gap-2">
+                        <span
+                          class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
+                            selectedSessionEntry()?.status ?? "",
+                          )}`}
+                        >
+                          {selectedSessionEntry()?.status}
+                        </span>
+                        <span class="rounded bg-bg-tertiary px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                          {describeAiSessionEntryModel(
+                            selectedSessionEntry() ?? {
+                              modelProfileId: undefined,
+                              modelVendor: undefined,
+                              modelName: undefined,
+                            },
+                            modelProfiles(),
+                          )}
+                        </span>
+                      </div>
+                      <h3 class="mt-2 truncate text-lg font-semibold text-text-primary">
+                        {selectedSessionEntry()?.title}
+                      </h3>
+                      <p class="mt-1 text-xs text-text-secondary">
+                        {selectedSessionEntry()?.detail}
+                      </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() =>
-                        void toggleSessionHidden(
-                          sessionEntry.qraftAiSessionId,
-                          hiddenSessionIds().includes(
-                            sessionEntry.qraftAiSessionId,
-                          ) === false,
-                        )
+                      class="rounded-md border border-border-default px-3 py-2 text-sm text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                      onClick={dismissSessionDetail}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div class="min-h-0 flex-1 overflow-auto px-4 py-4">
+                    <Show when={selectedSessionDetail() !== null}>
+                      <div class="mb-4 grid gap-3 sm:grid-cols-3">
+                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                          <p class="uppercase tracking-wide text-text-tertiary">
+                            Source
+                          </p>
+                          <p class="mt-1 text-sm text-text-primary">
+                            {selectedSessionDetail()?.source}
+                          </p>
+                        </div>
+                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                          <p class="uppercase tracking-wide text-text-tertiary">
+                            Branch
+                          </p>
+                          <p class="mt-1 text-sm text-text-primary">
+                            {selectedSessionDetail()?.gitBranch}
+                          </p>
+                        </div>
+                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                          <p class="uppercase tracking-wide text-text-tertiary">
+                            Updated
+                          </p>
+                          <p class="mt-1 text-sm text-text-primary">
+                            {formatAiSessionTimestamp(
+                              selectedSessionEntry()?.updatedAt ?? "",
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                    </Show>
+
+                    <Show when={selectedSessionLoading()}>
+                      <p class="text-sm text-text-secondary">
+                        Loading selected session transcript...
+                      </p>
+                    </Show>
+                    <Show when={selectedSessionError() !== null}>
+                      <p
+                        role="alert"
+                        class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-3 py-2 text-sm text-danger-fg"
+                      >
+                        {selectedSessionError()}
+                      </p>
+                    </Show>
+                    <div class="space-y-3">
+                      <For each={selectedSessionTranscript()}>
+                        {(transcriptLine) => (
+                          <article class="rounded-xl border border-border-default bg-bg-primary p-4">
+                            <div class="mb-2 flex items-center justify-between gap-3">
+                              <span
+                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                                  transcriptLine.role === "assistant"
+                                    ? "bg-success-muted text-success-fg"
+                                    : transcriptLine.role === "system"
+                                      ? "bg-attention-emphasis/20 text-attention-fg"
+                                      : "bg-accent-muted text-accent-fg"
+                                }`}
+                              >
+                                {transcriptLine.role}
+                              </span>
+                              <span class="text-[11px] text-text-tertiary">
+                                {transcriptLine.timestamp === null
+                                  ? ""
+                                  : formatAiSessionTimestamp(
+                                      transcriptLine.timestamp,
+                                    )}
+                              </span>
+                            </div>
+                            <p class="whitespace-pre-wrap break-words text-sm leading-6 text-text-primary">
+                              {transcriptLine.text}
+                            </p>
+                          </article>
+                        )}
+                      </For>
+                    </div>
+                    <Show
+                      when={
+                        !selectedSessionLoading() &&
+                        selectedSessionError() === null &&
+                        selectedSessionTranscript().length === 0
                       }
                     >
-                      {hiddenSessionIds().includes(
-                        sessionEntry.qraftAiSessionId,
-                      )
-                        ? "Show session"
-                        : "Hide session"}
-                    </button>
-                  </li>
-                )}
-              </For>
-            </ul>
+                      <p class="text-sm text-text-secondary">
+                        No transcript events are available for this session yet.
+                      </p>
+                    </Show>
+                    <Show
+                      when={canLoadMoreAiSessionTranscript({
+                        loadedEventCount:
+                          selectedSessionTranscriptLoadedEventCount(),
+                        totalCount: selectedSessionTranscriptTotal(),
+                      })}
+                    >
+                      <div class="flex justify-center pt-4">
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={selectedSessionLoadingMore()}
+                          onClick={() =>
+                            void loadMoreSelectedSessionTranscript()
+                          }
+                        >
+                          {selectedSessionLoadingMore()
+                            ? "Loading more transcript..."
+                            : "Load more transcript"}
+                        </button>
+                      </div>
+                    </Show>
+                  </div>
+                </div>
+
+                <aside class="flex w-full max-w-sm flex-col bg-bg-primary">
+                  <div class="border-b border-border-default px-4 py-3">
+                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-text-tertiary">
+                      Profile
+                    </p>
+                    <p class="mt-2 text-sm text-text-primary">
+                      {describeAiSessionTarget({
+                        selectedQraftAiSessionId: selectedQraftAiSessionId(),
+                        draftSessionId: draftSessionId(),
+                      })}
+                    </p>
+                    <p class="mt-1 text-xs text-text-secondary">
+                      {describeAiSessionPromptContext(promptContextState())}
+                    </p>
+                  </div>
+
+                  <div class="flex flex-1 flex-col gap-4 overflow-auto px-4 py-4">
+                    <label class="flex flex-col gap-2 text-sm text-text-secondary">
+                      <span>Model profile</span>
+                      <select
+                        class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
+                        value={selectedModelProfileId() ?? ""}
+                        disabled={modelProfilesLoading()}
+                        onChange={(event) =>
+                          setSelectedModelProfileId(
+                            event.currentTarget.value.length > 0
+                              ? event.currentTarget.value
+                              : null,
+                          )
+                        }
+                      >
+                        <option value="">Server default AI profile</option>
+                        <For each={modelProfiles()}>
+                          {(modelProfile) => (
+                            <option value={modelProfile.id}>
+                              {modelProfile.name} ({modelProfile.vendor}/
+                              {modelProfile.model})
+                            </option>
+                          )}
+                        </For>
+                      </select>
+                    </label>
+
+                    <p class="text-xs leading-5 text-text-secondary">
+                      {describeAiSessionModelProfile(
+                        selectedModelProfileId(),
+                        modelProfiles(),
+                      )}
+                    </p>
+
+                    <label class="flex flex-1 flex-col gap-2 text-sm text-text-secondary">
+                      <span>Next prompt</span>
+                      <textarea
+                        class="min-h-[220px] flex-1 rounded-md border border-border-default bg-bg-secondary px-3 py-3 text-sm leading-6 text-text-primary outline-none transition focus:border-accent-emphasis"
+                        rows={10}
+                        value={promptInput()}
+                        onInput={(event) =>
+                          setPromptInput(event.currentTarget.value)
+                        }
+                      />
+                    </label>
+
+                    <div class="grid gap-2">
+                      <button
+                        type="button"
+                        class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          submitting() ||
+                          modelProfilesLoading() ||
+                          runningDefaultPromptAction() !== null
+                        }
+                        onClick={() => void submitPrompt(true)}
+                      >
+                        {submitting() ? "Submitting..." : "Run now"}
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          submitting() ||
+                          modelProfilesLoading() ||
+                          runningDefaultPromptAction() !== null
+                        }
+                        onClick={() => void submitPrompt(false)}
+                      >
+                        Queue prompt
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={
+                          submitting() ||
+                          modelProfilesLoading() ||
+                          runningDefaultPromptAction() !== null
+                        }
+                        onClick={() =>
+                          void runDefaultPromptAction("ai-session-purpose")
+                        }
+                      >
+                        {runningDefaultPromptAction() === "ai-session-purpose"
+                          ? "Running purpose prompt..."
+                          : "Run default purpose prompt"}
+                      </button>
+
+                      <Show when={selectedSessionEntry() !== null}>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            submitting() ||
+                            runningDefaultPromptAction() !== null
+                          }
+                          onClick={() =>
+                            void runDefaultPromptAction(
+                              "ai-session-refresh-purpose",
+                            )
+                          }
+                        >
+                          {runningDefaultPromptAction() ===
+                          "ai-session-refresh-purpose"
+                            ? "Running refresh prompt..."
+                            : "Refresh purpose"}
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            submitting() ||
+                            runningDefaultPromptAction() !== null
+                          }
+                          onClick={() =>
+                            void runDefaultPromptAction("ai-session-resume")
+                          }
+                        >
+                          {runningDefaultPromptAction() === "ai-session-resume"
+                            ? "Running resume prompt..."
+                            : "Resume session"}
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={
+                            submitting() ||
+                            runningDefaultPromptAction() !== null ||
+                            promptInput().trim().length === 0
+                          }
+                          onClick={() =>
+                            void restartSelectedSessionFromBeginning()
+                          }
+                        >
+                          Restart from beginning
+                        </button>
+                        <Show when={selectedSessionCancelAction() !== null}>
+                          <button
+                            type="button"
+                            class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20"
+                            onClick={() => {
+                              const cancelAction =
+                                selectedSessionCancelAction();
+                              if (cancelAction === null) {
+                                return;
+                              }
+                              if (cancelAction.kind === "active-session") {
+                                void cancelActiveSession(cancelAction.targetId);
+                                return;
+                              }
+                              void cancelQueuedPrompt(cancelAction.targetId);
+                            }}
+                          >
+                            {selectedSessionCancelAction()?.label}
+                          </button>
+                        </Show>
+                      </Show>
+                    </div>
+                  </div>
+                </aside>
+              </div>
+            </div>
           </Show>
-        </section>
+        </div>
       </Show>
     </section>
   );

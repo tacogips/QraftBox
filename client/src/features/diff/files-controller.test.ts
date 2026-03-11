@@ -142,7 +142,7 @@ describe("createFilesController", () => {
   });
 
   test("clears stale all-files state immediately when switching contexts", async () => {
-    let resolveCtx2TreeLoad: (() => void) | null = null;
+    let resolveCtx2TreeLoad: () => void = () => {};
     const filesApiClient: FilesApiClient = {
       fetchAllFilesTree: async (contextId) => {
         if (contextId === "ctx-2") {
@@ -203,7 +203,7 @@ describe("createFilesController", () => {
     expect(filesController.getState().allFilesTree).toBeNull();
     expect(filesController.getState().fileContent).toBeNull();
 
-    resolveCtx2TreeLoad?.();
+    resolveCtx2TreeLoad();
     await switchContextPromise;
 
     expect(filesController.getState().allFilesTree?.children?.[0]?.path).toBe(
@@ -282,7 +282,7 @@ describe("createFilesController", () => {
   });
 
   test("ignores a stale all-files tree response after switching contexts", async () => {
-    let resolveCtx1TreeLoad: (() => void) | null = null;
+    let resolveCtx1TreeLoad: () => void = () => {};
     const filesApiClient: FilesApiClient = {
       fetchAllFilesTree: async (contextId) => {
         if (contextId === "ctx-1") {
@@ -335,7 +335,7 @@ describe("createFilesController", () => {
     });
     await filesController.setFileTreeMode("ctx-2", "all");
 
-    resolveCtx1TreeLoad?.();
+    resolveCtx1TreeLoad();
     await ctx1AllFilesPromise;
 
     expect(filesController.getState().allFilesTree?.children?.[0]?.path).toBe(
@@ -344,7 +344,7 @@ describe("createFilesController", () => {
   });
 
   test("ignores a stale file-content response after switching contexts", async () => {
-    let resolveCtx1FileContent: (() => void) | null = null;
+    let resolveCtx1FileContent: () => void = () => {};
     const filesApiClient: FilesApiClient = {
       fetchAllFilesTree: async () => ({
         tree: {
@@ -389,7 +389,7 @@ describe("createFilesController", () => {
       preferredViewMode: "full-file",
     });
 
-    resolveCtx1FileContent?.();
+    resolveCtx1FileContent();
     await ctx1SynchronizationPromise;
 
     expect(filesController.getState().fileContent?.content).toBe(
@@ -398,9 +398,9 @@ describe("createFilesController", () => {
   });
 
   test("ignores a stale all-files tree response after filters change", async () => {
-    let resolveFirstTreeLoad: (() => void) | null = null;
+    let resolveFirstTreeLoad: () => void = () => {};
     const filesApiClient: FilesApiClient = {
-      fetchAllFilesTree: async (_contextId, _expand, options) => {
+      fetchAllFilesTree: async (_contextId, _expand, options = {}) => {
         if (options.showIgnored === false) {
           await new Promise<void>((resolve) => {
             resolveFirstTreeLoad = resolve;
@@ -446,7 +446,7 @@ describe("createFilesController", () => {
     );
 
     await filesController.setShowIgnored("ctx-1", true);
-    resolveFirstTreeLoad?.();
+    resolveFirstTreeLoad();
     await firstTreeLoadPromise;
 
     expect(filesController.getState().allFilesTree?.children?.[0]?.path).toBe(

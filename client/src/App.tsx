@@ -2,29 +2,21 @@ import {
   createEffect,
   createSignal,
   For,
-  Match,
+  type JSX,
   onCleanup,
   onMount,
   Show,
-  Switch,
 } from "solid-js";
 import {
-  APP_SCREENS,
   buildScreenHash,
   parseAppHash,
+  type AppScreen,
   type ScreenRouteState,
 } from "../../client-shared/src/contracts/navigation";
-import { createFrontendStatusApiClient } from "../../client-shared/src/api/frontend-status";
 import { getActiveWorkspaceTab } from "../../client-shared/src/contracts/workspace";
 import type { SolidBootstrapState } from "./app/bootstrap-state";
 import { createScreenNavigationItems } from "./app/navigation";
-import {
-  getSolidCutoverReadinessReport,
-  getInProgressSolidScreens,
-  getOutstandingSolidCutoverBlockers,
-  getPlannedSolidScreens,
-  getSolidScreenDefinition,
-} from "./app/screen-registry";
+import { getSolidScreenDefinition } from "./app/screen-registry";
 import { ActionDefaultsScreen } from "./features/model-config/ActionDefaultsScreen";
 import { AiSessionScreen } from "./features/ai-session/AiSessionScreen";
 import { ModelProfilesScreen } from "./features/model-config/ModelProfilesScreen";
@@ -45,6 +37,33 @@ import { createWorkspaceViewModel } from "./features/workspace/create-workspace-
 export interface AppProps {
   readonly bootstrapState: SolidBootstrapState;
 }
+
+const PRIMARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
+  "files",
+  "ai-session",
+  "commits",
+  "terminal",
+] as const;
+
+const SECONDARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
+  "project",
+  "system-info",
+  "notifications",
+  "model-profiles",
+  "action-defaults",
+] as const;
+
+const NAVIGATION_LABELS: Readonly<Record<AppScreen, string>> = {
+  project: "Project",
+  files: "Files",
+  "ai-session": "Sessions",
+  commits: "Commits",
+  terminal: "Terminal",
+  "system-info": "System Info",
+  notifications: "Notifications",
+  "model-profiles": "Model Profiles",
+  "action-defaults": "Action Defaults",
+};
 
 function parseWindowRoute(): ScreenRouteState {
   const parsedRoute = parseAppHash(window.location.hash);
@@ -70,43 +89,47 @@ function renderPlannedScreenPlaceholder(
   const screenDefinition = getSolidScreenDefinition(screen);
 
   return (
-    <section>
-      <h2>{screenDefinition.label}</h2>
-      <p>
-        Solid migration status: {screenDefinition.implementationStatus}. Planned
+    <section class="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-8">
+      <h2 class="text-2xl font-semibold">{screenDefinition.label}</h2>
+      <p class="text-sm text-text-secondary">
+        Solid support status: {screenDefinition.implementationStatus}. Planned
         order: {screenDefinition.implementationOrder}.
       </p>
-      <p>Parity gate: {screenDefinition.parityGate.summary}</p>
-      <ul>
+      <p class="text-sm text-text-secondary">
+        Parity gate: {screenDefinition.parityGate.summary}
+      </p>
+      <ul class="list-disc pl-5 text-sm text-text-primary">
         <For each={screenDefinition.parityGate.checks}>
           {(check) => <li>{check}</li>}
         </For>
       </ul>
-      <Show
-        when={screenDefinition.blockers.length > 0}
-        fallback={<p>No screen-specific blockers are currently recorded.</p>}
-      >
-        <h3>Current blockers</h3>
-        <ul>
-          <For each={screenDefinition.blockers}>
-            {(blocker) => <li>{blocker.summary}</li>}
-          </For>
-        </ul>
-      </Show>
+      <h3 class="text-lg font-semibold">Current blockers</h3>
+      <ul class="list-disc pl-5 text-sm text-text-secondary">
+        <For each={screenDefinition.blockers}>
+          {(blocker) => <li>{blocker.summary}</li>}
+        </For>
+      </ul>
     </section>
   );
+}
+
+function getPrimaryNavigationButtonClass(isActive: boolean): string {
+  return isActive
+    ? "h-full border-b-2 border-accent-emphasis px-3 py-3 text-sm font-semibold text-text-primary"
+    : "h-full border-b-2 border-transparent px-3 py-3 text-sm text-text-secondary transition-colors hover:border-border-emphasis hover:text-text-primary";
+}
+
+function getSecondaryNavigationButtonClass(isActive: boolean): string {
+  return isActive
+    ? "rounded-md border border-border-emphasis bg-bg-tertiary px-3 py-2 text-sm font-medium text-text-primary"
+    : "rounded-md border border-transparent px-3 py-2 text-sm text-text-secondary transition-colors hover:border-border-default hover:bg-bg-tertiary hover:text-text-primary";
 }
 
 export function App(props: AppProps): JSX.Element {
   const [activeRoute, setActiveRoute] = createSignal<ScreenRouteState>(
     props.bootstrapState.route,
   );
-  const [cutoverEnvironmentStatus, setCutoverEnvironmentStatus] = createSignal(
-    props.bootstrapState.cutoverEnvironmentStatus,
-  );
-  const frontendStatusApi = createFrontendStatusApiClient({
-    apiBaseUrl: props.bootstrapState.apiBaseUrl,
-  });
+  const [headerMenuOpen, setHeaderMenuOpen] = createSignal(false);
   const diffViewModel = createDiffViewModel({
     apiBaseUrl: props.bootstrapState.apiBaseUrl,
   });
@@ -173,20 +196,13 @@ export function App(props: AppProps): JSX.Element {
   onMount(() => {
     const handleHashChange = (): void => {
       const nextRoute = parseWindowRoute();
+      setHeaderMenuOpen(false);
       setActiveRoute((currentRoute) =>
         sameRoute(currentRoute, nextRoute) ? currentRoute : nextRoute,
       );
     };
 
     window.addEventListener("hashchange", handleHashChange);
-    void frontendStatusApi
-      .fetchFrontendStatus()
-      .then((status) => {
-        setCutoverEnvironmentStatus(status.solidCutoverEnvironmentStatus);
-      })
-      .catch(() => {
-        // Keep the conservative bootstrap defaults when runtime status refresh fails.
-      });
     diffRealtimeController.connect();
     gitStateRefreshController.connect();
     onCleanup(() => {
@@ -223,21 +239,25 @@ export function App(props: AppProps): JSX.Element {
       projectSlug: activeRoute().projectSlug,
       screen: activeRoute().screen,
     });
-  const activeScreenDefinition = () =>
-    getSolidScreenDefinition(activeRoute().screen);
-  const cutoverReadiness = () =>
-    getSolidCutoverReadinessReport(cutoverEnvironmentStatus());
-  const inProgressScreens = () => getInProgressSolidScreens();
-  const outstandingCutoverBlockers = () =>
-    getOutstandingSolidCutoverBlockers(cutoverEnvironmentStatus());
-  const plannedScreens = () => getPlannedSolidScreens();
   const activeContextId = () =>
     workspaceViewModel.workspaceState().activeContextId;
+  const activeWorkspaceTab = () =>
+    getActiveWorkspaceTab(workspaceViewModel.workspaceState());
   const activeWorkspaceIsGitRepo = () =>
-    getActiveWorkspaceTab(workspaceViewModel.workspaceState())?.isGitRepo ??
-    false;
+    activeWorkspaceTab()?.isGitRepo ?? false;
+  const primaryNavigationItems = () =>
+    screenNavigationItems().filter((navigationItem) =>
+      PRIMARY_NAVIGATION_SCREENS.includes(navigationItem.screen),
+    );
+  const secondaryNavigationItems = () =>
+    screenNavigationItems().filter((navigationItem) =>
+      SECONDARY_NAVIGATION_SCREENS.includes(navigationItem.screen),
+    );
+  const activeProjectLabel = () => activeWorkspaceTab()?.name ?? "No Project";
+  const activeProjectPath = () => activeWorkspaceTab()?.path ?? "";
 
   function navigateToScreen(screen: ScreenRouteState["screen"]): void {
+    setHeaderMenuOpen(false);
     const nextRoute: ScreenRouteState = {
       ...activeRoute(),
       screen,
@@ -358,14 +378,12 @@ export function App(props: AppProps): JSX.Element {
         <AiSessionScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
           contextId={activeContextId()}
-          projectPath={
-            getActiveWorkspaceTab(workspaceViewModel.workspaceState())?.path ??
-            ""
-          }
+          projectPath={activeWorkspaceTab()?.path ?? ""}
           selectedPath={filesViewModel.selectedPath()}
           fileContent={filesViewModel.fileContent()}
           diffOverview={diffViewModel.diffOverview()}
           onOpenFilesScreen={() => navigateToScreen("files")}
+          onOpenProjectScreen={() => navigateToScreen("project")}
         />
       );
     }
@@ -402,111 +420,94 @@ export function App(props: AppProps): JSX.Element {
   }
 
   return (
-    <main>
-      <h1>QraftBox Solid Frontend</h1>
-      <p>
-        Solid migration is running against the shared routing, workspace, diff,
-        and cutover-readiness contracts. The remaining work is browser parity
-        verification, Solid build readiness in this workspace, and deeper AI
-        Sessions completion.
-      </p>
-      <p>
-        Active route:{" "}
-        <strong>
-          {activeRoute().projectSlug !== null
-            ? `${activeRoute().projectSlug} / ${activeRoute().screen}`
-            : activeRoute().screen}
-        </strong>
-      </p>
-      <p>
-        Active screen status:{" "}
-        <strong>{activeScreenDefinition().implementationStatus}</strong>
-      </p>
-      <section>
-        <h2>Screen navigation</h2>
-        <nav aria-label="Solid migration screens">
-          <ul>
-            <For each={screenNavigationItems()}>
+    <div class="flex h-screen flex-col bg-bg-primary text-text-primary">
+      <header class="border-b border-border-default bg-bg-secondary/95 backdrop-blur">
+        <div class="flex min-h-12 items-center gap-3 px-4">
+          <button
+            type="button"
+            class="flex min-w-0 max-w-[280px] items-center gap-2 rounded-md border border-border-default bg-bg-primary px-3 py-2 text-left transition-colors hover:bg-bg-tertiary"
+            onClick={() => navigateToScreen("project")}
+            title={activeProjectPath()}
+          >
+            <span class="text-base font-semibold text-text-primary">
+              QraftBox
+            </span>
+            <span class="truncate text-sm text-text-secondary">
+              {activeProjectLabel()}
+            </span>
+          </button>
+          <nav
+            aria-label="Primary screens"
+            class="flex min-w-0 flex-1 items-center overflow-x-auto"
+          >
+            <For each={primaryNavigationItems()}>
               {(navigationItem) => (
-                <li>
-                  <a
-                    href={navigationItem.href}
-                    aria-current={navigationItem.isActive ? "page" : undefined}
-                  >
-                    {navigationItem.label}
-                  </a>{" "}
-                  <Switch>
-                    <Match
-                      when={
-                        navigationItem.implementationStatus === "implemented"
-                      }
-                    >
-                      <span>
-                        {navigationItem.isActive ? "active" : "ready"}
-                      </span>
-                    </Match>
-                    <Match
-                      when={
-                        navigationItem.implementationStatus === "in-progress"
-                      }
-                    >
-                      <span>
-                        {navigationItem.isActive ? "active" : "in progress"}
-                      </span>
-                    </Match>
-                    <Match when={true}>
-                      <em>planned</em>
-                    </Match>
-                  </Switch>
-                </li>
+                <a
+                  href={navigationItem.href}
+                  aria-current={navigationItem.isActive ? "page" : undefined}
+                  class={getPrimaryNavigationButtonClass(
+                    navigationItem.isActive,
+                  )}
+                >
+                  {NAVIGATION_LABELS[navigationItem.screen]}
+                </a>
               )}
             </For>
-          </ul>
-        </nav>
-      </section>
-      {renderActiveScreen()}
-      <section>
-        <h2>Shared screen registry</h2>
-        <ul>
-          <For each={APP_SCREENS}>{(screen) => <li>{screen}</li>}</For>
-        </ul>
-      </section>
-      <section>
-        <h2>Cutover readiness</h2>
-        <p>
-          Implemented screens: {cutoverReadiness().implementedScreenCount}/
-          {cutoverReadiness().totalScreenCount}
-        </p>
-        <Show when={inProgressScreens().length > 0}>
-          <p>In-progress screens: {inProgressScreens().join(", ")}</p>
-        </Show>
-        <Show when={plannedScreens().length > 0}>
-          <p>Planned screens: {plannedScreens().join(", ")}</p>
-        </Show>
-        <ul>
-          <For each={cutoverReadiness().criteria}>
-            {(criterion) => (
-              <li>
-                <strong>{criterion.isSatisfied ? "pass" : "blocked"}</strong>{" "}
-                {criterion.summary}
-              </li>
-            )}
-          </For>
-        </ul>
-        <h3>Outstanding blockers</h3>
-        <ul>
-          <For each={outstandingCutoverBlockers()}>
-            {(blocker) => (
-              <li>
-                <strong>
-                  {blocker.scope}/{blocker.category}
-                </strong>{" "}
-                {blocker.summary}
-              </li>
-            )}
-          </For>
-        </ul>
-      </section>
-    </main>
+          </nav>
+          <div class="relative">
+            <button
+              type="button"
+              class="rounded-md p-2 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              aria-expanded={headerMenuOpen()}
+              aria-haspopup="menu"
+              aria-label="Open menu"
+              onClick={() => setHeaderMenuOpen((currentValue) => !currentValue)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path d="M1 2.75A.75.75 0 0 1 1.75 2h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 2.75Zm0 5A.75.75 0 0 1 1.75 7h12.5a.75.75 0 0 1 0 1.5H1.75A.75.75 0 0 1 1 7.75ZM1.75 12h12.5a.75.75 0 0 1 0 1.5H1.75a.75.75 0 0 1 0-1.5Z" />
+              </svg>
+            </button>
+            <Show when={headerMenuOpen()}>
+              <div class="absolute right-0 top-full z-50 mt-2 flex w-56 flex-col gap-1 rounded-xl border border-border-default bg-bg-secondary p-2 shadow-2xl shadow-black/30">
+                <For each={secondaryNavigationItems()}>
+                  {(navigationItem) => (
+                    <a
+                      href={navigationItem.href}
+                      aria-current={
+                        navigationItem.isActive ? "page" : undefined
+                      }
+                      class={getSecondaryNavigationButtonClass(
+                        navigationItem.isActive,
+                      )}
+                      onClick={() => setHeaderMenuOpen(false)}
+                    >
+                      {NAVIGATION_LABELS[navigationItem.screen]}
+                    </a>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </div>
+        </div>
+        <div class="flex items-center justify-between gap-3 border-t border-border-muted px-4 py-2 text-xs text-text-secondary">
+          <span class="truncate">
+            {activeContextId() === null
+              ? "No project open"
+              : activeProjectPath()}
+          </span>
+          <span>
+            {activeWorkspaceIsGitRepo() ? "Git workspace" : "Non-git workspace"}
+          </span>
+        </div>
+      </header>
+      <main class="min-h-0 flex-1 overflow-hidden">
+        <div class="h-full overflow-auto">{renderActiveScreen()}</div>
+      </main>
+    </div>
   );
 }

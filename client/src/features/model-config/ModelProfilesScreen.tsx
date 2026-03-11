@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { createModelConfigApiClient } from "../../../../client-shared/src/api/model-config";
 import type {
   ModelAuthMode,

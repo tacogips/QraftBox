@@ -1,4 +1,4 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, type JSX, Show } from "solid-js";
 import { readNotificationPermission } from "../../../../client-shared/src/browser/notifications";
 import {
   createInitialNotificationSettingsState,

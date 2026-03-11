@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { createDiffOverviewState } from "../../../../client-shared/src/contracts/diff";
+import {
+  createDiffOverviewState,
+  type DiffFile,
+} from "../../../../client-shared/src/contracts/diff";
 import {
   resolveDiffParityScenario,
   resolveDiffParityFixtures,
@@ -12,10 +15,13 @@ describe("solid diff presentation", () => {
     const populatedFixtureResponse = resolveDiffParityFixtures(
       "diff-populated-state",
     )[0]?.payload.response;
-    const diffOverview = createDiffOverviewState(
-      "files" in (populatedFixtureResponse ?? {})
+    const populatedFiles: readonly DiffFile[] =
+      populatedFixtureResponse !== undefined &&
+      "files" in populatedFixtureResponse
         ? (populatedFixtureResponse.files ?? [])
-        : [],
+        : [];
+    const diffOverview = createDiffOverviewState(
+      populatedFiles,
       "src/main.ts",
     );
 

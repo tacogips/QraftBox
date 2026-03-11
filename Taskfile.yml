@@ -208,16 +208,23 @@ tasks:
     cmds:
       - cd client && bun install && bun run build
 
+  build:client:legacy:
+    desc: Build legacy client assets (Svelte SPA)
+    cmds:
+      - cd client-legacy && bun install && bun run build
+
   build:server:
     desc: Bundle server code
     cmds:
       - bun build src/main.ts --outdir dist --target bun
 
   release:prepare:
-    desc: Typecheck, build client and server for release
+    desc: Verify frontend migration gates, then build client and server for release
     cmds:
-      - task: typecheck
+      - bun run check:frontend:migration:offline
+      - bun run typecheck:client
       - task: build:client
+      - task: build:client:legacy
       - task: build:server
 
   release:binary:
@@ -233,6 +240,7 @@ tasks:
       - mkdir -p {{.RELEASE_DIR}}/dist
       - bun build src/main.ts --compile --target {{.TARGET}} --outfile {{.RELEASE_DIR}}/{{.PROJECT_NAME}}
       - cp -r dist/client {{.RELEASE_DIR}}/dist/client
+      - cp -r dist/client-legacy {{.RELEASE_DIR}}/dist/client-legacy
       - cd release && tar -czf {{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}.tar.gz $(basename {{.RELEASE_DIR}})
       - echo "Built {{.RELEASE_DIR}}.tar.gz"
 
@@ -285,9 +293,10 @@ tasks:
     cmds:
       - task: release:prepare
       - mkdir -p release/npm/dist release/npm/bin
-      # Copy bundled server and client assets
+      # Copy bundled server and both frontend bundles
       - cp dist/main.js release/npm/dist/
       - cp -r dist/client release/npm/dist/client
+      - cp -r dist/client-legacy release/npm/dist/client-legacy
       # Copy bin entry script
       - cp bin/qraftbox.js release/npm/bin/qraftbox.js
       - chmod +x release/npm/bin/qraftbox.js

@@ -4,6 +4,7 @@ import type {
   CommitLogResponse,
 } from "../../../src/types/commit";
 import type { DiffFile } from "../contracts/diff";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface CommitApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
@@ -39,7 +40,9 @@ function createCommitApiClientConfig(
   options: CommitApiClientOptions = {},
 ): CommitApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

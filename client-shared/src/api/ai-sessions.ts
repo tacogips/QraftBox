@@ -1,8 +1,7 @@
 import {
+  type AIPromptContext,
   generateQraftAiSessionId,
   type AISessionSubmitResult,
-  type DiffSummaryContext,
-  type FileReference,
   type QraftAiSessionId,
 } from "../../../src/types/ai";
 import type {
@@ -10,6 +9,7 @@ import type {
   SessionFilters,
   SessionListResponse,
 } from "../../../src/types/claude-session";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface PromptQueueItem {
   readonly id: string;
@@ -68,18 +68,7 @@ export interface SubmitPromptInput {
   readonly qraftAiSessionId?: QraftAiSessionId | undefined;
   readonly forceNewSession?: boolean | undefined;
   readonly modelProfileId?: string | undefined;
-  readonly context: {
-    readonly primaryFile:
-      | {
-          readonly path: string;
-          readonly startLine: number;
-          readonly endLine: number;
-          readonly content: string;
-        }
-      | undefined;
-    readonly references: readonly FileReference[];
-    readonly diffSummary: DiffSummaryContext | undefined;
-  };
+  readonly context: AIPromptContext;
 }
 
 export interface AiSessionsApiClient {
@@ -134,7 +123,9 @@ function createAiSessionsApiClientConfig(
   options: AiSessionsApiClientOptions = {},
 ): AiSessionsApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

@@ -73,7 +73,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 - Orchestration
 - Workflow
 - Scheduling
-- Parallel Solid frontend migration with side-by-side parity validation against the existing Svelte UI
+- Legacy Svelte retirement after remaining parity/fallback verification is complete
 
 ## How it Works (Simple Explanation)
 
@@ -252,6 +252,8 @@ bun run start
 
 Open `http://localhost:7144` in your browser.
 
+Release artifacts include both the default Solid frontend and the optional legacy Svelte frontend, so installed binaries and npm packages can still serve `--frontend svelte`.
+
 To serve the legacy Svelte frontend instead of the default Solid frontend:
 
 ```bash
@@ -271,7 +273,9 @@ bun install --cwd client
 bun run check:frontend:migration
 ```
 
-The full migration check records its last successful pass in the workspace-local ignored marker `tmp-solid-migration-check.json`, which the Solid cutover-readiness UI reads through `/api/frontend-status`.
+The full migration check records its last successful pass in the workspace-local ignored marker `tmp-solid-migration-check.json`, which the Solid support-status UI reads through `/api/frontend-status` when QraftBox is running from a source checkout.
+
+The browser verification marker is narrower: `bun run verify:frontend:migration:browser` records the shared `project` and `files` smoke loop only. Other screens keep their explicit parity blockers until they are verified through their own follow-up checks.
 
 ---
 
@@ -372,6 +376,7 @@ Usage: qraftbox [options] [projectPath]
 Options:
   -p, --port <number>              Server port (default: 7144)
   -h, --host <string>              Server host (default: "localhost")
+  --frontend <target>              Frontend target: solid (default) or svelte (legacy)
   --open                           Open browser automatically
   --watch                          Enable file watching (default: true)
   --no-watch                       Disable file watching

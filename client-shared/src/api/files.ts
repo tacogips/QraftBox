@@ -4,6 +4,7 @@ import {
   type FileTreeNode,
   type ServerFileNode,
 } from "../contracts/files";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface FilesApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
@@ -51,7 +52,9 @@ function createFilesApiClientConfig(
   options: FilesApiClientOptions = {},
 ): FilesApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

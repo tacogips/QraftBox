@@ -4,6 +4,7 @@ import {
   type DiffFile,
   type DiffStats,
 } from "../contracts/diff";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface DiffApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
@@ -34,7 +35,9 @@ function createDiffApiClientConfig(
   options: DiffApiClientOptions = {},
 ): DiffApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

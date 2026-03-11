@@ -1,4 +1,5 @@
 import type { SystemInfo } from "../../../src/types/system-info";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface SystemInfoApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
@@ -26,7 +27,9 @@ function createSystemInfoApiClientConfig(
   options: SystemInfoApiClientOptions = {},
 ): SystemInfoApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

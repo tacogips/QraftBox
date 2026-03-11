@@ -2,14 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { createFrontendStatusApiClient } from "./frontend-status";
 
 describe("frontend status api client", () => {
-  test("fetches the selected frontend and solid cutover environment status", async () => {
+  test("fetches the selected frontend and solid support status", async () => {
     const client = createFrontendStatusApiClient({
       apiBaseUrl: "/custom-api/",
       fetchImpl: async () =>
         new Response(
           JSON.stringify({
             selectedFrontend: "solid",
-            solidCutoverEnvironmentStatus: {
+            solidSupportStatus: {
+              hasSourceCheckout: true,
               hasClientSolidDependencies: true,
               hasBuiltSolidBundle: true,
               hasAgentBrowser: false,
@@ -28,7 +29,8 @@ describe("frontend status api client", () => {
 
     await expect(client.fetchFrontendStatus()).resolves.toEqual({
       selectedFrontend: "solid",
-      solidCutoverEnvironmentStatus: {
+      solidSupportStatus: {
+        hasSourceCheckout: true,
         hasClientSolidDependencies: true,
         hasBuiltSolidBundle: true,
         hasAgentBrowser: false,

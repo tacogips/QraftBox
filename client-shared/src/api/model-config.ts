@@ -10,6 +10,7 @@ import type {
   PromptCategory,
   PromptTemplate,
 } from "../../../src/types/prompt-config";
+import { resolveFetchImplementation } from "./fetch";
 
 export type GitActionPromptName =
   | "commit"
@@ -95,7 +96,9 @@ function createModelConfigApiClientConfig(
   options: ModelConfigApiClientOptions = {},
 ): ModelConfigApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

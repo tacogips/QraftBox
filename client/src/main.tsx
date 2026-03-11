@@ -4,6 +4,7 @@ import type { ScreenRouteState } from "../../client-shared/src/contracts/navigat
 import type { SolidAppBootstrapOptions } from "./app/types";
 import { createSolidBootstrapState } from "./app/bootstrap-state";
 import { App } from "./App";
+import "./app.css";
 
 const rootElement = document.getElementById("root");
 

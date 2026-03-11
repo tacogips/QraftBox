@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import type { QraftAiSessionId } from "../../../../src/types/ai";
+import type { PromptQueueItem } from "../../../../client-shared/src/api/ai-sessions";
 import {
   applyAiSessionSearchDraft,
   buildAiSessionOverviewRouteSearch,
@@ -28,6 +30,20 @@ import {
   mergeAiSessionTranscriptLines,
   updateHiddenAiSessionIds,
 } from "./state";
+
+function asQraftAiSessionId(value: string): QraftAiSessionId {
+  return value as QraftAiSessionId;
+}
+
+function createPromptQueueItem(
+  overrides: Omit<PromptQueueItem, "project_path"> &
+    Partial<Pick<PromptQueueItem, "project_path">>,
+): PromptQueueItem {
+  return {
+    project_path: "/tmp/repo",
+    ...overrides,
+  };
+}
 
 describe("ai-session state helpers", () => {
   test("builds a stable scope key from context and project path", () => {
@@ -59,17 +75,17 @@ describe("ai-session state helpers", () => {
   test("treats queued prompts as live ai-session activity when preserving selection", () => {
     expect(
       hasAiSessionActivityEntry({
-        qraftAiSessionId: "qs-queued",
+        qraftAiSessionId: asQraftAiSessionId("qs-queued"),
         activeSessions: [],
         promptQueue: [
-          {
+          createPromptQueueItem({
             id: "prompt-1",
             message: "Queued follow-up",
             status: "queued",
             created_at: "2026-03-09T06:00:00.000Z",
             worktree_id: "wt-1",
-            qraft_ai_session_id: "qs-queued",
-          },
+            qraft_ai_session_id: asQraftAiSessionId("qs-queued"),
+          }),
         ],
         historicalSessions: [],
       }),
@@ -77,17 +93,17 @@ describe("ai-session state helpers", () => {
 
     expect(
       hasAiSessionActivityEntry({
-        qraftAiSessionId: "qs-missing",
+        qraftAiSessionId: asQraftAiSessionId("qs-missing"),
         activeSessions: [],
         promptQueue: [
-          {
+          createPromptQueueItem({
             id: "prompt-1",
             message: "Queued follow-up",
             status: "queued",
             created_at: "2026-03-09T06:00:00.000Z",
             worktree_id: "wt-1",
-            qraft_ai_session_id: "qs-queued",
-          },
+            qraft_ai_session_id: asQraftAiSessionId("qs-queued"),
+          }),
         ],
         historicalSessions: [],
       }),
@@ -97,32 +113,32 @@ describe("ai-session state helpers", () => {
   test("prefers the selected session id over the draft id", () => {
     expect(
       resolveAiSessionTargetSessionId({
-        selectedQraftAiSessionId: "qs-existing",
-        draftSessionId: "qs-draft",
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        draftSessionId: asQraftAiSessionId("qs-draft"),
       }),
-    ).toBe("qs-existing");
+    ).toBe(asQraftAiSessionId("qs-existing"));
   });
 
   test("preserves restart-from-beginning as a force_new_session request on the selected session", () => {
     expect(
       resolveAiSessionSubmitTarget({
-        selectedQraftAiSessionId: "qs-existing",
-        draftSessionId: "qs-draft",
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        draftSessionId: asQraftAiSessionId("qs-draft"),
         restartFromBeginning: true,
       }),
     ).toEqual({
-      qraftAiSessionId: "qs-existing",
+      qraftAiSessionId: asQraftAiSessionId("qs-existing"),
       forceNewSession: true,
     });
 
     expect(
       resolveAiSessionSubmitTarget({
         selectedQraftAiSessionId: null,
-        draftSessionId: "qs-draft",
+        draftSessionId: asQraftAiSessionId("qs-draft"),
         restartFromBeginning: true,
       }),
     ).toEqual({
-      qraftAiSessionId: "qs-draft",
+      qraftAiSessionId: asQraftAiSessionId("qs-draft"),
       forceNewSession: false,
     });
   });
@@ -239,7 +255,7 @@ describe("ai-session state helpers", () => {
         currentSearchQuery: "continue migration",
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
-          selectedSessionId: "qs-1",
+          selectedSessionId: asQraftAiSessionId("qs-1"),
           searchQuery: "continue migration",
           searchInTranscript: true,
         },
@@ -251,7 +267,7 @@ describe("ai-session state helpers", () => {
         currentSearchQuery: "continue migration",
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
-          selectedSessionId: "qs-1",
+          selectedSessionId: asQraftAiSessionId("qs-1"),
           searchQuery: "focus refresh",
           searchInTranscript: true,
         },
@@ -263,7 +279,7 @@ describe("ai-session state helpers", () => {
         currentSearchQuery: "continue migration",
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
-          selectedSessionId: "qs-1",
+          selectedSessionId: asQraftAiSessionId("qs-1"),
           searchQuery: "continue migration",
           searchInTranscript: false,
         },
@@ -312,19 +328,28 @@ describe("ai-session state helpers", () => {
   test("updates hidden ai-session ids without duplicating entries", () => {
     expect(
       updateHiddenAiSessionIds({
-        hiddenSessionIds: ["qs-hidden", "qs-other"],
-        sessionId: "qs-hidden",
+        hiddenSessionIds: [
+          asQraftAiSessionId("qs-hidden"),
+          asQraftAiSessionId("qs-other"),
+        ],
+        sessionId: asQraftAiSessionId("qs-hidden"),
         hidden: true,
       }),
-    ).toEqual(["qs-hidden", "qs-other"]);
+    ).toEqual([
+      asQraftAiSessionId("qs-hidden"),
+      asQraftAiSessionId("qs-other"),
+    ]);
 
     expect(
       updateHiddenAiSessionIds({
-        hiddenSessionIds: ["qs-hidden", "qs-other"],
-        sessionId: "qs-hidden",
+        hiddenSessionIds: [
+          asQraftAiSessionId("qs-hidden"),
+          asQraftAiSessionId("qs-other"),
+        ],
+        sessionId: asQraftAiSessionId("qs-hidden"),
         hidden: false,
       }),
-    ).toEqual(["qs-other"]);
+    ).toEqual([asQraftAiSessionId("qs-other")]);
   });
 
   test("describes hidden-session visibility changes for the overview", () => {
@@ -635,7 +660,7 @@ Resume this migration session
         "?ai_session_id=qs-existing&session_search=solid%20migration&session_search_in_transcript=false",
       ),
     ).toEqual({
-      selectedSessionId: "qs-existing",
+      selectedSessionId: asQraftAiSessionId("qs-existing"),
       searchQuery: "solid migration",
       searchInTranscript: false,
     });
@@ -656,7 +681,7 @@ Resume this migration session
   test("builds ai-session overview route search strings without empty values", () => {
     expect(
       buildAiSessionOverviewRouteSearch({
-        selectedSessionId: "qs-existing",
+        selectedSessionId: asQraftAiSessionId("qs-existing"),
         searchQuery: "  solid migration  ",
         searchInTranscript: true,
       }),
@@ -678,7 +703,9 @@ Resume this migration session
       "?ai_session_id=qs-existing&session_search=solid%20migration&session_search_in_transcript=true",
     );
 
-    expect(scopeResetState.selectedSessionId).toBe("qs-existing");
+    expect(scopeResetState.selectedSessionId).toBe(
+      asQraftAiSessionId("qs-existing"),
+    );
     expect(scopeResetState.searchQuery).toBe("solid migration");
     expect(scopeResetState.searchInTranscript).toBe(true);
     expect(scopeResetState.promptInput).toBe("");

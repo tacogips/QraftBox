@@ -1,6 +1,10 @@
 # Solid Frontend Migration Implementation Plan
 
-**Status**: Completed
+> Historical plan record. The Solid cutover has already completed on this branch.
+> Current implementation work should follow `impl-plans/solid-cutover-alignment.md`,
+> `impl-plans/solid-migration-history-alignment.md`, and the current design docs.
+
+**Status**: Archived
 **Design Reference**: design-docs/specs/design-solid-frontend-migration.md#overview
 **Created**: 2026-03-09
 **Last Updated**: 2026-03-09
@@ -12,6 +16,12 @@
 ### Summary
 
 Add a Solid-based frontend in parallel with the existing Svelte frontend, introduce shared contract and state-normalization layers, and verify both frontends against the same backend during migration.
+
+### Historical Directory Mapping
+
+- Historical `client-solid/` references in this file now map to the current Solid frontend in `client/`.
+- Historical `client/` Svelte references now map to the legacy frontend in `client-legacy/`.
+- Treat incomplete items below as migration-era recordkeeping, not as the active source of truth for post-cutover work.
 
 ### Scope
 
@@ -194,14 +204,14 @@ export interface DiffScreenState {
 
 ## Module Status
 
-| Module                               | File Path                                   | Status      | Tests   |
+| Module                               | Historical File Path                        | Status      | Tests   |
 | ------------------------------------ | ------------------------------------------- | ----------- | ------- |
 | Frontend selection config            | `src/config/frontend.ts`                    | COMPLETED   | Yes     |
-| Solid app foundation                 | `client-solid/src/main.tsx`                 | COMPLETED   | Partial |
+| Solid app foundation                 | `client-solid/src/main.tsx`                 | HISTORICAL  | Partial |
 | Shared routing and parity foundation | `client-shared/src/contracts/navigation.ts` | COMPLETED   | Yes     |
 | Shared workspace bootstrap contracts | `client-shared/src/contracts/workspace.ts`  | COMPLETED   | Yes     |
-| Workspace and navigation port        | `client-solid/src/features/workspace/*`     | COMPLETED   | Yes     |
-| Diff workflow port                   | `client-solid/src/features/diff/*`          | IN_PROGRESS | Partial |
+| Workspace and navigation port        | `client-solid/src/features/workspace/*`     | HISTORICAL  | Yes     |
+| Diff workflow port                   | `client-solid/src/features/diff/*`          | HISTORICAL  | Partial |
 
 ## Dependencies
 

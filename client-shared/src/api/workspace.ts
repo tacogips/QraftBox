@@ -7,6 +7,7 @@ import {
   type WorkspaceShellState,
   type WorkspaceSnapshot,
 } from "../contracts/workspace";
+import { resolveFetchImplementation } from "./fetch";
 
 export interface WorkspaceApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
@@ -104,7 +105,9 @@ function createWorkspaceApiClientConfig(
   options: WorkspaceApiClientOptions = {},
 ): WorkspaceApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

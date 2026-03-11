@@ -1,4 +1,11 @@
-import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js";
+import {
+  createEffect,
+  createSignal,
+  type JSX,
+  onCleanup,
+  onMount,
+  Show,
+} from "solid-js";
 import {
   createTerminalApiClient,
   type TerminalConnectResponse,
@@ -14,8 +21,16 @@ export interface TerminalScreenProps {
   readonly contextId: string | null;
 }
 
+const DEFAULT_TERMINAL_HEIGHT = 480;
+const MIN_TERMINAL_HEIGHT = 320;
+const MAX_TERMINAL_HEIGHT = 920;
+
 function createDisconnectedMessage(contextId: string): string {
   return `[terminal ready for ${contextId}]\n`;
+}
+
+function clampTerminalHeight(height: number): number {
+  return Math.max(MIN_TERMINAL_HEIGHT, Math.min(MAX_TERMINAL_HEIGHT, height));
 }
 
 export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
@@ -34,9 +49,13 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
   const [activeSessionId, setActiveSessionId] = createSignal<string | null>(
     null,
   );
+  const [terminalHeight, setTerminalHeight] = createSignal(
+    DEFAULT_TERMINAL_HEIGHT,
+  );
 
   let activeSocket: WebSocket | null = null;
   let activeContextId: string | null = null;
+  let terminalViewportRef: HTMLPreElement | undefined;
 
   function disposeSocket(): void {
     if (activeSocket === null) {
@@ -60,6 +79,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
     setConnectionError(null);
     setActiveSessionId(null);
     setInputValue("");
+    setTerminalHeight(DEFAULT_TERMINAL_HEIGHT);
     setOutput(contextId === null ? "" : createDisconnectedMessage(contextId));
   }
 
@@ -258,6 +278,21 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
     setInputValue("");
   }
 
+  function resizeTerminal(delta: number): void {
+    setTerminalHeight((currentHeight) =>
+      clampTerminalHeight(currentHeight + delta),
+    );
+  }
+
+  createEffect(() => {
+    output();
+    queueMicrotask(() => {
+      terminalViewportRef?.scrollTo({
+        top: terminalViewportRef.scrollHeight,
+      });
+    });
+  });
+
   onMount(() => {
     resetForContext(props.contextId);
   });
@@ -275,79 +310,178 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
   });
 
   return (
-    <section>
-      <h2>Terminal</h2>
-      <p>
-        Open a workspace terminal, reconnect to an existing session, and send
-        shell input through the current backend session.
-      </p>
+    <section class="flex min-h-0 flex-1 flex-col gap-4">
+      <header class="grid gap-3 md:grid-cols-3">
+        <div class="rounded-2xl border border-border-default bg-bg-secondary p-5 shadow-lg shadow-black/15 md:col-span-2">
+          <p class="text-xs font-semibold uppercase tracking-[0.24em] text-accent-fg">
+            Terminal
+          </p>
+          <h2 class="mt-2 text-2xl font-semibold text-text-primary">
+            Workspace Shell
+          </h2>
+          <p class="mt-2 text-sm leading-6 text-text-secondary">
+            Keep an attached backend shell session open inside the workspace,
+            with reconnect, quick interrupt, and a denser terminal surface than
+            the old migration placeholder.
+          </p>
+        </div>
+        <div class="rounded-2xl border border-border-default bg-bg-secondary p-5">
+          <p class="text-xs uppercase tracking-[0.22em] text-text-tertiary">
+            Connection
+          </p>
+          <p class="mt-3 text-lg font-semibold text-text-primary">
+            {isConnected()
+              ? "Connected"
+              : isConnecting()
+                ? "Connecting"
+                : isCheckingStatus()
+                  ? "Checking"
+                  : "Disconnected"}
+          </p>
+          <Show when={activeSessionId() !== null}>
+            <p class="mt-2 break-all font-mono text-xs text-text-secondary">
+              {activeSessionId()}
+            </p>
+          </Show>
+          <Show when={connectionError() !== null}>
+            <p class="mt-3 text-sm text-danger-fg">{connectionError()}</p>
+          </Show>
+        </div>
+      </header>
+
       <Show
         when={props.contextId !== null}
-        fallback={<p>Open a project tab to start a terminal session.</p>}
+        fallback={
+          <div class="flex min-h-[420px] items-center justify-center rounded-2xl border border-border-default bg-bg-secondary px-6 text-center text-sm text-text-secondary">
+            Open a project tab to start a terminal session.
+          </div>
+        }
       >
-        <p>
-          Status:{" "}
-          <strong>
-            {isConnected()
-              ? "connected"
-              : isConnecting()
-                ? "connecting"
-                : isCheckingStatus()
-                  ? "checking"
-                  : "disconnected"}
-          </strong>
-        </p>
-        <Show when={activeSessionId() !== null}>
-          <p>Session: {activeSessionId()}</p>
-        </Show>
-        <div>
-          <button
-            type="button"
-            disabled={isConnecting() || props.contextId === null}
-            onClick={() => void connect()}
+        <div class="flex min-h-0 flex-1 flex-col gap-4 rounded-2xl border border-border-default bg-bg-secondary p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isConnecting() || props.contextId === null}
+                class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void connect()}
+              >
+                {isConnected() ? "Connected" : "Connect"}
+              </button>
+              <button
+                type="button"
+                disabled={!isConnected()}
+                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void disconnect()}
+              >
+                Disconnect
+              </button>
+              <button
+                type="button"
+                disabled={!isConnected()}
+                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => sendInput("\u0003")}
+              >
+                Send Ctrl+C
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
+                onClick={() => resizeTerminal(120)}
+              >
+                Taller
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
+                onClick={() => resizeTerminal(-120)}
+              >
+                Shorter
+              </button>
+              <button
+                type="button"
+                class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
+                onClick={() => setTerminalHeight(DEFAULT_TERMINAL_HEIGHT)}
+              >
+                Reset height
+              </button>
+            </div>
+          </div>
+
+          <Show
+            when={isConnected() || isConnecting()}
+            fallback={
+              <div class="flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-dashed border-border-default bg-bg-primary/50 p-6 text-center">
+                <div>
+                  <button
+                    type="button"
+                    class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg"
+                    onClick={() => void connect()}
+                  >
+                    Connect
+                  </button>
+                  <Show when={connectionError() !== null}>
+                    <p class="mt-4 text-sm text-danger-fg">
+                      {connectionError()}
+                    </p>
+                  </Show>
+                </div>
+              </div>
+            }
           >
-            {isConnected() ? "Connected" : "Connect"}
-          </button>{" "}
-          <button
-            type="button"
-            disabled={!isConnected()}
-            onClick={() => void disconnect()}
-          >
-            Disconnect
-          </button>{" "}
-          <button
-            type="button"
-            disabled={!isConnected()}
-            onClick={() => sendInput("\u0003")}
-          >
-            Send Ctrl+C
-          </button>
+            <div class="flex min-h-0 flex-1 flex-col gap-3">
+              <div
+                class="overflow-hidden rounded-xl border border-border-default bg-[#020817] shadow-inner shadow-black/30"
+                style={{
+                  height: `${terminalHeight()}px`,
+                }}
+              >
+                <pre
+                  ref={terminalViewportRef}
+                  class="h-full overflow-auto px-4 py-4 font-mono text-[13px] leading-6 text-slate-100"
+                >
+                  {output()}
+                </pre>
+              </div>
+              <Show when={activeSessionId() !== null}>
+                <p class="text-xs text-text-tertiary">
+                  session: {activeSessionId()}
+                </p>
+              </Show>
+            </div>
+          </Show>
+
+          <div class="rounded-xl border border-border-default bg-bg-primary p-4">
+            <label class="flex flex-col gap-3 text-sm text-text-secondary">
+              Command input
+              <div class="flex flex-col gap-3 lg:flex-row">
+                <input
+                  value={inputValue()}
+                  disabled={!isConnected()}
+                  class="min-w-0 flex-1 rounded-md border border-border-default bg-bg-secondary px-3 py-2 font-mono text-sm text-text-primary outline-none transition focus:border-accent-emphasis disabled:cursor-not-allowed disabled:opacity-60"
+                  onInput={(event) => setInputValue(event.currentTarget.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !event.shiftKey) {
+                      event.preventDefault();
+                      void handleSubmit();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={!isConnected() || inputValue().length === 0}
+                  class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-semibold text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => void handleSubmit()}
+                >
+                  Send
+                </button>
+              </div>
+            </label>
+          </div>
         </div>
-        <Show when={connectionError() !== null}>
-          <p role="alert">{connectionError()}</p>
-        </Show>
-        <label>
-          Command input
-          <input
-            value={inputValue()}
-            disabled={!isConnected()}
-            onInput={(event) => setInputValue(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                void handleSubmit();
-              }
-            }}
-          />
-        </label>{" "}
-        <button
-          type="button"
-          disabled={!isConnected() || inputValue().length === 0}
-          onClick={() => void handleSubmit()}
-        >
-          Send
-        </button>
-        <pre>{output()}</pre>
       </Show>
     </section>
   );

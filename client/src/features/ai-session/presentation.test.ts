@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type {
+  AIPromptContext,
+  QraftAiSessionId,
+} from "../../../../src/types/ai";
 import type { ExtendedSessionEntry } from "../../../../src/types/claude-session";
 import type {
   AISessionInfo,
@@ -19,34 +23,64 @@ import {
 } from "./presentation";
 import { resolveAiSessionTargetSessionId } from "./state";
 
+const TEST_AI_PROMPT_CONTEXT: AIPromptContext = {
+  references: [],
+  diffSummary: undefined,
+};
+
+function asQraftAiSessionId(value: string): QraftAiSessionId {
+  return value as QraftAiSessionId;
+}
+
+function createAiSessionInfo(
+  overrides: Omit<AISessionInfo, "projectPath" | "context"> &
+    Partial<Pick<AISessionInfo, "projectPath" | "context">>,
+): AISessionInfo {
+  return {
+    projectPath: "/tmp/repo",
+    context: TEST_AI_PROMPT_CONTEXT,
+    ...overrides,
+  };
+}
+
+function createPromptQueueItem(
+  overrides: Omit<PromptQueueItem, "project_path"> &
+    Partial<Pick<PromptQueueItem, "project_path">>,
+): PromptQueueItem {
+  return {
+    project_path: "/tmp/repo",
+    ...overrides,
+  };
+}
+
 describe("ai-session presentation helpers", () => {
   test("merges active, queued, and historical sessions without duplicating the same qraft session", () => {
     const activeSessions: readonly AISessionInfo[] = [
-      {
+      createAiSessionInfo({
         id: "qs-active",
         state: "running",
         prompt: "Continue migration",
         createdAt: "2026-03-09T06:00:00.000Z",
         currentActivity: "Applying patch",
-      },
+      }),
     ];
     const promptQueue: readonly PromptQueueItem[] = [
-      {
+      createPromptQueueItem({
         id: "prompt-1",
         message: "Follow up on files parity",
         status: "queued",
         created_at: "2026-03-09T06:30:00.000Z",
         worktree_id: "wt-1",
-        qraft_ai_session_id: "qs-history",
-      },
-      {
+        qraft_ai_session_id: asQraftAiSessionId("qs-history"),
+      }),
+      createPromptQueueItem({
         id: "prompt-2",
         message: "Queued only session",
         status: "queued",
         created_at: "2026-03-09T07:00:00.000Z",
         worktree_id: "wt-1",
-        qraft_ai_session_id: "qs-queued-only",
-      },
+        qraft_ai_session_id: asQraftAiSessionId("qs-queued-only"),
+      }),
     ];
     const historicalSessions: readonly ExtendedSessionEntry[] = [
       {
@@ -63,7 +97,7 @@ describe("ai-session presentation helpers", () => {
         isSidechain: false,
         source: "qraftbox",
         projectEncoded: "tmp-repo",
-        qraftAiSessionId: "qs-active",
+        qraftAiSessionId: asQraftAiSessionId("qs-active"),
       },
       {
         sessionId: "claude-2",
@@ -79,7 +113,7 @@ describe("ai-session presentation helpers", () => {
         isSidechain: false,
         source: "claude-cli",
         projectEncoded: "tmp-repo",
-        qraftAiSessionId: "qs-history",
+        qraftAiSessionId: asQraftAiSessionId("qs-history"),
         modelProfileId: "profile-history",
         modelVendor: "anthropics",
         modelName: "claude-sonnet",
@@ -98,7 +132,7 @@ describe("ai-session presentation helpers", () => {
         title: "Queued only session",
         detail: "Queued prompt for qs-queued-only",
         status: "queued",
-        qraftAiSessionId: "qs-queued-only",
+        qraftAiSessionId: asQraftAiSessionId("qs-queued-only"),
         source: "queued",
         updatedAt: "2026-03-09T07:00:00.000Z",
         queuedPromptCount: 1,
@@ -116,7 +150,7 @@ describe("ai-session presentation helpers", () => {
         title: "Terminal parity work",
         detail: "Follow up on files parity",
         status: "queued",
-        qraftAiSessionId: "qs-history",
+        qraftAiSessionId: asQraftAiSessionId("qs-history"),
         source: "queued",
         updatedAt: "2026-03-09T06:30:00.000Z",
         queuedPromptCount: 1,
@@ -134,7 +168,7 @@ describe("ai-session presentation helpers", () => {
         title: "Continue migration",
         detail: "Applying patch",
         status: "running",
-        qraftAiSessionId: "qs-active",
+        qraftAiSessionId: asQraftAiSessionId("qs-active"),
         source: "active",
         updatedAt: "2026-03-09T06:00:00.000Z",
         queuedPromptCount: 0,
@@ -152,38 +186,38 @@ describe("ai-session presentation helpers", () => {
 
   test("prefers the newest queued prompt when summarizing active and historical sessions", () => {
     const activeSessions: readonly AISessionInfo[] = [
-      {
+      createAiSessionInfo({
         id: "qs-active",
         state: "running",
         prompt: "Continue migration",
         createdAt: "2026-03-09T06:00:00.000Z",
-      },
+      }),
     ];
     const promptQueue: readonly PromptQueueItem[] = [
-      {
+      createPromptQueueItem({
         id: "prompt-old",
         message: "Older queued follow-up",
         status: "queued",
         created_at: "2026-03-09T06:30:00.000Z",
         worktree_id: "wt-1",
-        qraft_ai_session_id: "qs-active",
-      },
-      {
+        qraft_ai_session_id: asQraftAiSessionId("qs-active"),
+      }),
+      createPromptQueueItem({
         id: "prompt-new",
         message: "Newest queued follow-up",
         status: "running",
         created_at: "2026-03-09T06:45:00.000Z",
         worktree_id: "wt-1",
-        qraft_ai_session_id: "qs-history",
-      },
-      {
+        qraft_ai_session_id: asQraftAiSessionId("qs-history"),
+      }),
+      createPromptQueueItem({
         id: "prompt-history-old",
         message: "History older follow-up",
         status: "queued",
         created_at: "2026-03-09T06:15:00.000Z",
         worktree_id: "wt-1",
-        qraft_ai_session_id: "qs-history",
-      },
+        qraft_ai_session_id: asQraftAiSessionId("qs-history"),
+      }),
     ];
     const historicalSessions: readonly ExtendedSessionEntry[] = [
       {
@@ -200,7 +234,7 @@ describe("ai-session presentation helpers", () => {
         isSidechain: false,
         source: "qraftbox",
         projectEncoded: "tmp-repo",
-        qraftAiSessionId: "qs-active",
+        qraftAiSessionId: asQraftAiSessionId("qs-active"),
       },
       {
         sessionId: "claude-2",
@@ -216,7 +250,7 @@ describe("ai-session presentation helpers", () => {
         isSidechain: false,
         source: "claude-cli",
         projectEncoded: "tmp-repo",
-        qraftAiSessionId: "qs-history",
+        qraftAiSessionId: asQraftAiSessionId("qs-history"),
       },
     ];
 
@@ -232,7 +266,7 @@ describe("ai-session presentation helpers", () => {
         title: "Terminal parity work",
         detail: "Newest queued follow-up",
         status: "running",
-        qraftAiSessionId: "qs-history",
+        qraftAiSessionId: asQraftAiSessionId("qs-history"),
         source: "queued",
         updatedAt: "2026-03-09T06:45:00.000Z",
         queuedPromptCount: 2,
@@ -250,7 +284,7 @@ describe("ai-session presentation helpers", () => {
         title: "Continue migration",
         detail: "Active session duplicate",
         status: "running",
-        qraftAiSessionId: "qs-active",
+        qraftAiSessionId: asQraftAiSessionId("qs-active"),
         source: "active",
         updatedAt: "2026-03-09T06:00:00.000Z",
         queuedPromptCount: 1,
@@ -302,20 +336,20 @@ describe("ai-session presentation helpers", () => {
 
   test("summarizes running and queued prompts", () => {
     const promptQueue: readonly PromptQueueItem[] = [
-      {
+      createPromptQueueItem({
         id: "prompt-1",
         message: "Queued",
         status: "queued",
         created_at: "2026-03-09T06:00:00.000Z",
         worktree_id: "wt-1",
-      },
-      {
+      }),
+      createPromptQueueItem({
         id: "prompt-2",
         message: "Running",
         status: "running",
         created_at: "2026-03-09T06:01:00.000Z",
         worktree_id: "wt-1",
-      },
+      }),
     ];
 
     expect(getQueuedPromptSummary(promptQueue)).toBe("1 running, 1 queued");
@@ -331,22 +365,22 @@ describe("ai-session presentation helpers", () => {
   test("describes the current session target", () => {
     expect(
       describeAiSessionTarget({
-        selectedQraftAiSessionId: "qs-existing",
-        draftSessionId: "qs-draft",
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        draftSessionId: asQraftAiSessionId("qs-draft"),
       }),
     ).toBe("Continuing session qs-existing");
     expect(
       describeAiSessionTarget({
         selectedQraftAiSessionId: null,
-        draftSessionId: "qs-draft",
+        draftSessionId: asQraftAiSessionId("qs-draft"),
       }),
     ).toBe("New session draft qs-draft");
     expect(
       resolveAiSessionTargetSessionId({
-        selectedQraftAiSessionId: "qs-existing",
-        draftSessionId: "qs-draft",
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        draftSessionId: asQraftAiSessionId("qs-draft"),
       }),
-    ).toBe("qs-existing");
+    ).toBe(asQraftAiSessionId("qs-existing"));
   });
 
   test("describes the selected model profile", () => {

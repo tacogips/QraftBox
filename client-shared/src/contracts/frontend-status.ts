@@ -1,4 +1,5 @@
-export interface SolidCutoverEnvironmentStatus {
+export interface SolidSupportStatus {
+  readonly hasSourceCheckout: boolean;
   readonly hasClientSolidDependencies: boolean;
   readonly hasBuiltSolidBundle: boolean;
   readonly hasAgentBrowser: boolean;
@@ -8,5 +9,5 @@ export interface SolidCutoverEnvironmentStatus {
 
 export interface FrontendStatusResponse {
   readonly selectedFrontend: "svelte" | "solid";
-  readonly solidCutoverEnvironmentStatus: SolidCutoverEnvironmentStatus;
+  readonly solidSupportStatus: SolidSupportStatus;
 }

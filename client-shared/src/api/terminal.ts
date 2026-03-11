@@ -1,3 +1,5 @@
+import { resolveFetchImplementation } from "./fetch";
+
 export interface TerminalApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
   readonly apiBaseUrl?: string | undefined;
@@ -46,7 +48,9 @@ function createTerminalApiClientConfig(
   options: TerminalApiClientOptions = {},
 ): TerminalApiClientConfig {
   return {
-    fetchImplementation: options.fetchImplementation ?? fetch,
+    fetchImplementation: resolveFetchImplementation(
+      options.fetchImplementation,
+    ),
     apiBaseUrl: normalizeApiBaseUrl(options.apiBaseUrl ?? "/api"),
   };
 }

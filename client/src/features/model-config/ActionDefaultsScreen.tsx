@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, type JSX, onCleanup, Show } from "solid-js";
 import {
   createModelConfigApiClient,
   type GitActionPromptName,

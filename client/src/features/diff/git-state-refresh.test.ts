@@ -126,21 +126,21 @@ describe("createGitStateRefreshController", () => {
   });
 
   test("polls while connected and stops after disconnect", () => {
-    let pollCallback: (() => void) | null = null;
-    let clearedTimerId: number | null = null;
+    let pollCallback: (() => void) | undefined;
+    let clearedTimerId: ReturnType<typeof setInterval> | null = null;
     let refreshCount = 0;
     const gitStateRefreshController = createGitStateRefreshController({
       windowSource: createEventTargetHarness(),
       documentSource: {
         ...createEventTargetHarness(),
-        visibilityState: "visible",
+        visibilityState: "visible" as const,
       },
       setIntervalFn(callback) {
         pollCallback = callback;
-        return 7 as ReturnType<typeof setInterval>;
+        return 7 as unknown as ReturnType<typeof setInterval>;
       },
       clearIntervalFn(timerId) {
-        clearedTimerId = timerId as number;
+        clearedTimerId = timerId;
       },
       getContextId: () => "ctx-4",
       getActiveScreen: () => "files",
@@ -156,7 +156,12 @@ describe("createGitStateRefreshController", () => {
     pollCallback?.();
 
     expect(refreshCount).toBe(2);
-    expect(clearedTimerId).toBe(7);
+    expect(clearedTimerId === null).toBe(false);
+    if (clearedTimerId !== null) {
+      const expectedTimerId =
+        7 as unknown as ReturnType<typeof setInterval>;
+      expect(clearedTimerId === expectedTimerId).toBe(true);
+    }
   });
 
   test("does not refresh hidden or non-git contexts", () => {

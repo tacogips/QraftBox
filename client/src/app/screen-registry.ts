@@ -1,5 +1,6 @@
 import type { AppScreen } from "../../../client-shared/src/contracts/navigation";
-import type { SolidCutoverEnvironmentStatus } from "../../../client-shared/src/contracts/frontend-status";
+import type { SolidSupportStatus } from "../../../client-shared/src/contracts/frontend-status";
+import { SOURCE_CHECKOUT_SOLID_SUPPORT_STATUS } from "./support-status";
 
 export type SolidScreenImplementationStatus =
   | "implemented"
@@ -11,7 +12,7 @@ export interface SolidScreenParityGate {
   readonly checks: readonly string[];
 }
 
-export interface SolidScreenCutoverBlocker {
+export interface SolidSupportBlocker {
   readonly id: string;
   readonly scope: "global" | "screen";
   readonly category:
@@ -29,33 +30,26 @@ export interface SolidScreenDefinition {
   readonly implementationStatus: SolidScreenImplementationStatus;
   readonly implementationOrder: number;
   readonly parityGate: SolidScreenParityGate;
-  readonly blockers: readonly SolidScreenCutoverBlocker[];
+  readonly blockers: readonly SolidSupportBlocker[];
 }
 
-export interface SolidCutoverCriterion {
+export interface SolidSupportCriterion {
   readonly id: string;
   readonly summary: string;
-  readonly isSatisfied: boolean;
+  readonly status: "pass" | "blocked" | "not-applicable";
 }
 
-export interface SolidCutoverReadinessReport {
+export interface SolidSupportReport {
   readonly implementedScreenCount: number;
   readonly totalScreenCount: number;
   readonly remainingScreens: readonly AppScreen[];
-  readonly outstandingBlockers: readonly SolidScreenCutoverBlocker[];
-  readonly criteria: readonly SolidCutoverCriterion[];
+  readonly outstandingBlockers: readonly SolidSupportBlocker[];
+  readonly criteria: readonly SolidSupportCriterion[];
 }
 
-export const DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS: SolidCutoverEnvironmentStatus =
-  {
-    hasClientSolidDependencies: false,
-    hasBuiltSolidBundle: false,
-    hasAgentBrowser: false,
-    hasRecordedFullMigrationCheck: false,
-    hasRecordedBrowserVerification: false,
-  };
+export const DEFAULT_SOLID_SUPPORT_STATUS = SOURCE_CHECKOUT_SOLID_SUPPORT_STATUS;
 
-const NO_EXTRA_BLOCKERS: readonly SolidScreenCutoverBlocker[] = [];
+const NO_EXTRA_BLOCKERS: readonly SolidSupportBlocker[] = [];
 
 export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
   {
@@ -240,7 +234,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
       summary: "Action default parity",
       checks: [
         "Render per-context default bindings from the model configuration API.",
-        "Preserve save, reset, and validation semantics before cutover.",
+        "Preserve save, reset, and validation semantics while legacy fallback remains supported.",
       ],
     },
     blockers: [
@@ -265,37 +259,37 @@ const SCREEN_DEFINITION_MAP: Readonly<
   {} as Record<AppScreen, SolidScreenDefinition>,
 );
 
-export const SOLID_CUTOVER_CRITERIA: readonly string[] = [
+export const SOLID_SUPPORT_CRITERIA: readonly string[] = [
   "All screen definitions are at implementationStatus=implemented.",
   "bun run check:frontend:migration passes, including nested Solid typecheck.",
   "The Solid bundle is built at dist/client/index.html and served successfully by the backend.",
   "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
-  "No explicit cutover blocker remains open in the screen registry or implementation plan.",
+  "No explicit legacy-support blocker remains open in the screen registry runtime status surface.",
 ];
 
-export const SOLID_CUTOVER_CRITERION_DEFINITIONS: readonly Pick<
-  SolidCutoverCriterion,
+export const SOLID_SUPPORT_CRITERION_DEFINITIONS: readonly Pick<
+  SolidSupportCriterion,
   "id" | "summary"
 >[] = [
   {
     id: "all-screens-implemented",
-    summary: SOLID_CUTOVER_CRITERIA[0],
+    summary: SOLID_SUPPORT_CRITERIA[0],
   },
   {
     id: "full-migration-check-passes",
-    summary: SOLID_CUTOVER_CRITERIA[1],
+    summary: SOLID_SUPPORT_CRITERIA[1],
   },
   {
     id: "solid-bundle-built",
-    summary: SOLID_CUTOVER_CRITERIA[2],
+    summary: SOLID_SUPPORT_CRITERIA[2],
   },
   {
     id: "browser-verification-recorded",
-    summary: SOLID_CUTOVER_CRITERIA[3],
+    summary: SOLID_SUPPORT_CRITERIA[3],
   },
   {
     id: "no-open-blockers",
-    summary: SOLID_CUTOVER_CRITERIA[4],
+    summary: SOLID_SUPPORT_CRITERIA[4],
   },
 ] as const;
 
@@ -329,12 +323,12 @@ export function getNonImplementedSolidScreens(): readonly AppScreen[] {
   ).map((definition) => definition.screen);
 }
 
-function getGlobalSolidCutoverBlockers(
-  environmentStatus: SolidCutoverEnvironmentStatus,
-): readonly SolidScreenCutoverBlocker[] {
-  const blockers: SolidScreenCutoverBlocker[] = [];
+function getGlobalSolidSupportBlockers(
+  supportStatus: SolidSupportStatus,
+): readonly SolidSupportBlocker[] {
+  const blockers: SolidSupportBlocker[] = [];
 
-  if (!environmentStatus.hasClientSolidDependencies) {
+  if (supportStatus.hasSourceCheckout && !supportStatus.hasClientSolidDependencies) {
     blockers.push({
       id: "solid-deps-missing",
       scope: "global",
@@ -344,7 +338,7 @@ function getGlobalSolidCutoverBlockers(
     });
   }
 
-  if (!environmentStatus.hasBuiltSolidBundle) {
+  if (!supportStatus.hasBuiltSolidBundle) {
     blockers.push({
       id: "solid-dist-missing",
       scope: "global",
@@ -354,7 +348,11 @@ function getGlobalSolidCutoverBlockers(
     });
   }
 
-  if (!environmentStatus.hasAgentBrowser) {
+  if (
+    supportStatus.hasSourceCheckout &&
+    !supportStatus.hasAgentBrowser &&
+    !supportStatus.hasRecordedBrowserVerification
+  ) {
     blockers.push({
       id: "agent-browser-missing",
       scope: "global",
@@ -364,43 +362,45 @@ function getGlobalSolidCutoverBlockers(
     });
   }
 
-  if (!environmentStatus.hasRecordedFullMigrationCheck) {
+  if (
+    supportStatus.hasSourceCheckout &&
+    !supportStatus.hasRecordedFullMigrationCheck
+  ) {
     blockers.push({
       id: "full-migration-check-pending",
       scope: "global",
       category: "verification",
       summary:
-        "bun run check:frontend:migration has not yet been recorded as passing for the Solid migration.",
+        "bun run check:frontend:migration has not yet been recorded as passing for the current Solid support baseline.",
     });
   }
 
-  if (!environmentStatus.hasRecordedBrowserVerification) {
+  if (
+    supportStatus.hasSourceCheckout &&
+    !supportStatus.hasRecordedBrowserVerification
+  ) {
     blockers.push({
       id: "browser-verification-not-recorded",
       scope: "global",
       category: "verification",
       summary:
-        "Browser verification for the Solid migration has not yet been recorded from this workspace.",
+        "Browser verification for the Solid and legacy Svelte support baseline has not yet been recorded from this workspace.",
     });
   }
 
   return blockers;
 }
 
-function getScreenSpecificSolidCutoverBlockers(
+function getScreenSpecificSolidSupportBlockers(
   definition: SolidScreenDefinition,
-  environmentStatus: SolidCutoverEnvironmentStatus,
-): readonly SolidScreenCutoverBlocker[] {
-  if (environmentStatus.hasRecordedBrowserVerification) {
+  supportStatus: SolidSupportStatus,
+): readonly SolidSupportBlocker[] {
+  if (
+    supportStatus.hasSourceCheckout &&
+    supportStatus.hasRecordedBrowserVerification
+  ) {
     const browserVerifiedBlockerIds = new Set([
       "files-parity-browser-verification-pending",
-      "ai-session-browser-verification-pending",
-      "commits-browser-verification-pending",
-      "terminal-browser-verification-pending",
-      "system-info-browser-verification-pending",
-      "notifications-browser-verification-pending",
-      "model-profiles-browser-verification-pending",
-      "action-defaults-browser-verification-pending",
     ]);
 
     return definition.blockers.filter(
@@ -411,19 +411,19 @@ function getScreenSpecificSolidCutoverBlockers(
   return definition.blockers;
 }
 
-export function getOutstandingSolidCutoverBlockers(
-  environmentStatus: SolidCutoverEnvironmentStatus = DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
-): readonly SolidScreenCutoverBlocker[] {
-  const blockersById = new Map<string, SolidScreenCutoverBlocker>();
+export function getOutstandingSolidSupportBlockers(
+  supportStatus: SolidSupportStatus = DEFAULT_SOLID_SUPPORT_STATUS,
+): readonly SolidSupportBlocker[] {
+  const blockersById = new Map<string, SolidSupportBlocker>();
 
-  for (const blocker of getGlobalSolidCutoverBlockers(environmentStatus)) {
+  for (const blocker of getGlobalSolidSupportBlockers(supportStatus)) {
     blockersById.set(blocker.id, blocker);
   }
 
   for (const definition of SOLID_SCREEN_DEFINITIONS) {
-    for (const blocker of getScreenSpecificSolidCutoverBlockers(
+    for (const blocker of getScreenSpecificSolidSupportBlockers(
       definition,
-      environmentStatus,
+      supportStatus,
     )) {
       blockersById.set(blocker.id, blocker);
     }
@@ -436,12 +436,11 @@ export function getOutstandingSolidCutoverBlockers(
   return Array.from(blockersById.values());
 }
 
-export function getSolidCutoverReadinessReport(
-  environmentStatus: SolidCutoverEnvironmentStatus = DEFAULT_SOLID_CUTOVER_ENVIRONMENT_STATUS,
-): SolidCutoverReadinessReport {
+export function getSolidSupportReport(
+  supportStatus: SolidSupportStatus = DEFAULT_SOLID_SUPPORT_STATUS,
+): SolidSupportReport {
   const remainingScreens = getNonImplementedSolidScreens();
-  const outstandingBlockers =
-    getOutstandingSolidCutoverBlockers(environmentStatus);
+  const outstandingBlockers = getOutstandingSolidSupportBlockers(supportStatus);
 
   return {
     implementedScreenCount:
@@ -449,20 +448,34 @@ export function getSolidCutoverReadinessReport(
     totalScreenCount: SOLID_SCREEN_DEFINITIONS.length,
     remainingScreens,
     outstandingBlockers,
-    criteria: SOLID_CUTOVER_CRITERION_DEFINITIONS.map((criterion) => ({
+    criteria: SOLID_SUPPORT_CRITERION_DEFINITIONS.map((criterion) => ({
       ...criterion,
-      isSatisfied:
+      status:
         criterion.id === "all-screens-implemented"
           ? remainingScreens.length === 0
+            ? "pass"
+            : "blocked"
           : criterion.id === "full-migration-check-passes"
-            ? environmentStatus.hasRecordedFullMigrationCheck
+            ? supportStatus.hasSourceCheckout
+              ? supportStatus.hasRecordedFullMigrationCheck
+                ? "pass"
+                : "blocked"
+              : "not-applicable"
             : criterion.id === "solid-bundle-built"
-              ? environmentStatus.hasBuiltSolidBundle
+              ? supportStatus.hasBuiltSolidBundle
+                ? "pass"
+                : "blocked"
               : criterion.id === "browser-verification-recorded"
-                ? environmentStatus.hasRecordedBrowserVerification
+                ? supportStatus.hasSourceCheckout
+                  ? supportStatus.hasRecordedBrowserVerification
+                    ? "pass"
+                    : "blocked"
+                  : "not-applicable"
                 : criterion.id === "no-open-blockers"
                   ? outstandingBlockers.length === 0
-                  : false,
+                    ? "pass"
+                    : "blocked"
+                  : "blocked",
     })),
   };
 }

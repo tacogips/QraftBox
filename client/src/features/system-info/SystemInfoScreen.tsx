@@ -1,4 +1,4 @@
-import { createSignal, For, onMount, Show } from "solid-js";
+import { createSignal, For, type JSX, onMount, Show } from "solid-js";
 import { createSystemInfoApiClient } from "../../../../client-shared/src/api/system-info";
 import type {
   ClaudeCodeUsage,
