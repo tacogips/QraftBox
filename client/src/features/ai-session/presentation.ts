@@ -18,7 +18,7 @@ export interface AiSessionListEntry {
   readonly id: string;
   readonly title: string;
   readonly detail: string;
-  readonly status: string;
+  readonly status: string | null;
   readonly qraftAiSessionId: QraftAiSessionId;
   readonly lifecycleState: "active" | "history" | "queued";
   readonly sessionSource?: SessionSource | undefined;
@@ -160,7 +160,7 @@ export function buildAiSessionListEntries(
       detail:
         latestQueuedPromptItem?.message.trim() ||
         `${historicalSession.source} | ${historicalSession.gitBranch}`,
-      status: latestQueuedPromptItem?.status ?? "history",
+      status: latestQueuedPromptItem?.status ?? null,
       qraftAiSessionId: historicalSession.qraftAiSessionId,
       lifecycleState: latestQueuedPromptItem === null ? "history" : "queued",
       sessionSource: historicalSession.source,
@@ -267,9 +267,18 @@ export interface AiSessionTranscriptLine {
   readonly text: string;
   readonly timestamp: string | null;
   readonly isInjectedSystemPrompt: boolean;
+  readonly isLive: boolean;
+  readonly isThinking: boolean;
 }
 
 const LIVE_ASSISTANT_TRANSCRIPT_LINE_ID = "live-assistant";
+const OPTIMISTIC_USER_TRANSCRIPT_LINE_ID = "optimistic-user";
+
+export type AiSessionLiveAssistantPhase =
+  | "idle"
+  | "starting"
+  | "thinking"
+  | "streaming";
 
 export interface BuildAiSessionTranscriptLinesOptions {
   readonly offset?: number | undefined;
@@ -423,6 +432,8 @@ export function buildAiSessionTranscriptLines(
           typeof event.timestamp === "string" && event.timestamp.length > 0
             ? event.timestamp
             : null,
+        isLive: false,
+        isThinking: false,
       } satisfies AiSessionTranscriptLine;
     })
     .filter(
@@ -433,15 +444,24 @@ export function buildAiSessionTranscriptLines(
 
 export function mergeLiveAiSessionTranscriptLine(params: {
   readonly transcriptLines: readonly AiSessionTranscriptLine[];
+  readonly liveAssistantPhase: AiSessionLiveAssistantPhase;
   readonly liveAssistantText: string | null;
   readonly liveAssistantTimestamp: string | null;
+  readonly liveAssistantStatusText: string | null;
 }): readonly AiSessionTranscriptLine[] {
   const persistedTranscriptLines = params.transcriptLines.filter(
     (transcriptLine) => transcriptLine.id !== LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
   );
   const liveAssistantText = params.liveAssistantText;
+  const liveAssistantPhase = params.liveAssistantPhase;
+  const liveAssistantDisplayText =
+    liveAssistantText !== null && liveAssistantText.trim().length > 0
+      ? liveAssistantText
+      : liveAssistantPhase === "idle"
+        ? null
+        : (params.liveAssistantStatusText ?? "Thinking...");
 
-  if (liveAssistantText === null || liveAssistantText.trim().length === 0) {
+  if (liveAssistantDisplayText === null) {
     return persistedTranscriptLines;
   }
 
@@ -449,7 +469,9 @@ export function mergeLiveAiSessionTranscriptLine(params: {
     persistedTranscriptLines[persistedTranscriptLines.length - 1];
   if (
     lastPersistedTranscriptLine?.role === "assistant" &&
-    lastPersistedTranscriptLine.text === liveAssistantText
+    lastPersistedTranscriptLine.text === liveAssistantDisplayText &&
+    liveAssistantPhase !== "starting" &&
+    liveAssistantPhase !== "thinking"
   ) {
     return persistedTranscriptLines;
   }
@@ -459,11 +481,186 @@ export function mergeLiveAiSessionTranscriptLine(params: {
     {
       id: LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
       role: "assistant",
-      text: liveAssistantText,
+      text: liveAssistantDisplayText,
       timestamp: params.liveAssistantTimestamp,
       isInjectedSystemPrompt: false,
+      isLive: true,
+      isThinking:
+        liveAssistantPhase === "starting" || liveAssistantPhase === "thinking",
     },
   ];
+}
+
+export function mergeOptimisticUserTranscriptLine(params: {
+  readonly transcriptLines: readonly AiSessionTranscriptLine[];
+  readonly optimisticUserText: string | null;
+  readonly optimisticUserTimestamp: string | null;
+}): readonly AiSessionTranscriptLine[] {
+  const persistedTranscriptLines = params.transcriptLines.filter(
+    (transcriptLine) =>
+      transcriptLine.id !== OPTIMISTIC_USER_TRANSCRIPT_LINE_ID,
+  );
+  const optimisticUserText = params.optimisticUserText;
+
+  if (optimisticUserText === null || optimisticUserText.trim().length === 0) {
+    return persistedTranscriptLines;
+  }
+
+  const lastPersistedTranscriptLine =
+    persistedTranscriptLines[persistedTranscriptLines.length - 1];
+  if (
+    lastPersistedTranscriptLine?.role === "user" &&
+    lastPersistedTranscriptLine.text === optimisticUserText
+  ) {
+    return persistedTranscriptLines;
+  }
+
+  return [
+    ...persistedTranscriptLines,
+    {
+      id: OPTIMISTIC_USER_TRANSCRIPT_LINE_ID,
+      role: "user",
+      text: optimisticUserText,
+      timestamp: params.optimisticUserTimestamp,
+      isInjectedSystemPrompt: false,
+      isLive: false,
+      isThinking: false,
+    },
+  ];
+}
+
+export function mergePendingAiSessionTranscriptLines(params: {
+  readonly transcriptLines: readonly AiSessionTranscriptLine[];
+  readonly optimisticUserText: string | null;
+  readonly optimisticUserTimestamp: string | null;
+  readonly optimisticAnchorIndex: number | null;
+  readonly liveAssistantPhase: AiSessionLiveAssistantPhase;
+  readonly liveAssistantText: string | null;
+  readonly liveAssistantTimestamp: string | null;
+  readonly liveAssistantStatusText: string | null;
+}): readonly AiSessionTranscriptLine[] {
+  const persistedTranscriptLines = params.transcriptLines.filter(
+    (transcriptLine) =>
+      transcriptLine.id !== OPTIMISTIC_USER_TRANSCRIPT_LINE_ID &&
+      transcriptLine.id !== LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
+  );
+  const anchorIndex = Math.max(
+    0,
+    Math.min(
+      params.optimisticAnchorIndex ?? persistedTranscriptLines.length,
+      persistedTranscriptLines.length,
+    ),
+  );
+  const transcriptTail = persistedTranscriptLines.slice(anchorIndex);
+  const normalizedOptimisticText = params.optimisticUserText?.trim().length
+    ? params.optimisticUserText.replace(/\s+/g, " ").trim()
+    : null;
+  const persistedOptimisticUserIndex =
+    normalizedOptimisticText === null
+      ? -1
+      : transcriptTail.findIndex(
+          (transcriptLine) =>
+            transcriptLine.role === "user" &&
+            transcriptLine.text.replace(/\s+/g, " ").trim() ===
+              normalizedOptimisticText,
+        );
+  const shouldRenderOptimisticUser =
+    normalizedOptimisticText !== null && persistedOptimisticUserIndex === -1;
+  const assistantAnchorOffset =
+    shouldRenderOptimisticUser || persistedOptimisticUserIndex === -1
+      ? 0
+      : persistedOptimisticUserIndex + 1;
+  const assistantPrefix = transcriptTail.slice(0, assistantAnchorOffset);
+  const assistantSuffix = transcriptTail.slice(assistantAnchorOffset);
+  const liveAssistantDisplayText =
+    params.liveAssistantText !== null && params.liveAssistantText.trim().length > 0
+      ? params.liveAssistantText
+      : params.liveAssistantPhase === "idle"
+        ? null
+        : (params.liveAssistantStatusText ?? "Thinking...");
+  const shouldRenderLiveAssistant =
+    liveAssistantDisplayText !== null &&
+    !(
+      (params.liveAssistantPhase === "starting" ||
+        params.liveAssistantPhase === "thinking") &&
+      assistantSuffix.some((transcriptLine) => transcriptLine.role === "assistant")
+    ) &&
+    !(
+      params.liveAssistantPhase !== "starting" &&
+      params.liveAssistantPhase !== "thinking" &&
+      assistantSuffix.some(
+        (transcriptLine) =>
+          transcriptLine.role === "assistant" &&
+          transcriptLine.text === liveAssistantDisplayText,
+      )
+    );
+
+  return [
+    ...persistedTranscriptLines.slice(0, anchorIndex),
+    ...(shouldRenderOptimisticUser
+      ? [
+          {
+            id: OPTIMISTIC_USER_TRANSCRIPT_LINE_ID,
+            role: "user",
+            text: params.optimisticUserText!,
+            timestamp: params.optimisticUserTimestamp,
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          } satisfies AiSessionTranscriptLine,
+        ]
+      : []),
+    ...assistantPrefix,
+    ...(shouldRenderLiveAssistant
+      ? [
+          {
+            id: LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
+            role: "assistant",
+            text: liveAssistantDisplayText!,
+            timestamp: params.liveAssistantTimestamp,
+            isInjectedSystemPrompt: false,
+            isLive: true,
+            isThinking:
+              params.liveAssistantPhase === "starting" ||
+              params.liveAssistantPhase === "thinking",
+          } satisfies AiSessionTranscriptLine,
+        ]
+      : []),
+    ...assistantSuffix,
+  ];
+}
+
+export function reconcileAiSessionTranscriptLines(
+  currentLines: readonly AiSessionTranscriptLine[],
+  nextLines: readonly AiSessionTranscriptLine[],
+): readonly AiSessionTranscriptLine[] {
+  if (currentLines.length === 0) {
+    return nextLines;
+  }
+
+  const currentById = new Map(
+    currentLines.map((transcriptLine) => [transcriptLine.id, transcriptLine]),
+  );
+
+  return nextLines.map((nextLine) => {
+    const currentLine = currentById.get(nextLine.id);
+    if (currentLine === undefined) {
+      return nextLine;
+    }
+
+    if (
+      currentLine.role === nextLine.role &&
+      currentLine.text === nextLine.text &&
+      currentLine.timestamp === nextLine.timestamp &&
+      currentLine.isInjectedSystemPrompt === nextLine.isInjectedSystemPrompt &&
+      currentLine.isLive === nextLine.isLive &&
+      currentLine.isThinking === nextLine.isThinking
+    ) {
+      return currentLine;
+    }
+
+    return nextLine;
+  });
 }
 
 export function getQueuedPromptSummary(

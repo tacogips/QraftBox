@@ -226,6 +226,10 @@ export interface ErrorData {
   readonly code?: string | undefined;
 }
 
+export interface ThinkingData {
+  readonly message: string;
+}
+
 /**
  * AI progress event for SSE streaming
  */
@@ -237,6 +241,7 @@ export interface AIProgressEvent {
     | ToolUseData
     | ToolResultData
     | MessageData
+    | ThinkingData
     | ErrorData
     | Record<string, never>;
 }

@@ -5,6 +5,8 @@ export function resolveFetchImplementation(
     return fetchImplementation;
   }
 
-  return ((input: RequestInfo | URL, init?: RequestInit): Promise<Response> =>
-    globalThis.fetch(input, init)) as typeof fetch;
+  return ((
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
+  ): ReturnType<typeof fetch> => globalThis.fetch(input, init)) as typeof fetch;
 }

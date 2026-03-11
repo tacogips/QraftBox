@@ -55,6 +55,12 @@ export function shouldShowAiSessionComposer(params: {
   return params.selectedQraftAiSessionId !== null || params.isDraftComposerOpen;
 }
 
+export function shouldAutoRefreshAiSessionOverview(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+}): boolean {
+  return params.selectedQraftAiSessionId === null;
+}
+
 export interface ResolvedAiSessionSubmitTarget {
   readonly qraftAiSessionId: QraftAiSessionId;
   readonly forceNewSession: boolean;
@@ -445,6 +451,46 @@ export function resolveAiSessionRuntimeSession(params: {
   );
 }
 
+export function resolveAiSessionStreamSessionId(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+  readonly preferredRuntimeSessionId: QraftAiSessionId | null;
+  readonly preferredRuntimeSessionOwnerQraftAiSessionId: QraftAiSessionId | null;
+  readonly runtimeSession: AISessionInfo | null;
+}): QraftAiSessionId | null {
+  if (
+    params.selectedQraftAiSessionId !== null &&
+    params.preferredRuntimeSessionId !== null &&
+    params.preferredRuntimeSessionOwnerQraftAiSessionId ===
+      params.selectedQraftAiSessionId
+  ) {
+    return params.preferredRuntimeSessionId;
+  }
+
+  if (params.runtimeSession?.state === "running") {
+    return params.runtimeSession.id;
+  }
+
+  return null;
+}
+
+export function shouldPreserveAiSessionLiveAssistantStateOnStreamOpen(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+  readonly streamSessionId: QraftAiSessionId | null;
+  readonly preferredRuntimeSessionId: QraftAiSessionId | null;
+  readonly preferredRuntimeSessionOwnerQraftAiSessionId: QraftAiSessionId | null;
+  readonly liveAssistantPhase: "idle" | "starting" | "thinking" | "streaming";
+}): boolean {
+  return (
+    params.selectedQraftAiSessionId !== null &&
+    params.streamSessionId !== null &&
+    params.preferredRuntimeSessionId === params.streamSessionId &&
+    params.preferredRuntimeSessionOwnerQraftAiSessionId ===
+      params.selectedQraftAiSessionId &&
+    (params.liveAssistantPhase === "starting" ||
+      params.liveAssistantPhase === "thinking")
+  );
+}
+
 export interface AiSessionRequestToken {
   readonly requestId: number;
   readonly scopeKey: string;
@@ -557,9 +603,8 @@ export function resolveLoadedAiSessionTranscriptEventCount(params: {
 export function createAiSessionDetailRequestKey(params: {
   readonly contextId: string;
   readonly qraftAiSessionId: QraftAiSessionId;
-  readonly hasHistoricalSession: boolean;
 }): string {
-  return `${params.contextId}:${params.qraftAiSessionId}:${params.hasHistoricalSession ? "history" : "live"}`;
+  return `${params.contextId}:${params.qraftAiSessionId}`;
 }
 
 export function createLatestAiSessionRequestGuard(): LatestAiSessionRequestGuard {

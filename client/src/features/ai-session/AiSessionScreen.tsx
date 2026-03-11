@@ -25,19 +25,21 @@ import {
 import type { ExtendedSessionEntry } from "../../../../src/types/claude-session";
 import type { ModelProfile } from "../../../../src/types/model-config";
 import {
+  type AiSessionLiveAssistantPhase,
   type AiSessionTranscriptLine,
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
+  reconcileAiSessionTranscriptLines,
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
-  mergeLiveAiSessionTranscriptLine,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
   describeAiSessionModelProfile,
   describeAiSessionTarget,
   formatAiSessionTimestamp,
   getQueuedPromptSummary,
+  mergePendingAiSessionTranscriptLines,
 } from "./presentation";
 import {
   applyAiSessionSearchDraft,
@@ -53,7 +55,6 @@ import {
   createAiSessionHistoryFilters,
   createAiSessionDefaultPromptMessage,
   createAiSessionDetailRequestKey,
-  createAiSessionHiddenStateMessage,
   createAiSessionScopeKey,
   createAiSessionScopeResetLoadingState,
   createAiSessionPromptContextState,
@@ -67,9 +68,12 @@ import {
   resolveNextAiSessionTranscriptOffset,
   resolveAiSessionRequestToken,
   resolveAiSessionRuntimeSession,
+  resolveAiSessionStreamSessionId,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   shouldShowAiSessionComposer,
+  shouldAutoRefreshAiSessionOverview,
   updateHiddenAiSessionIds,
 } from "./state";
 
@@ -194,6 +198,43 @@ function renderSystemPromptVisibilityIcon(hiddenCount: number): JSX.Element {
   );
 }
 
+function renderSessionVisibilityIcon(hidden: boolean): JSX.Element {
+  if (hidden) {
+    return (
+      <svg
+        viewBox="0 0 20 20"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+      >
+        <path
+          d="M3 10c1.8-3 4.3-4.5 7-4.5s5.2 1.5 7 4.5c-1.8 3-4.3 4.5-7 4.5S4.8 13 3 10Z"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        />
+        <circle cx="10" cy="10" r="2.25" />
+        <path d="M4 16 16 4" stroke-linecap="round" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="M3 10c1.8-3 4.3-4.5 7-4.5s5.2 1.5 7 4.5c-1.8 3-4.3 4.5-7 4.5S4.8 13 3 10Z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle cx="10" cy="10" r="2.25" />
+    </svg>
+  );
+}
+
 export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const initialOverviewRouteState = parseAiSessionOverviewRouteState(
     readAiSessionOverviewRouteSearchFromHash(window.location.hash),
@@ -279,12 +320,30 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [liveAssistantTimestamp, setLiveAssistantTimestamp] = createSignal<
     string | null
   >(null);
+  const [liveAssistantPhase, setLiveAssistantPhase] =
+    createSignal<AiSessionLiveAssistantPhase>("idle");
+  const [liveAssistantStatusText, setLiveAssistantStatusText] = createSignal<
+    string | null
+  >(null);
+  const [optimisticUserText, setOptimisticUserText] = createSignal<
+    string | null
+  >(null);
+  const [optimisticUserTimestamp, setOptimisticUserTimestamp] = createSignal<
+    string | null
+  >(null);
+  const [optimisticUserAnchorIndex, setOptimisticUserAnchorIndex] =
+    createSignal<number | null>(null);
+  const [
+    preferredStreamRuntimeSessionId,
+    setPreferredStreamRuntimeSessionId,
+  ] = createSignal<QraftAiSessionId | null>(null);
+  const [
+    preferredStreamRuntimeSessionOwnerQraftAiSessionId,
+    setPreferredStreamRuntimeSessionOwnerQraftAiSessionId,
+  ] = createSignal<QraftAiSessionId | null>(null);
   const [showInjectedSystemPrompts, setShowInjectedSystemPrompts] =
     createSignal(loadInjectedSystemPromptVisibility());
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
-  const [submitResultMessage, setSubmitResultMessage] = createSignal<
-    string | null
-  >(null);
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activeScopeKey: string | null = null;
@@ -330,12 +389,26 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       selectedQraftAiSessionId: selectedQraftAiSessionId(),
       activeSessions: activeSessions(),
     });
-  const displayedSelectedSessionTranscript = () =>
-    mergeLiveAiSessionTranscriptLine({
+  const selectedStreamSessionId = () =>
+    resolveAiSessionStreamSessionId({
+      selectedQraftAiSessionId: selectedQraftAiSessionId(),
+      preferredRuntimeSessionId: preferredStreamRuntimeSessionId(),
+      preferredRuntimeSessionOwnerQraftAiSessionId:
+        preferredStreamRuntimeSessionOwnerQraftAiSessionId(),
+      runtimeSession: selectedRuntimeSession(),
+    });
+  const displayedSelectedSessionTranscript = () => {
+    return mergePendingAiSessionTranscriptLines({
       transcriptLines: selectedSessionTranscript(),
+      optimisticUserText: optimisticUserText(),
+      optimisticUserTimestamp: optimisticUserTimestamp(),
+      optimisticAnchorIndex: optimisticUserAnchorIndex(),
+      liveAssistantPhase: liveAssistantPhase(),
       liveAssistantText: liveAssistantText(),
       liveAssistantTimestamp: liveAssistantTimestamp(),
+      liveAssistantStatusText: liveAssistantStatusText(),
     });
+  };
   const visibleSelectedSessionTranscript = () =>
     displayedSelectedSessionTranscript().filter(
       (transcriptLine) =>
@@ -525,6 +598,14 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       clearInterval(pollTimer);
     }
     pollTimer = setInterval(() => {
+      if (
+        !shouldAutoRefreshAiSessionOverview({
+          selectedQraftAiSessionId: selectedQraftAiSessionId(),
+        })
+      ) {
+        return;
+      }
+
       void refreshActivity(contextId, projectPath);
     }, ACTIVE_SESSION_POLL_MS);
   }
@@ -553,7 +634,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     activityRequestGuard.invalidate();
     hiddenSessionsRequestGuard.invalidate();
     modelProfilesRequestGuard.invalidate();
-    setSubmitResultMessage(null);
     setErrorMessage(null);
     setActiveSessions([]);
     setPromptQueue([]);
@@ -567,6 +647,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionError(null);
     setLiveAssistantText(null);
     setLiveAssistantTimestamp(null);
+    setLiveAssistantPhase("idle");
+    setLiveAssistantStatusText(null);
+    setOptimisticUserText(null);
+    setOptimisticUserTimestamp(null);
+    setOptimisticUserAnchorIndex(null);
+    setPreferredStreamRuntimeSessionId(null);
+    setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
     const resetLoadingState = createAiSessionScopeResetLoadingState();
     setHistoryLoading(resetLoadingState.historyLoading);
     setActivityLoading(resetLoadingState.activityLoading);
@@ -606,6 +693,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     readonly qraftAiSessionId: QraftAiSessionId;
     readonly hasHistoricalSession: boolean;
     readonly appendTranscript: boolean;
+    readonly preserveExistingContent?: boolean | undefined;
   }): Promise<void> {
     const requestScopeKey = `${params.contextId}:${params.qraftAiSessionId}`;
     const requestToken = selectedSessionRequestGuard.issue(requestScopeKey);
@@ -617,11 +705,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     if (params.appendTranscript) {
       setSelectedSessionLoadingMore(true);
     } else {
-      setSelectedSessionLoading(true);
-      setSelectedSessionDetail(null);
-      setSelectedSessionTranscript([]);
-      setSelectedSessionTranscriptLoadedEventCount(0);
-      setSelectedSessionTranscriptTotal(0);
+      if (params.preserveExistingContent !== true) {
+        setSelectedSessionLoading(true);
+        setSelectedSessionDetail(null);
+        setSelectedSessionTranscript([]);
+        setSelectedSessionTranscriptLoadedEventCount(0);
+        setSelectedSessionTranscriptTotal(0);
+      }
     }
     setSelectedSessionError(null);
 
@@ -668,13 +758,18 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           offset: transcript.offset,
         },
       );
-      setSelectedSessionTranscript((currentTranscriptLines) =>
-        mergeAiSessionTranscriptLines(
+      setSelectedSessionTranscript((currentTranscriptLines) => {
+        const mergedTranscriptLines = mergeAiSessionTranscriptLines(
           currentTranscriptLines,
           nextTranscriptLines,
           params.appendTranscript,
-        ),
-      );
+        );
+
+        return reconcileAiSessionTranscriptLines(
+          currentTranscriptLines,
+          mergedTranscriptLines,
+        );
+      });
       setSelectedSessionTranscriptLoadedEventCount((currentLoadedEventCount) =>
         resolveLoadedAiSessionTranscriptEventCount({
           append: params.appendTranscript,
@@ -689,7 +784,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         return;
       }
 
-      if (!params.appendTranscript) {
+      if (!params.appendTranscript && params.preserveExistingContent !== true) {
         setSelectedSessionDetail(null);
         setSelectedSessionTranscript([]);
         setSelectedSessionTranscriptLoadedEventCount(0);
@@ -743,6 +838,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setSelectedSessionError(null);
       setLiveAssistantText(null);
       setLiveAssistantTimestamp(null);
+      setLiveAssistantPhase("idle");
+      setLiveAssistantStatusText(null);
+      setOptimisticUserText(null);
+      setOptimisticUserTimestamp(null);
+      setOptimisticUserAnchorIndex(null);
+      setPreferredStreamRuntimeSessionId(null);
+      setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
       setSelectedSessionLoading(false);
       setSelectedSessionLoadingMore(false);
       return;
@@ -755,6 +857,15 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     activeSelectedSessionDetailKey = nextDetailKey;
     selectedSessionRequestGuard.invalidate();
+    setLiveAssistantText(null);
+    setLiveAssistantTimestamp(null);
+    setLiveAssistantPhase("idle");
+    setLiveAssistantStatusText(null);
+    setOptimisticUserText(null);
+    setOptimisticUserTimestamp(null);
+    setOptimisticUserAnchorIndex(null);
+    setPreferredStreamRuntimeSessionId(null);
+    setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
     void refreshSelectedSessionArtifacts({
       ...detailTarget,
       appendTranscript: false,
@@ -762,40 +873,218 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   });
 
   createEffect(() => {
+    const optimisticText = optimisticUserText();
+    if (optimisticText === null || optimisticText.trim().length === 0) {
+      return;
+    }
+
+    const normalizedOptimisticText = optimisticText.replace(/\s+/g, " ").trim();
+    if (normalizedOptimisticText.length === 0) {
+      setOptimisticUserText(null);
+      setOptimisticUserTimestamp(null);
+      setOptimisticUserAnchorIndex(null);
+      return;
+    }
+
+    const persistedTranscriptLines = selectedSessionTranscript();
+    const optimisticAnchorIndex = optimisticUserAnchorIndex();
+    const transcriptTail =
+      optimisticAnchorIndex === null
+        ? persistedTranscriptLines
+        : persistedTranscriptLines.slice(optimisticAnchorIndex);
+    const hasPersistedUserMessage = transcriptTail.some(
+      (transcriptLine) =>
+        transcriptLine.role === "user" &&
+        transcriptLine.text.replace(/\s+/g, " ").trim() ===
+          normalizedOptimisticText,
+    );
+
+    if (!hasPersistedUserMessage) {
+      return;
+    }
+
+    setOptimisticUserText(null);
+    setOptimisticUserTimestamp(null);
+    setOptimisticUserAnchorIndex(null);
+  });
+
+  createEffect(() => {
+    const currentLiveAssistantPhase = liveAssistantPhase();
+    if (currentLiveAssistantPhase === "idle") {
+      return;
+    }
+
+    const persistedTranscriptLines = selectedSessionTranscript();
+    const lastPersistedTranscriptLine =
+      persistedTranscriptLines[persistedTranscriptLines.length - 1];
+
+    if (lastPersistedTranscriptLine?.role !== "assistant") {
+      return;
+    }
+
+    const currentLiveAssistantText = liveAssistantText();
+    if (
+      currentLiveAssistantText !== null &&
+      lastPersistedTranscriptLine.text === currentLiveAssistantText
+    ) {
+      setLiveAssistantText(null);
+      setLiveAssistantTimestamp(null);
+      setLiveAssistantPhase("idle");
+      setLiveAssistantStatusText(null);
+      return;
+    }
+
+    if (
+      (currentLiveAssistantPhase === "starting" ||
+        currentLiveAssistantPhase === "thinking") &&
+      lastPersistedTranscriptLine.text.trim().length > 0
+    ) {
+      setLiveAssistantText(null);
+      setLiveAssistantTimestamp(null);
+      setLiveAssistantPhase("idle");
+      setLiveAssistantStatusText(null);
+    }
+  });
+
+  createEffect(() => {
     const contextId = props.contextId;
     const selectedSessionKey = selectedQraftAiSessionId();
-    const runtimeSession = selectedRuntimeSession();
+    const streamSessionId = selectedStreamSessionId();
     const nextStreamKey =
       contextId !== null &&
       selectedSessionKey !== null &&
-      runtimeSession !== null &&
-      runtimeSession.state === "running"
-        ? `${runtimeSession.id}:${selectedSessionKey}`
+      streamSessionId !== null
+        ? `${streamSessionId}:${selectedSessionKey}`
         : null;
 
     if (nextStreamKey === activeSelectedSessionStreamKey) {
       return;
     }
 
+    const preserveLiveAssistantState =
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: selectedSessionKey,
+        streamSessionId,
+        preferredRuntimeSessionId: preferredStreamRuntimeSessionId(),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          preferredStreamRuntimeSessionOwnerQraftAiSessionId(),
+        liveAssistantPhase: liveAssistantPhase(),
+      });
+
     activeSelectedSessionStreamKey = nextStreamKey;
     activeSelectedSessionEventSource?.close();
     activeSelectedSessionEventSource = null;
     setLiveAssistantText(null);
-    setLiveAssistantTimestamp(null);
+    if (!preserveLiveAssistantState) {
+      setLiveAssistantTimestamp(null);
+      setLiveAssistantPhase("idle");
+      setLiveAssistantStatusText(null);
+    }
 
     if (
       contextId === null ||
       selectedSessionKey === null ||
-      runtimeSession === null ||
-      runtimeSession.state !== "running"
+      streamSessionId === null
     ) {
       return;
     }
 
     const eventSource = new EventSource(
-      `${props.apiBaseUrl}/ai/sessions/${encodeURIComponent(runtimeSession.id)}/stream`,
+      `${props.apiBaseUrl}/ai/sessions/${encodeURIComponent(streamSessionId)}/stream`,
     );
     activeSelectedSessionEventSource = eventSource;
+
+    const showLiveAssistantPlaceholder = (
+      phase: Exclude<AiSessionLiveAssistantPhase, "idle">,
+      statusText: string | null,
+      timestamp: string | null,
+    ): void => {
+      setLiveAssistantPhase(phase);
+      setLiveAssistantStatusText(statusText);
+      setLiveAssistantTimestamp(timestamp);
+    };
+
+    const resolvePayloadTimestamp = (payload: {
+      readonly timestamp?: unknown;
+    }): string | null =>
+      typeof payload.timestamp === "string" ? payload.timestamp : null;
+
+    const handleConnected = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      showLiveAssistantPlaceholder("starting", "Thinking...", null);
+    };
+
+    const handleSessionStarted = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          "Thinking...",
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
+
+    const handleThinkingEvent = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: {
+            readonly message?: unknown;
+          };
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          typeof payload.data?.message === "string" &&
+            payload.data.message.length > 0
+            ? payload.data.message
+            : "Thinking...",
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
+
+    const handleToolLifecycleEvent = (
+      event: Event,
+      resolveStatusText: (payload: {
+        readonly data?: Record<string, unknown> | undefined;
+      }) => string,
+    ): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: Record<string, unknown>;
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          resolveStatusText(payload),
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
 
     const handleAssistantMessage = (event: Event): void => {
       if (!(event instanceof MessageEvent)) {
@@ -819,10 +1108,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           return;
         }
 
+        setLiveAssistantPhase("streaming");
         setLiveAssistantText(payload.data.content);
         setLiveAssistantTimestamp(
           typeof payload.timestamp === "string" ? payload.timestamp : null,
         );
+        setLiveAssistantStatusText(null);
       } catch {
         // Ignore malformed SSE payloads.
       }
@@ -838,8 +1129,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         activeSelectedSessionEventSource = null;
         activeSelectedSessionStreamKey = null;
       }
-      setLiveAssistantText(null);
-      setLiveAssistantTimestamp(null);
+      setPreferredStreamRuntimeSessionId(null);
+      setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
+      if (liveAssistantText() === null) {
+        setLiveAssistantTimestamp(null);
+        setLiveAssistantPhase("idle");
+        setLiveAssistantStatusText(null);
+      }
 
       if (props.contextId !== null && props.projectPath.length > 0) {
         void refreshActivity(props.contextId, props.projectPath);
@@ -853,10 +1149,30 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         void refreshSelectedSessionArtifacts({
           ...detailTarget,
           appendTranscript: false,
+          preserveExistingContent: true,
         });
       }
     };
 
+    eventSource.addEventListener("connected", handleConnected);
+    eventSource.addEventListener("session_started", handleSessionStarted);
+    eventSource.addEventListener("thinking", handleThinkingEvent);
+    eventSource.addEventListener("tool_use", (event) =>
+      handleToolLifecycleEvent(event, (payload) => {
+        const toolName = payload.data?.toolName;
+        return typeof toolName === "string" && toolName.length > 0
+          ? `Using ${toolName}...`
+          : "Thinking...";
+      }),
+    );
+    eventSource.addEventListener("tool_result", (event) =>
+      handleToolLifecycleEvent(event, (payload) => {
+        const toolName = payload.data?.toolName;
+        return typeof toolName === "string" && toolName.length > 0
+          ? `Processing ${toolName} result...`
+          : "Thinking...";
+      }),
+    );
     eventSource.addEventListener("message", handleAssistantMessage);
     eventSource.addEventListener("completed", handleTerminalEvent);
     eventSource.addEventListener("cancelled", handleTerminalEvent);
@@ -900,7 +1216,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         setHistoryRequestedLimit(SESSION_HISTORY_PAGE_SIZE);
         setHistoryLoadingMore(false);
         setErrorMessage(null);
-        setSubmitResultMessage(null);
         setHistoryLoading(true);
         void refreshActivity(props.contextId, props.projectPath);
       }
@@ -926,7 +1241,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       readonly clearComposerInput: boolean;
       readonly forceNewSession?: boolean | undefined;
       readonly requestToken?: AiSessionRequestToken | undefined;
-      readonly successLabel?: string | undefined;
     },
   ): Promise<void> {
     const contextId = props.contextId;
@@ -942,7 +1256,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     }
 
     setErrorMessage(null);
-    setSubmitResultMessage(null);
     const requestToken = resolveAiSessionRequestToken({
       requestGuard: mutationRequestGuard,
       scopeKey,
@@ -984,15 +1297,47 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       if (options.clearComposerInput) {
         setPromptInput("");
       }
-      setSubmitResultMessage(
-        options.successLabel ??
-          `${runImmediately ? "Started" : "Queued"} prompt for ${
-            submitResult.sessionId
-          }.`,
-      );
       setSelectedQraftAiSessionId(submitTarget.qraftAiSessionId);
       setIsDraftComposerOpen(false);
-      await refreshActivity(contextId, projectPath);
+      setSelectedSessionError(null);
+      setOptimisticUserText(message);
+      setOptimisticUserTimestamp(new Date().toISOString());
+      setOptimisticUserAnchorIndex(selectedSessionTranscript().length);
+      setLiveAssistantText(null);
+      setLiveAssistantTimestamp(null);
+      setLiveAssistantPhase(runImmediately ? "starting" : "idle");
+      setLiveAssistantStatusText(runImmediately ? "Thinking..." : null);
+      setPreferredStreamRuntimeSessionId(
+        runImmediately ? submitResult.sessionId : null,
+      );
+      setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(
+        runImmediately ? submitTarget.qraftAiSessionId : null,
+      );
+      try {
+        const [nextActiveSessions, nextPromptQueue] = await Promise.all([
+          aiSessionsApi.fetchActiveSessions({
+            projectPath,
+          }),
+          aiSessionsApi.fetchPromptQueue({
+            projectPath,
+          }),
+        ]);
+        if (
+          mutationRequestGuard.isCurrent(requestToken) &&
+          isAiSessionScopeCurrent({
+            expectedScopeKey: scopeKey,
+            contextId: props.contextId,
+            projectPath: props.projectPath,
+          })
+        ) {
+          setActiveSessions(nextActiveSessions);
+          setPromptQueue(nextPromptQueue);
+        }
+      } catch {
+        // Keep the optimistic transcript visible even if the lightweight
+        // activity refresh fails; the full refresh below will retry.
+      }
+      void refreshActivity(contextId, projectPath);
     } catch (error) {
       if (
         !mutationRequestGuard.isCurrent(requestToken) ||
@@ -1004,6 +1349,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ) {
         return;
       }
+      setOptimisticUserText(null);
+      setOptimisticUserTimestamp(null);
+      setOptimisticUserAnchorIndex(null);
+      setPreferredStreamRuntimeSessionId(null);
+      setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to submit prompt",
       );
@@ -1031,7 +1381,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     await submitPromptMessage(promptInput().trim(), true, {
       clearComposerInput: false,
       forceNewSession: true,
-      successLabel: "Restarted the selected session from the beginning.",
     });
   }
 
@@ -1051,7 +1400,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     const requestToken = mutationRequestGuard.issue(scopeKey);
     setErrorMessage(null);
-    setSubmitResultMessage(null);
     setRunningDefaultPromptAction(action);
 
     try {
@@ -1075,12 +1423,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       await submitPromptMessage(wrappedPrompt, true, {
         clearComposerInput: false,
         requestToken,
-        successLabel:
-          action === "ai-session-purpose"
-            ? "Started the default session-purpose prompt."
-            : action === "ai-session-refresh-purpose"
-              ? "Started the default refresh-purpose prompt."
-              : "Started the default resume-session prompt.",
       });
     } catch (error) {
       if (
@@ -1135,7 +1477,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ) {
         return;
       }
-      setSubmitResultMessage("Cancelled the selected active session.");
       if (props.contextId !== null) {
         await refreshActivity(props.contextId, props.projectPath);
       }
@@ -1179,7 +1520,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ) {
         return;
       }
-      setSubmitResultMessage("Cancelled the selected queued prompt.");
       if (props.contextId !== null) {
         await refreshActivity(props.contextId, props.projectPath);
       }
@@ -1207,7 +1547,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedQraftAiSessionId(null);
     setIsDraftComposerOpen(true);
     setErrorMessage(null);
-    setSubmitResultMessage("Prepared a new AI session draft.");
   }
 
   async function runSearch(): Promise<void> {
@@ -1224,7 +1563,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setHistoryRequestedLimit(SESSION_HISTORY_PAGE_SIZE);
     setHistoryLoadingMore(false);
     setErrorMessage(null);
-    setSubmitResultMessage(null);
     setHistoryLoading(true);
     await refreshActivity(props.contextId, props.projectPath);
   }
@@ -1244,7 +1582,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     }
 
     setErrorMessage(null);
-    setSubmitResultMessage(null);
     setHistoryLoading(true);
     await refreshActivity(props.contextId, props.projectPath);
   }
@@ -1267,7 +1604,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     const requestToken = mutationRequestGuard.issue(scopeKey);
     setErrorMessage(null);
-    setSubmitResultMessage(null);
 
     try {
       await aiSessionsApi.setSessionHidden(sessionId, hidden);
@@ -1290,7 +1626,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           hidden,
         }),
       );
-      setSubmitResultMessage(createAiSessionHiddenStateMessage(hidden));
     } catch (error) {
       if (
         !canApplyAiSessionScopedRequestResult({
@@ -1452,6 +1787,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     await refreshSelectedSessionArtifacts({
       ...detailTarget,
       appendTranscript: false,
+      preserveExistingContent: true,
     });
   }
 
@@ -1562,7 +1898,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                   return;
                 }
                 setErrorMessage(null);
-                setSubmitResultMessage(null);
                 void refreshActivity(props.contextId, props.projectPath);
               }}
             >
@@ -1595,17 +1930,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                 {errorMessage()}
               </p>
             </Show>
-            <Show when={submitResultMessage() !== null}>
-              <p class="rounded-md border border-success-emphasis/30 bg-success-subtle px-3 py-2 text-sm text-success-fg">
-                {submitResultMessage()}
-              </p>
-            </Show>
           </div>
 
           <div class="min-h-0 flex-1 overflow-auto p-4">
-            <Show
-              when={historyLoading() && visibleSessionEntries().length === 0}
-            >
+            <Show when={historyLoading()}>
               <div class="flex flex-col items-center justify-center gap-3 py-16 text-text-tertiary">
                 <div class="flex items-center gap-2">
                   <span class="h-2 w-2 animate-pulse rounded-full bg-accent-emphasis" />
@@ -1620,9 +1948,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
               </div>
             </Show>
 
-            <Show
-              when={!(historyLoading() && visibleSessionEntries().length === 0)}
-            >
+            <Show when={!historyLoading()}>
               <div class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                 <button
                   type="button"
@@ -1639,6 +1965,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       describeAiSessionEntryOrigin(sessionEntry);
                     const agentLabel =
                       describeAiSessionEntryAgent(sessionEntry);
+                    const isHidden = hiddenSessionIds().includes(
+                      sessionEntry.qraftAiSessionId,
+                    );
 
                     return (
                       <SummaryCard
@@ -1656,13 +1985,15 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         topSlot={
                           <div class="flex items-start justify-between gap-3">
                             <div class="flex flex-wrap items-center gap-2">
-                              <span
-                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
-                                  sessionEntry.status,
-                                )}`}
-                              >
-                                {sessionEntry.status}
-                              </span>
+                              <Show when={sessionEntry.status !== null}>
+                                <span
+                                  class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
+                                    sessionEntry.status ?? "",
+                                  )}`}
+                                >
+                                  {sessionEntry.status}
+                                </span>
+                              </Show>
                               <Show when={originLabel !== null}>
                                 <span
                                   class={`rounded px-2 py-1 text-[10px] font-medium uppercase tracking-wide ${getSessionOriginBadgeClass(
@@ -1697,22 +2028,22 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                               </span>
                               <button
                                 type="button"
-                                class="rounded border border-border-default px-2 py-1 text-[10px] text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                                class="rounded-md border border-border-default bg-bg-secondary p-2 text-text-primary transition hover:bg-bg-hover"
+                                aria-label={
+                                  isHidden ? "Show session" : "Hide session"
+                                }
+                                title={isHidden ? "Show session" : "Hide session"}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   void toggleSessionHidden(
                                     sessionEntry.qraftAiSessionId,
-                                    hiddenSessionIds().includes(
-                                      sessionEntry.qraftAiSessionId,
-                                    ) === false,
+                                    isHidden === false,
                                   );
                                 }}
                               >
-                                {hiddenSessionIds().includes(
-                                  sessionEntry.qraftAiSessionId,
-                                )
-                                  ? "Show"
-                                  : "Hide"}
+                                <span class="block h-4 w-4">
+                                  {renderSessionVisibilityIcon(isHidden)}
+                                </span>
                               </button>
                             </div>
                           </div>
@@ -1958,7 +2289,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                               <span
                                 class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
                                   transcriptLine.role === "assistant"
-                                    ? "bg-success-muted text-success-fg"
+                                    ? transcriptLine.isThinking
+                                      ? "bg-attention-emphasis/20 text-attention-fg"
+                                      : "bg-success-muted text-success-fg"
                                     : transcriptLine.role === "system"
                                       ? "bg-attention-emphasis/20 text-attention-fg"
                                       : "bg-accent-muted text-accent-fg"

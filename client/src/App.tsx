@@ -37,6 +37,7 @@ import { SystemInfoScreen } from "./features/system-info/SystemInfoScreen";
 import { TerminalScreen } from "./features/terminal/TerminalScreen";
 import { WorkspaceShell } from "./features/workspace/WorkspaceShell";
 import { createWorkspaceViewModel } from "./features/workspace/create-workspace-view-model";
+import type { QraftAiSessionId } from "../../src/types/ai";
 
 export interface AppProps {
   readonly bootstrapState: SolidBootstrapState;
@@ -435,6 +436,7 @@ export function App(props: AppProps): JSX.Element {
           allFilesError={filesViewModel.allFilesError()}
           fileContentError={filesViewModel.fileContentError()}
           fileContent={filesViewModel.fileContent()}
+          projectPath={activeProjectPath()}
           onChangeViewMode={(mode) => {
             setActiveRoute((currentRoute) => ({
               ...currentRoute,
@@ -513,11 +515,18 @@ export function App(props: AppProps): JSX.Element {
           onSelectLine={(lineNumber) => {
             setActiveRoute((currentRoute) => ({
               ...currentRoute,
-              selectedLineNumber:
-                currentRoute.selectedLineNumber === lineNumber
-                  ? null
-                  : lineNumber,
+              selectedLineNumber: lineNumber,
             }));
+          }}
+          onOpenAiSession={(sessionId: QraftAiSessionId) => {
+            const projectSlug = activeRoute().projectSlug;
+            const baseHash =
+              projectSlug !== null
+                ? `#/${projectSlug}/ai-session`
+                : "#/ai-session";
+            window.location.hash = `${baseHash}?ai_session_id=${encodeURIComponent(
+              sessionId,
+            )}`;
           }}
         />
       );

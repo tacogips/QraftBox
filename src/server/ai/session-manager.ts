@@ -662,6 +662,17 @@ export function createSessionManager(
 
       case "activity": {
         store.updateActivity(sessionId, event.activity);
+        if (
+          typeof event.activity === "string" &&
+          event.activity.trim().length > 0
+        ) {
+          emitEvent(
+            sessionId,
+            createProgressEvent("thinking", sessionId, {
+              message: event.activity,
+            }),
+          );
+        }
         break;
       }
 

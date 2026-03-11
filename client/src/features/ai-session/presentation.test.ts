@@ -15,7 +15,10 @@ import {
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
+  mergePendingAiSessionTranscriptLines,
+  reconcileAiSessionTranscriptLines,
   mergeLiveAiSessionTranscriptLine,
+  mergeOptimisticUserTranscriptLine,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
   describeAiSessionModelProfile,
@@ -323,10 +326,14 @@ describe("ai-session presentation helpers", () => {
             text: "say hello",
             timestamp: "2026-03-11T07:40:00.000Z",
             isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
           },
         ],
         liveAssistantText: "hello",
         liveAssistantTimestamp: "2026-03-11T07:40:01.000Z",
+        liveAssistantPhase: "streaming",
+        liveAssistantStatusText: null,
       }),
     ).toEqual([
       {
@@ -335,6 +342,8 @@ describe("ai-session presentation helpers", () => {
         text: "say hello",
         timestamp: "2026-03-11T07:40:00.000Z",
         isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
       },
       {
         id: "live-assistant",
@@ -342,6 +351,8 @@ describe("ai-session presentation helpers", () => {
         text: "hello",
         timestamp: "2026-03-11T07:40:01.000Z",
         isInjectedSystemPrompt: false,
+        isLive: true,
+        isThinking: false,
       },
     ]);
 
@@ -354,10 +365,14 @@ describe("ai-session presentation helpers", () => {
             text: "hello",
             timestamp: "2026-03-11T07:40:01.000Z",
             isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
           },
         ],
         liveAssistantText: "hello",
         liveAssistantTimestamp: "2026-03-11T07:40:01.000Z",
+        liveAssistantPhase: "streaming",
+        liveAssistantStatusText: null,
       }),
     ).toEqual([
       {
@@ -366,8 +381,267 @@ describe("ai-session presentation helpers", () => {
         text: "hello",
         timestamp: "2026-03-11T07:40:01.000Z",
         isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
       },
     ]);
+  });
+
+  test("renders a thinking assistant row before streamed text arrives", () => {
+    expect(
+      mergeLiveAiSessionTranscriptLine({
+        transcriptLines: [],
+        liveAssistantText: null,
+        liveAssistantTimestamp: "2026-03-11T07:40:01.000Z",
+        liveAssistantPhase: "thinking",
+        liveAssistantStatusText: "Using apply_patch...",
+      }),
+    ).toEqual([
+      {
+        id: "live-assistant",
+        role: "assistant",
+        text: "Using apply_patch...",
+        timestamp: "2026-03-11T07:40:01.000Z",
+        isInjectedSystemPrompt: false,
+        isLive: true,
+        isThinking: true,
+      },
+    ]);
+  });
+
+  test("appends an optimistic user line until the persisted transcript catches up", () => {
+    expect(
+      mergeOptimisticUserTranscriptLine({
+        transcriptLines: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "hello",
+            timestamp: "2026-03-11T07:40:01.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+        ],
+        optimisticUserText: "follow up",
+        optimisticUserTimestamp: "2026-03-11T07:40:02.000Z",
+      }),
+    ).toEqual([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        text: "hello",
+        timestamp: "2026-03-11T07:40:01.000Z",
+        isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
+      },
+      {
+        id: "optimistic-user",
+        role: "user",
+        text: "follow up",
+        timestamp: "2026-03-11T07:40:02.000Z",
+        isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
+      },
+    ]);
+
+    expect(
+      mergeOptimisticUserTranscriptLine({
+        transcriptLines: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "hello",
+            timestamp: "2026-03-11T07:40:01.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "user-2",
+            role: "user",
+            text: "follow up",
+            timestamp: "2026-03-11T07:40:03.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+        ],
+        optimisticUserText: "follow up",
+        optimisticUserTimestamp: "2026-03-11T07:40:02.000Z",
+      }),
+    ).toEqual([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        text: "hello",
+        timestamp: "2026-03-11T07:40:01.000Z",
+        isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
+      },
+      {
+        id: "user-2",
+        role: "user",
+        text: "follow up",
+        timestamp: "2026-03-11T07:40:03.000Z",
+        isInjectedSystemPrompt: false,
+        isLive: false,
+        isThinking: false,
+      },
+    ]);
+  });
+
+  test("anchors pending transcript rows at the submit boundary", () => {
+    expect(
+      mergePendingAiSessionTranscriptLines({
+        transcriptLines: [
+          {
+            id: "user-1",
+            role: "user",
+            text: "say hello",
+            timestamp: "2026-03-11T07:39:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "Hello.",
+            timestamp: "2026-03-11T07:40:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "user-2",
+            role: "user",
+            text: "say hello again",
+            timestamp: "2026-03-11T07:40:30.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "assistant-2",
+            role: "assistant",
+            text: "Hello again.",
+            timestamp: "2026-03-11T07:40:31.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "user-3",
+            role: "user",
+            text: "say hello 222",
+            timestamp: "2026-03-11T07:41:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "assistant-3",
+            role: "assistant",
+            text: "Hello 222.",
+            timestamp: "2026-03-11T07:41:01.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+        ],
+        optimisticUserText: "say hello 333",
+        optimisticUserTimestamp: "2026-03-11T07:41:30.000Z",
+        optimisticAnchorIndex: 4,
+        liveAssistantPhase: "thinking",
+        liveAssistantText: null,
+        liveAssistantTimestamp: "2026-03-11T07:41:31.000Z",
+        liveAssistantStatusText: "Thinking...",
+      }).map((transcriptLine) => transcriptLine.id),
+    ).toEqual([
+      "user-1",
+      "assistant-1",
+      "user-2",
+      "assistant-2",
+      "optimistic-user",
+      "user-3",
+      "assistant-3",
+    ]);
+  });
+
+  test("moves the live assistant row behind the persisted user once history catches up", () => {
+    expect(
+      mergePendingAiSessionTranscriptLines({
+        transcriptLines: [
+          {
+            id: "user-1",
+            role: "user",
+            text: "say hello",
+            timestamp: "2026-03-11T07:39:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "Hello.",
+            timestamp: "2026-03-11T07:40:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "user-2",
+            role: "user",
+            text: "say hello again",
+            timestamp: "2026-03-11T07:41:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+        ],
+        optimisticUserText: "say hello again",
+        optimisticUserTimestamp: "2026-03-11T07:40:59.000Z",
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "thinking",
+        liveAssistantText: null,
+        liveAssistantTimestamp: "2026-03-11T07:41:01.000Z",
+        liveAssistantStatusText: "Thinking...",
+      }).map((transcriptLine) => transcriptLine.id),
+    ).toEqual(["user-1", "assistant-1", "user-2", "live-assistant"]);
+  });
+
+  test("preserves transcript row object identity when line content is unchanged", () => {
+    const existingLine = {
+      id: "assistant-1",
+      role: "assistant" as const,
+      text: "hello",
+      timestamp: "2026-03-11T07:40:01.000Z",
+      isInjectedSystemPrompt: false,
+      isLive: false,
+      isThinking: false,
+    };
+
+    const reconciledLines = reconcileAiSessionTranscriptLines(
+      [existingLine],
+      [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          text: "hello",
+          timestamp: "2026-03-11T07:40:01.000Z",
+          isInjectedSystemPrompt: false,
+          isLive: false,
+          isThinking: false,
+        },
+      ],
+    );
+
+    expect(reconciledLines[0]).toBe(existingLine);
   });
 
   test("resolves the correct cancellation action for active and queued entries", () => {
@@ -629,6 +903,8 @@ describe("ai-session presentation helpers", () => {
         text: "Transcript line one",
         isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:00:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
       {
         id: "evt-2",
@@ -636,6 +912,8 @@ describe("ai-session presentation helpers", () => {
         text: "[Tool: exec_command]",
         isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:01:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
     ]);
   });
@@ -671,6 +949,8 @@ describe("ai-session presentation helpers", () => {
         text: "Page two assistant line",
         isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:10:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
       {
         id: "tool_use:201",
@@ -678,6 +958,8 @@ describe("ai-session presentation helpers", () => {
         text: "[Tool: write_stdin]",
         isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:11:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
     ]);
   });
@@ -718,6 +1000,8 @@ describe("ai-session presentation helpers", () => {
         text: "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
         isInjectedSystemPrompt: true,
         timestamp: "2026-03-09T06:20:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
       {
         id: "evt-user",
@@ -725,6 +1009,8 @@ describe("ai-session presentation helpers", () => {
         text: "Continue with the UI fix",
         isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:21:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
     ]);
   });
@@ -766,6 +1052,8 @@ describe("ai-session presentation helpers", () => {
         ].join("\n"),
         isInjectedSystemPrompt: true,
         timestamp: "2026-03-11T06:27:00.000Z",
+        isLive: false,
+        isThinking: false,
       },
       {
         id: "evt-collaboration",
@@ -777,6 +1065,8 @@ describe("ai-session presentation helpers", () => {
         ].join("\n"),
         isInjectedSystemPrompt: true,
         timestamp: "2026-03-11T06:27:01.000Z",
+        isLive: false,
+        isThinking: false,
       },
     ]);
   });

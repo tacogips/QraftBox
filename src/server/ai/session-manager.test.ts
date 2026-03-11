@@ -974,6 +974,39 @@ describe("createSessionManager", () => {
       };
     }
 
+    test("emits thinking progress events for non-empty activity updates", async () => {
+      const mockRunner = createMockAgentRunner([
+        { type: "activity", activity: "Thinking..." },
+        { type: "message", role: "assistant", content: "Hello" },
+        { type: "completed", success: true, lastAssistantMessage: "Hello" },
+      ]);
+      const manager = createSessionManager(
+        DEFAULT_AI_CONFIG,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      const capturedEvents: AIProgressEvent[] = [];
+      const result = await manager.submit(createTestRequest());
+      manager.subscribe(result.sessionId, (event) => {
+        capturedEvents.push(event);
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(
+        capturedEvents.some(
+          (event) =>
+            event.type === "thinking" &&
+            "message" in event.data &&
+            event.data.message === "Thinking...",
+        ),
+      ).toBe(true);
+    });
+
     test("registers client qraft_ai_session_id mapping on first prompt detection", async () => {
       const mappingStore = createInMemorySessionMappingStore();
       const clientQraftId = "qs_client_first_prompt_1" as QraftAiSessionId;

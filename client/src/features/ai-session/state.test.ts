@@ -26,10 +26,13 @@ import {
   resolveLoadedAiSessionTranscriptEventCount,
   resolveAiSessionRequestToken,
   resolveAiSessionRuntimeSession,
+  resolveAiSessionStreamSessionId,
   resolveNextAiSessionTranscriptOffset,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   mergeAiSessionTranscriptLines,
+  shouldAutoRefreshAiSessionOverview,
   shouldShowAiSessionComposer,
   readAiSessionOverviewRouteSearchFromHash,
   replaceAiSessionOverviewRouteSearchInHash,
@@ -150,6 +153,93 @@ describe("ai-session state helpers", () => {
     ).toBeNull();
   });
 
+  test("prefers a direct submit stream session id for the selected qraft session", () => {
+    const runtimeSession = {
+      id: "qs-runtime-fallback" as QraftAiSessionId,
+      state: "running",
+      prompt: "say hello",
+      projectPath: "/tmp/repo",
+      createdAt: "2026-03-11T07:40:00.000Z",
+      context: { references: [] },
+      clientSessionId: "qs-client" as QraftAiSessionId,
+    };
+
+    expect(
+      resolveAiSessionStreamSessionId({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        runtimeSession,
+      }),
+    ).toBe(asQraftAiSessionId("qs-runtime-direct"));
+
+    expect(
+      resolveAiSessionStreamSessionId({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-other"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        runtimeSession,
+      }),
+    ).toBe(asQraftAiSessionId("qs-runtime-fallback"));
+
+    expect(
+      resolveAiSessionStreamSessionId({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-other"),
+        preferredRuntimeSessionId: null,
+        preferredRuntimeSessionOwnerQraftAiSessionId: null,
+        runtimeSession: null,
+      }),
+    ).toBeNull();
+  });
+
+  test("preserves submit-time assistant thinking state while the direct stream opens", () => {
+    expect(
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        streamSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        liveAssistantPhase: "starting",
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        streamSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        liveAssistantPhase: "thinking",
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        streamSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        liveAssistantPhase: "streaming",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        streamSessionId: asQraftAiSessionId("qs-runtime-fallback"),
+        preferredRuntimeSessionId: asQraftAiSessionId("qs-runtime-direct"),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          asQraftAiSessionId("qs-client"),
+        liveAssistantPhase: "starting",
+      }),
+    ).toBe(false);
+  });
+
   test("prefers the selected session id over the draft id", () => {
     expect(
       resolveAiSessionTargetSessionId({
@@ -178,6 +268,20 @@ describe("ai-session state helpers", () => {
       shouldShowAiSessionComposer({
         selectedQraftAiSessionId: null,
         isDraftComposerOpen: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("stops overview auto-refresh while a specific session is open", () => {
+    expect(
+      shouldAutoRefreshAiSessionOverview({
+        selectedQraftAiSessionId: null,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldAutoRefreshAiSessionOverview({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-open"),
       }),
     ).toBe(false);
   });
@@ -629,17 +733,15 @@ describe("ai-session state helpers", () => {
       createAiSessionDetailRequestKey({
         contextId: "ctx-1",
         qraftAiSessionId: asQraftAiSessionId("qs-existing"),
-        hasHistoricalSession: true,
       }),
-    ).toBe("ctx-1:qs-existing:history");
+    ).toBe("ctx-1:qs-existing");
 
     expect(
       createAiSessionDetailRequestKey({
         contextId: "ctx-1",
         qraftAiSessionId: asQraftAiSessionId("qs-existing"),
-        hasHistoricalSession: false,
       }),
-    ).toBe("ctx-1:qs-existing:live");
+    ).toBe("ctx-1:qs-existing");
   });
 
   test("omits prompt file references when no file is selected", () => {

@@ -8,6 +8,8 @@ import {
   Show,
   Switch,
 } from "solid-js";
+import { createAiCommentsApiClient } from "../../../../client-shared/src/api/ai-comments";
+import { createAiSessionsApiClient } from "../../../../client-shared/src/api/ai-sessions";
 import {
   transformToCurrentState,
   type CurrentStateLine,
@@ -35,14 +37,23 @@ import {
   type HighlightToken,
 } from "./syntax-highlighting";
 import {
+  collectFullFileLineRangeNumbers,
+  createFullFileCommentPlaceholder,
+  createFullFilePromptContext,
+  type FullFileLineRange,
+  resolveFullFileLineRange,
+} from "./full-file-ai";
+import {
   shouldShowAllFilesFilters,
   shouldShowDiffDirectoryControls,
   shouldShowFileTreeModeControls,
 } from "./file-tree-visibility";
+import { generateQraftAiSessionId } from "../../../../src/types/ai";
 
 export interface DiffScreenProps {
   readonly apiBaseUrl: string;
   readonly contextId: string | null;
+  readonly projectPath: string;
   readonly diffOverview: DiffOverviewState;
   readonly selectedPath: string | null;
   readonly supportsDiff: boolean;
@@ -64,7 +75,7 @@ export interface DiffScreenProps {
   readonly selectedLineNumber: number | null;
   onChangeViewMode(mode: DiffViewMode): void;
   onSelectPath(path: string): void;
-  onSelectLine(lineNumber: number): void;
+  onSelectLine(lineNumber: number | null): void;
   onChangeFileTreeMode(mode: FileTreeMode): void;
   onToggleDirectory(path: string): void;
   onExpandAllDirectories(): void;
@@ -72,6 +83,7 @@ export interface DiffScreenProps {
   onToggleShowIgnored(value: boolean): void;
   onToggleShowAllFiles(value: boolean): void;
   onReload(): void;
+  onOpenAiSession(sessionId: string): void;
 }
 
 interface SideBySideChangeRow {
@@ -843,6 +855,12 @@ function renderHighlightedTextLine(props: {
 }
 
 export function DiffScreen(props: DiffScreenProps): JSX.Element {
+  const aiCommentsApi = createAiCommentsApiClient({
+    apiBaseUrl: props.apiBaseUrl,
+  });
+  const aiSessionsApi = createAiSessionsApiClient({
+    apiBaseUrl: props.apiBaseUrl,
+  });
   const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
   const [highlightedFullFileLines, setHighlightedFullFileLines] = createSignal<
     readonly (readonly HighlightToken[])[]
@@ -853,6 +871,18 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const [afterHighlightedLines, setAfterHighlightedLines] = createSignal<
     readonly (readonly HighlightToken[])[]
   >([]);
+  const [activeFullFileRange, setActiveFullFileRange] =
+    createSignal<FullFileLineRange | null>(null);
+  const [fullFilePromptInput, setFullFilePromptInput] = createSignal("");
+  const [fullFileQueuedNoticeOpen, setFullFileQueuedNoticeOpen] =
+    createSignal(false);
+  const [fullFileSubmitNoticeSessionId, setFullFileSubmitNoticeSessionId] =
+    createSignal<string | null>(null);
+  const [fullFileInlineError, setFullFileInlineError] = createSignal<
+    string | null
+  >(null);
+  const [fullFileMutationPending, setFullFileMutationPending] =
+    createSignal(false);
   let previewContainerElement: HTMLDivElement | undefined;
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
@@ -913,6 +943,18 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     return transformToCurrentState(diffFile);
   };
   const fullFileLines = () => splitFileContentLines(props.fileContent);
+  const fullFileRangeLineNumbers = () =>
+    collectFullFileLineRangeNumbers(activeFullFileRange());
+  const fullFileCommentPlaceholder = () =>
+    createFullFileCommentPlaceholder(
+      props.fileContent?.path ?? selectedPreviewPath() ?? "",
+      activeFullFileRange(),
+    );
+  const canUseFullFileInlineActions = () =>
+    props.projectPath.trim().length > 0 &&
+    props.fileContent !== null &&
+    props.fileContent.isBinary !== true &&
+    effectiveViewMode() === "full-file";
   const highlightedBeforeLine = (lineNumber: number | undefined) =>
     lineNumber !== undefined
       ? (beforeHighlightedLines()[lineNumber - 1] ?? null)
@@ -929,6 +971,96 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
           props.fileContent.path,
         )
       : null;
+
+  function resetFullFileInlineUi(clearSelectedLine: boolean): void {
+    setActiveFullFileRange(null);
+    setFullFilePromptInput("");
+    setFullFileQueuedNoticeOpen(false);
+    setFullFileSubmitNoticeSessionId(null);
+    setFullFileInlineError(null);
+    if (clearSelectedLine) {
+      props.onSelectLine(null);
+    }
+  }
+
+  function handleFullFileRangeSelection(
+    lineNumber: number,
+    extendRange: boolean,
+  ): void {
+    const nextRange = resolveFullFileLineRange({
+      currentRange: activeFullFileRange(),
+      lineNumber,
+      extendRange,
+    });
+    setActiveFullFileRange(nextRange);
+    setFullFileQueuedNoticeOpen(false);
+    setFullFileSubmitNoticeSessionId(null);
+    setFullFileInlineError(null);
+    props.onSelectLine(nextRange.endLine);
+  }
+
+  async function submitFullFileComment(immediate: boolean): Promise<void> {
+    const fileContent = props.fileContent;
+    const activeRange = activeFullFileRange();
+    const prompt = fullFilePromptInput().trim();
+
+    if (
+      fileContent === null ||
+      fileContent.isBinary === true ||
+      activeRange === null ||
+      props.projectPath.trim().length === 0
+    ) {
+      return;
+    }
+
+    if (prompt.length === 0) {
+      setFullFileInlineError("Prompt text is required.");
+      return;
+    }
+
+    setFullFileMutationPending(true);
+    setFullFileInlineError(null);
+
+    try {
+      if (immediate) {
+        const submitResult = await aiSessionsApi.submitPrompt({
+          runImmediately: true,
+          message: prompt,
+          projectPath: props.projectPath,
+          qraftAiSessionId: generateQraftAiSessionId(),
+          forceNewSession: true,
+          context: createFullFilePromptContext({
+            fileContent,
+            range: activeRange,
+          }),
+        });
+        setFullFileSubmitNoticeSessionId(submitResult.sessionId);
+        setFullFileQueuedNoticeOpen(false);
+      } else {
+        await aiCommentsApi.addComment({
+          projectPath: props.projectPath,
+          filePath: fileContent.path,
+          startLine: activeRange.startLine,
+          endLine: activeRange.endLine,
+          side: "new",
+          source: "full-file",
+          prompt,
+        });
+        setFullFileQueuedNoticeOpen(true);
+        setFullFileSubmitNoticeSessionId(null);
+      }
+
+      setFullFilePromptInput("");
+    } catch (error) {
+      setFullFileInlineError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit the inline action.",
+      );
+    } finally {
+      setFullFileMutationPending(false);
+    }
+  }
 
   createEffect(() => {
     const fileContent = props.fileContent;
@@ -1071,14 +1203,22 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   });
 
   createEffect(() => {
+    effectiveViewMode();
+    props.fileContent?.path;
+    resetFullFileInlineUi(false);
+  });
+
+  createEffect(() => {
     const selectedLineNumber = props.selectedLineNumber;
-    if (selectedLineNumber === null) {
+    const targetLineNumber =
+      activeFullFileRange()?.endLine ?? selectedLineNumber;
+    if (targetLineNumber === null) {
       return;
     }
 
     const selectedLineElement =
       previewContainerElement?.querySelector<HTMLElement>(
-        `[data-qraftbox-line="${selectedLineNumber}"]`,
+        `[data-qraftbox-line="${targetLineNumber}"]`,
       );
     selectedLineElement?.scrollIntoView({
       block: "center",
@@ -1793,45 +1933,233 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                               >
                                 <For each={highlightedFullFileLines()}>
                                   {(lineTokens, lineIndex) => (
-                                    <div
-                                      data-qraftbox-line={lineIndex() + 1}
-                                      class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
-                                        lineIndex() + 1 ===
-                                          props.selectedLineNumber,
-                                      )}`}
-                                      onClick={() =>
-                                        props.onSelectLine(lineIndex() + 1)
-                                      }
-                                    >
-                                      <div class="px-4 py-1 text-right text-text-tertiary">
-                                        {lineIndex() + 1}
+                                    <>
+                                      <div
+                                        data-qraftbox-line={lineIndex() + 1}
+                                        class={`group/line grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
+                                          lineIndex() + 1 ===
+                                            props.selectedLineNumber,
+                                        )} ${
+                                          fullFileRangeLineNumbers().includes(
+                                            lineIndex() + 1,
+                                          )
+                                            ? "bg-accent-muted/10"
+                                            : ""
+                                        }`}
+                                        onClick={() =>
+                                          props.onSelectLine(lineIndex() + 1)
+                                        }
+                                      >
+                                        <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                          <Show
+                                            when={canUseFullFileInlineActions()}
+                                          >
+                                            <button
+                                              type="button"
+                                              class="absolute left-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-accent-emphasis text-[11px] font-semibold text-text-on-emphasis opacity-0 transition group-hover/line:opacity-100 hover:brightness-110"
+                                              aria-label={`Add comment on line ${
+                                                lineIndex() + 1
+                                              }`}
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                                handleFullFileRangeSelection(
+                                                  lineIndex() + 1,
+                                                  event.shiftKey,
+                                                );
+                                              }}
+                                            >
+                                              +
+                                            </button>
+                                          </Show>
+                                          <button
+                                            type="button"
+                                            class="rounded px-1 transition hover:bg-bg-hover"
+                                            aria-label={`Select line ${
+                                              lineIndex() + 1
+                                            } for AI prompt`}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              handleFullFileRangeSelection(
+                                                lineIndex() + 1,
+                                                event.shiftKey,
+                                              );
+                                            }}
+                                          >
+                                            {lineIndex() + 1}
+                                          </button>
+                                        </div>
+                                        <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                          <Show
+                                            when={lineTokens.length > 0}
+                                            fallback={" "}
+                                          >
+                                            <For each={lineTokens}>
+                                              {(lineToken) => (
+                                                <span
+                                                  class={lineToken.className}
+                                                  style={
+                                                    lineToken.color !==
+                                                    undefined
+                                                      ? {
+                                                          color:
+                                                            lineToken.color,
+                                                        }
+                                                      : undefined
+                                                  }
+                                                >
+                                                  {lineToken.text.length > 0
+                                                    ? lineToken.text
+                                                    : " "}
+                                                </span>
+                                              )}
+                                            </For>
+                                          </Show>
+                                        </div>
                                       </div>
-                                      <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                        <Show
-                                          when={lineTokens.length > 0}
-                                          fallback={" "}
-                                        >
-                                          <For each={lineTokens}>
-                                            {(lineToken) => (
-                                              <span
-                                                class={lineToken.className}
-                                                style={
-                                                  lineToken.color !== undefined
-                                                    ? {
-                                                        color: lineToken.color,
-                                                      }
-                                                    : undefined
+                                      <Show
+                                        when={
+                                          activeFullFileRange()?.endLine ===
+                                          lineIndex() + 1
+                                        }
+                                      >
+                                        <div class="border-y-2 border-accent-emphasis/60 bg-bg-secondary px-4 py-3">
+                                          <textarea
+                                            class="min-h-28 w-full resize-y rounded-xl border border-border-default bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
+                                            placeholder={fullFileCommentPlaceholder()}
+                                            value={fullFilePromptInput()}
+                                            onInput={(event) => {
+                                              setFullFilePromptInput(
+                                                event.currentTarget.value,
+                                              );
+                                              if (
+                                                fullFileInlineError() !== null
+                                              ) {
+                                                setFullFileInlineError(null);
+                                              }
+                                            }}
+                                            onKeyDown={(event) => {
+                                              if (
+                                                event.key === "Enter" &&
+                                                (event.ctrlKey || event.metaKey)
+                                              ) {
+                                                event.preventDefault();
+                                                void submitFullFileComment(
+                                                  false,
+                                                );
+                                              }
+
+                                              if (event.key === "Escape") {
+                                                event.preventDefault();
+                                                resetFullFileInlineUi(true);
+                                              }
+                                            }}
+                                          />
+                                          <div class="mt-3 flex flex-wrap items-center gap-2">
+                                            <button
+                                              type="button"
+                                              class="rounded-md bg-success-emphasis px-3 py-1.5 text-xs font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                                              disabled={
+                                                fullFilePromptInput().trim()
+                                                  .length === 0 ||
+                                                fullFileMutationPending()
+                                              }
+                                              onClick={() =>
+                                                void submitFullFileComment(
+                                                  false,
+                                                )
+                                              }
+                                            >
+                                              Add comment
+                                            </button>
+                                            <button
+                                              type="button"
+                                              class="rounded-md border border-accent-emphasis/40 bg-accent-muted/20 px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-muted/35 disabled:cursor-not-allowed disabled:opacity-50"
+                                              disabled={
+                                                fullFilePromptInput().trim()
+                                                  .length === 0 ||
+                                                fullFileMutationPending()
+                                              }
+                                              onClick={() =>
+                                                void submitFullFileComment(true)
+                                              }
+                                            >
+                                              Start AI session
+                                            </button>
+                                            <button
+                                              type="button"
+                                              class="px-2 py-1 text-xs text-text-secondary transition hover:text-text-primary"
+                                              disabled={fullFileMutationPending()}
+                                              onClick={() =>
+                                                resetFullFileInlineUi(true)
+                                              }
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                          <Show
+                                            when={
+                                              fullFileInlineError() !== null
+                                            }
+                                          >
+                                            <div class="mt-3 rounded-lg border border-danger-emphasis/40 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
+                                              {fullFileInlineError()}
+                                            </div>
+                                          </Show>
+                                          <Show
+                                            when={
+                                              fullFileSubmitNoticeSessionId() !==
+                                              null
+                                            }
+                                          >
+                                            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-emphasis/40 bg-accent-muted/10 px-3 py-2 text-xs text-text-secondary">
+                                              <span>AI session submitted.</span>
+                                              <div class="flex items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  class="text-accent-fg underline underline-offset-2 transition hover:opacity-80"
+                                                  onClick={() =>
+                                                    props.onOpenAiSession(
+                                                      fullFileSubmitNoticeSessionId()!,
+                                                    )
+                                                  }
+                                                >
+                                                  Open session
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  class="text-text-secondary transition hover:text-text-primary"
+                                                  onClick={() =>
+                                                    resetFullFileInlineUi(true)
+                                                  }
+                                                >
+                                                  Close
+                                                </button>
+                                              </div>
+                                            </div>
+                                          </Show>
+                                          <Show
+                                            when={fullFileQueuedNoticeOpen()}
+                                          >
+                                            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success-emphasis/40 bg-success-muted/10 px-3 py-2 text-xs text-success-fg">
+                                              <span>
+                                                Comment added to queue.
+                                              </span>
+                                              <button
+                                                type="button"
+                                                class="text-text-secondary transition hover:text-text-primary"
+                                                onClick={() =>
+                                                  setFullFileQueuedNoticeOpen(
+                                                    false,
+                                                  )
                                                 }
                                               >
-                                                {lineToken.text.length > 0
-                                                  ? lineToken.text
-                                                  : " "}
-                                              </span>
-                                            )}
-                                          </For>
-                                        </Show>
-                                      </div>
-                                    </div>
+                                                Close
+                                              </button>
+                                            </div>
+                                          </Show>
+                                        </div>
+                                      </Show>
+                                    </>
                                   )}
                                 </For>
                               </Show>
