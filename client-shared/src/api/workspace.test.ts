@@ -4,6 +4,7 @@ import {
   closeWorkspaceTab,
   createWorkspaceApiClient,
   fetchRecentProjects,
+  pickDirectory,
   fetchWorkspaceShellState,
   fetchWorkspaceSnapshot,
   openWorkspaceTab,
@@ -247,6 +248,43 @@ describe("shared workspace api", () => {
         },
       },
     });
+  });
+
+  test("opens the directory picker with the requested start path", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "/repos/selected",
+        }),
+      ),
+    );
+
+    await expect(
+      pickDirectory("/repos/current", fetchImplementation),
+    ).resolves.toBe("/repos/selected");
+
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "/api/browse/pick-directory",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startPath: "/repos/current" }),
+      },
+    );
+  });
+
+  test("supports a cancelled directory picker response", async () => {
+    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: null,
+        }),
+      ),
+    );
+
+    await expect(pickDirectory(undefined, fetchImplementation)).resolves.toBe(
+      null,
+    );
   });
 
   test("opens a workspace tab by slug and uses server error messages", async () => {

@@ -77,6 +77,20 @@ function renderClearIcon(): JSX.Element {
   );
 }
 
+function renderCloseIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="m5 5 10 10" stroke-linecap="round" />
+      <path d="M15 5 5 15" stroke-linecap="round" />
+    </svg>
+  );
+}
+
 function getCommitFileStatusClass(status: string): string {
   if (status === "Added") {
     return "border border-success-emphasis/30 bg-success-muted/15 text-success-fg";
@@ -550,10 +564,12 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                     </div>
                     <button
                       type="button"
-                      class="rounded-md border border-border-default px-3 py-2 text-sm text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
+                      class="rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
+                      aria-label="Close"
+                      title="Close"
                       onClick={dismissCommitDetail}
                     >
-                      Close
+                      <span class="block h-5 w-5">{renderCloseIcon()}</span>
                     </button>
                   </div>
 

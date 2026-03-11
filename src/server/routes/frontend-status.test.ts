@@ -100,7 +100,10 @@ describe("GET /api/frontend-status", () => {
   test("detects repo-local verification markers from a source checkout", () => {
     const cwd = mkdtempSync(join(tmpdir(), "qraftbox-frontend-status-"));
     createdDirs.push(cwd);
-    writeFileSync(join(cwd, "package.json"), JSON.stringify({ name: "qraftbox" }));
+    writeFileSync(
+      join(cwd, "package.json"),
+      JSON.stringify({ name: "qraftbox" }),
+    );
     mkdirSync(join(cwd, "client"), { recursive: true });
     writeFileSync(
       join(cwd, "client", "package.json"),
@@ -143,7 +146,9 @@ describe("GET /api/frontend-status", () => {
   });
 
   test("detects repo-local support facts from a resolved source root even when cwd is unrelated", () => {
-    const repoRoot = mkdtempSync(join(tmpdir(), "qraftbox-frontend-status-repo-"));
+    const repoRoot = mkdtempSync(
+      join(tmpdir(), "qraftbox-frontend-status-repo-"),
+    );
     const unrelatedCwd = mkdtempSync(
       join(tmpdir(), "qraftbox-frontend-status-unrelated-"),
     );
@@ -167,9 +172,7 @@ describe("GET /api/frontend-status", () => {
     process.chdir(unrelatedCwd);
 
     try {
-      expect(
-        detectSolidSupportStatus({ searchRoots: [repoRoot] }),
-      ).toEqual(
+      expect(detectSolidSupportStatus({ searchRoots: [repoRoot] })).toEqual(
         expect.objectContaining({
           hasSourceCheckout: true,
           hasClientSolidDependencies: true,
@@ -183,7 +186,9 @@ describe("GET /api/frontend-status", () => {
   });
 
   test("walks upward from nested search roots to find the source checkout", () => {
-    const repoRoot = mkdtempSync(join(tmpdir(), "qraftbox-frontend-status-repo-"));
+    const repoRoot = mkdtempSync(
+      join(tmpdir(), "qraftbox-frontend-status-repo-"),
+    );
     const nestedRuntimeDir = join(repoRoot, "dist", "server", "routes");
     createdDirs.push(repoRoot);
 

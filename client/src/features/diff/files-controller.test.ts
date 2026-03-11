@@ -101,7 +101,7 @@ describe("createFilesController", () => {
     );
   });
 
-  test("loads file content for diff-backed paths outside full-file mode", async () => {
+  test("does not load file content for diff-backed paths outside full-file mode", async () => {
     let fetchFileContentCalls = 0;
     const filesApiClient: FilesApiClient = {
       fetchAllFilesTree: async () => ({
@@ -135,14 +135,9 @@ describe("createFilesController", () => {
       preferredViewMode: "side-by-side",
     });
 
-    expect(fetchFileContentCalls).toBe(1);
+    expect(fetchFileContentCalls).toBe(0);
     expect(filesController.getState().selectedPath).toBe("src/main.ts");
-    expect(filesController.getState().fileContent).toEqual({
-      path: "src/main.ts",
-      content: "diff-backed body",
-      language: "typescript",
-      mimeType: "text/typescript",
-    });
+    expect(filesController.getState().fileContent).toBeNull();
   });
 
   test("marks the all-files tree stale and refreshes it on demand", async () => {
@@ -183,6 +178,81 @@ describe("createFilesController", () => {
 
     expect(fetchCount).toBe(2);
     expect(filesController.getState().isAllFilesTreeStale).toBeFalse();
+  });
+
+  test("does not keep diff-only expanded folders when switching to all-files mode", async () => {
+    const filesApiClient: FilesApiClient = {
+      fetchAllFilesTree: async () => ({
+        tree: {
+          name: "",
+          path: "",
+          isDirectory: true,
+          children: [
+            {
+              name: "client",
+              path: "client",
+              isDirectory: true,
+            },
+          ],
+        },
+        totalFiles: 1,
+        changedFiles: 1,
+      }),
+      fetchDirectoryChildren: async (contextId, directoryPath) => [
+        {
+          name: "src",
+          path: `${directoryPath}/src`,
+          isDirectory: true,
+        },
+      ],
+      fetchFileContent: async (_contextId, filePath) => ({
+        path: filePath,
+        content: filePath,
+        language: "typescript",
+      }),
+    };
+    const filesController = createFilesController({ filesApiClient });
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "client/src/app/route-sync.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      "client/src/app/route-sync.ts",
+    );
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-all-mode-toggle",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+
+    expect(Array.from(filesController.getState().expandedPaths)).toEqual([
+      "client",
+      "client/src",
+      "client/src/app",
+    ]);
+
+    await filesController.setFileTreeMode("ctx-all-mode-toggle", "all");
+
+    expect(Array.from(filesController.getState().expandedPaths)).toEqual([]);
+
+    await filesController.toggleDirectory("ctx-all-mode-toggle", "client");
+
+    expect(Array.from(filesController.getState().expandedPaths)).toEqual([
+      "client",
+    ]);
+    expect(
+      filesController.getState().allFilesTree?.children?.[0]?.children?.[0]
+        ?.path,
+    ).toBe("client/src");
   });
 
   test("clears stale all-files state immediately when switching contexts", async () => {
@@ -296,6 +366,56 @@ describe("createFilesController", () => {
     expect(filesController.getState().fileContent?.path).toBe("src/main.ts");
   });
 
+  test("expands all diff directories when entering the files screen from ai-session", async () => {
+    const filesController = createFilesController();
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "src/nested/main.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+        {
+          path: "docs/guides/setup.md",
+          status: "added",
+          additions: 8,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      "src/nested/main.ts",
+    );
+
+    await filesController.synchronize({
+      screen: "ai-session",
+      activeContextId: "ctx-enter-files",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+    await filesController.toggleDirectory("ctx-enter-files", "docs");
+
+    expect(Array.from(filesController.getState().expandedPaths).sort()).toEqual(
+      ["docs/guides", "src", "src/nested"],
+    );
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-enter-files",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+
+    expect(Array.from(filesController.getState().expandedPaths).sort()).toEqual(
+      ["docs", "docs/guides", "src", "src/nested"],
+    );
+  });
+
   test("auto-expands ancestor directories for the selected diff file", async () => {
     const filesController = createFilesController();
 
@@ -323,6 +443,148 @@ describe("createFilesController", () => {
       "src",
       "src/nested",
     ]);
+  });
+
+  test("expands all diff directories by default on first synchronize", async () => {
+    const filesController = createFilesController();
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-expand-all",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview: createDiffOverviewState(
+        [
+          {
+            path: "src/nested/main.ts",
+            status: "modified",
+            additions: 1,
+            deletions: 0,
+            chunks: [],
+            isBinary: false,
+          },
+          {
+            path: "docs/guides/setup.md",
+            status: "added",
+            additions: 8,
+            deletions: 0,
+            chunks: [],
+            isBinary: false,
+          },
+        ],
+        "src/nested/main.ts",
+      ),
+      preferredViewMode: "side-by-side",
+    });
+
+    expect(Array.from(filesController.getState().expandedPaths).sort()).toEqual(
+      ["docs", "docs/guides", "src", "src/nested"],
+    );
+  });
+
+  test("preserves manual diff directory collapse across synchronize when selection is unchanged", async () => {
+    const filesController = createFilesController();
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "src/nested/main.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      "src/nested/main.ts",
+    );
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-collapse-persist",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+
+    await filesController.toggleDirectory("ctx-collapse-persist", "src");
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-collapse-persist",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+
+    expect(Array.from(filesController.getState().expandedPaths)).toEqual([
+      "src/nested",
+    ]);
+  });
+
+  test("expands every diff directory when expand-all is requested", async () => {
+    const filesController = createFilesController();
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "src/nested/main.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+        {
+          path: "docs/guides/setup.md",
+          status: "added",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      "src/nested/main.ts",
+    );
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-expand-command",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview,
+      preferredViewMode: "side-by-side",
+    });
+    await filesController.toggleDirectory("ctx-expand-command", "src");
+
+    filesController.expandAllDirectories();
+
+    expect(Array.from(filesController.getState().expandedPaths).sort()).toEqual(
+      ["docs", "docs/guides", "src", "src/nested"],
+    );
+  });
+
+  test("clears all expanded diff directories when collapse-all is requested", async () => {
+    const filesController = createFilesController();
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-collapse-command",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview: createDiffOverviewState(
+        [
+          {
+            path: "src/nested/main.ts",
+            status: "modified",
+            additions: 1,
+            deletions: 0,
+            chunks: [],
+            isBinary: false,
+          },
+        ],
+        "src/nested/main.ts",
+      ),
+      preferredViewMode: "side-by-side",
+    });
+
+    filesController.collapseAllDirectories();
+
+    expect(Array.from(filesController.getState().expandedPaths)).toEqual([]);
   });
 
   test("ignores a stale all-files tree response after switching contexts", async () => {

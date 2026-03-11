@@ -6,7 +6,9 @@ import {
 
 describe("browser verification scenarios", () => {
   test("lists the shared workspace and diff browser scenarios", () => {
-    expect(listBrowserVerificationScenarios().map((scenario) => scenario.id)).toEqual([
+    expect(
+      listBrowserVerificationScenarios().map((scenario) => scenario.id),
+    ).toEqual([
       "workspace-shared-git-state",
       "diff-shared-git-state",
       "diff-shared-non-git-state",
@@ -21,7 +23,9 @@ describe("browser verification scenarios", () => {
   });
 
   test("resolves the non-git diff scenario with request guards", () => {
-    expect(resolveBrowserVerificationScenario("diff-shared-non-git-state")).toEqual(
+    expect(
+      resolveBrowserVerificationScenario("diff-shared-non-git-state"),
+    ).toEqual(
       expect.objectContaining({
         routeHash: "#/files",
         workspaceKind: "non-git",

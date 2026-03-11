@@ -377,14 +377,18 @@ describe("screen registry", () => {
       hasRecordedBrowserVerification: true,
     }).map((blocker) => blocker.id);
 
-    expect(blockerIds).not.toContain("files-parity-browser-verification-pending");
+    expect(blockerIds).not.toContain(
+      "files-parity-browser-verification-pending",
+    );
     expect(blockerIds).toContain("ai-session-browser-verification-pending");
     expect(blockerIds).toContain("commits-browser-verification-pending");
     expect(blockerIds).toContain("terminal-browser-verification-pending");
     expect(blockerIds).toContain("system-info-browser-verification-pending");
     expect(blockerIds).toContain("notifications-browser-verification-pending");
     expect(blockerIds).toContain("model-profiles-browser-verification-pending");
-    expect(blockerIds).toContain("action-defaults-browser-verification-pending");
+    expect(blockerIds).toContain(
+      "action-defaults-browser-verification-pending",
+    );
   });
 
   test("keeps files parity blockers visible when browser markers are not applicable", () => {

@@ -171,10 +171,10 @@ export function createAIRoutes(context: AIServerContext): Hono {
     const projectPath = c.req.query("projectPath");
     const prompts = context.sessionManager
       .getPromptQueue(
-      typeof worktreeId === "string" && worktreeId.length > 0
-        ? (worktreeId as WorktreeId)
-        : undefined,
-    )
+        typeof worktreeId === "string" && worktreeId.length > 0
+          ? (worktreeId as WorktreeId)
+          : undefined,
+      )
       .filter((prompt) =>
         typeof projectPath === "string" && projectPath.length > 0
           ? prompt.project_path === projectPath

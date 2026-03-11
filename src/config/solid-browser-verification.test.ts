@@ -49,9 +49,9 @@ describe("solid browser verification", () => {
   });
 
   test("rejects unknown arguments", () => {
-    expect(() =>
-      parseBrowserVerificationCliArgs(["--unknown-flag"]),
-    ).toThrow("Unknown argument: --unknown-flag");
+    expect(() => parseBrowserVerificationCliArgs(["--unknown-flag"])).toThrow(
+      "Unknown argument: --unknown-flag",
+    );
   });
 
   test("builds a filtered agent-browser environment without secret-like vars", () => {
@@ -118,7 +118,13 @@ describe("solid browser verification", () => {
         "open",
         "http://localhost:7001#/project",
       ],
-      ["--session", "qraftbox-migration-svelte", "wait", "--load", "networkidle"],
+      [
+        "--session",
+        "qraftbox-migration-svelte",
+        "wait",
+        "--load",
+        "networkidle",
+      ],
       ["--session", "qraftbox-migration-svelte", "get", "text", "body"],
       ["--session", "qraftbox-migration-svelte", "snapshot", "-i"],
       ["--session", "qraftbox-migration-svelte", "screenshot", "--full"],
@@ -128,7 +134,13 @@ describe("solid browser verification", () => {
         "open",
         "http://localhost:7001#/files",
       ],
-      ["--session", "qraftbox-migration-svelte", "wait", "--load", "networkidle"],
+      [
+        "--session",
+        "qraftbox-migration-svelte",
+        "wait",
+        "--load",
+        "networkidle",
+      ],
       ["--session", "qraftbox-migration-svelte", "get", "text", "body"],
       ["--session", "qraftbox-migration-svelte", "snapshot", "-i"],
       ["--session", "qraftbox-migration-svelte", "screenshot", "--full"],
@@ -139,7 +151,13 @@ describe("solid browser verification", () => {
         "open",
         "http://localhost:7002#/project",
       ],
-      ["--session", "qraftbox-migration-solid", "wait", "--load", "networkidle"],
+      [
+        "--session",
+        "qraftbox-migration-solid",
+        "wait",
+        "--load",
+        "networkidle",
+      ],
       ["--session", "qraftbox-migration-solid", "get", "text", "body"],
       ["--session", "qraftbox-migration-solid", "snapshot", "-i"],
       ["--session", "qraftbox-migration-solid", "screenshot", "--full"],
@@ -149,7 +167,13 @@ describe("solid browser verification", () => {
         "open",
         "http://localhost:7002#/files",
       ],
-      ["--session", "qraftbox-migration-solid", "wait", "--load", "networkidle"],
+      [
+        "--session",
+        "qraftbox-migration-solid",
+        "wait",
+        "--load",
+        "networkidle",
+      ],
       ["--session", "qraftbox-migration-solid", "get", "text", "body"],
       ["--session", "qraftbox-migration-solid", "snapshot", "-i"],
       ["--session", "qraftbox-migration-solid", "screenshot", "--full"],

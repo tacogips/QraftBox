@@ -1,9 +1,4 @@
-import {
-  mkdtempSync,
-  mkdirSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, test } from "bun:test";
@@ -127,6 +122,8 @@ describe("frontend config", () => {
 
     const resolvedAssets = requireFrontendAssets("solid");
     expect(resolvedAssets.assetRoot).toBe(solidAssetDir);
-    expect(resolvedAssets.source).toBe("QRAFTBOX_CLIENT_DIR environment variable");
+    expect(resolvedAssets.source).toBe(
+      "QRAFTBOX_CLIENT_DIR environment variable",
+    );
   });
 });

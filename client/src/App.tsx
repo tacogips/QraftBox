@@ -16,6 +16,7 @@ import {
 import { getActiveWorkspaceTab } from "../../client-shared/src/contracts/workspace";
 import type { SolidBootstrapState } from "./app/bootstrap-state";
 import { createScreenNavigationItems } from "./app/navigation";
+import { resolveUiSynchronizedRouteState } from "./app/route-sync";
 import { getSolidScreenDefinition } from "./app/screen-registry";
 import { ActionDefaultsScreen } from "./features/model-config/ActionDefaultsScreen";
 import { AiSessionScreen } from "./features/ai-session/AiSessionScreen";
@@ -26,7 +27,10 @@ import { DiffScreen } from "./features/diff/DiffScreen";
 import { createDiffRealtimeController } from "./features/diff/realtime";
 import { refreshFilesScreenFromRealtime } from "./features/diff/realtime-refresh";
 import { createGitStateRefreshController } from "./features/diff/git-state-refresh";
-import { resolveViewModeForFileTreeModeChange } from "./features/diff/screen-state";
+import {
+  resolveViewModeForFileTreeModeChange,
+  resolveViewModeForPathSelection,
+} from "./features/diff/screen-state";
 import { CommitsScreen } from "./features/commits/CommitsScreen";
 import { NotificationsScreen } from "./features/notifications/NotificationsScreen";
 import { SystemInfoScreen } from "./features/system-info/SystemInfoScreen";
@@ -76,6 +80,7 @@ function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
     left.contextId === right.contextId &&
     left.selectedPath === right.selectedPath &&
     left.selectedViewMode === right.selectedViewMode &&
+    left.fileTreeMode === right.fileTreeMode &&
     left.selectedLineNumber === right.selectedLineNumber
   );
 }
@@ -146,6 +151,7 @@ export function App(props: AppProps): JSX.Element {
         {
           selectedPath: nextRoute.selectedPath,
           selectedViewMode: nextRoute.selectedViewMode,
+          fileTreeMode: nextRoute.fileTreeMode,
           selectedLineNumber: nextRoute.selectedLineNumber,
         },
       );
@@ -280,6 +286,20 @@ export function App(props: AppProps): JSX.Element {
       return;
     }
 
+    const routeFileTreeMode = activeRoute().fileTreeMode;
+    if (
+      routeFileTreeMode !== null &&
+      routeFileTreeMode !== filesViewModel.fileTreeMode()
+    ) {
+      void filesViewModel.setFileTreeMode(activeContextId(), routeFileTreeMode);
+    }
+  });
+
+  createEffect(() => {
+    if (activeRoute().screen !== "files") {
+      return;
+    }
+
     const routeSelectedPath = activeRoute().selectedPath;
     if (
       routeSelectedPath === null ||
@@ -296,38 +316,40 @@ export function App(props: AppProps): JSX.Element {
       diffViewModel.selectPath(activeContextId(), routeSelectedPath);
     }
 
+    const nextViewMode = resolveViewModeForPathSelection({
+      selectedPath: routeSelectedPath,
+      diffOverview: diffViewModel.diffOverview(),
+      preferredViewMode: diffViewModel.preferredViewMode(),
+    });
+    if (nextViewMode !== diffViewModel.preferredViewMode()) {
+      diffViewModel.setPreferredViewMode(nextViewMode);
+    }
+
     void filesViewModel.selectPath(activeContextId(), routeSelectedPath);
   });
 
   createEffect(() => {
     const currentRoute = activeRoute();
-    const nextRoute: ScreenRouteState =
-      currentRoute.screen === "files"
-        ? {
-            ...currentRoute,
-            selectedPath:
-              filesViewModel.selectedPath() ?? currentRoute.selectedPath,
-            selectedViewMode:
-              currentRoute.selectedViewMode !== null &&
-              currentRoute.selectedViewMode !==
-                diffViewModel.preferredViewMode()
-                ? currentRoute.selectedViewMode
-                : diffViewModel.preferredViewMode(),
-          }
-        : {
-            ...currentRoute,
-            selectedPath: null,
-            selectedViewMode: null,
-            selectedLineNumber: null,
-          };
+    const nextRoute = resolveUiSynchronizedRouteState({
+      currentRoute,
+      filesSelectedPath: filesViewModel.selectedPath(),
+      preferredViewMode: diffViewModel.preferredViewMode(),
+      fileTreeMode: filesViewModel.fileTreeMode(),
+      activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
+    });
 
     if (sameRoute(currentRoute, nextRoute)) {
+      if (currentRoute.screen !== "files") {
+        return;
+      }
+
       const nextHash = buildScreenHash(
         nextRoute.projectSlug,
         nextRoute.screen,
         {
           selectedPath: nextRoute.selectedPath,
           selectedViewMode: nextRoute.selectedViewMode,
+          fileTreeMode: nextRoute.fileTreeMode,
           selectedLineNumber: nextRoute.selectedLineNumber,
         },
       );
@@ -341,6 +363,7 @@ export function App(props: AppProps): JSX.Element {
     const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
       selectedPath: nextRoute.selectedPath,
       selectedViewMode: nextRoute.selectedViewMode,
+      fileTreeMode: nextRoute.fileTreeMode,
       selectedLineNumber: nextRoute.selectedLineNumber,
     });
     if (window.location.hash !== nextHash) {
@@ -359,6 +382,7 @@ export function App(props: AppProps): JSX.Element {
     const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
       selectedPath: nextRoute.selectedPath,
       selectedViewMode: nextRoute.selectedViewMode,
+      fileTreeMode: nextRoute.fileTreeMode,
       selectedLineNumber: nextRoute.selectedLineNumber,
     });
     if (window.location.hash !== nextHash) {
@@ -374,9 +398,11 @@ export function App(props: AppProps): JSX.Element {
           availableRecentProjects={workspaceViewModel.availableRecentProjects()}
           isLoading={workspaceViewModel.isLoading()}
           isMutating={workspaceViewModel.isMutating()}
+          isPickingDirectory={workspaceViewModel.isPickingDirectory()}
           errorMessage={workspaceViewModel.errorMessage()}
           newProjectPath={workspaceViewModel.newProjectPath()}
           onNewProjectPathInput={workspaceViewModel.setNewProjectPath}
+          onPickProjectDirectory={workspaceViewModel.pickProjectDirectory}
           onOpenProjectByPath={workspaceViewModel.openProjectByPath}
           onOpenRecentProject={workspaceViewModel.openRecentProject}
           onRemoveRecentProject={workspaceViewModel.removeRecentProject}
@@ -389,6 +415,8 @@ export function App(props: AppProps): JSX.Element {
     if (activeRoute().screen === "files") {
       return (
         <DiffScreen
+          apiBaseUrl={props.bootstrapState.apiBaseUrl}
+          contextId={activeContextId()}
           diffOverview={diffViewModel.diffOverview()}
           selectedPath={filesViewModel.selectedPath()}
           supportsDiff={activeWorkspaceIsGitRepo()}
@@ -415,9 +443,15 @@ export function App(props: AppProps): JSX.Element {
             diffViewModel.setPreferredViewMode(mode);
           }}
           onSelectPath={async (path: string) => {
+            const nextViewMode = resolveViewModeForPathSelection({
+              selectedPath: path,
+              diffOverview: diffViewModel.diffOverview(),
+              preferredViewMode: diffViewModel.preferredViewMode(),
+            });
             setActiveRoute((currentRoute) => ({
               ...currentRoute,
               selectedPath: path,
+              selectedViewMode: nextViewMode,
               selectedLineNumber: null,
             }));
             if (
@@ -427,9 +461,16 @@ export function App(props: AppProps): JSX.Element {
             ) {
               diffViewModel.selectPath(activeContextId(), path);
             }
+            if (nextViewMode !== diffViewModel.preferredViewMode()) {
+              diffViewModel.setPreferredViewMode(nextViewMode);
+            }
             await filesViewModel.selectPath(activeContextId(), path);
           }}
           onChangeFileTreeMode={async (mode) => {
+            setActiveRoute((currentRoute) => ({
+              ...currentRoute,
+              fileTreeMode: mode,
+            }));
             const nextViewMode = resolveViewModeForFileTreeModeChange({
               previousFileTreeMode: filesViewModel.fileTreeMode(),
               nextFileTreeMode: mode,
@@ -442,6 +483,12 @@ export function App(props: AppProps): JSX.Element {
           }}
           onToggleDirectory={async (path: string) => {
             await filesViewModel.toggleDirectory(activeContextId(), path);
+          }}
+          onExpandAllDirectories={() => {
+            filesViewModel.expandAllDirectories();
+          }}
+          onCollapseAllDirectories={() => {
+            filesViewModel.collapseAllDirectories();
           }}
           onToggleShowIgnored={async (value: boolean) => {
             await filesViewModel.setShowIgnored(activeContextId(), value);
@@ -496,8 +543,8 @@ export function App(props: AppProps): JSX.Element {
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
           contextId={activeContextId()}
           projectPath={activeWorkspaceTab()?.path ?? ""}
-          selectedPath={filesViewModel.selectedPath()}
-          fileContent={filesViewModel.fileContent()}
+          selectedPath={null}
+          fileContent={null}
           diffOverview={diffViewModel.diffOverview()}
           onOpenFilesScreen={() => navigateToScreen("files")}
           onOpenProjectScreen={() => navigateToScreen("project")}

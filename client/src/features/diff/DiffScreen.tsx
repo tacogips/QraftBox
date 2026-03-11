@@ -1,5 +1,6 @@
 import {
   createEffect,
+  onCleanup,
   createSignal,
   For,
   type JSX,
@@ -29,8 +30,19 @@ import {
   formatDiffStatusLabel,
   resolveDiffPathNavigation,
 } from "./screen-state";
+import {
+  highlightFullFileContent,
+  type HighlightToken,
+} from "./syntax-highlighting";
+import {
+  shouldShowAllFilesFilters,
+  shouldShowDiffDirectoryControls,
+  shouldShowFileTreeModeControls,
+} from "./file-tree-visibility";
 
 export interface DiffScreenProps {
+  readonly apiBaseUrl: string;
+  readonly contextId: string | null;
   readonly diffOverview: DiffOverviewState;
   readonly selectedPath: string | null;
   readonly supportsDiff: boolean;
@@ -55,6 +67,8 @@ export interface DiffScreenProps {
   onSelectLine(lineNumber: number): void;
   onChangeFileTreeMode(mode: FileTreeMode): void;
   onToggleDirectory(path: string): void;
+  onExpandAllDirectories(): void;
+  onCollapseAllDirectories(): void;
   onToggleShowIgnored(value: boolean): void;
   onToggleShowAllFiles(value: boolean): void;
   onReload(): void;
@@ -131,6 +145,100 @@ function renderTreeModeIcon(mode: FileTreeMode): JSX.Element {
       <path d="M2 2.75A.75.75 0 012.75 2h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 2.75zm0 5A.75.75 0 012.75 7h10.5a.75.75 0 010 1.5H2.75A.75.75 0 012 7.75zM2.75 12h10.5a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5z" />
     </svg>
   );
+}
+
+function renderTreeChevronIcon(isExpanded: boolean): JSX.Element {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      class={
+        isExpanded ? "rotate-90 transition-transform" : "transition-transform"
+      }
+    >
+      <path
+        d="M6 4l4 4-4 4"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderFolderIcon(isExpanded: boolean): JSX.Element {
+  if (isExpanded) {
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M1.75 4.5A1.75 1.75 0 013.5 2.75h3.086c.32 0 .627.127.854.354l.792.792c.227.227.535.354.856.354h3.412A1.75 1.75 0 0114.25 6v5.5A1.75 1.75 0 0112.5 13.25h-9A1.75 1.75 0 011.75 11.5v-7z"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linejoin="round"
+        />
+        <path
+          d="M2.5 6.25h11"
+          stroke="currentColor"
+          stroke-width="1.3"
+          stroke-linecap="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M1.75 4.5A1.75 1.75 0 013.5 2.75h3.086c.32 0 .627.127.854.354l.792.792c.227.227.535.354.856.354h3.412A1.75 1.75 0 0114.25 6v5.5A1.75 1.75 0 0112.5 13.25h-9A1.75 1.75 0 011.75 11.5v-7z"
+        stroke="currentColor"
+        stroke-width="1.3"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderFileTreeLeadingIcon(treeEntry: {
+  readonly isDirectory: boolean;
+  readonly isExpandable: boolean;
+  readonly isExpanded: boolean;
+}): JSX.Element {
+  if (treeEntry.isDirectory) {
+    return (
+      <span class="flex shrink-0 items-center gap-1 text-text-tertiary">
+        <span
+          class={
+            treeEntry.isExpandable
+              ? "flex h-3.5 w-3.5 items-center justify-center"
+              : "flex h-3.5 w-3.5 items-center justify-center opacity-35"
+          }
+        >
+          {renderTreeChevronIcon(treeEntry.isExpanded)}
+        </span>
+        <span class="text-text-secondary">
+          {renderFolderIcon(treeEntry.isExpanded)}
+        </span>
+      </span>
+    );
+  }
+
+  return <span class="shrink-0 text-text-tertiary">·</span>;
 }
 
 function renderViewModeIcon(viewMode: DiffViewMode): JSX.Element {
@@ -321,6 +429,195 @@ function renderReloadIcon(): JSX.Element {
   );
 }
 
+function trimTrailingSlash(value: string): string {
+  return value.endsWith("/") ? value.slice(0, -1) : value;
+}
+
+function encodeFilePathForUrl(filePath: string): string {
+  return filePath
+    .split("/")
+    .map((pathSegment) => encodeURIComponent(pathSegment))
+    .join("/");
+}
+
+function buildRawFileUrl(
+  apiBaseUrl: string,
+  contextId: string,
+  filePath: string,
+): string {
+  return `${trimTrailingSlash(apiBaseUrl)}/ctx/${encodeURIComponent(
+    contextId,
+  )}/files/file-raw/${encodeFilePathForUrl(filePath)}`;
+}
+
+function buildFileContentUrl(options: {
+  readonly apiBaseUrl: string;
+  readonly contextId: string;
+  readonly filePath: string;
+  readonly ref?: string | undefined;
+  readonly full?: boolean | undefined;
+}): string {
+  const searchParams = new URLSearchParams();
+  if (options.ref !== undefined) {
+    searchParams.set("ref", options.ref);
+  }
+  if (options.full === true) {
+    searchParams.set("full", "true");
+  }
+
+  const query = searchParams.toString();
+  const baseUrl = `${trimTrailingSlash(options.apiBaseUrl)}/ctx/${encodeURIComponent(
+    options.contextId,
+  )}/files/file/${encodeFilePathForUrl(options.filePath)}`;
+
+  return query.length > 0 ? `${baseUrl}?${query}` : baseUrl;
+}
+
+async function fetchFileContentForSyntax(options: {
+  readonly apiBaseUrl: string;
+  readonly contextId: string;
+  readonly filePath: string;
+  readonly ref?: string | undefined;
+}): Promise<FileContent | null> {
+  const response = await fetch(
+    buildFileContentUrl({
+      ...options,
+      full: true,
+    }),
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return (await response.json()) as FileContent;
+}
+
+function isRenderableBinaryFile(fileContent: FileContent | null): boolean {
+  if (fileContent === null || fileContent.isBinary !== true) {
+    return false;
+  }
+
+  return (
+    fileContent.isImage === true ||
+    fileContent.isVideo === true ||
+    fileContent.isPdf === true
+  );
+}
+
+function renderBinaryFilePreview(props: {
+  readonly fileContent: FileContent;
+  readonly rawFileUrl: string | null;
+}): JSX.Element {
+  if (props.fileContent.isImage === true) {
+    const mimeType = props.fileContent.mimeType ?? "application/octet-stream";
+    return (
+      <div class="flex justify-center px-6 py-6">
+        <img
+          src={`data:${mimeType};base64,${props.fileContent.content}`}
+          alt={props.fileContent.path}
+          class="max-h-[70vh] max-w-full rounded-xl border border-border-default bg-bg-primary object-contain shadow-lg shadow-black/10"
+        />
+      </div>
+    );
+  }
+
+  if (props.rawFileUrl === null) {
+    return (
+      <div class="px-6 py-12 text-sm text-text-secondary">
+        Raw preview is unavailable because the workspace context is missing.
+      </div>
+    );
+  }
+
+  if (props.fileContent.isVideo === true) {
+    return (
+      <div class="px-6 py-6">
+        <video
+          src={props.rawFileUrl}
+          controls
+          preload="metadata"
+          class="max-h-[70vh] w-full rounded-xl border border-border-default bg-black shadow-lg shadow-black/15"
+        >
+          Your browser could not play this video preview.
+        </video>
+      </div>
+    );
+  }
+
+  if (props.fileContent.isPdf === true) {
+    return (
+      <div class="px-6 py-6">
+        <iframe
+          src={props.rawFileUrl}
+          title={props.fileContent.path}
+          class="h-[70vh] w-full rounded-xl border border-border-default bg-bg-primary"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div class="px-6 py-12 text-sm text-text-secondary">
+      Binary files are not previewed in the full-file viewer.
+    </div>
+  );
+}
+
+function renderExpandAllIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 4.5l4 4 4-4"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M4 8.5l4 4 4-4"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderCollapseAllIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 7.5l4-4 4 4"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M4 11.5l4-4 4 4"
+        stroke="currentColor"
+        stroke-width="1.4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
 function getStatusBadgeClass(status: string | undefined): string {
   if (status === "added" || status === "untracked") {
     return "border border-success-emphasis/40 bg-success-muted/20 text-success-fg";
@@ -497,8 +794,65 @@ function splitFileContentLines(
   return fileContent.content.split("\n");
 }
 
+function createPlainHighlightedLines(
+  fileContent: FileContent | null,
+): readonly (readonly HighlightToken[])[] {
+  return splitFileContentLines(fileContent).map((line) => [
+    {
+      text: line,
+      className: "text-text-primary",
+    },
+  ]);
+}
+
+function createPlainHighlightedLinesFromText(
+  content: string,
+): readonly (readonly HighlightToken[])[] {
+  return content.split("\n").map((line) => [
+    {
+      text: line,
+      className: "text-text-primary",
+    },
+  ]);
+}
+
+function renderHighlightedTextLine(props: {
+  readonly tokens: readonly HighlightToken[] | null;
+  readonly fallbackText: string;
+}): JSX.Element {
+  if (props.tokens === null) {
+    return <>{props.fallbackText.length > 0 ? props.fallbackText : " "}</>;
+  }
+
+  return (
+    <For each={props.tokens}>
+      {(lineToken) => (
+        <span
+          class={lineToken.className}
+          style={
+            lineToken.color !== undefined
+              ? { color: lineToken.color }
+              : undefined
+          }
+        >
+          {lineToken.text.length > 0 ? lineToken.text : " "}
+        </span>
+      )}
+    </For>
+  );
+}
+
 export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
+  const [highlightedFullFileLines, setHighlightedFullFileLines] = createSignal<
+    readonly (readonly HighlightToken[])[]
+  >([]);
+  const [beforeHighlightedLines, setBeforeHighlightedLines] = createSignal<
+    readonly (readonly HighlightToken[])[]
+  >([]);
+  const [afterHighlightedLines, setAfterHighlightedLines] = createSignal<
+    readonly (readonly HighlightToken[])[]
+  >([]);
   let previewContainerElement: HTMLDivElement | undefined;
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
@@ -520,6 +874,8 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     props.fileContent !== null && selectedDiffFile() === null
       ? null
       : (selectedDiffFile()?.status ?? null);
+  const shouldShowDiffTreeControls = () =>
+    shouldShowFileTreeModeControls(props.supportsDiff);
   const availableModes = (): readonly DiffViewMode[] => {
     if (selectedDiffFile()?.isBinary === true) {
       return ["full-file"];
@@ -557,6 +913,162 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     return transformToCurrentState(diffFile);
   };
   const fullFileLines = () => splitFileContentLines(props.fileContent);
+  const highlightedBeforeLine = (lineNumber: number | undefined) =>
+    lineNumber !== undefined
+      ? (beforeHighlightedLines()[lineNumber - 1] ?? null)
+      : null;
+  const highlightedAfterLine = (lineNumber: number | undefined) =>
+    lineNumber !== undefined
+      ? (afterHighlightedLines()[lineNumber - 1] ?? null)
+      : null;
+  const rawFileUrl = () =>
+    props.contextId !== null && props.fileContent !== null
+      ? buildRawFileUrl(
+          props.apiBaseUrl,
+          props.contextId,
+          props.fileContent.path,
+        )
+      : null;
+
+  createEffect(() => {
+    const fileContent = props.fileContent;
+    if (
+      effectiveViewMode() !== "full-file" ||
+      fileContent === null ||
+      fileContent.isBinary === true
+    ) {
+      setHighlightedFullFileLines([]);
+      return;
+    }
+
+    let isDisposed = false;
+    setHighlightedFullFileLines(createPlainHighlightedLines(fileContent));
+
+    void highlightFullFileContent(
+      {
+        language: fileContent.language,
+        filePath: fileContent.path,
+      },
+      fileContent.content,
+    ).then((nextHighlightedLines) => {
+      if (!isDisposed) {
+        setHighlightedFullFileLines(nextHighlightedLines);
+      }
+    });
+
+    onCleanup(() => {
+      isDisposed = true;
+    });
+  });
+
+  createEffect(() => {
+    const diffFile = selectedDiffFile();
+    const activeViewMode = effectiveViewMode();
+    const contextId = props.contextId;
+
+    if (
+      diffFile === null ||
+      diffFile.isBinary ||
+      contextId === null ||
+      activeViewMode === "full-file"
+    ) {
+      setBeforeHighlightedLines([]);
+      setAfterHighlightedLines([]);
+      return;
+    }
+
+    let isDisposed = false;
+    setBeforeHighlightedLines([]);
+    setAfterHighlightedLines([]);
+    const activeDiffFile = diffFile;
+    const activeContextId = contextId;
+
+    async function loadDiffSyntax(): Promise<void> {
+      const shouldLoadBefore =
+        activeViewMode === "side-by-side" || activeViewMode === "inline";
+      const shouldLoadAfter =
+        activeViewMode === "side-by-side" ||
+        activeViewMode === "inline" ||
+        activeViewMode === "current-state";
+
+      const beforePath = activeDiffFile.oldPath ?? activeDiffFile.path;
+
+      const [beforeContent, afterContent] = await Promise.all([
+        shouldLoadBefore
+          ? fetchFileContentForSyntax({
+              apiBaseUrl: props.apiBaseUrl,
+              contextId: activeContextId,
+              filePath: beforePath,
+              ref: "HEAD",
+            }).catch(() => null)
+          : Promise.resolve(null),
+        shouldLoadAfter
+          ? fetchFileContentForSyntax({
+              apiBaseUrl: props.apiBaseUrl,
+              contextId: activeContextId,
+              filePath: activeDiffFile.path,
+            }).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      if (isDisposed) {
+        return;
+      }
+
+      if (beforeContent !== null) {
+        setBeforeHighlightedLines(
+          createPlainHighlightedLinesFromText(beforeContent.content),
+        );
+      }
+      if (afterContent !== null) {
+        setAfterHighlightedLines(
+          createPlainHighlightedLinesFromText(afterContent.content),
+        );
+      }
+
+      const [beforeTokens, afterTokens] = await Promise.all([
+        beforeContent !== null
+          ? highlightFullFileContent(
+              {
+                language: beforeContent.language,
+                filePath: beforeContent.path,
+              },
+              beforeContent.content,
+            ).catch(() =>
+              createPlainHighlightedLinesFromText(beforeContent.content),
+            )
+          : Promise.resolve<readonly (readonly HighlightToken[])[]>([]),
+        afterContent !== null
+          ? highlightFullFileContent(
+              {
+                language: afterContent.language,
+                filePath: afterContent.path,
+              },
+              afterContent.content,
+            ).catch(() =>
+              createPlainHighlightedLinesFromText(afterContent.content),
+            )
+          : Promise.resolve<readonly (readonly HighlightToken[])[]>([]),
+      ]);
+
+      if (isDisposed) {
+        return;
+      }
+
+      if (beforeContent !== null) {
+        setBeforeHighlightedLines(beforeTokens);
+      }
+      if (afterContent !== null) {
+        setAfterHighlightedLines(afterTokens);
+      }
+    }
+
+    void loadDiffSyntax();
+
+    onCleanup(() => {
+      isDisposed = true;
+    });
+  });
 
   createEffect(() => {
     const selectedLineNumber = props.selectedLineNumber;
@@ -625,47 +1137,47 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                         : renderNavigationIcon("previous")}
                     </button>
                     <Show when={!isFileTreeCollapsed()}>
-                      <div
-                        class="inline-flex rounded-lg border border-border-default bg-bg-primary p-1"
-                        role="group"
-                        aria-label="File tree mode"
-                      >
-                        <button
-                          type="button"
-                          class={
-                            props.fileTreeMode === "diff"
-                              ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
-                              : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                          }
-                          disabled={
-                            !props.supportsDiff || props.fileTreeMode === "diff"
-                          }
-                          aria-label="Show only files with changes"
-                          title={`Diff (${props.diffOverview.stats.totalFiles})`}
-                          onClick={() => props.onChangeFileTreeMode("diff")}
+                      <Show when={shouldShowDiffTreeControls()}>
+                        <div
+                          class="inline-flex rounded-lg border border-border-default bg-bg-primary p-1"
+                          role="group"
+                          aria-label="File tree mode"
                         >
-                          <span class="flex items-center gap-1.5">
-                            {renderTreeModeIcon("diff")}
-                            <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] font-semibold">
-                              {props.diffOverview.stats.totalFiles}
+                          <button
+                            type="button"
+                            class={
+                              props.fileTreeMode === "diff"
+                                ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
+                                : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                            }
+                            disabled={props.fileTreeMode === "diff"}
+                            aria-label="Show only files with changes"
+                            title={`Diff (${props.diffOverview.stats.totalFiles})`}
+                            onClick={() => props.onChangeFileTreeMode("diff")}
+                          >
+                            <span class="flex items-center gap-1.5">
+                              {renderTreeModeIcon("diff")}
+                              <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] font-semibold">
+                                {props.diffOverview.stats.totalFiles}
+                              </span>
                             </span>
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          class={
-                            props.fileTreeMode === "all"
-                              ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
-                              : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                          }
-                          disabled={props.fileTreeMode === "all"}
-                          aria-label="Show all files"
-                          title="All files"
-                          onClick={() => props.onChangeFileTreeMode("all")}
-                        >
-                          {renderTreeModeIcon("all")}
-                        </button>
-                      </div>
+                          </button>
+                          <button
+                            type="button"
+                            class={
+                              props.fileTreeMode === "all"
+                                ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
+                                : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                            }
+                            disabled={props.fileTreeMode === "all"}
+                            aria-label="Show all files"
+                            title="All files"
+                            onClick={() => props.onChangeFileTreeMode("all")}
+                          >
+                            {renderTreeModeIcon("all")}
+                          </button>
+                        </div>
+                      </Show>
                       <button
                         type="button"
                         class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
@@ -679,9 +1191,11 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                   </div>
 
                   <Show
-                    when={
-                      !isFileTreeCollapsed() && props.fileTreeMode === "all"
-                    }
+                    when={shouldShowAllFilesFilters({
+                      supportsDiff: props.supportsDiff,
+                      isFileTreeCollapsed: isFileTreeCollapsed(),
+                      fileTreeMode: props.fileTreeMode,
+                    })}
                   >
                     <div class="mt-4 grid gap-2 text-xs text-text-secondary">
                       <CheckboxField
@@ -706,17 +1220,45 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                   </Show>
 
                   <Show
-                    when={
-                      !isFileTreeCollapsed() && props.fileTreeMode === "diff"
-                    }
+                    when={shouldShowDiffDirectoryControls({
+                      supportsDiff: props.supportsDiff,
+                      isFileTreeCollapsed: isFileTreeCollapsed(),
+                      fileTreeMode: props.fileTreeMode,
+                    })}
                   >
-                    <div class="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-text-secondary">
-                      <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 font-semibold text-success-fg">
-                        +{props.diffOverview.stats.additions}
-                      </span>
-                      <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 font-semibold text-danger-fg">
-                        -{props.diffOverview.stats.deletions}
-                      </span>
+                    <div class="mt-4 flex flex-wrap items-center justify-between gap-2">
+                      <div class="flex flex-wrap items-center gap-2 text-[10px] text-text-secondary">
+                        <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 font-semibold text-success-fg">
+                          +{props.diffOverview.stats.additions}
+                        </span>
+                        <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 font-semibold text-danger-fg">
+                          -{props.diffOverview.stats.deletions}
+                        </span>
+                      </div>
+                      <div
+                        class="inline-flex rounded-lg border border-border-default bg-bg-primary p-1"
+                        role="group"
+                        aria-label="Folder expansion controls"
+                      >
+                        <button
+                          type="button"
+                          class="rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                          aria-label="Expand all folders"
+                          title="Expand all folders"
+                          onClick={() => props.onExpandAllDirectories()}
+                        >
+                          {renderExpandAllIcon()}
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                          aria-label="Collapse all folders"
+                          title="Collapse all folders"
+                          onClick={() => props.onCollapseAllDirectories()}
+                        >
+                          {renderCollapseAllIcon()}
+                        </button>
+                      </div>
                     </div>
                   </Show>
                 </div>
@@ -791,15 +1333,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                         : props.onSelectPath(treeEntry.path)
                                     }
                                   >
-                                    <span class="shrink-0 text-text-tertiary">
-                                      {treeEntry.isDirectory
-                                        ? treeEntry.isExpandable
-                                          ? treeEntry.isExpanded
-                                            ? "▾"
-                                            : "▸"
-                                          : "•"
-                                        : "·"}
-                                    </span>
+                                    {renderFileTreeLeadingIcon(treeEntry)}
                                     <span class="truncate leading-5">
                                       {treeEntry.name}
                                     </span>
@@ -1019,7 +1553,13 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       )}`}
                                     >
                                       {row.kind === "change"
-                                        ? (row.left?.content ?? "")
+                                        ? renderHighlightedTextLine({
+                                            tokens: highlightedBeforeLine(
+                                              row.left?.oldLine,
+                                            ),
+                                            fallbackText:
+                                              row.left?.content ?? "",
+                                          })
                                         : ""}
                                     </div>
                                     <div
@@ -1061,7 +1601,13 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       )}`}
                                     >
                                       {row.kind === "change"
-                                        ? (row.right?.content ?? "")
+                                        ? renderHighlightedTextLine({
+                                            tokens: highlightedAfterLine(
+                                              row.right?.newLine,
+                                            ),
+                                            fallbackText:
+                                              row.right?.content ?? "",
+                                          })
                                         : ""}
                                     </div>
                                   </div>
@@ -1121,7 +1667,17 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                             : "-"}
                                       </div>
                                       <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                        {diffChange.content}
+                                        {renderHighlightedTextLine({
+                                          tokens:
+                                            diffChange.type === "delete"
+                                              ? highlightedBeforeLine(
+                                                  diffChange.oldLine,
+                                                )
+                                              : highlightedAfterLine(
+                                                  diffChange.newLine,
+                                                ),
+                                          fallbackText: diffChange.content,
+                                        })}
                                       </div>
                                     </div>
                                   )}
@@ -1192,7 +1748,13 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                         {currentStateLine.lineNumber}
                                       </div>
                                       <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                        {currentStateLine.content}
+                                        {renderHighlightedTextLine({
+                                          tokens: highlightedAfterLine(
+                                            currentStateLine.lineNumber,
+                                          ),
+                                          fallbackText:
+                                            currentStateLine.content,
+                                        })}
                                       </div>
                                     </div>
                                   </Show>
@@ -1206,45 +1768,73 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                       <Match when={effectiveViewMode() === "full-file"}>
                         <div class="min-w-[720px]">
                           <Show
-                            when={props.fileContent?.isBinary !== true}
-                            fallback={
-                              <div class="px-6 py-12 text-sm text-text-secondary">
-                                Binary files are not previewed in the full-file
-                                viewer.
-                              </div>
-                            }
+                            when={!isRenderableBinaryFile(props.fileContent)}
+                            fallback={renderBinaryFilePreview({
+                              fileContent: props.fileContent as FileContent,
+                              rawFileUrl: rawFileUrl(),
+                            })}
                           >
                             <Show
-                              when={fullFileLines().length > 0}
+                              when={props.fileContent?.isBinary !== true}
                               fallback={
                                 <div class="px-6 py-12 text-sm text-text-secondary">
-                                  The selected file is empty.
+                                  Binary files are not previewed in the
+                                  full-file viewer.
                                 </div>
                               }
                             >
-                              <For each={fullFileLines()}>
-                                {(lineContent, lineIndex) => (
-                                  <div
-                                    data-qraftbox-line={lineIndex() + 1}
-                                    class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
-                                      lineIndex() + 1 ===
-                                        props.selectedLineNumber,
-                                    )}`}
-                                    onClick={() =>
-                                      props.onSelectLine(lineIndex() + 1)
-                                    }
-                                  >
-                                    <div class="px-4 py-1 text-right text-text-tertiary">
-                                      {lineIndex() + 1}
-                                    </div>
-                                    <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                      {lineContent.length > 0
-                                        ? lineContent
-                                        : " "}
-                                    </div>
+                              <Show
+                                when={fullFileLines().length > 0}
+                                fallback={
+                                  <div class="px-6 py-12 text-sm text-text-secondary">
+                                    The selected file is empty.
                                   </div>
-                                )}
-                              </For>
+                                }
+                              >
+                                <For each={highlightedFullFileLines()}>
+                                  {(lineTokens, lineIndex) => (
+                                    <div
+                                      data-qraftbox-line={lineIndex() + 1}
+                                      class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
+                                        lineIndex() + 1 ===
+                                          props.selectedLineNumber,
+                                      )}`}
+                                      onClick={() =>
+                                        props.onSelectLine(lineIndex() + 1)
+                                      }
+                                    >
+                                      <div class="px-4 py-1 text-right text-text-tertiary">
+                                        {lineIndex() + 1}
+                                      </div>
+                                      <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                        <Show
+                                          when={lineTokens.length > 0}
+                                          fallback={" "}
+                                        >
+                                          <For each={lineTokens}>
+                                            {(lineToken) => (
+                                              <span
+                                                class={lineToken.className}
+                                                style={
+                                                  lineToken.color !== undefined
+                                                    ? {
+                                                        color: lineToken.color,
+                                                      }
+                                                    : undefined
+                                                }
+                                              >
+                                                {lineToken.text.length > 0
+                                                  ? lineToken.text
+                                                  : " "}
+                                              </span>
+                                            )}
+                                          </For>
+                                        </Show>
+                                      </div>
+                                    </div>
+                                  )}
+                                </For>
+                              </Show>
                             </Show>
                           </Show>
                         </div>

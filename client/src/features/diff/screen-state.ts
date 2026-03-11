@@ -39,6 +39,22 @@ export function resolveViewModeForFileTreeModeChange(options: {
   return options.preferredViewMode;
 }
 
+export function resolveViewModeForPathSelection(options: {
+  readonly selectedPath: string;
+  readonly diffOverview: DiffOverviewState;
+  readonly preferredViewMode: DiffViewMode;
+}): DiffViewMode {
+  const selectedDiffFile = options.diffOverview.files.find(
+    (diffFile) => diffFile.path === options.selectedPath,
+  );
+
+  if (selectedDiffFile === undefined) {
+    return "full-file";
+  }
+
+  return options.preferredViewMode;
+}
+
 export function collectVisibleFileTreeEntries(
   fileTree: FileTreeNode | null,
   expandedPaths: ReadonlySet<string>,

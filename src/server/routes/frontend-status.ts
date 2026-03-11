@@ -79,12 +79,16 @@ function findQraftBoxSourceCheckoutRoot(
   return null;
 }
 
-function detectClientSolidDependencies(sourceCheckoutRoot: string | null): boolean {
+function detectClientSolidDependencies(
+  sourceCheckoutRoot: string | null,
+): boolean {
   if (sourceCheckoutRoot === null) {
     return false;
   }
 
-  return existsSync(join(sourceCheckoutRoot, "client", "node_modules", "solid-js"));
+  return existsSync(
+    join(sourceCheckoutRoot, "client", "node_modules", "solid-js"),
+  );
 }
 
 function detectBuiltSolidBundle(): boolean {
@@ -102,12 +106,15 @@ export interface DetectSolidSupportStatusOptions {
 export function detectSolidSupportStatus(
   options: DetectSolidSupportStatusOptions = {},
 ): SolidSupportStatus {
-  const sourceCheckoutRoot = findQraftBoxSourceCheckoutRoot(options.searchRoots);
+  const sourceCheckoutRoot = findQraftBoxSourceCheckoutRoot(
+    options.searchRoots,
+  );
   const hasSourceCheckout = sourceCheckoutRoot !== null;
 
   return {
     hasSourceCheckout,
-    hasClientSolidDependencies: detectClientSolidDependencies(sourceCheckoutRoot),
+    hasClientSolidDependencies:
+      detectClientSolidDependencies(sourceCheckoutRoot),
     hasBuiltSolidBundle: detectBuiltSolidBundle(),
     hasAgentBrowser: detectAgentBrowser(),
     hasRecordedFullMigrationCheck: hasSourceCheckout

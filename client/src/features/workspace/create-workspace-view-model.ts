@@ -23,11 +23,13 @@ export interface WorkspaceViewModel {
   readonly errorMessage: () => string | null;
   readonly isLoading: () => boolean;
   readonly isMutating: () => boolean;
+  readonly isPickingDirectory: () => boolean;
   readonly newProjectPath: () => string;
   setNewProjectPath(path: string): void;
   refresh(): Promise<void>;
   activateTab(tabId: string): Promise<void>;
   closeTab(tabId: string): Promise<void>;
+  pickProjectDirectory(): Promise<void>;
   openProjectByPath(): Promise<void>;
   openRecentProject(path: string): Promise<void>;
   removeRecentProject(path: string): Promise<void>;
@@ -60,6 +62,7 @@ export function createWorkspaceViewModel(
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
   const [isMutating, setIsMutating] = createSignal(false);
+  const [isPickingDirectory, setIsPickingDirectory] = createSignal(false);
   const [newProjectPath, setNewProjectPath] = createSignal("");
 
   const availableRecentProjects = createMemo(() =>
@@ -160,7 +163,7 @@ export function createWorkspaceViewModel(
     const currentRoute = options.getCurrentRoute();
     const currentWorkspaceState = workspaceState();
 
-    if (isLoading() || isMutating()) {
+    if (isLoading() || isMutating() || isPickingDirectory()) {
       return;
     }
 
@@ -190,6 +193,7 @@ export function createWorkspaceViewModel(
     errorMessage,
     isLoading,
     isMutating,
+    isPickingDirectory,
     newProjectPath,
     setNewProjectPath,
     refresh: initialize,
@@ -204,6 +208,40 @@ export function createWorkspaceViewModel(
         const workspaceSnapshot = await workspaceApi.closeWorkspaceTab(tabId);
         applyWorkspaceSnapshot(workspaceSnapshot);
       }, "Failed to close workspace tab"),
+    pickProjectDirectory: async () => {
+      if (isPickingDirectory()) {
+        return;
+      }
+
+      const startPathCandidate =
+        newProjectPath().trim().length > 0
+          ? newProjectPath().trim()
+          : (workspaceState().activeProjectPath ?? undefined);
+
+      setIsPickingDirectory(true);
+      setErrorMessage(null);
+
+      try {
+        const selectedPath =
+          await workspaceApi.pickDirectory(startPathCandidate);
+        if (selectedPath === null || selectedPath.trim().length === 0) {
+          return;
+        }
+
+        setNewProjectPath(selectedPath);
+        const openResult = await workspaceApi.openWorkspaceTab(selectedPath);
+        applyWorkspaceSnapshot(openResult.workspaceSnapshot);
+        setNewProjectPath("");
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Failed to open directory picker",
+        );
+      } finally {
+        setIsPickingDirectory(false);
+      }
+    },
     openProjectByPath: async () =>
       runMutation(async () => {
         const trimmedProjectPath = newProjectPath().trim();

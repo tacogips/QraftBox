@@ -70,9 +70,7 @@ describe("solid migration check marker", () => {
       readonly recordedAt: string;
     };
     expect(marker.schemaVersion).toBe(1);
-    expect(marker.command).toBe(
-      "bun run verify:frontend:migration:browser",
-    );
+    expect(marker.command).toBe("bun run verify:frontend:migration:browser");
     expect(marker.status).toBe("passed");
     expect(marker.recordedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });

@@ -48,6 +48,13 @@ export function resolveAiSessionTargetSessionId(params: {
   return params.selectedQraftAiSessionId ?? params.draftSessionId;
 }
 
+export function shouldShowAiSessionComposer(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+  readonly isDraftComposerOpen: boolean;
+}): boolean {
+  return params.selectedQraftAiSessionId !== null || params.isDraftComposerOpen;
+}
+
 export interface ResolvedAiSessionSubmitTarget {
   readonly qraftAiSessionId: QraftAiSessionId;
   readonly forceNewSession: boolean;
@@ -169,6 +176,24 @@ export interface AiSessionOverviewRouteState {
   readonly selectedSessionId: QraftAiSessionId | null;
   readonly searchQuery: string;
   readonly searchInTranscript: boolean;
+}
+
+export function readAiSessionOverviewRouteSearchFromHash(hash: string): string {
+  const hashQueryStart = hash.indexOf("?");
+  if (hashQueryStart < 0) {
+    return "";
+  }
+
+  return hash.slice(hashQueryStart);
+}
+
+export function replaceAiSessionOverviewRouteSearchInHash(
+  hash: string,
+  nextSearch: string,
+): string {
+  const hashQueryStart = hash.indexOf("?");
+  const hashPath = hashQueryStart < 0 ? hash : hash.slice(0, hashQueryStart);
+  return `${hashPath}${nextSearch}`;
 }
 
 export function didAiSessionHistoryFilterChange(params: {
@@ -400,6 +425,23 @@ export function hasAiSessionActivityEntry(params: {
       (historicalSession) =>
         historicalSession.qraftAiSessionId === params.qraftAiSessionId,
     )
+  );
+}
+
+export function resolveAiSessionRuntimeSession(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+  readonly activeSessions: readonly AISessionInfo[];
+}): AISessionInfo | null {
+  if (params.selectedQraftAiSessionId === null) {
+    return null;
+  }
+
+  return (
+    params.activeSessions.find(
+      (activeSession) =>
+        activeSession.id === params.selectedQraftAiSessionId ||
+        activeSession.clientSessionId === params.selectedQraftAiSessionId,
+    ) ?? null
   );
 }
 

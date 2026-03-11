@@ -777,7 +777,8 @@ export function createSessionManager(
 
       // 2. Start execution
       const aiAgent =
-        session.aiAgent ?? resolveAIAgentFromVendor(handle.modelOverride?.vendor);
+        session.aiAgent ??
+        resolveAIAgentFromVendor(handle.modelOverride?.vendor);
       const normalizedResumeSessionId = normalizeResumeSessionIdForAgent(
         session.currentClaudeSessionId,
         aiAgent,

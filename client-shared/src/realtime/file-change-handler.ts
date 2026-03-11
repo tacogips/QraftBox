@@ -27,7 +27,8 @@ function isCurrentProjectEvent(
   activeProjectPath: string,
 ): boolean {
   return (
-    message.projectPath === undefined || message.projectPath === activeProjectPath
+    message.projectPath === undefined ||
+    message.projectPath === activeProjectPath
   );
 }
 

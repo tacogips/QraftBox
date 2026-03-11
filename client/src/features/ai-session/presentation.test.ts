@@ -15,6 +15,7 @@ import {
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
+  mergeLiveAiSessionTranscriptLine,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
   describeAiSessionModelProfile,
@@ -312,6 +313,63 @@ describe("ai-session presentation helpers", () => {
     ]);
   });
 
+  test("appends a live assistant line until the persisted transcript catches up", () => {
+    expect(
+      mergeLiveAiSessionTranscriptLine({
+        transcriptLines: [
+          {
+            id: "user-1",
+            role: "user",
+            text: "say hello",
+            timestamp: "2026-03-11T07:40:00.000Z",
+            isInjectedSystemPrompt: false,
+          },
+        ],
+        liveAssistantText: "hello",
+        liveAssistantTimestamp: "2026-03-11T07:40:01.000Z",
+      }),
+    ).toEqual([
+      {
+        id: "user-1",
+        role: "user",
+        text: "say hello",
+        timestamp: "2026-03-11T07:40:00.000Z",
+        isInjectedSystemPrompt: false,
+      },
+      {
+        id: "live-assistant",
+        role: "assistant",
+        text: "hello",
+        timestamp: "2026-03-11T07:40:01.000Z",
+        isInjectedSystemPrompt: false,
+      },
+    ]);
+
+    expect(
+      mergeLiveAiSessionTranscriptLine({
+        transcriptLines: [
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "hello",
+            timestamp: "2026-03-11T07:40:01.000Z",
+            isInjectedSystemPrompt: false,
+          },
+        ],
+        liveAssistantText: "hello",
+        liveAssistantTimestamp: "2026-03-11T07:40:01.000Z",
+      }),
+    ).toEqual([
+      {
+        id: "assistant-1",
+        role: "assistant",
+        text: "hello",
+        timestamp: "2026-03-11T07:40:01.000Z",
+        isInjectedSystemPrompt: false,
+      },
+    ]);
+  });
+
   test("resolves the correct cancellation action for active and queued entries", () => {
     expect(
       resolveAiSessionCancelAction({
@@ -569,12 +627,14 @@ describe("ai-session presentation helpers", () => {
         id: "evt-1",
         role: "assistant",
         text: "Transcript line one",
+        isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:00:00.000Z",
       },
       {
         id: "evt-2",
         role: "system",
         text: "[Tool: exec_command]",
+        isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:01:00.000Z",
       },
     ]);
@@ -609,13 +669,114 @@ describe("ai-session presentation helpers", () => {
         id: "assistant:200",
         role: "assistant",
         text: "Page two assistant line",
+        isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:10:00.000Z",
       },
       {
         id: "tool_use:201",
         role: "system",
         text: "[Tool: write_stdin]",
+        isInjectedSystemPrompt: false,
         timestamp: "2026-03-09T06:11:00.000Z",
+      },
+    ]);
+  });
+
+  test("tags injected bootstrap prompts so the UI can hide them", () => {
+    const transcriptEvents: readonly AiSessionTranscriptEvent[] = [
+      {
+        type: "user",
+        uuid: "evt-bootstrap",
+        timestamp: "2026-03-09T06:20:00.000Z",
+        raw: {
+          message: {
+            content: [
+              {
+                type: "text",
+                text: "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
+              },
+            ],
+          },
+        },
+      },
+      {
+        type: "user",
+        uuid: "evt-user",
+        timestamp: "2026-03-09T06:21:00.000Z",
+        raw: {
+          message: {
+            content: [{ type: "text", text: "Continue with the UI fix" }],
+          },
+        },
+      },
+    ];
+
+    expect(buildAiSessionTranscriptLines(transcriptEvents)).toEqual([
+      {
+        id: "evt-bootstrap",
+        role: "user",
+        text: "# AGENTS.md instructions for /g/gits/tacogips/QraftBox",
+        isInjectedSystemPrompt: true,
+        timestamp: "2026-03-09T06:20:00.000Z",
+      },
+      {
+        id: "evt-user",
+        role: "user",
+        text: "Continue with the UI fix",
+        isInjectedSystemPrompt: false,
+        timestamp: "2026-03-09T06:21:00.000Z",
+      },
+    ]);
+  });
+
+  test("tags injected system-role bootstrap prompts so the UI can hide them", () => {
+    const transcriptEvents: readonly AiSessionTranscriptEvent[] = [
+      {
+        type: "system",
+        uuid: "evt-permissions",
+        timestamp: "2026-03-11T06:27:00.000Z",
+        content: [
+          "<permissions instructions>",
+          "Approval policy is currently never.",
+          "</permissions instructions>",
+        ].join("\n"),
+        raw: {},
+      },
+      {
+        type: "system",
+        uuid: "evt-collaboration",
+        timestamp: "2026-03-11T06:27:01.000Z",
+        content: [
+          "<collaboration_mode># Collaboration Mode: Default",
+          "## request_user_input availability",
+          "</collaboration_mode>",
+        ].join("\n"),
+        raw: {},
+      },
+    ];
+
+    expect(buildAiSessionTranscriptLines(transcriptEvents)).toEqual([
+      {
+        id: "evt-permissions",
+        role: "system",
+        text: [
+          "<permissions instructions>",
+          "Approval policy is currently never.",
+          "</permissions instructions>",
+        ].join("\n"),
+        isInjectedSystemPrompt: true,
+        timestamp: "2026-03-11T06:27:00.000Z",
+      },
+      {
+        id: "evt-collaboration",
+        role: "system",
+        text: [
+          "<collaboration_mode># Collaboration Mode: Default",
+          "## request_user_input availability",
+          "</collaboration_mode>",
+        ].join("\n"),
+        isInjectedSystemPrompt: true,
+        timestamp: "2026-03-11T06:27:01.000Z",
       },
     ]);
   });

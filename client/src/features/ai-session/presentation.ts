@@ -8,7 +8,10 @@ import type {
 } from "../../../../client-shared/src/api/ai-sessions";
 import type { ExtendedSessionEntry } from "../../../../src/types/claude-session";
 import type { ModelProfile } from "../../../../src/types/model-config";
-import { stripSystemTags } from "../../../../src/utils/strip-system-tags";
+import {
+  isInjectedSessionSystemPrompt,
+  stripSystemTags,
+} from "../../../../src/utils/strip-system-tags";
 import type { AiSessionPromptContextState } from "./state";
 
 export interface AiSessionListEntry {
@@ -263,7 +266,10 @@ export interface AiSessionTranscriptLine {
   readonly role: "user" | "assistant" | "system";
   readonly text: string;
   readonly timestamp: string | null;
+  readonly isInjectedSystemPrompt: boolean;
 }
+
+const LIVE_ASSISTANT_TRANSCRIPT_LINE_ID = "live-assistant";
 
 export interface BuildAiSessionTranscriptLinesOptions {
   readonly offset?: number | undefined;
@@ -367,6 +373,31 @@ export function extractAiSessionTranscriptText(
   return "";
 }
 
+function isInjectedTranscriptSystemPrompt(
+  event: AiSessionTranscriptEvent,
+): boolean {
+  if (event.type === "tool_use" || event.type === "tool_result") {
+    return false;
+  }
+
+  const messageContent = extractMessageContent(event.raw);
+  if (typeof messageContent === "string") {
+    return isInjectedSessionSystemPrompt(messageContent);
+  }
+
+  if (Array.isArray(messageContent)) {
+    return isInjectedSessionSystemPrompt(
+      extractTranscriptTextFromBlocks(messageContent),
+    );
+  }
+
+  if (typeof event.content === "string") {
+    return isInjectedSessionSystemPrompt(event.content);
+  }
+
+  return false;
+}
+
 export function buildAiSessionTranscriptLines(
   events: readonly AiSessionTranscriptEvent[],
   options: BuildAiSessionTranscriptLinesOptions = {},
@@ -387,6 +418,7 @@ export function buildAiSessionTranscriptLines(
               ? "assistant"
               : "system",
         text,
+        isInjectedSystemPrompt: isInjectedTranscriptSystemPrompt(event),
         timestamp:
           typeof event.timestamp === "string" && event.timestamp.length > 0
             ? event.timestamp
@@ -397,6 +429,41 @@ export function buildAiSessionTranscriptLines(
       (transcriptLine): transcriptLine is AiSessionTranscriptLine =>
         transcriptLine !== null,
     );
+}
+
+export function mergeLiveAiSessionTranscriptLine(params: {
+  readonly transcriptLines: readonly AiSessionTranscriptLine[];
+  readonly liveAssistantText: string | null;
+  readonly liveAssistantTimestamp: string | null;
+}): readonly AiSessionTranscriptLine[] {
+  const persistedTranscriptLines = params.transcriptLines.filter(
+    (transcriptLine) => transcriptLine.id !== LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
+  );
+  const liveAssistantText = params.liveAssistantText;
+
+  if (liveAssistantText === null || liveAssistantText.trim().length === 0) {
+    return persistedTranscriptLines;
+  }
+
+  const lastPersistedTranscriptLine =
+    persistedTranscriptLines[persistedTranscriptLines.length - 1];
+  if (
+    lastPersistedTranscriptLine?.role === "assistant" &&
+    lastPersistedTranscriptLine.text === liveAssistantText
+  ) {
+    return persistedTranscriptLines;
+  }
+
+  return [
+    ...persistedTranscriptLines,
+    {
+      id: LIVE_ASSISTANT_TRANSCRIPT_LINE_ID,
+      role: "assistant",
+      text: liveAssistantText,
+      timestamp: params.liveAssistantTimestamp,
+      isInjectedSystemPrompt: false,
+    },
+  ];
 }
 
 export function getQueuedPromptSummary(

@@ -1,15 +1,8 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { recordSolidBrowserVerificationPassed } from "./solid-migration-check";
-import {
-  listBrowserVerificationScenarios,
-} from "../../client-shared/src/testing/browser-verification";
+import { listBrowserVerificationScenarios } from "../../client-shared/src/testing/browser-verification";
 import { createContextManager } from "../server/workspace/context-manager";
 import { createInMemoryProjectRegistry } from "../server/workspace/project-registry";
 import { createRecentDirectoryStore } from "../server/workspace/recent-store";
@@ -49,9 +42,7 @@ export interface BrowserVerificationRunOptions {
         scenario: BrowserVerificationScenario,
       ) => readonly string[])
     | undefined;
-  readonly recordPassed?:
-    | ((cwd?: string | undefined) => string)
-    | undefined;
+  readonly recordPassed?: ((cwd?: string | undefined) => string) | undefined;
 }
 
 export type BrowserVerificationCommandRunner = (
@@ -93,11 +84,9 @@ const BROWSER_VERIFICATION_SCENARIOS: readonly BrowserVerificationScenario[] = [
 ] as const;
 
 const DEFAULT_SVELTE_VERIFICATION_URL =
-  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ??
-  "http://127.0.0.1:7155";
+  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ?? "http://127.0.0.1:7155";
 const DEFAULT_SOLID_VERIFICATION_URL =
-  DEFAULT_FRONTEND_VERIFICATION_TARGETS[1]?.baseUrl ??
-  "http://127.0.0.1:7156";
+  DEFAULT_FRONTEND_VERIFICATION_TARGETS[1]?.baseUrl ?? "http://127.0.0.1:7156";
 
 function parseFrontendVerificationUrl(
   value: string,
@@ -193,17 +182,18 @@ async function runAgentBrowserCommand(
 ): Promise<string> {
   const agentBrowserExecutable = Bun.which("agent-browser");
   if (agentBrowserExecutable === null) {
-    throw new Error(
-      "agent-browser is not installed or not available on PATH.",
-    );
+    throw new Error("agent-browser is not installed or not available on PATH.");
   }
 
-  const browserProcess = Bun.spawn([agentBrowserExecutable, ...commandArguments], {
-    cwd: process.cwd(),
-    env: createAgentBrowserEnvironment(),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const browserProcess = Bun.spawn(
+    [agentBrowserExecutable, ...commandArguments],
+    {
+      cwd: process.cwd(),
+      env: createAgentBrowserEnvironment(),
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
 
   const [exitCode, stdoutText, stderrText] = await Promise.all([
     browserProcess.exited,
@@ -360,17 +350,17 @@ export async function runFrontendMigrationBrowserVerification(
     options.recordPassed ?? recordSolidBrowserVerificationPassed;
 
   for (const target of targets) {
-      const sessionName = createBrowserSessionName(target.frontend);
-      try {
-        for (const scenario of BROWSER_VERIFICATION_SCENARIOS) {
-          await verifyScenarioInBrowser(
-            target,
-            scenario,
-            commandRunner,
-            options.getObservedApiPaths,
-          );
-        }
-      } finally {
+    const sessionName = createBrowserSessionName(target.frontend);
+    try {
+      for (const scenario of BROWSER_VERIFICATION_SCENARIOS) {
+        await verifyScenarioInBrowser(
+          target,
+          scenario,
+          commandRunner,
+          options.getObservedApiPaths,
+        );
+      }
+    } finally {
       try {
         await commandRunner(["--session", sessionName, "close"]);
       } catch {
@@ -443,11 +433,7 @@ function runProcessOrThrow(
     const stderrText = commandProcess.stderr.toString().trim();
     const stdoutText = commandProcess.stdout.toString().trim();
     throw new Error(
-      [
-        `Command failed: ${commandArguments.join(" ")}`,
-        stdoutText,
-        stderrText,
-      ]
+      [`Command failed: ${commandArguments.join(" ")}`, stdoutText, stderrText]
         .filter((part) => part.length > 0)
         .join("\n"),
     );
@@ -614,7 +600,10 @@ async function startManagedVerificationServers(
 }
 
 export async function runManagedFrontendMigrationBrowserVerification(
-  options: Pick<BrowserVerificationRunOptions, "cwd" | "commandRunner" | "recordPassed"> = {},
+  options: Pick<
+    BrowserVerificationRunOptions,
+    "cwd" | "commandRunner" | "recordPassed"
+  > = {},
 ): Promise<BrowserVerificationRunResult> {
   const commandRunner = options.commandRunner ?? runAgentBrowserCommand;
   const recordPassed =
@@ -642,8 +631,7 @@ export async function runManagedFrontendMigrationBrowserVerification(
               routeHash: scenario.routeHash,
               requiredTextSubstrings: scenario.requiredTextSubstrings,
               requiredApiPathSubstrings: scenario.requiredApiPathSubstrings,
-              forbiddenApiPathSubstrings:
-                scenario.forbiddenApiPathSubstrings,
+              forbiddenApiPathSubstrings: scenario.forbiddenApiPathSubstrings,
             },
             commandRunner,
             (frontend) => servers.requestLogs[frontend],
@@ -677,7 +665,9 @@ export function getBrowserVerificationUsage(): string {
   ].join("\n");
 }
 
-async function runBrowserVerificationCli(args: readonly string[]): Promise<void> {
+async function runBrowserVerificationCli(
+  args: readonly string[],
+): Promise<void> {
   const parsedArgs = parseBrowserVerificationCliArgs(args);
   if (parsedArgs.showHelp) {
     console.log(getBrowserVerificationUsage());

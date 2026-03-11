@@ -4,6 +4,7 @@ import type {
   WorkspaceShellState,
 } from "../../../../client-shared/src/contracts/workspace";
 import { SummaryCard } from "../../components/SummaryCard";
+import { ToolbarIconButton } from "../../components/ToolbarIconButton";
 import { createWorkspaceShellPresentation } from "./presentation";
 
 export interface WorkspaceShellProps {
@@ -11,9 +12,11 @@ export interface WorkspaceShellProps {
   readonly availableRecentProjects: readonly RecentProjectSummary[];
   readonly isLoading: boolean;
   readonly isMutating: boolean;
+  readonly isPickingDirectory: boolean;
   readonly errorMessage: string | null;
   readonly newProjectPath: string;
   onNewProjectPathInput(path: string): void;
+  onPickProjectDirectory(): Promise<void>;
   onOpenProjectByPath(): Promise<void>;
   onOpenRecentProject(path: string): Promise<void>;
   onRemoveRecentProject(path: string): Promise<void>;
@@ -58,17 +61,40 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
 
             <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-primary">
               <div class="flex flex-col gap-3 border-b border-border-default bg-bg-primary px-4 py-3 lg:flex-row lg:items-center">
-                <div class="min-w-0 flex-1">
+                <div class="flex min-w-0 flex-1 items-center gap-2">
                   <input
                     type="text"
                     value={props.newProjectPath}
                     placeholder="/path/to/project"
-                    disabled={props.isMutating}
+                    disabled={props.isMutating || props.isPickingDirectory}
                     class="w-full rounded-md border border-border-default bg-bg-secondary px-3 py-2 font-mono text-sm text-text-primary outline-none transition focus:border-accent-emphasis disabled:cursor-not-allowed disabled:opacity-60"
                     onInput={(event) =>
                       props.onNewProjectPathInput(event.currentTarget.value)
                     }
                   />
+                  <ToolbarIconButton
+                    label={
+                      props.isPickingDirectory
+                        ? "Opening directory picker"
+                        : "Browse directories"
+                    }
+                    disabled={
+                      props.isMutating ||
+                      props.isPickingDirectory ||
+                      !props.workspaceState.canManageProjects
+                    }
+                    onClick={() => void props.onPickProjectDirectory()}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+                    </svg>
+                  </ToolbarIconButton>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
                   <span class="rounded-full border border-border-default bg-bg-secondary px-3 py-2">
@@ -81,12 +107,15 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
                     type="button"
                     disabled={
                       props.isMutating ||
+                      props.isPickingDirectory ||
                       props.newProjectPath.trim().length === 0
                     }
                     class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
                     onClick={() => void props.onOpenProjectByPath()}
                   >
-                    {props.isMutating ? "Opening..." : "Open project"}
+                    {props.isMutating || props.isPickingDirectory
+                      ? "Opening..."
+                      : "Open project"}
                   </button>
                 </div>
               </div>

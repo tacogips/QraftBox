@@ -158,8 +158,7 @@ describe("createGitStateRefreshController", () => {
     expect(refreshCount).toBe(2);
     expect(clearedTimerId === null).toBe(false);
     if (clearedTimerId !== null) {
-      const expectedTimerId =
-        7 as unknown as ReturnType<typeof setInterval>;
+      const expectedTimerId = 7 as unknown as ReturnType<typeof setInterval>;
       expect(clearedTimerId === expectedTimerId).toBe(true);
     }
   });

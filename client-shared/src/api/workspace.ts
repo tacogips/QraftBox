@@ -20,6 +20,7 @@ export interface WorkspaceApiClient {
   fetchWorkspaceShellState(): Promise<WorkspaceShellState>;
   activateWorkspaceTab(tabId: string): Promise<WorkspaceSnapshot>;
   closeWorkspaceTab(tabId: string): Promise<WorkspaceSnapshot>;
+  pickDirectory(startPath?: string): Promise<string | null>;
   openWorkspaceTab(path: string): Promise<{
     readonly tab: WorkspaceTabSummary;
     readonly workspaceSnapshot: WorkspaceSnapshot;
@@ -166,6 +167,23 @@ async function closeWorkspaceTabWithConfig(
   return normalizeWorkspaceMutation(payload);
 }
 
+async function pickDirectoryWithConfig(
+  startPath: string | undefined,
+  config: WorkspaceApiClientConfig,
+): Promise<string | null> {
+  const response = await config.fetchImplementation(
+    buildWorkspaceApiUrl(config, "/browse/pick-directory"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(startPath === undefined ? {} : { startPath }),
+    },
+  );
+  await ensureOk(response, "Failed to open directory picker");
+  const payload = (await response.json()) as { path?: string | null };
+  return payload.path ?? null;
+}
+
 async function openWorkspaceTabWithConfig(
   path: string,
   config: WorkspaceApiClientConfig,
@@ -248,6 +266,8 @@ export function createWorkspaceApiClient(
       activateWorkspaceTabWithConfig(tabId, config),
     closeWorkspaceTab: (tabId: string) =>
       closeWorkspaceTabWithConfig(tabId, config),
+    pickDirectory: (startPath?: string) =>
+      pickDirectoryWithConfig(startPath, config),
     openWorkspaceTab: (path: string) =>
       openWorkspaceTabWithConfig(path, config),
     openWorkspaceTabBySlug: (slug: string) =>
@@ -309,6 +329,15 @@ export async function openWorkspaceTab(
   return createWorkspaceApiClient({
     fetchImplementation,
   }).openWorkspaceTab(path);
+}
+
+export async function pickDirectory(
+  startPath?: string,
+  fetchImplementation: typeof fetch = fetch,
+): Promise<string | null> {
+  return createWorkspaceApiClient({
+    fetchImplementation,
+  }).pickDirectory(startPath);
 }
 
 export async function openWorkspaceTabBySlug(

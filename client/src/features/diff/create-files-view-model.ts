@@ -37,6 +37,8 @@ export interface FilesViewModel {
     activeContextId: string | null,
     directoryPath: string,
   ): Promise<void>;
+  expandAllDirectories(): void;
+  collapseAllDirectories(): void;
   setShowIgnored(activeContextId: string | null, value: boolean): Promise<void>;
   setShowAllFiles(
     activeContextId: string | null,
@@ -87,6 +89,8 @@ export function createFilesViewModel(
       filesController.setFileTreeMode(activeContextId, mode),
     toggleDirectory: (activeContextId, directoryPath) =>
       filesController.toggleDirectory(activeContextId, directoryPath),
+    expandAllDirectories: () => filesController.expandAllDirectories(),
+    collapseAllDirectories: () => filesController.collapseAllDirectories(),
     setShowIgnored: (activeContextId, value) =>
       filesController.setShowIgnored(activeContextId, value),
     setShowAllFiles: (activeContextId, value) =>

@@ -31,6 +31,7 @@ import {
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
+  mergeLiveAiSessionTranscriptLine,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
   describeAiSessionModelProfile,
@@ -49,7 +50,6 @@ import {
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
   createAiSessionScopeResetState,
-  hasAiSessionActivityEntry,
   createAiSessionHistoryFilters,
   createAiSessionDefaultPromptMessage,
   createAiSessionDetailRequestKey,
@@ -61,11 +61,15 @@ import {
   isAiSessionScopeCurrent,
   mergeAiSessionTranscriptLines,
   parseAiSessionOverviewRouteState,
+  readAiSessionOverviewRouteSearchFromHash,
+  replaceAiSessionOverviewRouteSearchInHash,
   resolveLoadedAiSessionTranscriptEventCount,
   resolveNextAiSessionTranscriptOffset,
   resolveAiSessionRequestToken,
+  resolveAiSessionRuntimeSession,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  shouldShowAiSessionComposer,
   updateHiddenAiSessionIds,
 } from "./state";
 
@@ -83,19 +87,18 @@ export interface AiSessionScreenProps {
 const ACTIVE_SESSION_POLL_MS = 5000;
 const SESSION_HISTORY_PAGE_SIZE = 50;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
+const SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY =
+  "qraftbox:session-transcript-show-system-prompts";
 
-function renderPlusIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path d="M10 4v12" stroke-linecap="round" />
-      <path d="M4 10h12" stroke-linecap="round" />
-    </svg>
-  );
+function loadInjectedSystemPromptVisibility(): boolean {
+  try {
+    return (
+      window.localStorage.getItem(SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY) ===
+      "true"
+    );
+  } catch {
+    return false;
+  }
 }
 
 function renderSearchIcon(): JSX.Element {
@@ -144,9 +147,56 @@ function renderClearIcon(): JSX.Element {
   );
 }
 
+function renderJumpToLatestIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="M10 4v9" stroke-linecap="round" />
+      <path d="m6 10 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M5 16h10" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderCloseIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="m5 5 10 10" stroke-linecap="round" />
+      <path d="M15 5 5 15" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderSystemPromptVisibilityIcon(hiddenCount: number): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <rect x="3.5" y="4" width="13" height="10" rx="2" />
+      <path d="M6.5 7.5h7" stroke-linecap="round" />
+      <path d="M6.5 10.5h4" stroke-linecap="round" />
+      <Show when={hiddenCount > 0}>
+        <path d="M4 16 16 4" stroke-linecap="round" />
+      </Show>
+    </svg>
+  );
+}
+
 export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const initialOverviewRouteState = parseAiSessionOverviewRouteState(
-    window.location.search,
+    readAiSessionOverviewRouteSearchFromHash(window.location.hash),
   );
   const aiSessionsApi = createAiSessionsApiClient({
     apiBaseUrl: props.apiBaseUrl,
@@ -171,6 +221,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [draftSessionId, setDraftSessionId] = createSignal<QraftAiSessionId>(
     generateQraftAiSessionId(),
   );
+  const [isDraftComposerOpen, setIsDraftComposerOpen] = createSignal(false);
   const [searchDraftQuery, setSearchDraftQuery] = createSignal(
     initialOverviewRouteState.searchQuery,
   );
@@ -222,6 +273,14 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [selectedSessionError, setSelectedSessionError] = createSignal<
     string | null
   >(null);
+  const [liveAssistantText, setLiveAssistantText] = createSignal<string | null>(
+    null,
+  );
+  const [liveAssistantTimestamp, setLiveAssistantTimestamp] = createSignal<
+    string | null
+  >(null);
+  const [showInjectedSystemPrompts, setShowInjectedSystemPrompts] =
+    createSignal(loadInjectedSystemPromptVisibility());
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
   const [submitResultMessage, setSubmitResultMessage] = createSignal<
     string | null
@@ -230,6 +289,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activeScopeKey: string | null = null;
   let activeSelectedSessionDetailKey: string | null = null;
+  let activeSelectedSessionStreamKey: string | null = null;
+  let activeSelectedSessionEventSource: EventSource | null = null;
+  let transcriptScrollContainer: HTMLDivElement | null = null;
   const activityRequestGuard = createLatestAiSessionRequestGuard();
   const hiddenSessionsRequestGuard = createLatestAiSessionRequestGuard();
   const modelProfilesRequestGuard = createLatestAiSessionRequestGuard();
@@ -240,6 +302,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     resolveAiSessionTargetSessionId({
       selectedQraftAiSessionId: selectedQraftAiSessionId(),
       draftSessionId: draftSessionId(),
+    });
+  const showComposer = () =>
+    shouldShowAiSessionComposer({
+      selectedQraftAiSessionId: selectedQraftAiSessionId(),
+      isDraftComposerOpen: isDraftComposerOpen(),
     });
   const promptContextState = () =>
     createAiSessionPromptContextState({
@@ -258,6 +325,26 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       (sessionEntry) =>
         sessionEntry.qraftAiSessionId === selectedQraftAiSessionId(),
     ) ?? null;
+  const selectedRuntimeSession = () =>
+    resolveAiSessionRuntimeSession({
+      selectedQraftAiSessionId: selectedQraftAiSessionId(),
+      activeSessions: activeSessions(),
+    });
+  const displayedSelectedSessionTranscript = () =>
+    mergeLiveAiSessionTranscriptLine({
+      transcriptLines: selectedSessionTranscript(),
+      liveAssistantText: liveAssistantText(),
+      liveAssistantTimestamp: liveAssistantTimestamp(),
+    });
+  const visibleSelectedSessionTranscript = () =>
+    displayedSelectedSessionTranscript().filter(
+      (transcriptLine) =>
+        showInjectedSystemPrompts() || !transcriptLine.isInjectedSystemPrompt,
+    );
+  const hiddenInjectedSystemPromptCount = () =>
+    displayedSelectedSessionTranscript().filter(
+      (transcriptLine) => transcriptLine.isInjectedSystemPrompt,
+    ).length;
   const selectedSessionDetailTarget = () => {
     const qraftAiSessionId = selectedQraftAiSessionId();
     if (props.contextId === null || qraftAiSessionId === null) {
@@ -279,6 +366,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ? null
       : resolveAiSessionCancelAction(sessionEntry);
   };
+  const selectedComposerHeading = () =>
+    selectedSessionEntry()?.title ?? "New AI session";
+  const selectedComposerDescription = () =>
+    selectedSessionEntry()?.detail ??
+    "Compose the first prompt for a new session. Nothing will be sent until you run or queue it.";
   const visibleSessionEntries = () => {
     if (includeHiddenSessions()) {
       return sessionEntries();
@@ -290,6 +382,17 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         hiddenSessionIdSet.has(sessionEntry.qraftAiSessionId) === false,
     );
   };
+
+  createEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY,
+        showInjectedSystemPrompts() ? "true" : "false",
+      );
+    } catch {
+      // localStorage unavailable
+    }
+  });
 
   async function refreshHiddenSessions(scopeKey: string): Promise<void> {
     const requestToken = hiddenSessionsRequestGuard.issue(scopeKey);
@@ -401,18 +504,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setHistoricalSessions(nextHistory.sessions);
       setHistoryTotal(nextHistory.total);
       setErrorMessage(null);
-      const liveSessionId = selectedQraftAiSessionId();
-      if (
-        liveSessionId !== null &&
-        !hasAiSessionActivityEntry({
-          qraftAiSessionId: liveSessionId,
-          activeSessions: nextActiveSessions,
-          promptQueue: nextPromptQueue,
-          historicalSessions: nextHistory.sessions,
-        })
-      ) {
-        setSelectedQraftAiSessionId(null);
-      }
     } catch (error) {
       if (!activityRequestGuard.isCurrent(requestToken)) {
         return;
@@ -446,9 +537,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     if (activeScopeKey !== nextScopeKey) {
       activeScopeKey = nextScopeKey;
       const scopeResetState = createAiSessionScopeResetState(
-        window.location.search,
+        readAiSessionOverviewRouteSearchFromHash(window.location.hash),
       );
       setSelectedQraftAiSessionId(scopeResetState.selectedSessionId);
+      setIsDraftComposerOpen(false);
       setDraftSessionId(scopeResetState.draftSessionId);
       setPromptInput(scopeResetState.promptInput);
       setSearchDraftQuery(scopeResetState.searchQuery);
@@ -473,6 +565,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionTranscriptLoadedEventCount(0);
     setSelectedSessionTranscriptTotal(0);
     setSelectedSessionError(null);
+    setLiveAssistantText(null);
+    setLiveAssistantTimestamp(null);
     const resetLoadingState = createAiSessionScopeResetLoadingState();
     setHistoryLoading(resetLoadingState.historyLoading);
     setActivityLoading(resetLoadingState.activityLoading);
@@ -624,7 +718,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       searchInTranscript: searchInTranscript(),
     });
     const currentUrl = new URL(window.location.href);
-    const nextUrl = `${currentUrl.pathname}${nextSearch}${currentUrl.hash}`;
+    const nextHash = replaceAiSessionOverviewRouteSearchInHash(
+      currentUrl.hash,
+      nextSearch,
+    );
+    const nextUrl = `${currentUrl.pathname}${currentUrl.search}${nextHash}`;
     const currentVisibleUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
     if (nextUrl !== currentVisibleUrl) {
@@ -643,6 +741,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setSelectedSessionTranscriptLoadedEventCount(0);
       setSelectedSessionTranscriptTotal(0);
       setSelectedSessionError(null);
+      setLiveAssistantText(null);
+      setLiveAssistantTimestamp(null);
       setSelectedSessionLoading(false);
       setSelectedSessionLoadingMore(false);
       return;
@@ -662,6 +762,108 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   });
 
   createEffect(() => {
+    const contextId = props.contextId;
+    const selectedSessionKey = selectedQraftAiSessionId();
+    const runtimeSession = selectedRuntimeSession();
+    const nextStreamKey =
+      contextId !== null &&
+      selectedSessionKey !== null &&
+      runtimeSession !== null &&
+      runtimeSession.state === "running"
+        ? `${runtimeSession.id}:${selectedSessionKey}`
+        : null;
+
+    if (nextStreamKey === activeSelectedSessionStreamKey) {
+      return;
+    }
+
+    activeSelectedSessionStreamKey = nextStreamKey;
+    activeSelectedSessionEventSource?.close();
+    activeSelectedSessionEventSource = null;
+    setLiveAssistantText(null);
+    setLiveAssistantTimestamp(null);
+
+    if (
+      contextId === null ||
+      selectedSessionKey === null ||
+      runtimeSession === null ||
+      runtimeSession.state !== "running"
+    ) {
+      return;
+    }
+
+    const eventSource = new EventSource(
+      `${props.apiBaseUrl}/ai/sessions/${encodeURIComponent(runtimeSession.id)}/stream`,
+    );
+    activeSelectedSessionEventSource = eventSource;
+
+    const handleAssistantMessage = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: {
+            readonly role?: unknown;
+            readonly content?: unknown;
+          };
+          readonly timestamp?: unknown;
+        };
+
+        if (payload.data?.role !== "assistant") {
+          return;
+        }
+
+        if (typeof payload.data.content !== "string") {
+          return;
+        }
+
+        setLiveAssistantText(payload.data.content);
+        setLiveAssistantTimestamp(
+          typeof payload.timestamp === "string" ? payload.timestamp : null,
+        );
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    };
+
+    const handleTerminalEvent = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      eventSource.close();
+      if (activeSelectedSessionEventSource === eventSource) {
+        activeSelectedSessionEventSource = null;
+        activeSelectedSessionStreamKey = null;
+      }
+      setLiveAssistantText(null);
+      setLiveAssistantTimestamp(null);
+
+      if (props.contextId !== null && props.projectPath.length > 0) {
+        void refreshActivity(props.contextId, props.projectPath);
+      }
+
+      const detailTarget = selectedSessionDetailTarget();
+      if (
+        detailTarget !== null &&
+        detailTarget.qraftAiSessionId === selectedSessionKey
+      ) {
+        void refreshSelectedSessionArtifacts({
+          ...detailTarget,
+          appendTranscript: false,
+        });
+      }
+    };
+
+    eventSource.addEventListener("message", handleAssistantMessage);
+    eventSource.addEventListener("completed", handleTerminalEvent);
+    eventSource.addEventListener("cancelled", handleTerminalEvent);
+    eventSource.addEventListener("error", handleTerminalEvent);
+  });
+
+  createEffect(() => {
     const hiddenSessionIdSet = new Set(hiddenSessionIds());
     const selectedSessionId = selectedQraftAiSessionId();
     if (
@@ -670,13 +872,14 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       hiddenSessionIdSet.has(selectedSessionId)
     ) {
       setSelectedQraftAiSessionId(null);
+      setIsDraftComposerOpen(false);
     }
   });
 
   createEffect(() => {
     const handlePopState = (): void => {
       const nextOverviewRouteState = parseAiSessionOverviewRouteState(
-        window.location.search,
+        readAiSessionOverviewRouteSearchFromHash(window.location.hash),
       );
       const shouldRefreshHistory = didAiSessionHistoryFilterChange({
         currentSearchQuery: searchQuery(),
@@ -684,6 +887,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         nextOverviewRouteState,
       });
       setSelectedQraftAiSessionId(nextOverviewRouteState.selectedSessionId);
+      setIsDraftComposerOpen(false);
       setSearchDraftQuery(nextOverviewRouteState.searchQuery);
       setSearchDraftInTranscript(nextOverviewRouteState.searchInTranscript);
       setSearchQuery(nextOverviewRouteState.searchQuery);
@@ -709,6 +913,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   });
 
   onCleanup(() => {
+    activeSelectedSessionEventSource?.close();
     if (pollTimer !== null) {
       clearInterval(pollTimer);
     }
@@ -743,6 +948,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       scopeKey,
       requestToken: options.requestToken,
     });
+    activityRequestGuard.invalidate();
     setSubmitting(true);
     try {
       const submitTarget = resolveAiSessionSubmitTarget({
@@ -784,7 +990,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
             submitResult.sessionId
           }.`,
       );
-      setSelectedQraftAiSessionId(submitResult.sessionId as QraftAiSessionId);
+      setSelectedQraftAiSessionId(submitTarget.qraftAiSessionId);
+      setIsDraftComposerOpen(false);
       await refreshActivity(contextId, projectPath);
     } catch (error) {
       if (
@@ -998,6 +1205,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   function startNewSession(): void {
     setDraftSessionId(generateQraftAiSessionId());
     setSelectedQraftAiSessionId(null);
+    setIsDraftComposerOpen(true);
     setErrorMessage(null);
     setSubmitResultMessage("Prepared a new AI session draft.");
   }
@@ -1039,6 +1247,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSubmitResultMessage(null);
     setHistoryLoading(true);
     await refreshActivity(props.contextId, props.projectPath);
+  }
+
+  function clearSearchTextBox(): void {
+    setSearchDraftQuery("");
   }
 
   async function toggleSessionHidden(
@@ -1211,7 +1423,36 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
   function dismissSessionDetail(): void {
     setSelectedQraftAiSessionId(null);
+    setIsDraftComposerOpen(false);
     setSelectedSessionError(null);
+  }
+
+  function scrollSelectedTranscriptToLatest(): void {
+    const container = transcriptScrollContainer;
+    if (container === null) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior: "smooth",
+    });
+  }
+
+  async function reloadSelectedSessionArtifacts(): Promise<void> {
+    const detailTarget = selectedSessionDetailTarget();
+    if (
+      detailTarget === null ||
+      selectedSessionLoading() ||
+      selectedSessionLoadingMore()
+    ) {
+      return;
+    }
+
+    await refreshSelectedSessionArtifacts({
+      ...detailTarget,
+      appendTranscript: false,
+    });
   }
 
   return (
@@ -1278,9 +1519,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                   setSearchDraftQuery(event.currentTarget.value)
                 }
               />
-              <ToolbarIconButton label="New session" onClick={startNewSession}>
-                {renderPlusIcon()}
-              </ToolbarIconButton>
               <ToolbarIconButton
                 type="submit"
                 label={
@@ -1289,6 +1527,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                 disabled={historyLoading() || activityLoading()}
               >
                 {renderSearchIcon()}
+              </ToolbarIconButton>
+              <ToolbarIconButton
+                label="Clear search text"
+                disabled={searchDraftQuery().length === 0}
+                onClick={clearSearchTextBox}
+              >
+                {renderClearIcon()}
               </ToolbarIconButton>
             </div>
             <CheckboxField
@@ -1402,11 +1647,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           sessionEntry.qraftAiSessionId
                         }
                         ariaLabel={`Open session ${sessionEntry.qraftAiSessionId}`}
-                        onActivate={() =>
+                        onActivate={() => {
+                          setIsDraftComposerOpen(false);
                           setSelectedQraftAiSessionId(
                             sessionEntry.qraftAiSessionId,
-                          )
-                        }
+                          );
+                        }}
                         topSlot={
                           <div class="flex items-start justify-between gap-3">
                             <div class="flex flex-wrap items-center gap-2">
@@ -1542,48 +1788,112 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
             </Show>
           </div>
 
-          <Show when={selectedQraftAiSessionId() !== null}>
+          <Show when={showComposer()}>
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
               <div class="flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-w-0 flex-1 flex-col border-r border-border-default">
                   <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
                     <div class="min-w-0">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <span
-                          class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
-                            selectedSessionEntry()?.status ?? "",
-                          )}`}
-                        >
-                          {selectedSessionEntry()?.status}
-                        </span>
-                        <span class="rounded bg-bg-tertiary px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                          {describeAiSessionEntryModel(
-                            selectedSessionEntry() ?? {
-                              modelProfileId: undefined,
-                              modelVendor: undefined,
-                              modelName: undefined,
-                            },
-                            modelProfiles(),
-                          )}
-                        </span>
-                      </div>
+                      <Show when={selectedSessionEntry() !== null}>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span
+                            class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
+                              selectedSessionEntry()?.status ?? "",
+                            )}`}
+                          >
+                            {selectedSessionEntry()?.status}
+                          </span>
+                          <span class="rounded bg-bg-tertiary px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                            {describeAiSessionEntryModel(
+                              selectedSessionEntry() ?? {
+                                modelProfileId: undefined,
+                                modelVendor: undefined,
+                                modelName: undefined,
+                              },
+                              modelProfiles(),
+                            )}
+                          </span>
+                        </div>
+                      </Show>
                       <h3 class="mt-2 truncate text-lg font-semibold text-text-primary">
-                        {selectedSessionEntry()?.title}
+                        {selectedComposerHeading()}
                       </h3>
                       <p class="mt-1 text-xs text-text-secondary">
-                        {selectedSessionEntry()?.detail}
+                        {selectedComposerDescription()}
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      class="rounded-md border border-border-default px-3 py-2 text-sm text-text-secondary transition hover:bg-bg-primary hover:text-text-primary"
-                      onClick={dismissSessionDetail}
-                    >
-                      Close
-                    </button>
+                    <div class="flex items-center gap-2">
+                      <button
+                        type="button"
+                        class={`rounded-md border p-2 transition ${
+                          showInjectedSystemPrompts()
+                            ? "border-accent-emphasis/50 bg-accent-muted text-accent-fg"
+                            : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+                        }`}
+                        aria-pressed={showInjectedSystemPrompts()}
+                        aria-label={
+                          showInjectedSystemPrompts()
+                            ? "Hide injected system prompts"
+                            : hiddenInjectedSystemPromptCount() > 0
+                              ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
+                              : "Show injected system prompts"
+                        }
+                        title={
+                          showInjectedSystemPrompts()
+                            ? "Hide injected system prompts"
+                            : hiddenInjectedSystemPromptCount() > 0
+                              ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
+                              : "Show injected system prompts"
+                        }
+                        onClick={() =>
+                          setShowInjectedSystemPrompts(
+                            !showInjectedSystemPrompts(),
+                          )
+                        }
+                      >
+                        <span class="block h-5 w-5">
+                          {renderSystemPromptVisibilityIcon(
+                            showInjectedSystemPrompts()
+                              ? 0
+                              : hiddenInjectedSystemPromptCount(),
+                          )}
+                        </span>
+                      </button>
+                      <ToolbarIconButton
+                        label="Reload transcript"
+                        disabled={
+                          selectedSessionLoading() ||
+                          selectedSessionLoadingMore()
+                        }
+                        onClick={() => void reloadSelectedSessionArtifacts()}
+                      >
+                        {renderRefreshIcon()}
+                      </ToolbarIconButton>
+                      <ToolbarIconButton
+                        label="Jump to latest"
+                        disabled={selectedSessionTranscript().length === 0}
+                        onClick={scrollSelectedTranscriptToLatest}
+                      >
+                        {renderJumpToLatestIcon()}
+                      </ToolbarIconButton>
+                      <button
+                        type="button"
+                        class="rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
+                        aria-label="Close"
+                        title="Close"
+                        onClick={dismissSessionDetail}
+                      >
+                        <span class="block h-5 w-5">{renderCloseIcon()}</span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div class="min-h-0 flex-1 overflow-auto px-4 py-4">
+                  <div
+                    ref={(element) => {
+                      transcriptScrollContainer = element;
+                    }}
+                    class="min-h-0 flex-1 overflow-auto px-4 py-4"
+                  >
                     <Show when={selectedSessionDetail() !== null}>
                       <div class="mb-4 grid gap-3 sm:grid-cols-3">
                         <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
@@ -1615,6 +1925,18 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       </div>
                     </Show>
 
+                    <Show
+                      when={
+                        selectedQraftAiSessionId() === null &&
+                        selectedSessionLoading() === false
+                      }
+                    >
+                      <div class="mb-4 rounded-xl border border-dashed border-border-default bg-bg-primary p-4 text-sm leading-6 text-text-secondary">
+                        New sessions do not have transcript history yet. Add a
+                        prompt from the right panel to start one.
+                      </div>
+                    </Show>
+
                     <Show when={selectedSessionLoading()}>
                       <p class="text-sm text-text-secondary">
                         Loading selected session transcript...
@@ -1629,7 +1951,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       </p>
                     </Show>
                     <div class="space-y-3">
-                      <For each={selectedSessionTranscript()}>
+                      <For each={visibleSelectedSessionTranscript()}>
                         {(transcriptLine) => (
                           <article class="rounded-xl border border-border-default bg-bg-primary p-4">
                             <div class="mb-2 flex items-center justify-between gap-3">
@@ -1663,11 +1985,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       when={
                         !selectedSessionLoading() &&
                         selectedSessionError() === null &&
-                        selectedSessionTranscript().length === 0
+                        visibleSelectedSessionTranscript().length === 0
                       }
                     >
                       <p class="text-sm text-text-secondary">
-                        No transcript events are available for this session yet.
+                        {hiddenInjectedSystemPromptCount() > 0
+                          ? "Only injected system prompts are currently hidden for this session."
+                          : "No transcript events are available for this session yet."}
                       </p>
                     </Show>
                     <Show

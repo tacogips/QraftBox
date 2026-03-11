@@ -2,6 +2,15 @@ import type { DiffFile, DiffStatus } from "./diff";
 
 export type FileTreeMode = "diff" | "all";
 
+export const FILE_TREE_MODES = [
+  "diff",
+  "all",
+] as const satisfies readonly FileTreeMode[];
+
+export function isFileTreeMode(value: string): value is FileTreeMode {
+  return FILE_TREE_MODES.includes(value as FileTreeMode);
+}
+
 export type FileTreeNodeStatus = DiffStatus | "ignored";
 
 export interface ServerFileNode {

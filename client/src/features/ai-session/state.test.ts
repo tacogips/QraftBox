@@ -25,10 +25,14 @@ import {
   parseAiSessionOverviewRouteState,
   resolveLoadedAiSessionTranscriptEventCount,
   resolveAiSessionRequestToken,
+  resolveAiSessionRuntimeSession,
   resolveNextAiSessionTranscriptOffset,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
   mergeAiSessionTranscriptLines,
+  shouldShowAiSessionComposer,
+  readAiSessionOverviewRouteSearchFromHash,
+  replaceAiSessionOverviewRouteSearchInHash,
   updateHiddenAiSessionIds,
 } from "./state";
 
@@ -111,6 +115,41 @@ describe("ai-session state helpers", () => {
     ).toBe(false);
   });
 
+  test("resolves the running runtime session from either runtime id or client session id", () => {
+    const activeSessions = [
+      {
+        id: "qs-runtime" as QraftAiSessionId,
+        state: "running",
+        prompt: "say hello",
+        projectPath: "/tmp/repo",
+        createdAt: "2026-03-11T07:40:00.000Z",
+        context: { references: [] },
+        clientSessionId: "qs-client" as QraftAiSessionId,
+      },
+    ];
+
+    expect(
+      resolveAiSessionRuntimeSession({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-client"),
+        activeSessions,
+      }),
+    ).toEqual(activeSessions[0]);
+
+    expect(
+      resolveAiSessionRuntimeSession({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-runtime"),
+        activeSessions,
+      }),
+    ).toEqual(activeSessions[0]);
+
+    expect(
+      resolveAiSessionRuntimeSession({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-missing"),
+        activeSessions,
+      }),
+    ).toBeNull();
+  });
+
   test("prefers the selected session id over the draft id", () => {
     expect(
       resolveAiSessionTargetSessionId({
@@ -118,6 +157,29 @@ describe("ai-session state helpers", () => {
         draftSessionId: asQraftAiSessionId("qs-draft"),
       }),
     ).toBe(asQraftAiSessionId("qs-existing"));
+  });
+
+  test("shows the composer for either a selected session or a draft session", () => {
+    expect(
+      shouldShowAiSessionComposer({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        isDraftComposerOpen: false,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldShowAiSessionComposer({
+        selectedQraftAiSessionId: null,
+        isDraftComposerOpen: true,
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldShowAiSessionComposer({
+        selectedQraftAiSessionId: null,
+        isDraftComposerOpen: false,
+      }),
+    ).toBe(false);
   });
 
   test("preserves restart-from-beginning as a force_new_session request on the selected session", () => {
@@ -729,5 +791,35 @@ Resume this migration session
     expect(scopeResetState.searchInTranscript).toBe(true);
     expect(scopeResetState.promptInput).toBe("");
     expect(scopeResetState.draftSessionId.length).toBeGreaterThan(0);
+  });
+
+  test("reads ai-session overview route state from the hash query", () => {
+    expect(
+      readAiSessionOverviewRouteSearchFromHash(
+        "#/qraftbox-dd412c/ai-session?ai_session_id=qs-existing&session_search=hello",
+      ),
+    ).toBe("?ai_session_id=qs-existing&session_search=hello");
+
+    expect(
+      readAiSessionOverviewRouteSearchFromHash("#/qraftbox-dd412c/ai-session"),
+    ).toBe("");
+  });
+
+  test("replaces ai-session overview route state inside the hash without touching the path", () => {
+    expect(
+      replaceAiSessionOverviewRouteSearchInHash(
+        "#/qraftbox-dd412c/ai-session",
+        "?ai_session_id=qs-existing",
+      ),
+    ).toBe("#/qraftbox-dd412c/ai-session?ai_session_id=qs-existing");
+
+    expect(
+      replaceAiSessionOverviewRouteSearchInHash(
+        "#/qraftbox-dd412c/ai-session?ai_session_id=qs-old",
+        "?ai_session_id=qs-new&session_search=hello",
+      ),
+    ).toBe(
+      "#/qraftbox-dd412c/ai-session?ai_session_id=qs-new&session_search=hello",
+    );
   });
 });

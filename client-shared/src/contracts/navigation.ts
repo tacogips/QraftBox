@@ -1,4 +1,5 @@
 import { isDiffViewMode, type DiffViewMode } from "./diff";
+import { isFileTreeMode, type FileTreeMode } from "./files";
 
 export const APP_SCREENS = [
   "files",
@@ -29,6 +30,7 @@ export interface ParsedAppRoute {
   readonly contextId: string | null;
   readonly selectedPath: string | null;
   readonly selectedViewMode: DiffViewMode | null;
+  readonly fileTreeMode: FileTreeMode | null;
   readonly selectedLineNumber: number | null;
 }
 
@@ -54,12 +56,14 @@ function createDefaultParsedRoute(
   projectSlug: string | null,
   screen: AppScreen,
 ): ParsedAppRoute {
+  const isFilesScreen = screen === "files";
   return {
     projectSlug,
     screen,
     contextId: null,
     selectedPath: null,
-    selectedViewMode: null,
+    selectedViewMode: isFilesScreen ? "side-by-side" : null,
+    fileTreeMode: isFilesScreen ? "diff" : null,
     selectedLineNumber: null,
   };
 }
@@ -79,23 +83,39 @@ function parseLineNumber(lineNumberValue: string | null): number | null {
 
 function appendRouteQuery(
   hashPath: string,
-  routeState: Pick<
-    ScreenRouteState,
-    "selectedPath" | "selectedViewMode" | "selectedLineNumber"
+  screen: AppScreen,
+  routeState: Partial<
+    Pick<
+      ScreenRouteState,
+      | "selectedPath"
+      | "selectedViewMode"
+      | "fileTreeMode"
+      | "selectedLineNumber"
+    >
   >,
 ): string {
   const hashSearchParams = new URLSearchParams();
+  const effectiveViewMode =
+    routeState.selectedViewMode ?? (screen === "files" ? "side-by-side" : null);
+  const effectiveFileTreeMode =
+    routeState.fileTreeMode ?? (screen === "files" ? "diff" : null);
+  const selectedPath = routeState.selectedPath;
+  const selectedLineNumber = routeState.selectedLineNumber;
 
-  if (routeState.selectedPath !== null) {
-    hashSearchParams.set("path", routeState.selectedPath);
+  if (selectedPath != null) {
+    hashSearchParams.set("path", selectedPath);
   }
 
-  if (routeState.selectedViewMode !== null) {
-    hashSearchParams.set("view", routeState.selectedViewMode);
+  if (effectiveViewMode !== null) {
+    hashSearchParams.set("view", effectiveViewMode);
   }
 
-  if (routeState.selectedLineNumber !== null) {
-    hashSearchParams.set("line", String(routeState.selectedLineNumber));
+  if (effectiveFileTreeMode !== null) {
+    hashSearchParams.set("tree", effectiveFileTreeMode);
+  }
+
+  if (selectedLineNumber != null) {
+    hashSearchParams.set("line", String(selectedLineNumber));
   }
 
   const serializedSearch = hashSearchParams.toString();
@@ -114,7 +134,11 @@ export function parseAppHash(hashValue: string): ParsedAppRoute {
   const selectedViewModeValue = hashSearchParams.get("view")?.trim() ?? "";
   const selectedViewMode = isDiffViewMode(selectedViewModeValue)
     ? selectedViewModeValue
-    : null;
+    : undefined;
+  const fileTreeModeValue = hashSearchParams.get("tree")?.trim() ?? "";
+  const fileTreeMode = isFileTreeMode(fileTreeModeValue)
+    ? fileTreeModeValue
+    : undefined;
   const selectedLineNumber = parseLineNumber(hashSearchParams.get("line"));
 
   if (routeParts.length >= 2) {
@@ -126,7 +150,18 @@ export function parseAppHash(hashValue: string): ParsedAppRoute {
         normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
       ),
       selectedPath: selectedPath.length > 0 ? selectedPath : null,
-      selectedViewMode,
+      selectedViewMode:
+        selectedViewMode ??
+        createDefaultParsedRoute(
+          projectSlug,
+          normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
+        ).selectedViewMode,
+      fileTreeMode:
+        fileTreeMode ??
+        createDefaultParsedRoute(
+          projectSlug,
+          normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
+        ).fileTreeMode,
       selectedLineNumber,
     };
   }
@@ -138,14 +173,25 @@ export function parseAppHash(hashValue: string): ParsedAppRoute {
       return {
         ...createDefaultParsedRoute(null, normalizedScreen),
         selectedPath: selectedPath.length > 0 ? selectedPath : null,
-        selectedViewMode,
+        selectedViewMode:
+          selectedViewMode ??
+          createDefaultParsedRoute(null, normalizedScreen).selectedViewMode,
+        fileTreeMode:
+          fileTreeMode ??
+          createDefaultParsedRoute(null, normalizedScreen).fileTreeMode,
         selectedLineNumber,
       };
     }
     return {
       ...createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN),
       selectedPath: selectedPath.length > 0 ? selectedPath : null,
-      selectedViewMode,
+      selectedViewMode:
+        selectedViewMode ??
+        createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN)
+          .selectedViewMode,
+      fileTreeMode:
+        fileTreeMode ??
+        createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN).fileTreeMode,
       selectedLineNumber,
     };
   }
@@ -153,7 +199,12 @@ export function parseAppHash(hashValue: string): ParsedAppRoute {
   return {
     ...createDefaultParsedRoute(null, DEFAULT_APP_SCREEN),
     selectedPath: selectedPath.length > 0 ? selectedPath : null,
-    selectedViewMode,
+    selectedViewMode:
+      selectedViewMode ??
+      createDefaultParsedRoute(null, DEFAULT_APP_SCREEN).selectedViewMode,
+    fileTreeMode:
+      fileTreeMode ??
+      createDefaultParsedRoute(null, DEFAULT_APP_SCREEN).fileTreeMode,
     selectedLineNumber,
   };
 }
@@ -165,16 +216,17 @@ export function screenFromHash(hashValue: string): AppScreen {
 export function buildScreenHash(
   projectSlug: string | null,
   screen: AppScreen,
-  routeState: Pick<
-    ScreenRouteState,
-    "selectedPath" | "selectedViewMode" | "selectedLineNumber"
-  > = {
-    selectedPath: null,
-    selectedViewMode: null,
-    selectedLineNumber: null,
-  },
+  routeState: Partial<
+    Pick<
+      ScreenRouteState,
+      | "selectedPath"
+      | "selectedViewMode"
+      | "fileTreeMode"
+      | "selectedLineNumber"
+    >
+  > = {},
 ): string {
   const hashPath =
     projectSlug !== null ? `#/${projectSlug}/${screen}` : `#/${screen}`;
-  return appendRouteQuery(hashPath, routeState);
+  return appendRouteQuery(hashPath, screen, routeState);
 }

@@ -28,13 +28,17 @@ function collectTsxFiles(directoryPath: string): readonly string[] {
   return filePaths;
 }
 
-function collectUsedControlFlowComponents(fileContents: string): readonly string[] {
+function collectUsedControlFlowComponents(
+  fileContents: string,
+): readonly string[] {
   return SOLID_CONTROL_FLOW_COMPONENTS.filter((componentName) =>
     new RegExp(`<${componentName}\\b`).test(fileContents),
   );
 }
 
-function collectImportedSolidBindings(fileContents: string): ReadonlySet<string> {
+function collectImportedSolidBindings(
+  fileContents: string,
+): ReadonlySet<string> {
   const solidImportMatch = fileContents.match(
     /import\s*\{([^}]*)\}\s*from\s*["']solid-js["']/s,
   );

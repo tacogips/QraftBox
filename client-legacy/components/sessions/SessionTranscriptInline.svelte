@@ -632,14 +632,13 @@
 
   $effect(() => {
     const activeLiveSessionId = liveAssistantSessionId;
-    if (
-      activeLiveSessionId === undefined ||
-      activeLiveSessionId.length === 0
-    ) {
+    if (activeLiveSessionId === undefined || activeLiveSessionId.length === 0) {
       return;
     }
 
-    const stream = new EventSource(`/api/ai/sessions/${activeLiveSessionId}/stream`);
+    const stream = new EventSource(
+      `/api/ai/sessions/${activeLiveSessionId}/stream`,
+    );
 
     const onLiveMessage = (event: Event): void => {
       if (!(event instanceof MessageEvent)) {
@@ -671,7 +670,8 @@
       !enableAssistantStream ||
       contextId.length === 0 ||
       sessionId.length === 0 ||
-      (liveAssistantSessionId !== undefined && liveAssistantSessionId.length > 0)
+      (liveAssistantSessionId !== undefined &&
+        liveAssistantSessionId.length > 0)
     ) {
       return;
     }

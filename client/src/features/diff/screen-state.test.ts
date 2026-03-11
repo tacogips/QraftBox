@@ -7,6 +7,7 @@ import {
   formatDiffStatusLabel,
   resolveDiffPathNavigation,
   resolveViewModeForFileTreeModeChange,
+  resolveViewModeForPathSelection,
 } from "./screen-state";
 
 const SAMPLE_FILE_TREE: FileTreeNode = {
@@ -207,5 +208,38 @@ describe("screen-state", () => {
         preferredViewMode: "full-file",
       }),
     ).toBe("full-file");
+  });
+
+  test("forces full-file mode when selecting a file outside the diff set", () => {
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "src/alpha.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      "src/alpha.ts",
+      "side-by-side",
+    );
+
+    expect(
+      resolveViewModeForPathSelection({
+        selectedPath: "docs/readme.md",
+        diffOverview,
+        preferredViewMode: "side-by-side",
+      }),
+    ).toBe("full-file");
+
+    expect(
+      resolveViewModeForPathSelection({
+        selectedPath: "src/alpha.ts",
+        diffOverview,
+        preferredViewMode: "inline",
+      }),
+    ).toBe("inline");
   });
 });

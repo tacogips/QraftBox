@@ -9,6 +9,7 @@ const INITIAL_ROUTE: ScreenRouteState = {
   contextId: null,
   selectedPath: null,
   selectedViewMode: null,
+  fileTreeMode: null,
   selectedLineNumber: null,
 };
 
@@ -18,6 +19,7 @@ const UPDATED_ROUTE: ScreenRouteState = {
   contextId: null,
   selectedPath: null,
   selectedViewMode: null,
+  fileTreeMode: null,
   selectedLineNumber: null,
 };
 

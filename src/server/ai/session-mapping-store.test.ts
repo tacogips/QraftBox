@@ -113,7 +113,13 @@ describe("SessionMappingStore", () => {
       const firstSessionId = "tie-claude-session-1" as ClaudeSessionId;
       const secondSessionId = "tie-claude-session-2" as ClaudeSessionId;
 
-      store.upsert(firstSessionId, projectPath, worktreeId, "qraftbox", qraftId);
+      store.upsert(
+        firstSessionId,
+        projectPath,
+        worktreeId,
+        "qraftbox",
+        qraftId,
+      );
       store.upsert(
         secondSessionId,
         projectPath,

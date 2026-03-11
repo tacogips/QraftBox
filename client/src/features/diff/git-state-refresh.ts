@@ -20,7 +20,10 @@ export interface CreateGitStateRefreshControllerOptions {
   readonly windowSource?: EventTargetLike | undefined;
   readonly documentSource?: VisibilitySource | undefined;
   readonly setIntervalFn?:
-    | ((callback: () => void, delayMs: number) => ReturnType<typeof setInterval>)
+    | ((
+        callback: () => void,
+        delayMs: number,
+      ) => ReturnType<typeof setInterval>)
     | undefined;
   readonly clearIntervalFn?:
     | ((timerId: ReturnType<typeof setInterval>) => void)
@@ -95,7 +98,10 @@ export function createGitStateRefreshController(
 
       pollTimer = setIntervalFn(refreshIfNeeded, pollMs);
       windowSource.addEventListener("focus", handleFocus);
-      documentSource.addEventListener("visibilitychange", handleVisibilityChange);
+      documentSource.addEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
     },
     disconnect(): void {
       if (pollTimer !== null) {

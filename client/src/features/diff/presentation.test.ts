@@ -20,10 +20,7 @@ describe("solid diff presentation", () => {
       "files" in populatedFixtureResponse
         ? (populatedFixtureResponse.files ?? [])
         : [];
-    const diffOverview = createDiffOverviewState(
-      populatedFiles,
-      "src/main.ts",
-    );
+    const diffOverview = createDiffOverviewState(populatedFiles, "src/main.ts");
 
     const parityResult = evaluateParityScenario(
       resolveDiffParityScenario("diff-populated-state"),

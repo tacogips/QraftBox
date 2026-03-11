@@ -59,6 +59,8 @@ export interface FilesController {
     activeContextId: string | null,
     directoryPath: string,
   ): Promise<void>;
+  expandAllDirectories(): void;
+  collapseAllDirectories(): void;
   setShowIgnored(activeContextId: string | null, value: boolean): Promise<void>;
   setShowAllFiles(
     activeContextId: string | null,
@@ -117,12 +119,78 @@ function expandDirectoriesForSelection(
   return nextExpandedPaths;
 }
 
+function collectDiffDirectoryPaths(
+  diffOverview: DiffOverviewState,
+): ReadonlySet<string> {
+  const expandedPaths = new Set<string>();
+
+  for (const diffFile of diffOverview.files) {
+    for (const directoryPath of collectAncestorDirectoryPaths(diffFile.path)) {
+      expandedPaths.add(directoryPath);
+    }
+  }
+
+  return expandedPaths;
+}
+
+function collectDirectoryPathsFromTree(
+  fileTree: FileTreeNode | null,
+): ReadonlySet<string> {
+  if (fileTree === null) {
+    return new Set<string>();
+  }
+
+  const directoryPaths = new Set<string>();
+
+  function visitTreeNode(fileTreeNode: FileTreeNode): void {
+    if (!fileTreeNode.isDirectory) {
+      return;
+    }
+
+    if (fileTreeNode.path.length > 0) {
+      directoryPaths.add(fileTreeNode.path);
+    }
+
+    for (const childNode of fileTreeNode.children ?? []) {
+      visitTreeNode(childNode);
+    }
+  }
+
+  visitTreeNode(fileTree);
+  return directoryPaths;
+}
+
+function arePathSetsEqual(
+  leftPaths: ReadonlySet<string>,
+  rightPaths: ReadonlySet<string>,
+): boolean {
+  if (leftPaths.size !== rightPaths.size) {
+    return false;
+  }
+
+  for (const leftPath of leftPaths) {
+    if (!rightPaths.has(leftPath)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function shouldLoadFileContent(
   selectedPath: string | null,
-  _diffOverview: DiffOverviewState,
-  _preferredViewMode: DiffViewMode,
+  diffOverview: DiffOverviewState,
+  preferredViewMode: DiffViewMode,
 ): boolean {
-  return selectedPath !== null;
+  if (selectedPath === null) {
+    return false;
+  }
+
+  if (preferredViewMode === "full-file") {
+    return true;
+  }
+
+  return !diffOverview.files.some((diffFile) => diffFile.path === selectedPath);
 }
 
 export function createFilesController(
@@ -199,6 +267,16 @@ export function createFilesController(
     }
 
     return diffOverview.selectedPath;
+  }
+
+  function collectExpandedPathsForCurrentMode(): ReadonlySet<string> {
+    if (state.fileTreeMode === "diff") {
+      return lastSynchronizationOptions === null
+        ? new Set<string>()
+        : collectDiffDirectoryPaths(lastSynchronizationOptions.diffOverview);
+    }
+
+    return collectDirectoryPathsFromTree(state.allFilesTree);
   }
 
   async function ensureAllFilesTree(
@@ -367,6 +445,7 @@ export function createFilesController(
       return state;
     },
     async synchronize(synchronizationOptions): Promise<void> {
+      const previousSynchronizationOptions = lastSynchronizationOptions;
       lastSynchronizationOptions = synchronizationOptions;
 
       if (
@@ -385,6 +464,9 @@ export function createFilesController(
 
       const activeContextId = synchronizationOptions.activeContextId;
       const contextChanged = visibleContextId !== activeContextId;
+      const enteringFilesScreen =
+        previousSynchronizationOptions?.screen !== "files" &&
+        synchronizationOptions.screen === "files";
       visibleContextId = activeContextId;
       visibleWorkspaceIsGitRepo =
         synchronizationOptions.activeWorkspaceIsGitRepo;
@@ -421,30 +503,20 @@ export function createFilesController(
       );
       const nextExpandedPaths =
         state.fileTreeMode === "diff"
-          ? expandDirectoriesForSelection(state.expandedPaths, nextSelectedPath)
+          ? contextChanged
+            ? collectDiffDirectoryPaths(synchronizationOptions.diffOverview)
+            : enteringFilesScreen
+              ? collectDiffDirectoryPaths(synchronizationOptions.diffOverview)
+              : state.selectedPath !== nextSelectedPath
+                ? expandDirectoriesForSelection(
+                    state.expandedPaths,
+                    nextSelectedPath,
+                  )
+                : state.expandedPaths
           : state.expandedPaths;
       if (
         state.selectedPath !== nextSelectedPath ||
-        serializeFileTree({
-          name: "",
-          path: "",
-          isDirectory: true,
-          children: Array.from(nextExpandedPaths).map((path) => ({
-            name: path,
-            path,
-            isDirectory: true,
-          })),
-        } as FileTreeNode) !==
-          serializeFileTree({
-            name: "",
-            path: "",
-            isDirectory: true,
-            children: Array.from(state.expandedPaths).map((path) => ({
-              name: path,
-              path,
-              isDirectory: true,
-            })),
-          } as FileTreeNode)
+        !arePathSetsEqual(nextExpandedPaths, state.expandedPaths)
       ) {
         updateState((currentState) => ({
           ...currentState,
@@ -480,6 +552,12 @@ export function createFilesController(
         nextMode === "diff"
           ? (lastSynchronizationOptions?.diffOverview.selectedPath ?? null)
           : state.selectedPath;
+      const nextExpandedPaths =
+        nextMode === "diff"
+          ? lastSynchronizationOptions !== null
+            ? collectDiffDirectoryPaths(lastSynchronizationOptions.diffOverview)
+            : state.expandedPaths
+          : collectDirectoryPathsFromTree(state.allFilesTree);
       updateState((currentState) => ({
         ...currentState,
         fileTreeMode: nextMode,
@@ -487,10 +565,10 @@ export function createFilesController(
         expandedPaths:
           nextMode === "diff"
             ? expandDirectoriesForSelection(
-                currentState.expandedPaths,
+                nextExpandedPaths,
                 fallbackSelectedPath,
               )
-            : currentState.expandedPaths,
+            : nextExpandedPaths,
       }));
       selectedPathContextId =
         fallbackSelectedPath !== null ? activeContextId : null;
@@ -573,6 +651,27 @@ export function createFilesController(
           allFilesError: toErrorMessage(error, "Failed to load directory"),
         }));
       }
+    },
+    expandAllDirectories(): void {
+      const nextExpandedPaths = collectExpandedPathsForCurrentMode();
+      if (arePathSetsEqual(nextExpandedPaths, state.expandedPaths)) {
+        return;
+      }
+
+      updateState((currentState) => ({
+        ...currentState,
+        expandedPaths: nextExpandedPaths,
+      }));
+    },
+    collapseAllDirectories(): void {
+      if (state.expandedPaths.size === 0) {
+        return;
+      }
+
+      updateState((currentState) => ({
+        ...currentState,
+        expandedPaths: new Set<string>(),
+      }));
     },
     async setShowIgnored(activeContextId, value): Promise<void> {
       updateState((currentState) => ({

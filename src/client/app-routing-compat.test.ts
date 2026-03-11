@@ -15,6 +15,7 @@ describe("app-routing compatibility adapter", () => {
       contextId: null,
       selectedPath: null,
       selectedViewMode: null,
+      fileTreeMode: null,
       selectedLineNumber: null,
     });
   });

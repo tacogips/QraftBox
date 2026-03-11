@@ -47,7 +47,8 @@ export interface SolidSupportReport {
   readonly criteria: readonly SolidSupportCriterion[];
 }
 
-export const DEFAULT_SOLID_SUPPORT_STATUS = SOURCE_CHECKOUT_SOLID_SUPPORT_STATUS;
+export const DEFAULT_SOLID_SUPPORT_STATUS =
+  SOURCE_CHECKOUT_SOLID_SUPPORT_STATUS;
 
 const NO_EXTRA_BLOCKERS: readonly SolidSupportBlocker[] = [];
 
@@ -328,7 +329,10 @@ function getGlobalSolidSupportBlockers(
 ): readonly SolidSupportBlocker[] {
   const blockers: SolidSupportBlocker[] = [];
 
-  if (supportStatus.hasSourceCheckout && !supportStatus.hasClientSolidDependencies) {
+  if (
+    supportStatus.hasSourceCheckout &&
+    !supportStatus.hasClientSolidDependencies
+  ) {
     blockers.push({
       id: "solid-deps-missing",
       scope: "global",
