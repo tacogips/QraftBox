@@ -1,8 +1,9 @@
-import { For, type JSX, Match, Show, Switch } from "solid-js";
+import { createSignal, For, type JSX, Match, Show, Switch } from "solid-js";
 import {
   transformToCurrentState,
   type CurrentStateLine,
 } from "../../../../client-shared/src/contracts/current-state";
+import { CheckboxField } from "../../components/CheckboxField";
 import type {
   DiffChange,
   DiffFile,
@@ -290,6 +291,26 @@ function renderNavigationIcon(direction: "previous" | "next"): JSX.Element {
   );
 }
 
+function renderReloadIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3 8a5 5 0 1 0 1.5-3.6M3 3v3h3"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
 function getStatusBadgeClass(status: string | undefined): string {
   if (status === "added" || status === "untracked") {
     return "border border-success-emphasis/40 bg-success-muted/20 text-success-fg";
@@ -367,6 +388,29 @@ function getCurrentStateLineClass(
   return "border-border-default/50 bg-bg-primary";
 }
 
+function getDeletedBlockIndicatorText(
+  currentStateLine: CurrentStateLine,
+): string {
+  const deletedBlock = currentStateLine.deletedBefore;
+  if (deletedBlock === undefined) {
+    return "";
+  }
+
+  const deletedLineCount = deletedBlock.lines.length;
+  const lineLabel = deletedLineCount === 1 ? "line" : "lines";
+
+  return `${deletedLineCount} deleted ${lineLabel} folded`;
+}
+
+function shouldRenderCurrentStateLine(
+  currentStateLine: CurrentStateLine,
+): boolean {
+  return (
+    currentStateLine.content !== "" ||
+    currentStateLine.changeType !== "unchanged"
+  );
+}
+
 function buildSideBySideRows(diffFile: DiffFile): readonly SideBySideRow[] {
   const rows: SideBySideRow[] = [];
 
@@ -430,6 +474,7 @@ function splitFileContentLines(
 }
 
 export function DiffScreen(props: DiffScreenProps): JSX.Element {
+  const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
   const visibleTreeEntries = () =>
@@ -489,7 +534,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const fullFileLines = () => splitFileContentLines(props.fileContent);
 
   return (
-    <section class="flex min-h-0 flex-1 flex-col overflow-hidden">
+    <section class="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <Switch>
         <Match when={props.errorMessage !== null}>
           <div class="rounded-2xl border border-danger-emphasis/40 bg-danger-muted/10 p-6 text-sm text-danger-fg">
@@ -507,216 +552,249 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
           </div>
         </Match>
         <Match when={true}>
-          <div class="flex min-h-0 flex-1 flex-col gap-4">
-            <div class="grid min-h-0 flex-1 gap-4 xl:grid-cols-[300px_minmax(0,1fr)_280px]">
-              <aside class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+          <div class="flex h-full min-h-0 flex-1 flex-col gap-4">
+            <div
+              class={`grid min-h-0 flex-1 gap-4 ${isFileTreeCollapsed() ? "xl:grid-cols-[56px_minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}
+            >
+              <aside
+                class={`flex min-h-0 h-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
+              >
                 <div class="border-b border-border-default p-4">
-                  <div class="flex items-center justify-between gap-2">
-                    <div
-                      class="inline-flex rounded-lg border border-border-default bg-bg-primary p-1"
-                      role="group"
-                      aria-label="File tree mode"
-                    >
-                      <button
-                        type="button"
-                        class={
-                          props.fileTreeMode === "diff"
-                            ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
-                            : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                        }
-                        disabled={
-                          !props.supportsDiff || props.fileTreeMode === "diff"
-                        }
-                        aria-label="Show only files with changes"
-                        title={`Diff (${props.diffOverview.stats.totalFiles})`}
-                        onClick={() => props.onChangeFileTreeMode("diff")}
-                      >
-                        <span class="flex items-center gap-1.5">
-                          {renderTreeModeIcon("diff")}
-                          <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] font-semibold">
-                            {props.diffOverview.stats.totalFiles}
-                          </span>
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        class={
-                          props.fileTreeMode === "all"
-                            ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
-                            : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                        }
-                        disabled={props.fileTreeMode === "all"}
-                        aria-label="Show all files"
-                        title="All files"
-                        onClick={() => props.onChangeFileTreeMode("all")}
-                      >
-                        {renderTreeModeIcon("all")}
-                      </button>
-                    </div>
+                  <div
+                    class={`flex items-center gap-2 ${isFileTreeCollapsed() ? "justify-center" : "justify-between"}`}
+                  >
                     <button
                       type="button"
-                      class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
-                      onClick={() => props.onReload()}
+                      class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                      aria-label={
+                        isFileTreeCollapsed()
+                          ? "Expand file tree"
+                          : "Collapse file tree"
+                      }
+                      title={
+                        isFileTreeCollapsed()
+                          ? "Expand file tree"
+                          : "Collapse file tree"
+                      }
+                      onClick={() =>
+                        setIsFileTreeCollapsed((currentValue) => !currentValue)
+                      }
                     >
-                      Reload
+                      {isFileTreeCollapsed()
+                        ? renderNavigationIcon("next")
+                        : renderNavigationIcon("previous")}
                     </button>
+                    <Show when={!isFileTreeCollapsed()}>
+                      <div
+                        class="inline-flex rounded-lg border border-border-default bg-bg-primary p-1"
+                        role="group"
+                        aria-label="File tree mode"
+                      >
+                        <button
+                          type="button"
+                          class={
+                            props.fileTreeMode === "diff"
+                              ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
+                              : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                          }
+                          disabled={
+                            !props.supportsDiff || props.fileTreeMode === "diff"
+                          }
+                          aria-label="Show only files with changes"
+                          title={`Diff (${props.diffOverview.stats.totalFiles})`}
+                          onClick={() => props.onChangeFileTreeMode("diff")}
+                        >
+                          <span class="flex items-center gap-1.5">
+                            {renderTreeModeIcon("diff")}
+                            <span class="rounded-full bg-black/15 px-1.5 py-0.5 text-[10px] font-semibold">
+                              {props.diffOverview.stats.totalFiles}
+                            </span>
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          class={
+                            props.fileTreeMode === "all"
+                              ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
+                              : "rounded-md p-2 text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                          }
+                          disabled={props.fileTreeMode === "all"}
+                          aria-label="Show all files"
+                          title="All files"
+                          onClick={() => props.onChangeFileTreeMode("all")}
+                        >
+                          {renderTreeModeIcon("all")}
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                        aria-label="Reload file tree"
+                        title="Reload file tree"
+                        onClick={() => props.onReload()}
+                      >
+                        {renderReloadIcon()}
+                      </button>
+                    </Show>
                   </div>
 
-                  <Show when={props.fileTreeMode === "all"}>
-                    <div class="mt-4 grid gap-2 text-xs text-text-secondary">
-                      <label class="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          class="rounded border-border-default"
-                          checked={props.showIgnored}
-                          onInput={(event) =>
-                            props.onToggleShowIgnored(
-                              event.currentTarget.checked,
-                            )
-                          }
-                        />
-                        Show ignored
-                      </label>
-                      <label class="inline-flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          class="rounded border-border-default"
-                          checked={props.showAllFiles}
-                          onInput={(event) =>
-                            props.onToggleShowAllFiles(
-                              event.currentTarget.checked,
-                            )
-                          }
-                        />
-                        Show non-Git files
-                      </label>
-                    </div>
-                  </Show>
-                </div>
-
-                <div class="min-h-0 flex-1 overflow-y-auto p-3">
-                  <Show when={props.allFilesError !== null}>
-                    <div class="mb-3 rounded-xl border border-danger-emphasis/30 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
-                      {props.allFilesError}
-                    </div>
-                  </Show>
-                  <Show when={props.isAllFilesLoading}>
-                    <div class="mb-3 rounded-xl border border-border-default bg-bg-primary px-3 py-2 text-xs text-text-secondary">
-                      Loading file tree...
-                    </div>
-                  </Show>
                   <Show
-                    when={visibleTreeEntries().length > 0}
-                    fallback={
-                      <div class="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border-default bg-bg-primary/40 px-6 py-10 text-center text-sm text-text-secondary">
-                        {resolveEmptyTreeText(
-                          props.fileTreeMode,
-                          props.showIgnored,
-                          props.showAllFiles,
-                        )}
-                      </div>
+                    when={
+                      !isFileTreeCollapsed() && props.fileTreeMode === "all"
                     }
                   >
-                    <ul class="space-y-1">
-                      <For each={visibleTreeEntries()}>
-                        {(treeEntry) => {
-                          const statusLabel = () =>
-                            formatDiffStatusLabel(treeEntry.status);
-                          return (
-                            <li>
-                              <div
-                                class="flex items-center gap-2"
-                                style={{
-                                  "padding-left": `${treeEntry.depth * 14}px`,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  class={`flex min-w-0 flex-1 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition ${getTreeItemClass(
-                                    {
-                                      isSelected:
-                                        !treeEntry.isDirectory &&
-                                        props.selectedPath === treeEntry.path,
-                                      isDirectory: treeEntry.isDirectory,
-                                    },
-                                  )}`}
-                                  onClick={() =>
-                                    treeEntry.isDirectory
-                                      ? props.onToggleDirectory(treeEntry.path)
-                                      : props.onSelectPath(treeEntry.path)
-                                  }
-                                >
-                                  <span class="shrink-0 text-text-tertiary">
-                                    {treeEntry.isDirectory
-                                      ? treeEntry.isExpandable
-                                        ? treeEntry.isExpanded
-                                          ? "▾"
-                                          : "▸"
-                                        : "•"
-                                      : "·"}
-                                  </span>
-                                  <span class="truncate">{treeEntry.name}</span>
-                                </button>
-                                <Show when={statusLabel() !== null}>
-                                  <span
-                                    class={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
-                                      treeEntry.status,
-                                    )}`}
-                                  >
-                                    {statusLabel()}
-                                  </span>
-                                </Show>
-                              </div>
-                            </li>
-                          );
-                        }}
-                      </For>
-                    </ul>
+                    <div class="mt-4 grid gap-2 text-xs text-text-secondary">
+                      <CheckboxField
+                        checked={props.showIgnored}
+                        label="Show ignored"
+                        labelClass="text-xs text-text-secondary"
+                        onInput={(event) =>
+                          props.onToggleShowIgnored(event.currentTarget.checked)
+                        }
+                      />
+                      <CheckboxField
+                        checked={props.showAllFiles}
+                        label="Show non-Git files"
+                        labelClass="text-xs text-text-secondary"
+                        onInput={(event) =>
+                          props.onToggleShowAllFiles(
+                            event.currentTarget.checked,
+                          )
+                        }
+                      />
+                    </div>
+                  </Show>
+
+                  <Show
+                    when={
+                      !isFileTreeCollapsed() && props.fileTreeMode === "diff"
+                    }
+                  >
+                    <div class="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-text-secondary">
+                      <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 font-semibold text-success-fg">
+                        +{props.diffOverview.stats.additions}
+                      </span>
+                      <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 font-semibold text-danger-fg">
+                        -{props.diffOverview.stats.deletions}
+                      </span>
+                    </div>
                   </Show>
                 </div>
-                <div class="border-t border-border-default bg-bg-primary/70 p-4">
-                  <div class="flex items-start justify-between gap-4">
-                    <div>
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                        Changed files
-                      </p>
-                      <p class="mt-2 text-lg font-semibold text-text-primary">
-                        {props.diffOverview.stats.totalFiles}
-                      </p>
+
+                <Show
+                  when={!isFileTreeCollapsed()}
+                  fallback={
+                    <div class="flex min-h-0 flex-1 items-start justify-center p-2">
+                      <button
+                        type="button"
+                        class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                        aria-label="Expand file tree"
+                        title="Expand file tree"
+                        onClick={() => setIsFileTreeCollapsed(false)}
+                      >
+                        {renderTreeModeIcon(props.fileTreeMode)}
+                      </button>
                     </div>
-                    <div class="text-right">
-                      <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-                        Insertions / Deletions
-                      </p>
-                      <div class="mt-2 flex items-center gap-2 text-sm font-semibold">
-                        <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-1 text-success-fg">
-                          +{props.diffOverview.stats.additions}
-                        </span>
-                        <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-1 text-danger-fg">
-                          -{props.diffOverview.stats.deletions}
-                        </span>
+                  }
+                >
+                  <div class="min-h-0 flex-1 overflow-y-auto p-3">
+                    <Show when={props.allFilesError !== null}>
+                      <div class="mb-3 rounded-xl border border-danger-emphasis/30 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
+                        {props.allFilesError}
                       </div>
-                    </div>
+                    </Show>
+                    <Show when={props.isAllFilesLoading}>
+                      <div class="mb-3 rounded-xl border border-border-default bg-bg-primary px-3 py-2 text-xs text-text-secondary">
+                        Loading file tree...
+                      </div>
+                    </Show>
+                    <Show
+                      when={visibleTreeEntries().length > 0}
+                      fallback={
+                        <div class="flex min-h-[240px] items-center justify-center rounded-xl border border-dashed border-border-default bg-bg-primary/40 px-6 py-10 text-center text-sm text-text-secondary">
+                          {resolveEmptyTreeText(
+                            props.fileTreeMode,
+                            props.showIgnored,
+                            props.showAllFiles,
+                          )}
+                        </div>
+                      }
+                    >
+                      <ul class="space-y-1">
+                        <For each={visibleTreeEntries()}>
+                          {(treeEntry) => {
+                            const statusLabel = () =>
+                              formatDiffStatusLabel(treeEntry.status);
+                            return (
+                              <li>
+                                <div
+                                  class="flex items-center gap-2"
+                                  style={{
+                                    "padding-left": `${treeEntry.depth * 14}px`,
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    class={`flex min-w-0 flex-1 items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-left text-xs transition ${getTreeItemClass(
+                                      {
+                                        isSelected:
+                                          !treeEntry.isDirectory &&
+                                          props.selectedPath === treeEntry.path,
+                                        isDirectory: treeEntry.isDirectory,
+                                      },
+                                    )}`}
+                                    onClick={() =>
+                                      treeEntry.isDirectory
+                                        ? props.onToggleDirectory(
+                                            treeEntry.path,
+                                          )
+                                        : props.onSelectPath(treeEntry.path)
+                                    }
+                                  >
+                                    <span class="shrink-0 text-text-tertiary">
+                                      {treeEntry.isDirectory
+                                        ? treeEntry.isExpandable
+                                          ? treeEntry.isExpanded
+                                            ? "▾"
+                                            : "▸"
+                                          : "•"
+                                        : "·"}
+                                    </span>
+                                    <span class="truncate leading-5">
+                                      {treeEntry.name}
+                                    </span>
+                                  </button>
+                                  <Show when={statusLabel() !== null}>
+                                    <span
+                                      class={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
+                                        treeEntry.status,
+                                      )}`}
+                                    >
+                                      {statusLabel()}
+                                    </span>
+                                  </Show>
+                                </div>
+                              </li>
+                            );
+                          }}
+                        </For>
+                      </ul>
+                    </Show>
                   </div>
-                  <Show when={props.unsupportedMessage !== null}>
-                    <p class="mt-3 text-xs text-attention-fg">
-                      {props.unsupportedMessage}
-                    </p>
-                  </Show>
-                </div>
+                </Show>
               </aside>
 
               <main class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
-                <div class="border-b border-border-default px-4 py-3">
-                  <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
+                  <div class="flex min-w-0 flex-col gap-2">
                     <div class="min-w-0">
-                      <div class="flex flex-wrap items-center gap-2">
-                        <p class="truncate text-lg font-semibold text-text-primary">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2">
+                        <p class="break-all text-base font-semibold text-text-primary">
                           {selectedPreviewPath() ?? "Select a file"}
                         </p>
                         <Show when={selectedStatus() !== null}>
                           <span
-                            class={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
+                            class={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
                               selectedStatus() ?? undefined,
                             )}`}
                           >
@@ -724,32 +802,10 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           </span>
                         </Show>
                       </div>
-                      <Show when={selectedDiffFile()?.oldPath !== undefined}>
-                        <p class="mt-1 text-xs text-text-secondary">
-                          Renamed from {selectedDiffFile()?.oldPath}
-                        </p>
-                      </Show>
-                      <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-text-secondary">
-                        <Show when={selectedDiffFile() !== null}>
-                          <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-1 text-success-fg">
-                            +{selectedDiffFile()?.additions}
-                          </span>
-                          <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-1 text-danger-fg">
-                            -{selectedDiffFile()?.deletions}
-                          </span>
-                        </Show>
-                        <For each={fileContentMetadata()}>
-                          {(metadataItem) => (
-                            <span class="rounded-full border border-border-default bg-bg-primary px-2 py-1">
-                              {metadataItem}
-                            </span>
-                          )}
-                        </For>
-                      </div>
                     </div>
 
-                    <div class="flex flex-col gap-2 lg:items-end">
-                      <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-text-secondary">
+                      <div class="flex shrink-0 flex-wrap items-center gap-2">
                         <For each={availableModes()}>
                           {(viewMode) => (
                             <button
@@ -768,8 +824,6 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                             </button>
                           )}
                         </For>
-                      </div>
-                      <div class="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
@@ -803,13 +857,37 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                         </button>
                         <button
                           type="button"
-                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
+                          class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                          aria-label="Refresh preview"
+                          title="Refresh preview"
                           onClick={() => props.onReload()}
                         >
-                          Refresh
+                          {renderReloadIcon()}
                         </button>
                       </div>
+
+                      <Show when={selectedDiffFile() !== null}>
+                        <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 text-success-fg">
+                          +{selectedDiffFile()?.additions}
+                        </span>
+                        <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 text-danger-fg">
+                          -{selectedDiffFile()?.deletions}
+                        </span>
+                      </Show>
+                      <For each={fileContentMetadata()}>
+                        {(metadataItem) => (
+                          <span class="rounded-full border border-border-default bg-bg-primary px-2 py-0.5">
+                            {metadataItem}
+                          </span>
+                        )}
+                      </For>
                     </div>
+
+                    <Show when={selectedDiffFile()?.oldPath !== undefined}>
+                      <p class="text-xs text-text-secondary">
+                        Renamed from {selectedDiffFile()?.oldPath}
+                      </p>
+                    </Show>
                   </div>
                 </div>
 
@@ -977,29 +1055,40 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       undefined
                                     }
                                   >
-                                    <div class="grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 bg-diff-del-bg font-mono text-[13px] leading-6">
-                                      <div class="px-4 py-1 text-right text-text-tertiary">
+                                    <div class="grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/40 font-mono text-[13px] leading-6">
+                                      <div class="px-4 py-1 text-right text-text-tertiary/45">
                                         {`${currentStateLine.deletedBefore?.originalStart ?? ""}-${currentStateLine.deletedBefore?.originalEnd ?? ""}`}
                                       </div>
-                                      <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                        {currentStateLine.deletedBefore?.lines.join(
-                                          "\n",
-                                        ) ?? ""}
+                                      <div class="relative px-4 py-1.5">
+                                        <div class="absolute inset-x-4 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
+                                        <div class="relative flex justify-end">
+                                          <span class="bg-bg-primary px-2 text-[11px] tracking-[0.08em] text-danger-fg/35">
+                                            {getDeletedBlockIndicatorText(
+                                              currentStateLine,
+                                            )}
+                                          </span>
+                                        </div>
                                       </div>
                                     </div>
                                   </Show>
-                                  <div
-                                    class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
-                                      currentStateLine.changeType,
-                                    )}`}
+                                  <Show
+                                    when={shouldRenderCurrentStateLine(
+                                      currentStateLine,
+                                    )}
                                   >
-                                    <div class="px-4 py-1 text-right text-text-tertiary">
-                                      {currentStateLine.lineNumber}
+                                    <div
+                                      class={`grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
+                                        currentStateLine.changeType,
+                                      )}`}
+                                    >
+                                      <div class="px-4 py-1 text-right text-text-tertiary">
+                                        {currentStateLine.lineNumber}
+                                      </div>
+                                      <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                        {currentStateLine.content}
+                                      </div>
                                     </div>
-                                    <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                      {currentStateLine.content}
-                                    </div>
-                                  </div>
+                                  </Show>
                                 </div>
                               )}
                             </For>
@@ -1048,81 +1137,6 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                   </Show>
                 </div>
               </main>
-
-              <aside class="hidden min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary xl:flex">
-                <div class="border-b border-border-default p-4">
-                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-text-tertiary">
-                    Changed files
-                  </p>
-                  <p class="mt-2 text-sm text-text-secondary">
-                    Jump between modified paths without losing your current diff
-                    mode.
-                  </p>
-                </div>
-                <div class="min-h-0 flex-1 overflow-y-auto p-3">
-                  <Show
-                    when={props.supportsDiff}
-                    fallback={
-                      <div class="rounded-xl border border-border-default bg-bg-primary px-4 py-6 text-sm text-text-secondary">
-                        Diff view is unavailable for non-Git workspaces.
-                      </div>
-                    }
-                  >
-                    <Show
-                      when={!props.diffOverview.isEmpty}
-                      fallback={
-                        <div class="rounded-xl border border-dashed border-border-default bg-bg-primary/40 px-4 py-6 text-sm text-text-secondary">
-                          No changed files are available for this workspace.
-                        </div>
-                      }
-                    >
-                      <div class="space-y-3">
-                        <For each={props.diffOverview.files}>
-                          {(diffFile) => (
-                            <button
-                              type="button"
-                              class={
-                                props.selectedPath === diffFile.path
-                                  ? "w-full rounded-xl border border-accent-emphasis/60 bg-accent-muted/15 p-4 text-left transition"
-                                  : "w-full rounded-xl border border-border-default bg-bg-primary p-4 text-left transition hover:border-accent-emphasis/40 hover:bg-bg-hover"
-                              }
-                              onClick={() => props.onSelectPath(diffFile.path)}
-                            >
-                              <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                  <p class="truncate text-sm font-medium text-text-primary">
-                                    {diffFile.path}
-                                  </p>
-                                  <Show when={diffFile.oldPath !== undefined}>
-                                    <p class="mt-1 truncate text-xs text-text-secondary">
-                                      from {diffFile.oldPath}
-                                    </p>
-                                  </Show>
-                                </div>
-                                <span
-                                  class={`shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
-                                    diffFile.status,
-                                  )}`}
-                                >
-                                  {diffFile.status}
-                                </span>
-                              </div>
-                              <div class="mt-3 flex items-center gap-2 text-xs">
-                                <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-1 text-success-fg">
-                                  +{diffFile.additions}
-                                </span>
-                                <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-1 text-danger-fg">
-                                  -{diffFile.deletions}
-                                </span>
-                              </div>
-                            </button>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </Show>
-                </div>
-              </aside>
             </div>
           </div>
         </Match>
