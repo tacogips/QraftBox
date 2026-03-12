@@ -569,8 +569,8 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
         <Show
           when={isConnected() || isConnecting()}
           fallback={
-            <div class="flex min-h-[420px] flex-1 items-center justify-center rounded-2xl border border-border-default bg-bg-secondary p-6 text-center">
-              <div>
+            <div class="flex min-h-[420px] flex-1 items-start justify-start rounded-2xl border border-border-default bg-bg-secondary p-6 text-left">
+              <div class="flex flex-col items-start gap-4">
                 <ToolbarIconButton
                   label="Connect terminal"
                   onClick={() => void connect()}
@@ -591,7 +591,9 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
                   </svg>
                 </ToolbarIconButton>
                 <Show when={connectionError() !== null}>
-                  <p class="mt-4 text-sm text-danger-fg">{connectionError()}</p>
+                  <p class="max-w-md text-sm text-danger-fg">
+                    {connectionError()}
+                  </p>
                 </Show>
               </div>
             </div>
