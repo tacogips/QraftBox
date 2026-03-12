@@ -14,7 +14,6 @@ import {
   createAiSessionsApiClient,
   type AISessionInfo,
   type PromptQueueItem,
-  type SessionPurposeResponse,
 } from "../../../../client-shared/src/api/ai-sessions";
 import { createModelConfigApiClient } from "../../../../client-shared/src/api/model-config";
 import type { DiffOverviewState } from "../../../../client-shared/src/contracts/diff";
@@ -45,31 +44,34 @@ import { renderAiSessionMarkdown } from "./markdown";
 import {
   applyAiSessionSearchDraft,
   canApplyAiSessionScopedRequestResult,
+  buildAiSessionScreenHash,
+  canSubmitAiSessionComposerPrompt,
   canLoadMoreAiSessionHistory,
   canLoadMoreAiSessionTranscript,
   canClearAiSessionSearch,
   type AiSessionRequestToken,
-  buildAiSessionOverviewRouteSearch,
+  createAiSessionDefaultPromptMessage,
+  resolveAiSessionSelectedModelState,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
   createAiSessionScopeResetState,
   createAiSessionHistoryFilters,
   createAiSessionDetailRequestKey,
+  type AiSessionDefaultPromptAction,
   createAiSessionScopeKey,
   createAiSessionScopeResetLoadingState,
-  createAiSessionPromptContextState,
+  isAiSessionComposerBusy,
   createLatestAiSessionRequestGuard,
   isAiSessionScopeCurrent,
   mergeAiSessionTranscriptLines,
   parseAiSessionOverviewRouteState,
   readAiSessionOverviewRouteSearchFromHash,
-  replaceAiSessionOverviewRouteSearchInHash,
   resolveLatestAiSessionTranscriptOffset,
   resolvePreviousAiSessionTranscriptOffset,
   resolveAiSessionRequestToken,
   resolveAiSessionRuntimeSession,
   resolveAiSessionStreamSessionId,
-  resolveAiSessionTargetSessionId,
+  resolveAiSessionSubmitModelProfileId,
   resolveAiSessionSubmitTarget,
   normalizeAiSessionLiveAssistantStatusText,
   shouldRetireAiSessionLiveAssistantFromTranscript,
@@ -82,6 +84,7 @@ import {
 export interface AiSessionScreenProps {
   readonly apiBaseUrl: string;
   readonly contextId: string | null;
+  readonly projectSlug: string | null;
   readonly projectPath: string;
   readonly selectedPath: string | null;
   readonly fileContent: FileContent | null;
@@ -95,6 +98,28 @@ const SESSION_HISTORY_PAGE_SIZE = 50;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
 const SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY =
   "qraftbox:session-transcript-show-system-prompts";
+const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
+  Record<
+    AiSessionDefaultPromptAction,
+    {
+      readonly idleLabel: string;
+      readonly runningLabel: string;
+    }
+  >
+> = {
+  "ai-session-purpose": {
+    idleLabel: "Create Purpose",
+    runningLabel: "Creating...",
+  },
+  "ai-session-refresh-purpose": {
+    idleLabel: "Refresh Purpose",
+    runningLabel: "Refreshing...",
+  },
+  "ai-session-resume": {
+    idleLabel: "Resume Session",
+    runningLabel: "Resuming...",
+  },
+};
 
 function loadInjectedSystemPromptVisibility(): boolean {
   try {
@@ -135,22 +160,6 @@ function renderRefreshIcon(): JSX.Element {
         stroke-linejoin="round"
       />
       <path d="M12.5 3.5h3v3" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-
-function renderPurposeIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <rect x="4" y="3.5" width="12" height="13" rx="2" />
-      <path d="M7 7.5h6" stroke-linecap="round" />
-      <path d="M7 10.5h6" stroke-linecap="round" />
-      <path d="M7 13.5h4" stroke-linecap="round" />
     </svg>
   );
 }
@@ -399,8 +408,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [activityLoading, setActivityLoading] = createSignal(false);
   const [modelProfilesLoading, setModelProfilesLoading] = createSignal(false);
   const [submitting, setSubmitting] = createSignal(false);
-  const [refreshingSessionPurpose, setRefreshingSessionPurpose] =
-    createSignal(false);
+  const [runningDefaultPromptAction, setRunningDefaultPromptAction] =
+    createSignal<AiSessionDefaultPromptAction | null>(null);
   const [isPurposeExpanded, setIsPurposeExpanded] = createSignal(false);
   const [selectedSessionDetail, setSelectedSessionDetail] =
     createSignal<ExtendedSessionEntry | null>(null);
@@ -469,21 +478,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const selectedSessionRequestGuard = createLatestAiSessionRequestGuard();
   const mutationRequestGuard = createLatestAiSessionRequestGuard();
 
-  const selectedSessionId = () =>
-    resolveAiSessionTargetSessionId({
-      selectedQraftAiSessionId: selectedQraftAiSessionId(),
-      draftSessionId: draftSessionId(),
-    });
   const showComposer = () =>
     shouldShowAiSessionComposer({
       selectedQraftAiSessionId: selectedQraftAiSessionId(),
       isDraftComposerOpen: isDraftComposerOpen(),
-    });
-  const promptContextState = () =>
-    createAiSessionPromptContextState({
-      selectedPath: props.selectedPath,
-      fileContent: props.fileContent,
-      diffOverview: props.diffOverview,
     });
   const sessionEntries = () =>
     buildAiSessionListEntries(
@@ -551,15 +549,25 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ? null
       : resolveAiSessionCancelAction(sessionEntry);
   };
-  const canRefreshSelectedSessionPurpose = () => {
-    const sessionEntry = selectedSessionEntry();
-    return sessionEntry !== null && sessionEntry.historySessionId !== null;
-  };
+  const canRunDraftSessionDefaultPrompt = () =>
+    selectedQraftAiSessionId() === null;
+  const canRunSelectedSessionDefaultPrompts = () =>
+    selectedQraftAiSessionId() !== null;
   const selectedComposerHeading = () =>
     selectedSessionEntry()?.title ?? "New AI session";
   const selectedComposerDescription = () =>
     selectedSessionEntry()?.detail ??
     "Compose the first prompt for a new session. Nothing will be sent until you run or queue it.";
+  const selectedSessionModelState = () => {
+    return resolveAiSessionSelectedModelState({
+      overviewModelState: selectedSessionEntry(),
+      detailModelState: selectedSessionDetail(),
+    });
+  };
+  const selectedSessionModelLabel = () =>
+    describeAiSessionEntryModel(selectedSessionModelState(), modelProfiles(), {
+      unknownLabel: "-",
+    });
   const visibleSessionEntries = () => {
     if (includeHiddenSessions()) {
       return sessionEntries();
@@ -778,7 +786,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionLoading(resetLoadingState.selectedSessionLoading);
     setSelectedSessionLoadingMore(resetLoadingState.selectedSessionLoadingMore);
     setSubmitting(resetLoadingState.submitting);
-    setRefreshingSessionPurpose(false);
+    setRunningDefaultPromptAction(null);
     setHistoryLoadingMore(false);
 
     if (pollTimer !== null) {
@@ -981,21 +989,21 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
   createEffect(() => {
     const selectedSessionId = selectedQraftAiSessionId();
-    const nextSearch = buildAiSessionOverviewRouteSearch({
-      selectedSessionId,
-      searchQuery: searchQuery(),
-      searchInTranscript: searchInTranscript(),
+    const nextHash = buildAiSessionScreenHash({
+      projectSlug: props.projectSlug,
+      overviewRouteState: {
+        selectedSessionId,
+        searchQuery: searchQuery(),
+        searchInTranscript: searchInTranscript(),
+      },
     });
-    const currentUrl = new URL(window.location.href);
-    const nextHash = replaceAiSessionOverviewRouteSearchInHash(
-      currentUrl.hash,
-      nextSearch,
-    );
-    const nextUrl = `${currentUrl.pathname}${currentUrl.search}${nextHash}`;
-    const currentVisibleUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
 
-    if (nextUrl !== currentVisibleUrl) {
-      window.history.replaceState(window.history.state, "", nextUrl);
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${window.location.search}${nextHash}`,
+      );
     }
   });
 
@@ -1515,7 +1523,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         projectPath,
         qraftAiSessionId: submitTarget.qraftAiSessionId,
         forceNewSession: submitTarget.forceNewSession,
-        modelProfileId: selectedModelProfileId() ?? undefined,
+        modelProfileId: resolveAiSessionSubmitModelProfileId({
+          selectedQraftAiSessionId: selectedQraftAiSessionId(),
+          selectedSessionModelProfileId:
+            selectedSessionModelState().modelProfileId,
+          draftModelProfileId: selectedModelProfileId(),
+        }),
         context: submitContext,
       });
       if (
@@ -1612,8 +1625,26 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     });
   }
 
+  async function restartSelectedSessionFromBeginning(): Promise<void> {
+    await submitPromptMessage(promptInput().trim(), true, {
+      clearComposerInput: true,
+      forceNewSession: true,
+    });
+  }
+
+  const composerBusy = () =>
+    isAiSessionComposerBusy({
+      submitting: submitting(),
+      modelProfilesLoading: modelProfilesLoading(),
+      runningDefaultPromptAction: runningDefaultPromptAction(),
+    });
   const promptSubmissionDisabled = () =>
-    submitting() || modelProfilesLoading() || refreshingSessionPurpose();
+    !canSubmitAiSessionComposerPrompt({
+      promptInput: promptInput(),
+      submitting: submitting(),
+      modelProfilesLoading: modelProfilesLoading(),
+      runningDefaultPromptAction: runningDefaultPromptAction(),
+    });
 
   function handlePromptInputKeyDown(event: KeyboardEvent): void {
     if (!event.ctrlKey || event.key !== "Enter" || promptSubmissionDisabled()) {
@@ -1624,64 +1655,42 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     void submitPrompt(false);
   }
 
-  function applyRefreshedSessionPurpose(
-    qraftAiSessionId: QraftAiSessionId,
-    purposeResponse: SessionPurposeResponse,
-  ): void {
-    const nextPurpose = purposeResponse.purpose.trim();
-    if (nextPurpose.length === 0) {
-      return;
-    }
-
-    setHistoricalSessions((currentHistoricalSessions) =>
-      currentHistoricalSessions.map((historicalSession) =>
-        historicalSession.qraftAiSessionId === qraftAiSessionId
-          ? {
-              ...historicalSession,
-              firstPrompt: nextPurpose,
-              summary: nextPurpose,
-            }
-          : historicalSession,
-      ),
-    );
-    setSelectedSessionDetail((currentSelectedSessionDetail) =>
-      currentSelectedSessionDetail?.qraftAiSessionId === qraftAiSessionId
-        ? {
-            ...currentSelectedSessionDetail,
-            firstPrompt: nextPurpose,
-            summary: nextPurpose,
-          }
-        : currentSelectedSessionDetail,
-    );
+  function isRunningDefaultPrompt(
+    action: AiSessionDefaultPromptAction,
+  ): boolean {
+    return runningDefaultPromptAction() === action;
   }
 
-  async function refreshSelectedSessionPurpose(): Promise<void> {
+  function describeDefaultPromptActionLabel(
+    action: AiSessionDefaultPromptAction,
+  ): string {
+    const actionLabels = DEFAULT_PROMPT_ACTION_LABELS[action];
+    return isRunningDefaultPrompt(action)
+      ? actionLabels.runningLabel
+      : actionLabels.idleLabel;
+  }
+
+  async function runDefaultPromptAction(
+    action: AiSessionDefaultPromptAction,
+  ): Promise<void> {
     const scopeKey = createAiSessionScopeKey(
       props.contextId,
       props.projectPath,
     );
-    const qraftAiSessionId = selectedQraftAiSessionId();
-    if (
-      scopeKey === null ||
-      props.contextId === null ||
-      qraftAiSessionId === null ||
-      !canRefreshSelectedSessionPurpose()
-    ) {
+    if (scopeKey === null || props.contextId === null) {
       return;
     }
 
     const requestToken = mutationRequestGuard.issue(scopeKey);
     setErrorMessage(null);
-    setRefreshingSessionPurpose(true);
+    setRunningDefaultPromptAction(action);
 
     try {
-      const purposeResponse = await aiSessionsApi.fetchClaudeSessionPurpose(
-        props.contextId,
-        qraftAiSessionId,
-      );
+      const promptResponse = await modelConfigApi.fetchGitActionPrompt(action);
       if (
-        !mutationRequestGuard.isCurrent(requestToken) ||
-        !isAiSessionScopeCurrent({
+        !canApplyAiSessionScopedRequestResult({
+          requestGuard: mutationRequestGuard,
+          requestToken,
           expectedScopeKey: scopeKey,
           contextId: props.contextId,
           projectPath: props.projectPath,
@@ -1689,11 +1698,20 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ) {
         return;
       }
-      applyRefreshedSessionPurpose(qraftAiSessionId, purposeResponse);
+
+      await submitPromptMessage(
+        createAiSessionDefaultPromptMessage(action, promptResponse.content),
+        true,
+        {
+          clearComposerInput: false,
+          requestToken,
+        },
+      );
     } catch (error) {
       if (
-        !mutationRequestGuard.isCurrent(requestToken) ||
-        !isAiSessionScopeCurrent({
+        !canApplyAiSessionScopedRequestResult({
+          requestGuard: mutationRequestGuard,
+          requestToken,
           expectedScopeKey: scopeKey,
           contextId: props.contextId,
           projectPath: props.projectPath,
@@ -1704,18 +1722,19 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to refresh the session purpose",
+          : "Failed to run the default session action",
       );
     } finally {
       if (
-        mutationRequestGuard.isCurrent(requestToken) &&
-        isAiSessionScopeCurrent({
+        canApplyAiSessionScopedRequestResult({
+          requestGuard: mutationRequestGuard,
+          requestToken,
           expectedScopeKey: scopeKey,
           contextId: props.contextId,
           projectPath: props.projectPath,
         })
       ) {
-        setRefreshingSessionPurpose(false);
+        setRunningDefaultPromptAction(null);
       }
     }
   }
@@ -2490,14 +2509,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             {selectedSessionEntry()?.status}
                           </span>
                           <span class="rounded bg-bg-tertiary px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
-                            {describeAiSessionEntryModel(
-                              selectedSessionEntry() ?? {
-                                modelProfileId: undefined,
-                                modelVendor: undefined,
-                                modelName: undefined,
-                              },
-                              modelProfiles(),
-                            )}
+                            {selectedSessionModelLabel()}
                           </span>
                         </div>
                       </Show>
@@ -2565,22 +2577,47 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           )}
                         </span>
                       </button>
-                      <Show when={canRefreshSelectedSessionPurpose()}>
-                        <ToolbarIconButton
-                          label="Refresh purpose"
-                          disabled={refreshingSessionPurpose() || submitting()}
-                          onClick={() => void refreshSelectedSessionPurpose()}
+                      <Show when={canRunDraftSessionDefaultPrompt()}>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={composerBusy()}
+                          onClick={() =>
+                            void runDefaultPromptAction("ai-session-purpose")
+                          }
                         >
-                          <span
-                            class={`block h-5 w-5 ${
-                              refreshingSessionPurpose()
-                                ? "animate-spin-smooth"
-                                : ""
-                            }`}
-                          >
-                            {renderPurposeIcon()}
-                          </span>
-                        </ToolbarIconButton>
+                          {describeDefaultPromptActionLabel(
+                            "ai-session-purpose",
+                          )}
+                        </button>
+                      </Show>
+                      <Show when={canRunSelectedSessionDefaultPrompts()}>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={composerBusy()}
+                          onClick={() =>
+                            void runDefaultPromptAction(
+                              "ai-session-refresh-purpose",
+                            )
+                          }
+                        >
+                          {describeDefaultPromptActionLabel(
+                            "ai-session-refresh-purpose",
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={composerBusy()}
+                          onClick={() =>
+                            void runDefaultPromptAction("ai-session-resume")
+                          }
+                        >
+                          {describeDefaultPromptActionLabel(
+                            "ai-session-resume",
+                          )}
+                        </button>
                       </Show>
                       <ToolbarIconButton
                         label="Reload transcript"
@@ -2769,7 +2806,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] md:items-end">
                         <div class="min-w-0">
                           <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                            Profile
+                            Session
                           </p>
                           <p class="mt-1 truncate text-sm text-text-primary">
                             {describeAiSessionTarget({
@@ -2779,33 +2816,49 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             })}
                           </p>
                         </div>
-                        <label class="flex flex-col gap-1 text-sm text-text-secondary">
-                          <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                            Model profile
-                          </span>
-                          <select
-                            class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
-                            value={selectedModelProfileId() ?? ""}
-                            disabled={modelProfilesLoading()}
-                            onChange={(event) =>
-                              setSelectedModelProfileId(
-                                event.currentTarget.value.length > 0
-                                  ? event.currentTarget.value
-                                  : null,
-                              )
-                            }
-                          >
-                            <option value="">Server default AI profile</option>
-                            <For each={modelProfiles()}>
-                              {(modelProfile) => (
-                                <option value={modelProfile.id}>
-                                  {modelProfile.name} ({modelProfile.vendor}/
-                                  {modelProfile.model})
-                                </option>
-                              )}
-                            </For>
-                          </select>
-                        </label>
+                        <Show
+                          when={selectedQraftAiSessionId() === null}
+                          fallback={
+                            <div class="flex flex-col gap-1 text-sm text-text-secondary">
+                              <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                                Model profile
+                              </span>
+                              <p class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary">
+                                {selectedSessionModelLabel()}
+                              </p>
+                            </div>
+                          }
+                        >
+                          <label class="flex flex-col gap-1 text-sm text-text-secondary">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                              Model profile
+                            </span>
+                            <select
+                              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
+                              value={selectedModelProfileId() ?? ""}
+                              disabled={modelProfilesLoading()}
+                              onChange={(event) =>
+                                setSelectedModelProfileId(
+                                  event.currentTarget.value.length > 0
+                                    ? event.currentTarget.value
+                                    : null,
+                                )
+                              }
+                            >
+                              <option value="">
+                                Server default AI profile
+                              </option>
+                              <For each={modelProfiles()}>
+                                {(modelProfile) => (
+                                  <option value={modelProfile.id}>
+                                    {modelProfile.name} ({modelProfile.vendor}/
+                                    {modelProfile.model})
+                                  </option>
+                                )}
+                              </For>
+                            </select>
+                          </label>
+                        </Show>
                       </div>
                       <div class="pt-1">
                         <div class="mb-1 flex items-center justify-between gap-3">
@@ -2839,6 +2892,18 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           >
                             Run now
                           </button>
+                          <Show when={selectedQraftAiSessionId() !== null}>
+                            <button
+                              type="button"
+                              class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={promptSubmissionDisabled()}
+                              onClick={() =>
+                                void restartSelectedSessionFromBeginning()
+                              }
+                            >
+                              Restart from beginning
+                            </button>
+                          </Show>
                           <Show when={selectedSessionCancelAction() !== null}>
                             <button
                               type="button"

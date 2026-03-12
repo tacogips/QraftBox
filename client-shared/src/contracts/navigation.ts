@@ -16,6 +16,8 @@ export const APP_SCREENS = [
 export type AppScreen = (typeof APP_SCREENS)[number];
 
 export const DEFAULT_APP_SCREEN: AppScreen = "files";
+const DEFAULT_FILES_VIEW_MODE: DiffViewMode = "side-by-side";
+const DEFAULT_FILES_TREE_MODE: FileTreeMode = "diff";
 
 export const VALID_APP_SCREENS: ReadonlySet<AppScreen> = new Set(APP_SCREENS);
 
@@ -62,8 +64,8 @@ function createDefaultParsedRoute(
     screen,
     contextId: null,
     selectedPath: null,
-    selectedViewMode: isFilesScreen ? "side-by-side" : null,
-    fileTreeMode: isFilesScreen ? "diff" : null,
+    selectedViewMode: isFilesScreen ? DEFAULT_FILES_VIEW_MODE : null,
+    fileTreeMode: isFilesScreen ? DEFAULT_FILES_TREE_MODE : null,
     selectedLineNumber: null,
   };
 }
@@ -94,24 +96,36 @@ function appendRouteQuery(
     >
   >,
 ): string {
+  if (screen !== "files") {
+    return hashPath;
+  }
+
   const hashSearchParams = new URLSearchParams();
-  const effectiveViewMode =
-    routeState.selectedViewMode ?? (screen === "files" ? "side-by-side" : null);
-  const effectiveFileTreeMode =
-    routeState.fileTreeMode ?? (screen === "files" ? "diff" : null);
-  const selectedPath = routeState.selectedPath;
-  const selectedLineNumber = routeState.selectedLineNumber;
+  const selectedPath = routeState.selectedPath?.trim() ?? "";
+  const normalizedSelectedPath = selectedPath.length > 0 ? selectedPath : null;
+  const selectedLineNumber =
+    normalizedSelectedPath === null
+      ? null
+      : (routeState.selectedLineNumber ?? null);
 
-  if (selectedPath != null) {
-    hashSearchParams.set("path", selectedPath);
+  if (normalizedSelectedPath !== null) {
+    hashSearchParams.set("path", normalizedSelectedPath);
   }
 
-  if (effectiveViewMode !== null) {
-    hashSearchParams.set("view", effectiveViewMode);
+  if (
+    routeState.selectedViewMode !== null &&
+    routeState.selectedViewMode !== undefined &&
+    routeState.selectedViewMode !== DEFAULT_FILES_VIEW_MODE
+  ) {
+    hashSearchParams.set("view", routeState.selectedViewMode);
   }
 
-  if (effectiveFileTreeMode !== null) {
-    hashSearchParams.set("tree", effectiveFileTreeMode);
+  if (
+    routeState.fileTreeMode !== null &&
+    routeState.fileTreeMode !== undefined &&
+    routeState.fileTreeMode !== DEFAULT_FILES_TREE_MODE
+  ) {
+    hashSearchParams.set("tree", routeState.fileTreeMode);
   }
 
   if (selectedLineNumber != null) {
@@ -122,6 +136,37 @@ function appendRouteQuery(
   return serializedSearch.length > 0
     ? `${hashPath}?${serializedSearch}`
     : hashPath;
+}
+
+function createParsedRouteWithQueryState(params: {
+  readonly projectSlug: string | null;
+  readonly screen: AppScreen;
+  readonly selectedPath: string;
+  readonly selectedViewMode: DiffViewMode | undefined;
+  readonly fileTreeMode: FileTreeMode | undefined;
+  readonly selectedLineNumber: number | null;
+}): ParsedAppRoute {
+  const defaultRoute = createDefaultParsedRoute(
+    params.projectSlug,
+    params.screen,
+  );
+
+  if (params.screen !== "files") {
+    return defaultRoute;
+  }
+
+  const normalizedSelectedPath = params.selectedPath.trim();
+  const selectedPath =
+    normalizedSelectedPath.length > 0 ? normalizedSelectedPath : null;
+
+  return {
+    ...defaultRoute,
+    selectedPath,
+    selectedViewMode: params.selectedViewMode ?? defaultRoute.selectedViewMode,
+    fileTreeMode: params.fileTreeMode ?? defaultRoute.fileTreeMode,
+    selectedLineNumber:
+      selectedPath === null ? null : params.selectedLineNumber,
+  };
 }
 
 export function parseAppHash(hashValue: string): ParsedAppRoute {
@@ -144,69 +189,48 @@ export function parseAppHash(hashValue: string): ParsedAppRoute {
   if (routeParts.length >= 2) {
     const projectSlug = routeParts[0] ?? null;
     const screenPart = routeParts[1] ?? DEFAULT_APP_SCREEN;
-    return {
-      ...createDefaultParsedRoute(
-        projectSlug,
-        normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
-      ),
-      selectedPath: selectedPath.length > 0 ? selectedPath : null,
-      selectedViewMode:
-        selectedViewMode ??
-        createDefaultParsedRoute(
-          projectSlug,
-          normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
-        ).selectedViewMode,
-      fileTreeMode:
-        fileTreeMode ??
-        createDefaultParsedRoute(
-          projectSlug,
-          normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN,
-        ).fileTreeMode,
+    const screen = normalizeAppScreen(screenPart) ?? DEFAULT_APP_SCREEN;
+    return createParsedRouteWithQueryState({
+      projectSlug,
+      screen,
+      selectedPath,
+      selectedViewMode,
+      fileTreeMode,
       selectedLineNumber,
-    };
+    });
   }
 
   if (routeParts.length === 1) {
     const singlePart = routeParts[0] ?? "";
     const normalizedScreen = normalizeAppScreen(singlePart);
     if (normalizedScreen !== undefined) {
-      return {
-        ...createDefaultParsedRoute(null, normalizedScreen),
-        selectedPath: selectedPath.length > 0 ? selectedPath : null,
-        selectedViewMode:
-          selectedViewMode ??
-          createDefaultParsedRoute(null, normalizedScreen).selectedViewMode,
-        fileTreeMode:
-          fileTreeMode ??
-          createDefaultParsedRoute(null, normalizedScreen).fileTreeMode,
+      return createParsedRouteWithQueryState({
+        projectSlug: null,
+        screen: normalizedScreen,
+        selectedPath,
+        selectedViewMode,
+        fileTreeMode,
         selectedLineNumber,
-      };
+      });
     }
-    return {
-      ...createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN),
-      selectedPath: selectedPath.length > 0 ? selectedPath : null,
-      selectedViewMode:
-        selectedViewMode ??
-        createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN)
-          .selectedViewMode,
-      fileTreeMode:
-        fileTreeMode ??
-        createDefaultParsedRoute(singlePart, DEFAULT_APP_SCREEN).fileTreeMode,
+    return createParsedRouteWithQueryState({
+      projectSlug: singlePart,
+      screen: DEFAULT_APP_SCREEN,
+      selectedPath,
+      selectedViewMode,
+      fileTreeMode,
       selectedLineNumber,
-    };
+    });
   }
 
-  return {
-    ...createDefaultParsedRoute(null, DEFAULT_APP_SCREEN),
-    selectedPath: selectedPath.length > 0 ? selectedPath : null,
-    selectedViewMode:
-      selectedViewMode ??
-      createDefaultParsedRoute(null, DEFAULT_APP_SCREEN).selectedViewMode,
-    fileTreeMode:
-      fileTreeMode ??
-      createDefaultParsedRoute(null, DEFAULT_APP_SCREEN).fileTreeMode,
+  return createParsedRouteWithQueryState({
+    projectSlug: null,
+    screen: DEFAULT_APP_SCREEN,
+    selectedPath,
+    selectedViewMode,
+    fileTreeMode,
     selectedLineNumber,
-  };
+  });
 }
 
 export function screenFromHash(hashValue: string): AppScreen {

@@ -11,7 +11,11 @@ import type { ContextManager } from "./workspace/context-manager";
 import type { ServerWebSocket } from "bun";
 import type { WebSocketManager } from "./websocket/index";
 import { createErrorHandler } from "./errors";
-import { createStaticMiddleware, createSPAFallback } from "./static";
+import {
+  createDevServerRedirectMiddleware,
+  createStaticMiddleware,
+  createSPAFallback,
+} from "./static";
 import { mountAllRoutes } from "./routes/index";
 import { createSessionManager } from "./ai/session-manager";
 import { createPromptStore } from "./prompts/prompt-store";
@@ -27,7 +31,10 @@ import { createModelConfigStore } from "./model-config/store.js";
 import type { ProjectWatcherManager } from "./watcher/manager";
 import { ensurePurposePromptFile } from "./claude/session-purpose";
 import { createAiCommentQueueStore } from "./ai/comment-queue-store.js";
-import { requireFrontendAssets } from "../config/frontend";
+import {
+  requireFrontendAssets,
+  resolveFrontendDevServerUrl,
+} from "../config/frontend";
 import type {
   TerminalSessionManager,
   TerminalSocketData,
@@ -210,6 +217,12 @@ export function createServer(options: ServerOptions): Hono {
     aiCommentStore,
     selectedFrontend: options.config.frontend,
   });
+
+  const frontendDevServerUrl = resolveFrontendDevServerUrl();
+  if (frontendDevServerUrl !== null) {
+    app.use("*", createDevServerRedirectMiddleware(frontendDevServerUrl));
+    return app;
+  }
 
   // Static file serving and SPA fallback
   // Resolves client build directory from multiple candidate locations

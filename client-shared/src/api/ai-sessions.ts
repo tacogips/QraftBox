@@ -61,12 +61,6 @@ export interface AiSessionTranscriptResponse {
   readonly total: number;
 }
 
-export interface SessionPurposeResponse {
-  readonly purpose: string;
-  readonly updatedAt: string;
-  readonly source: "llm" | "fallback";
-}
-
 export interface AiSessionsApiClientOptions {
   readonly fetchImplementation?: typeof fetch | undefined;
   readonly apiBaseUrl?: string | undefined;
@@ -115,10 +109,6 @@ export interface AiSessionsApiClient {
       readonly limit?: number | undefined;
     },
   ): Promise<AiSessionTranscriptResponse>;
-  fetchClaudeSessionPurpose(
-    contextId: string,
-    qraftAiSessionId: QraftAiSessionId,
-  ): Promise<SessionPurposeResponse>;
 }
 
 interface AiSessionsApiClientConfig {
@@ -460,20 +450,6 @@ export function createAiSessionsApiClient(
         ...payload,
         events: payload.events.map(normalizeTranscriptEvent),
       };
-    },
-    async fetchClaudeSessionPurpose(
-      contextId: string,
-      qraftAiSessionId: QraftAiSessionId,
-    ): Promise<SessionPurposeResponse> {
-      const response = await config.fetchImplementation(
-        `${config.apiBaseUrl}/ctx/${encodeURIComponent(
-          contextId,
-        )}/claude-sessions/sessions/${encodeURIComponent(
-          qraftAiSessionId,
-        )}/purpose`,
-      );
-      await ensureOk(response, "Failed to load session purpose");
-      return (await response.json()) as SessionPurposeResponse;
     },
   };
 }

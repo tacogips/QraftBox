@@ -22,6 +22,7 @@ import { resolveUiSynchronizedRouteState } from "./app/route-sync";
 import { getSolidScreenDefinition } from "./app/screen-registry";
 import { ActionDefaultsScreen } from "./features/model-config/ActionDefaultsScreen";
 import { AiSessionScreen } from "./features/ai-session/AiSessionScreen";
+import { buildAiSessionScreenHash } from "./features/ai-session/state";
 import { ModelProfilesScreen } from "./features/model-config/ModelProfilesScreen";
 import { createFilesViewModel } from "./features/diff/create-files-view-model";
 import { createDiffViewModel } from "./features/diff/create-diff-view-model";
@@ -88,6 +89,15 @@ function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
   );
 }
 
+function buildRouteHash(route: ScreenRouteState): string {
+  return buildScreenHash(route.projectSlug, route.screen, {
+    selectedPath: route.selectedPath,
+    selectedViewMode: route.selectedViewMode,
+    fileTreeMode: route.fileTreeMode,
+    selectedLineNumber: route.selectedLineNumber,
+  });
+}
+
 function replaceWindowHash(nextHash: string): void {
   if (window.location.hash === nextHash) {
     return;
@@ -105,8 +115,8 @@ function renderPlannedScreenPlaceholder(
     <section class="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-8">
       <h2 class="text-2xl font-semibold">{screenDefinition.label}</h2>
       <p class="text-sm text-text-secondary">
-        Solid support status: {screenDefinition.implementationStatus}. Planned
-        order: {screenDefinition.implementationOrder}.
+        Frontend support status: {screenDefinition.implementationStatus}.
+        Planned order: {screenDefinition.implementationOrder}.
       </p>
       <p class="text-sm text-text-secondary">
         Parity gate: {screenDefinition.parityGate.summary}
@@ -155,17 +165,7 @@ export function App(props: AppProps): JSX.Element {
     getCurrentRoute: () => activeRoute,
     onRouteChange(nextRoute) {
       setActiveRoute(nextRoute);
-
-      const nextHash = buildScreenHash(
-        nextRoute.projectSlug,
-        nextRoute.screen,
-        {
-          selectedPath: nextRoute.selectedPath,
-          selectedViewMode: nextRoute.selectedViewMode,
-          fileTreeMode: nextRoute.fileTreeMode,
-          selectedLineNumber: nextRoute.selectedLineNumber,
-        },
-      );
+      const nextHash = buildRouteHash(nextRoute);
       if (window.location.hash !== nextHash) {
         window.location.hash = nextHash;
       }
@@ -387,27 +387,12 @@ export function App(props: AppProps): JSX.Element {
         return;
       }
 
-      const nextHash = buildScreenHash(
-        nextRoute.projectSlug,
-        nextRoute.screen,
-        {
-          selectedPath: nextRoute.selectedPath,
-          selectedViewMode: nextRoute.selectedViewMode,
-          fileTreeMode: nextRoute.fileTreeMode,
-          selectedLineNumber: nextRoute.selectedLineNumber,
-        },
-      );
-      replaceWindowHash(nextHash);
+      replaceWindowHash(buildRouteHash(nextRoute));
       return;
     }
 
     setActiveRoute(nextRoute);
-    const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
-      selectedPath: nextRoute.selectedPath,
-      selectedViewMode: nextRoute.selectedViewMode,
-      fileTreeMode: nextRoute.fileTreeMode,
-      selectedLineNumber: nextRoute.selectedLineNumber,
-    });
+    const nextHash = buildRouteHash(nextRoute);
     if (currentRoute.screen === "files" && nextRoute.screen === "files") {
       replaceWindowHash(nextHash);
       return;
@@ -426,12 +411,7 @@ export function App(props: AppProps): JSX.Element {
     };
     setActiveRoute(nextRoute);
 
-    const nextHash = buildScreenHash(nextRoute.projectSlug, nextRoute.screen, {
-      selectedPath: nextRoute.selectedPath,
-      selectedViewMode: nextRoute.selectedViewMode,
-      fileTreeMode: nextRoute.fileTreeMode,
-      selectedLineNumber: nextRoute.selectedLineNumber,
-    });
+    const nextHash = buildRouteHash(nextRoute);
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -567,29 +547,20 @@ export function App(props: AppProps): JSX.Element {
               ...activeRoute,
               selectedLineNumber: lineNumber,
             });
-            const nextHash = buildScreenHash(
-              nextRoute.projectSlug,
-              nextRoute.screen,
-              {
-                selectedPath: nextRoute.selectedPath,
-                selectedViewMode: nextRoute.selectedViewMode,
-                fileTreeMode: nextRoute.fileTreeMode,
-                selectedLineNumber: nextRoute.selectedLineNumber,
-              },
-            );
+            const nextHash = buildRouteHash(nextRoute);
             if (window.location.hash !== nextHash) {
-              window.history.replaceState(window.history.state, "", nextHash);
+              replaceWindowHash(nextHash);
             }
           }}
           onOpenAiSession={(sessionId: QraftAiSessionId) => {
-            const projectSlug = activeRoute.projectSlug;
-            const baseHash =
-              projectSlug !== null
-                ? `#/${projectSlug}/ai-session`
-                : "#/ai-session";
-            window.location.hash = `${baseHash}?ai_session_id=${encodeURIComponent(
-              sessionId,
-            )}`;
+            window.location.hash = buildAiSessionScreenHash({
+              projectSlug: activeRoute.projectSlug,
+              overviewRouteState: {
+                selectedSessionId: sessionId,
+                searchQuery: "",
+                searchInTranscript: true,
+              },
+            });
           }}
         />
       );
@@ -614,9 +585,10 @@ export function App(props: AppProps): JSX.Element {
         <AiSessionScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
           contextId={activeContextId()}
+          projectSlug={activeRoute.projectSlug}
           projectPath={activeWorkspaceTab()?.path ?? ""}
-          selectedPath={null}
-          fileContent={null}
+          selectedPath={filesViewModel.selectedPath()}
+          fileContent={filesViewModel.fileContent()}
           diffOverview={diffViewModel.diffOverview()}
           onOpenFilesScreen={() => navigateToScreen("files")}
           onOpenProjectScreen={() => navigateToScreen("project")}

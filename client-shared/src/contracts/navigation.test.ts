@@ -87,12 +87,18 @@ describe("navigation contracts", () => {
   });
 
   test("builds screen hashes", () => {
-    expect(buildScreenHash(null, "files")).toBe(
-      "#/files?view=side-by-side&tree=diff",
-    );
+    expect(buildScreenHash(null, "files")).toBe("#/files");
     expect(buildScreenHash("repo-slug", "ai-session")).toBe(
       "#/repo-slug/ai-session",
     );
+    expect(
+      buildScreenHash("repo-slug", "ai-session", {
+        selectedPath: "src/main.ts",
+        selectedViewMode: "inline",
+        fileTreeMode: "all",
+        selectedLineNumber: 42,
+      }),
+    ).toBe("#/repo-slug/ai-session");
   });
 
   test("parses file-selection query state from the hash", () => {
@@ -125,6 +131,34 @@ describe("navigation contracts", () => {
     });
   });
 
+  test("drops line-only query state when no file is selected", () => {
+    expect(parseAppHash("#/repo-slug/files?line=42")).toEqual({
+      projectSlug: "repo-slug",
+      screen: "files",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: "side-by-side",
+      fileTreeMode: "diff",
+      selectedLineNumber: null,
+    });
+  });
+
+  test("ignores file-selection query state outside the files screen", () => {
+    expect(
+      parseAppHash(
+        "#/repo-slug/ai-session?path=src%2Fmain.ts&view=inline&tree=all&line=42",
+      ),
+    ).toEqual({
+      projectSlug: "repo-slug",
+      screen: "ai-session",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      fileTreeMode: null,
+      selectedLineNumber: null,
+    });
+  });
+
   test("builds screen hashes with file-selection query state", () => {
     expect(
       buildScreenHash("repo-slug", "files", {
@@ -136,6 +170,16 @@ describe("navigation contracts", () => {
     ).toBe(
       "#/repo-slug/files?path=src%2Fmain.ts&view=current-state&tree=all&line=17",
     );
+  });
+
+  test("omits default files-route state from built hashes", () => {
+    expect(
+      buildScreenHash("repo-slug", "files", {
+        selectedViewMode: "side-by-side",
+        fileTreeMode: "diff",
+        selectedLineNumber: 42,
+      }),
+    ).toBe("#/repo-slug/files");
   });
 
   test("derives the active screen from a hash", () => {

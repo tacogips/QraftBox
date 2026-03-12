@@ -43,12 +43,17 @@ function createEmptyFrontendFixtureDir(frontendDirName: string): string {
 describe("frontend config", () => {
   test("recognizes valid frontend targets", () => {
     expect(isFrontendTarget("svelte")).toBe(true);
-    expect(isFrontendTarget("solid")).toBe(true);
+    expect(isFrontendTarget("current")).toBe(true);
+    expect(isFrontendTarget("solid")).toBe(false);
     expect(isFrontendTarget("vue")).toBe(false);
   });
 
-  test("defaults to solid when target is omitted", () => {
-    expect(resolveFrontendTarget(undefined)).toBe("solid");
+  test("defaults to current when target is omitted", () => {
+    expect(resolveFrontendTarget(undefined)).toBe("current");
+  });
+
+  test("accepts the legacy solid alias for the current frontend", () => {
+    expect(resolveFrontendTarget("solid")).toBe("current");
   });
 
   test("resolves configured frontend from environment when CLI value is omitted", () => {
@@ -56,7 +61,7 @@ describe("frontend config", () => {
 
     try {
       process.env[FRONTEND_TARGET_ENV_VAR] = "solid";
-      expect(resolveConfiguredFrontend(undefined)).toBe("solid");
+      expect(resolveConfiguredFrontend(undefined)).toBe("current");
     } finally {
       if (originalValue === undefined) {
         delete process.env[FRONTEND_TARGET_ENV_VAR];
@@ -83,13 +88,13 @@ describe("frontend config", () => {
 
   test("throws for unknown frontend target", () => {
     expect(() => resolveFrontendTarget("vue")).toThrow(
-      "Invalid frontend target: vue. Must be one of: svelte, solid",
+      "Invalid frontend target: vue. Must be one of: current, svelte",
     );
   });
 
-  test("returns a stable fallback path for solid assets", () => {
-    const resolvedAssets = resolveFrontendAssets("solid");
-    expect(resolvedAssets.target).toBe("solid");
+  test("returns a stable fallback path for current frontend assets", () => {
+    const resolvedAssets = resolveFrontendAssets("current");
+    expect(resolvedAssets.target).toBe("current");
     expect(resolvedAssets.assetRoot.endsWith("dist/client")).toBe(true);
     expect(resolvedAssets.indexPath.endsWith("dist/client/index.html")).toBe(
       true,
@@ -100,8 +105,8 @@ describe("frontend config", () => {
     process.env["QRAFTBOX_CLIENT_DIR"] =
       createEmptyFrontendFixtureDir("client-missing");
 
-    expect(() => requireFrontendAssets("solid")).toThrow(
-      "Frontend assets for 'solid' were not found.",
+    expect(() => requireFrontendAssets("current")).toThrow(
+      "Frontend assets for the current frontend were not found.",
     );
   });
 
@@ -116,12 +121,12 @@ describe("frontend config", () => {
     );
   });
 
-  test("resolves solid assets from QRAFTBOX_CLIENT_DIR", () => {
-    const solidAssetDir = createFrontendFixtureDir("client");
-    process.env["QRAFTBOX_CLIENT_DIR"] = solidAssetDir;
+  test("resolves current frontend assets from QRAFTBOX_CLIENT_DIR", () => {
+    const currentFrontendAssetDir = createFrontendFixtureDir("client");
+    process.env["QRAFTBOX_CLIENT_DIR"] = currentFrontendAssetDir;
 
-    const resolvedAssets = requireFrontendAssets("solid");
-    expect(resolvedAssets.assetRoot).toBe(solidAssetDir);
+    const resolvedAssets = requireFrontendAssets("current");
+    expect(resolvedAssets.assetRoot).toBe(currentFrontendAssetDir);
     expect(resolvedAssets.source).toBe(
       "QRAFTBOX_CLIENT_DIR environment variable",
     );

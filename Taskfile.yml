@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   PROJECT_NAME: qraftbox
@@ -19,7 +19,7 @@ tasks:
   dev:
     desc: Run backend + client dev servers with hot reload
     deps:
-      - dev:server
+      - dev:server:current
       - dev:client
 
   dev:server:
@@ -30,6 +30,26 @@ tasks:
     cmds:
       - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
       - bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
+
+  dev:server:current:
+    desc: Run backend server with watch and redirect frontend traffic to the current Vite dev server
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      FRONTEND_DEV_URL: '{{.FRONTEND_DEV_URL | default "http://127.0.0.1:5173"}}'
+    cmds:
+      - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
+      - QRAFTBOX_FRONTEND=current QRAFTBOX_FRONTEND_DEV_URL={{.FRONTEND_DEV_URL}} bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
+
+  dev:server:legacy:
+    desc: Run backend server with watch and redirect frontend traffic to the legacy Vite dev server
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      FRONTEND_DEV_URL: '{{.FRONTEND_DEV_URL | default "http://127.0.0.1:5174"}}'
+    cmds:
+      - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
+      - QRAFTBOX_FRONTEND=svelte QRAFTBOX_FRONTEND_DEV_URL={{.FRONTEND_DEV_URL}} bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
 
   dev:client:
     desc: Run Vite dev server with HMR
@@ -60,7 +80,7 @@ tasks:
   dev-legacy:
     desc: Run backend + legacy Svelte dev servers with hot reload
     deps:
-      - dev:server
+      - dev:server:legacy
       - dev:client-legacy
 
   build:
@@ -238,7 +258,7 @@ tasks:
     vars:
       VERSION:
         sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
-      RELEASE_DIR: 'release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}'
+      RELEASE_DIR: "release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}"
     cmds:
       - mkdir -p {{.RELEASE_DIR}}/dist
       - bun build src/main.ts --compile --target {{.TARGET}} --outfile {{.RELEASE_DIR}}/{{.PROJECT_NAME}}
@@ -360,7 +380,7 @@ tasks:
     vars:
       VERSION:
         sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
-      TAG: 'v{{.VERSION}}'
+      TAG: "v{{.VERSION}}"
     cmds:
       # Verify gh CLI is available and authenticated
       - gh auth status

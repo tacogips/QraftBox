@@ -38,7 +38,7 @@ export interface ConfigDefaults {
 export const DEFAULT_CONFIG: ConfigDefaults = {
   PORT: 7144,
   HOST: "localhost",
-  FRONTEND: "solid",
+  FRONTEND: "current",
   OPEN: false,
   WATCH: true,
   SYNC_MODE: "manual",
@@ -139,10 +139,10 @@ export function validateConfig(config: CLIConfig): ValidationResult {
     };
   }
 
-  if (config.frontend !== "svelte" && config.frontend !== "solid") {
+  if (config.frontend !== "svelte" && config.frontend !== "current") {
     return {
       valid: false,
-      error: "frontend must be one of: svelte, solid",
+      error: "frontend must be one of: current, svelte",
     };
   }
 

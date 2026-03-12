@@ -8,7 +8,7 @@ describe("frontend status api client", () => {
       fetchImpl: async () =>
         new Response(
           JSON.stringify({
-            selectedFrontend: "solid",
+            selectedFrontend: "current",
             solidSupportStatus: {
               hasSourceCheckout: true,
               hasClientSolidDependencies: true,
@@ -28,7 +28,7 @@ describe("frontend status api client", () => {
     });
 
     await expect(client.fetchFrontendStatus()).resolves.toEqual({
-      selectedFrontend: "solid",
+      selectedFrontend: "current",
       solidSupportStatus: {
         hasSourceCheckout: true,
         hasClientSolidDependencies: true,

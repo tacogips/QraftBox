@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-03-09.
+This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-03-12.
 
 ## Overview
 
@@ -72,6 +72,15 @@ QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-bas
 - Primary feature modules live under `client/src/features/` and `client/src/app/`.
 - Legacy Svelte feature code remains under `client-legacy/src/` and `client-legacy/components/`.
 - Screens currently wired in the primary Solid client include project/workspace, files/diff, AI sessions, commits, terminal, system info, notifications, model profiles, and action defaults.
+- The Solid app keeps file-selection and loaded file-preview state in a shared diff/files context that survives moves between `files` and `ai-session`; only the `files` route serializes that selection into the browser hash.
+- Shared navigation contracts now enforce that `path`/`view`/`tree`/`line` hash query state is parsed and emitted only for the `files` route, omit default files-route values that add no state, and drop meaningless line-only hash state so screen changes do not leak stale or noisy file-selection URLs.
+- Files-route line anchors now clear whenever the displayed files selection diverges from the route-selected path, preventing stale line highlights from carrying across per-workspace selection restores or route-driven file changes.
+- The Solid AI-session popup now restores the Svelte baseline's selected-session default actions by fetching Action Defaults prompt content for `ai-session-refresh-purpose` and `ai-session-resume`, wrapping it with the internal session-action marker, and submitting it against the currently selected Qraft session.
+- The Solid AI-session popup now also exposes the configured `ai-session-purpose` Action Default for new-session drafts, so initial-purpose generation uses the same feature-owned prompt flow as the selected-session refresh/resume actions instead of a handwritten draft prompt.
+- The Solid AI-session composer also preserves the selected-session restart-from-beginning flow through its feature-owned `forceNewSession` submit path, and keeps Queue/Run/Restart actions disabled until the prompt contains non-empty text so manual submission behavior matches the Svelte baseline again.
+- Selected-session model metadata in the Solid popup now resolves field-by-field from overview data plus loaded session detail, matching the Svelte baseline so resumed prompts and labels keep the correct model identity even when the overview card omits part of that metadata.
+- Files-to-session deep links now reuse the ai-session feature's full screen-hash builder, and selected-session model labels in the popup reuse one resolved label source so header and footer surfaces cannot diverge on partial overview metadata.
+- The AI-session screen now also writes its own selected-session/search hash state through that same feature-owned full screen-hash helper instead of manually replacing only the hash query, keeping route ownership consistent for deep links, local mutations, and future route-shape changes.
 
 ## Frontend Selection And Legacy Support
 

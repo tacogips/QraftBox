@@ -3,7 +3,9 @@ import type { QraftAiSessionId } from "../../../../src/types/ai";
 import type { PromptQueueItem } from "../../../../client-shared/src/api/ai-sessions";
 import {
   applyAiSessionSearchDraft,
+  buildAiSessionScreenHash,
   buildAiSessionOverviewRouteSearch,
+  canSubmitAiSessionComposerPrompt,
   canApplyAiSessionScopedRequestResult,
   canLoadMoreAiSessionHistory,
   canClearAiSessionSearch,
@@ -16,14 +18,16 @@ import {
   createAiSessionHiddenStateMessage,
   createAiSessionScopeResetState,
   createAiSessionHistoryFilters,
-  createAiSessionDefaultPromptMessage,
   createAiSessionPromptContextState,
   createAiSessionScopeKey,
   isAiSessionScopeCurrent,
   createLatestAiSessionRequestGuard,
+  createAiSessionDefaultPromptMessage,
   normalizeAiSessionSearchQuery,
   normalizeAiSessionLiveAssistantStatusText,
   parseAiSessionOverviewRouteState,
+  resolveAiSessionSelectedModelState,
+  resolveAiSessionSubmitModelProfileId,
   resolveAiSessionRequestToken,
   resolveLatestAiSessionTranscriptOffset,
   resolveAiSessionRuntimeSession,
@@ -36,8 +40,8 @@ import {
   mergeAiSessionTranscriptLines,
   shouldAutoRefreshAiSessionOverview,
   shouldShowAiSessionComposer,
+  isAiSessionComposerBusy,
   readAiSessionOverviewRouteSearchFromHash,
-  replaceAiSessionOverviewRouteSearchInHash,
   updateHiddenAiSessionIds,
 } from "./state";
 
@@ -383,6 +387,42 @@ describe("ai-session state helpers", () => {
     ).toBe(false);
   });
 
+  test("keeps default session actions available while disabling empty prompt submission", () => {
+    expect(
+      isAiSessionComposerBusy({
+        submitting: false,
+        modelProfilesLoading: false,
+        runningDefaultPromptAction: null,
+      }),
+    ).toBe(false);
+
+    expect(
+      canSubmitAiSessionComposerPrompt({
+        promptInput: "   ",
+        submitting: false,
+        modelProfilesLoading: false,
+        runningDefaultPromptAction: null,
+      }),
+    ).toBe(false);
+
+    expect(
+      canSubmitAiSessionComposerPrompt({
+        promptInput: "Resume the review with fresh context",
+        submitting: false,
+        modelProfilesLoading: false,
+        runningDefaultPromptAction: null,
+      }),
+    ).toBe(true);
+
+    expect(
+      isAiSessionComposerBusy({
+        submitting: false,
+        modelProfilesLoading: false,
+        runningDefaultPromptAction: "ai-session-resume",
+      }),
+    ).toBe(true);
+  });
+
   test("stops overview auto-refresh while a specific session is open", () => {
     expect(
       shouldAutoRefreshAiSessionOverview({
@@ -647,7 +687,6 @@ describe("ai-session state helpers", () => {
       selectedSessionLoading: false,
       selectedSessionLoadingMore: false,
       submitting: false,
-      runningDefaultPromptAction: null,
     });
   });
 
@@ -710,6 +749,66 @@ describe("ai-session state helpers", () => {
       ],
       selectedReferencePath: "src/app.ts",
       changedFileCount: 1,
+    });
+  });
+
+  test("wraps default ai-session prompts with the internal session-action marker", () => {
+    expect(
+      createAiSessionDefaultPromptMessage(
+        "ai-session-purpose",
+        "Summarize the initial session goal",
+      ),
+    ).toBe(
+      `<qraftbox-internal-prompt label="ai-session-purpose" anchor="session-action-v1">
+Summarize the initial session goal
+</qraftbox-internal-prompt>`,
+    );
+  });
+
+  test("reuses the selected session model profile instead of the draft profile", () => {
+    expect(
+      resolveAiSessionSubmitModelProfileId({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        selectedSessionModelProfileId: "profile-existing",
+        draftModelProfileId: "profile-draft",
+      }),
+    ).toBe("profile-existing");
+
+    expect(
+      resolveAiSessionSubmitModelProfileId({
+        selectedQraftAiSessionId: asQraftAiSessionId("qs-existing"),
+        selectedSessionModelProfileId: undefined,
+        draftModelProfileId: "profile-draft",
+      }),
+    ).toBeUndefined();
+
+    expect(
+      resolveAiSessionSubmitModelProfileId({
+        selectedQraftAiSessionId: null,
+        selectedSessionModelProfileId: "profile-existing",
+        draftModelProfileId: "profile-draft",
+      }),
+    ).toBe("profile-draft");
+  });
+
+  test("fills missing selected-session model metadata from loaded detail state", () => {
+    expect(
+      resolveAiSessionSelectedModelState({
+        overviewModelState: {
+          modelProfileId: undefined,
+          modelVendor: "openai",
+          modelName: undefined,
+        },
+        detailModelState: {
+          modelProfileId: "profile-detail",
+          modelVendor: "anthropic",
+          modelName: "claude-sonnet",
+        },
+      }),
+    ).toEqual({
+      modelProfileId: "profile-detail",
+      modelVendor: "openai",
+      modelName: "claude-sonnet",
     });
   });
 
@@ -922,19 +1021,6 @@ describe("ai-session state helpers", () => {
     });
   });
 
-  test("wraps default ai-session prompts with the internal session-action marker", () => {
-    expect(
-      createAiSessionDefaultPromptMessage(
-        "ai-session-resume",
-        "Resume this migration session",
-      ),
-    ).toBe(
-      `<qraftbox-internal-prompt label="ai-session-resume" anchor="session-action-v1">
-Resume this migration session
-</qraftbox-internal-prompt>`,
-    );
-  });
-
   test("parses ai-session overview route state from the browser query string", () => {
     expect(
       parseAiSessionOverviewRouteState(
@@ -979,6 +1065,32 @@ Resume this migration session
     ).toBe("");
   });
 
+  test("builds ai-session screen hashes through the feature-owned route helper", () => {
+    expect(
+      buildAiSessionScreenHash({
+        projectSlug: "repo-slug",
+        overviewRouteState: {
+          selectedSessionId: asQraftAiSessionId("qs-selected"),
+          searchQuery: "resume",
+          searchInTranscript: false,
+        },
+      }),
+    ).toBe(
+      "#/repo-slug/ai-session?ai_session_id=qs-selected&session_search=resume&session_search_in_transcript=false",
+    );
+
+    expect(
+      buildAiSessionScreenHash({
+        projectSlug: null,
+        overviewRouteState: {
+          selectedSessionId: null,
+          searchQuery: "",
+          searchInTranscript: true,
+        },
+      }),
+    ).toBe("#/ai-session");
+  });
+
   test("reuses url-backed session/search state when the ai-session scope resets", () => {
     const scopeResetState = createAiSessionScopeResetState(
       "?ai_session_id=qs-existing&session_search=solid%20migration&session_search_in_transcript=true",
@@ -1003,23 +1115,5 @@ Resume this migration session
     expect(
       readAiSessionOverviewRouteSearchFromHash("#/qraftbox-dd412c/ai-session"),
     ).toBe("");
-  });
-
-  test("replaces ai-session overview route state inside the hash without touching the path", () => {
-    expect(
-      replaceAiSessionOverviewRouteSearchInHash(
-        "#/qraftbox-dd412c/ai-session",
-        "?ai_session_id=qs-existing",
-      ),
-    ).toBe("#/qraftbox-dd412c/ai-session?ai_session_id=qs-existing");
-
-    expect(
-      replaceAiSessionOverviewRouteSearchInHash(
-        "#/qraftbox-dd412c/ai-session?ai_session_id=qs-old",
-        "?ai_session_id=qs-new&session_search=hello",
-      ),
-    ).toBe(
-      "#/qraftbox-dd412c/ai-session?ai_session_id=qs-new&session_search=hello",
-    );
   });
 });

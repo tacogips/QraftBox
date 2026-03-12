@@ -32,14 +32,14 @@ describe("screen registry", () => {
         scope: "global",
         category: "build",
         summary:
-          "client dependencies are not installed in this workspace, so nested Solid typecheck/build cannot run yet.",
+          "client dependencies are not installed in this workspace, so nested current-frontend typecheck/build cannot run yet.",
       },
       {
         id: "solid-dist-missing",
         scope: "global",
         category: "build",
         summary:
-          "dist/client/index.html is not built yet, so the Solid bundle cannot be served for browser parity checks.",
+          "dist/client/index.html is not built yet, so the current frontend bundle cannot be served for browser parity checks.",
       },
       {
         id: "agent-browser-missing",
@@ -53,14 +53,14 @@ describe("screen registry", () => {
         scope: "global",
         category: "verification",
         summary:
-          "bun run check:frontend:migration has not yet been recorded as passing for the current Solid support baseline.",
+          "bun run check:frontend:migration has not yet been recorded as passing for the current frontend support baseline.",
       },
       {
         id: "browser-verification-not-recorded",
         scope: "global",
         category: "verification",
         summary:
-          "Browser verification for the Solid and legacy Svelte support baseline has not yet been recorded from this workspace.",
+          "Browser verification for the current frontend and legacy Svelte support baseline has not yet been recorded from this workspace.",
       },
       {
         id: "files-parity-browser-verification-pending",
@@ -201,19 +201,19 @@ describe("screen registry", () => {
         {
           id: "full-migration-check-passes",
           summary:
-            "bun run check:frontend:migration passes, including nested Solid typecheck.",
+            "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
           status: "blocked",
         },
         {
           id: "solid-bundle-built",
           summary:
-            "The Solid bundle is built at dist/client/index.html and served successfully by the backend.",
+            "The current frontend bundle is built at dist/client/index.html and served successfully by the backend.",
           status: "blocked",
         },
         {
           id: "browser-verification-recorded",
           summary:
-            "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+            "Browser verification is recorded for the legacy Svelte frontend and the current frontend against the same backend state for workspace and diff flows.",
           status: "blocked",
         },
         {
@@ -231,7 +231,7 @@ describe("screen registry", () => {
       "All screen definitions are at implementationStatus=implemented.",
     );
     expect(SOLID_SUPPORT_CRITERIA).toContain(
-      "bun run check:frontend:migration passes, including nested Solid typecheck.",
+      "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
     );
   });
 
@@ -264,7 +264,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "full-migration-check-passes",
       summary:
-        "bun run check:frontend:migration passes, including nested Solid typecheck.",
+        "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
       status: "blocked",
     });
 
@@ -282,7 +282,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "full-migration-check-passes",
       summary:
-        "bun run check:frontend:migration passes, including nested Solid typecheck.",
+        "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
       status: "pass",
     });
   });
@@ -302,7 +302,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "browser-verification-recorded",
       summary:
-        "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+        "Browser verification is recorded for the legacy Svelte frontend and the current frontend against the same backend state for workspace and diff flows.",
       status: "blocked",
     });
 
@@ -320,7 +320,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "browser-verification-recorded",
       summary:
-        "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+        "Browser verification is recorded for the legacy Svelte frontend and the current frontend against the same backend state for workspace and diff flows.",
       status: "pass",
     });
   });
@@ -349,7 +349,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "full-migration-check-passes",
       summary:
-        "bun run check:frontend:migration passes, including nested Solid typecheck.",
+        "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
       status: "not-applicable",
     });
     expect(
@@ -359,7 +359,7 @@ describe("screen registry", () => {
     ).toEqual({
       id: "browser-verification-recorded",
       summary:
-        "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+        "Browser verification is recorded for the legacy Svelte frontend and the current frontend against the same backend state for workspace and diff flows.",
       status: "not-applicable",
     });
     expect(

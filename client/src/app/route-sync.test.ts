@@ -11,7 +11,7 @@ describe("resolveUiSynchronizedRouteState", () => {
       selectedPath: "client/src/features/ai-session/state.ts",
       selectedViewMode: "side-by-side",
       fileTreeMode: "diff",
-      selectedLineNumber: null,
+      selectedLineNumber: 14,
     };
 
     expect(
@@ -21,8 +21,11 @@ describe("resolveUiSynchronizedRouteState", () => {
         preferredViewMode: "side-by-side",
         fileTreeMode: "diff",
         activeWorkspaceIsGitRepo: true,
-      }).selectedPath,
-    ).toBe("client/src/features/ai-session/state.ts");
+      }),
+    ).toEqual({
+      ...currentRoute,
+      selectedLineNumber: null,
+    });
   });
 
   test("uses the files selection once the route and files state match", () => {
@@ -33,7 +36,7 @@ describe("resolveUiSynchronizedRouteState", () => {
       selectedPath: "client/src/features/ai-session/state.ts",
       selectedViewMode: "side-by-side",
       fileTreeMode: "diff",
-      selectedLineNumber: null,
+      selectedLineNumber: 14,
     };
 
     expect(
@@ -47,9 +50,32 @@ describe("resolveUiSynchronizedRouteState", () => {
     ).toEqual({
       ...currentRoute,
       selectedPath: "client/src/features/ai-session/state.ts",
+      selectedLineNumber: 14,
       selectedViewMode: "side-by-side",
       fileTreeMode: "diff",
     });
+  });
+
+  test("clears the line anchor when the displayed files selection disappears", () => {
+    const currentRoute: ScreenRouteState = {
+      projectSlug: "repo",
+      screen: "files",
+      contextId: null,
+      selectedPath: "client/src/features/ai-session/state.ts",
+      selectedViewMode: "side-by-side",
+      fileTreeMode: "diff",
+      selectedLineNumber: 14,
+    };
+
+    expect(
+      resolveUiSynchronizedRouteState({
+        currentRoute,
+        filesSelectedPath: null,
+        preferredViewMode: "side-by-side",
+        fileTreeMode: "diff",
+        activeWorkspaceIsGitRepo: true,
+      }).selectedLineNumber,
+    ).toBeNull();
   });
 
   test("clears file-specific selection state outside the files screen", () => {

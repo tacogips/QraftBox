@@ -4,28 +4,38 @@ This directory contains implementation plans that describe the current as-built 
 
 ## Current Plan
 
-| Plan                     | Status      | Design Reference                                              | Last Updated |
-| ------------------------ | ----------- | ------------------------------------------------------------- | ------------ |
-| current-system           | Completed   | design-docs/specs/architecture.md#overview                    | 2026-02-17   |
-| solid-frontend-migration | Archived    | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-cutover-alignment  | Completed   | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-migration-history-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-support-status-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-browser-verification-scope-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-release-verification-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-post-cutover-design-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-frontend-status-default-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-support-language-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#overview | 2026-03-09   |
-| solid-support-truth-source-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#progressive-screen-porting | 2026-03-09   |
-| solid-support-runtime-scope-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-browser-marker-source-scope-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-source-checkout-detection-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-bootstrap-support-fallback-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-bootstrap-bundle-truthfulness-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-source-root-runtime-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-runtime-root-ancestor-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-browser-tool-blocker-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
-| solid-support-baseline-alignment | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support | 2026-03-09   |
+| Plan                                                                 | Status    | Design Reference                                                                | Last Updated |
+| -------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------- | ------------ |
+| current-system                                                       | Completed | design-docs/specs/architecture.md#overview                                      | 2026-02-17   |
+| solid-frontend-migration                                             | Archived  | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-cutover-alignment                                              | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-migration-history-alignment                                    | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-support-status-alignment                                       | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-browser-verification-scope-alignment                           | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-release-verification-alignment                                 | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-post-cutover-design-alignment                                  | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-frontend-status-default-alignment                              | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-support-language-alignment                                     | Completed | design-docs/specs/design-solid-frontend-migration.md#overview                   | 2026-03-09   |
+| solid-support-truth-source-alignment                                 | Completed | design-docs/specs/design-solid-frontend-migration.md#progressive-screen-porting | 2026-03-09   |
+| solid-support-runtime-scope-alignment                                | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-browser-marker-source-scope-alignment                          | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-source-checkout-detection-alignment                            | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-bootstrap-support-fallback-alignment                           | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-bootstrap-bundle-truthfulness-alignment                        | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-source-root-runtime-alignment                                  | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-runtime-root-ancestor-alignment                                | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-browser-tool-blocker-alignment                                 | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| solid-support-baseline-alignment                                     | Completed | design-docs/specs/architecture.md#frontend-selection-and-legacy-support         | 2026-03-09   |
+| files-ai-session-shared-selection-alignment                          | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-default-action-parity-alignment                           | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| route-hash-files-scope-alignment                                     | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| files-route-hash-cleanliness-and-ai-session-model-fallback-alignment | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-route-helper-and-selected-model-label-alignment           | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-feature-owned-route-hash-alignment                        | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| files-route-line-anchor-alignment                                    | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-screen-full-hash-ownership-alignment                      | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-purpose-default-action-alignment                          | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
+| ai-session-restart-flow-regression-alignment                         | Completed | design-docs/specs/design-solid-frontend-migration.md#proposed-architecture      | 2026-03-12   |
 
 ## Directory Structure
 

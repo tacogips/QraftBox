@@ -25,7 +25,7 @@ describe("GET /api/frontend-status", () => {
 
   test("returns the selected frontend and the current Solid support status", async () => {
     const app = createFrontendStatusRoutes({
-      selectedFrontend: "solid",
+      selectedFrontend: "current",
       getSolidSupportStatus: () => ({
         hasSourceCheckout: true,
         hasClientSolidDependencies: true,
@@ -40,7 +40,7 @@ describe("GET /api/frontend-status", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
-      selectedFrontend: "solid",
+      selectedFrontend: "current",
       solidSupportStatus: {
         hasSourceCheckout: true,
         hasClientSolidDependencies: true,

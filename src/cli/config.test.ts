@@ -17,7 +17,7 @@ describe("DEFAULT_CONFIG", () => {
   test("has correct default values", () => {
     expect(DEFAULT_CONFIG.PORT).toBe(7144);
     expect(DEFAULT_CONFIG.HOST).toBe("localhost");
-    expect(DEFAULT_CONFIG.FRONTEND).toBe("solid");
+    expect(DEFAULT_CONFIG.FRONTEND).toBe("current");
     expect(DEFAULT_CONFIG.OPEN).toBe(false);
     expect(DEFAULT_CONFIG.WATCH).toBe(true);
     expect(DEFAULT_CONFIG.SYNC_MODE).toBe("manual");
@@ -110,13 +110,13 @@ describe("loadConfig", () => {
     const config = loadConfig({
       port: 3000,
       host: "127.0.0.1",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       syncMode: "auto",
     });
     expect(config.port).toBe(3000);
     expect(config.host).toBe("127.0.0.1");
-    expect(config.frontend).toBe("solid");
+    expect(config.frontend).toBe("current");
     expect(config.open).toBe(false);
     expect(config.syncMode).toBe("auto");
     expect(config.watch).toBe(DEFAULT_CONFIG.WATCH);

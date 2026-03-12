@@ -294,7 +294,7 @@ export function getNonContextRouteGroups(
     {
       prefix: "/frontend-status",
       routes: createFrontendStatusRoutes({
-        selectedFrontend: config.selectedFrontend ?? "solid",
+        selectedFrontend: config.selectedFrontend ?? "current",
       }),
     },
   ];

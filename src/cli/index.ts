@@ -57,7 +57,7 @@ export function parseArgs(args: string[]): CLIConfig {
     .option("-h, --host <string>", "Server host", "localhost")
     .option(
       "--frontend <target>",
-      "Frontend target: solid (default) or svelte (legacy)",
+      "Frontend target: current (default) or svelte (legacy)",
     )
     .option("--open", "Open browser automatically")
     .option("--watch", "Enable file watching (default: true)")

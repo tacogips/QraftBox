@@ -92,7 +92,7 @@ function detectClientSolidDependencies(
 }
 
 function detectBuiltSolidBundle(): boolean {
-  return resolveFrontendAssets("solid").exists;
+  return resolveFrontendAssets("current").exists;
 }
 
 function detectAgentBrowser(): boolean {

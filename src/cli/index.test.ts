@@ -16,7 +16,7 @@ describe("parseArgs", () => {
     expect(config).toEqual({
       port: 7144,
       host: "localhost",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: true,
       syncMode: "manual",
@@ -45,10 +45,17 @@ describe("parseArgs", () => {
   });
 
   test("parses frontend target", () => {
+    const args = ["node", "script.js", "--frontend", "current"];
+    const config = parseArgs(args);
+
+    expect(config.frontend).toBe("current");
+  });
+
+  test("accepts the legacy solid alias for the current frontend", () => {
     const args = ["node", "script.js", "--frontend", "solid"];
     const config = parseArgs(args);
 
-    expect(config.frontend).toBe("solid");
+    expect(config.frontend).toBe("current");
   });
 
   test("uses QRAFTBOX_FRONTEND when CLI frontend is omitted", () => {
@@ -59,7 +66,7 @@ describe("parseArgs", () => {
       const args = ["node", "script.js"];
       const config = parseArgs(args);
 
-      expect(config.frontend).toBe("solid");
+      expect(config.frontend).toBe("current");
     } finally {
       if (originalValue === undefined) {
         delete process.env[FRONTEND_TARGET_ENV_VAR];
@@ -187,7 +194,7 @@ describe("parseArgs", () => {
     expect(config).toEqual({
       port: 9000,
       host: "127.0.0.1",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "auto",

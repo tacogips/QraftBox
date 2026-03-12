@@ -65,13 +65,13 @@ describe("createServer", () => {
     process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
       testDir,
       "client",
-      "<html><body>Default Solid Fixture</body></html>",
+      "<html><body>Default Current Frontend Fixture</body></html>",
     );
 
     config = {
       port: 7144,
       host: "localhost",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -85,6 +85,8 @@ describe("createServer", () => {
   });
 
   afterEach(() => {
+    delete process.env["QRAFTBOX_FRONTEND_DEV_URL"];
+
     // Restore original QRAFTBOX_CLIENT_DIR
     if (originalClientDir !== undefined) {
       process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
@@ -180,10 +182,10 @@ describe("createServer", () => {
     expect(response.status).toBe(404);
   });
 
-  test("should fail startup when solid frontend assets are missing", () => {
-    const emptySolidClientDir = join(testDir, "client-missing");
-    mkdirSync(emptySolidClientDir, { recursive: true });
-    process.env["QRAFTBOX_CLIENT_DIR"] = emptySolidClientDir;
+  test("should fail startup when current frontend assets are missing", () => {
+    const emptyCurrentFrontendClientDir = join(testDir, "client-missing");
+    mkdirSync(emptyCurrentFrontendClientDir, { recursive: true });
+    process.env["QRAFTBOX_CLIENT_DIR"] = emptyCurrentFrontendClientDir;
 
     const contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
@@ -195,22 +197,22 @@ describe("createServer", () => {
       createServer({
         config: {
           ...config,
-          frontend: "solid",
+          frontend: "current",
         },
         contextManager,
         recentStore,
         openTabsStore,
       }),
-    ).toThrow("Frontend assets for 'solid' were not found.");
+    ).toThrow("Frontend assets for the current frontend were not found.");
   });
 
-  test("should serve the selected solid frontend bundle when assets are configured", async () => {
-    const solidClientDir = createFrontendFixtureDir(
+  test("should serve the selected current frontend bundle when assets are configured", async () => {
+    const currentFrontendClientDir = createFrontendFixtureDir(
       testDir,
       "client",
-      "<html><body>Solid Fixture</body></html>",
+      "<html><body>Current Frontend Fixture</body></html>",
     );
-    process.env["QRAFTBOX_CLIENT_DIR"] = solidClientDir;
+    process.env["QRAFTBOX_CLIENT_DIR"] = currentFrontendClientDir;
 
     const contextManager = createContextManager();
     const recentStore = createRecentDirectoryStore({
@@ -220,7 +222,7 @@ describe("createServer", () => {
     const app = createServer({
       config: {
         ...config,
-        frontend: "solid",
+        frontend: "current",
       },
       contextManager,
       recentStore,
@@ -229,22 +231,55 @@ describe("createServer", () => {
 
     const rootResponse = await app.request("/");
     expect(rootResponse.status).toBe(200);
-    await expect(rootResponse.text()).resolves.toContain("Solid Fixture");
+    await expect(rootResponse.text()).resolves.toContain(
+      "Current Frontend Fixture",
+    );
 
     const nestedRouteResponse = await app.request("/projects/demo/files");
     expect(nestedRouteResponse.status).toBe(200);
     await expect(nestedRouteResponse.text()).resolves.toContain(
-      "Solid Fixture",
+      "Current Frontend Fixture",
     );
 
     const frontendStatusResponse = await app.request("/api/frontend-status");
     expect(frontendStatusResponse.status).toBe(200);
     await expect(frontendStatusResponse.json()).resolves.toEqual(
       expect.objectContaining({
-        selectedFrontend: "solid",
+        selectedFrontend: "current",
         solidSupportStatus: expect.any(Object),
       }),
     );
+  });
+
+  test("should redirect browser requests to the configured frontend dev server", async () => {
+    process.env["QRAFTBOX_FRONTEND_DEV_URL"] = "http://127.0.0.1:5173";
+    process.env["QRAFTBOX_CLIENT_DIR"] = join(testDir, "client-missing");
+
+    const contextManager = createContextManager();
+    const recentStore = createRecentDirectoryStore({
+      dbPath: join(testDir, "recent.db"),
+    });
+    const openTabsStore = createInMemoryOpenTabsStore();
+    const app = createServer({
+      config: {
+        ...config,
+        frontend: "current",
+      },
+      contextManager,
+      recentStore,
+      openTabsStore,
+    });
+
+    const response = await app.request(
+      "http://localhost/projects/demo/files?tab=diff",
+    );
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "http://127.0.0.1:5173/projects/demo/files?tab=diff",
+    );
+
+    const apiResponse = await app.request("/api/health");
+    expect(apiResponse.status).toBe(200);
   });
 });
 
@@ -260,7 +295,7 @@ describe("startServer and stopServer", () => {
     const config: CLIConfig = {
       port: 7145,
       host: "127.0.0.1",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -325,7 +360,7 @@ describe("startServer and stopServer", () => {
     const config: CLIConfig = {
       port: 7146,
       host: "localhost",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -380,7 +415,7 @@ describe("Server integration", () => {
     const config: CLIConfig = {
       port: 7147,
       host: "localhost",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "manual",
@@ -433,7 +468,7 @@ describe("Server integration", () => {
     const config: CLIConfig = {
       port: 7148,
       host: "localhost",
-      frontend: "solid",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "manual",

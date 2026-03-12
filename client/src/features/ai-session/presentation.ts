@@ -12,7 +12,6 @@ import {
   isInjectedSessionSystemPrompt,
   stripSystemTags,
 } from "../../../../src/utils/strip-system-tags";
-import type { AiSessionPromptContextState } from "./state";
 
 export interface AiSessionListEntry {
   readonly id: string;
@@ -428,7 +427,7 @@ export function buildAiSessionTranscriptLines(
   options: BuildAiSessionTranscriptLinesOptions = {},
 ): readonly AiSessionTranscriptLine[] {
   return events
-    .map((event, eventIndex) => {
+    .map((event, eventIndex): AiSessionTranscriptLine | null => {
       const text = extractAiSessionTranscriptText(event).trim();
       if (text.length === 0) {
         return null;
@@ -450,7 +449,7 @@ export function buildAiSessionTranscriptLines(
             : null,
         isLive: false,
         isThinking: false,
-      } satisfies AiSessionTranscriptLine;
+      };
     })
     .filter(
       (transcriptLine): transcriptLine is AiSessionTranscriptLine =>
@@ -703,30 +702,15 @@ export function describeAiSessionTarget(params: {
   return `New session draft ${params.draftSessionId}`;
 }
 
-export function describeAiSessionModelProfile(
-  selectedProfileId: string | null,
-  profiles: readonly ModelProfile[],
-): string {
-  if (selectedProfileId === null) {
-    return "Using the server default AI profile.";
-  }
-
-  const selectedProfile = profiles.find(
-    (profile) => profile.id === selectedProfileId,
-  );
-  if (selectedProfile === undefined) {
-    return "Using a custom AI profile selection.";
-  }
-
-  return `Using profile ${selectedProfile.name} (${selectedProfile.vendor}/${selectedProfile.model}).`;
-}
-
 export function describeAiSessionEntryModel(
   entry: Pick<
     AiSessionListEntry,
     "modelProfileId" | "modelVendor" | "modelName"
   >,
   profiles: readonly ModelProfile[],
+  options: {
+    readonly unknownLabel?: string | undefined;
+  } = {},
 ): string {
   if (entry.modelProfileId !== undefined) {
     const matchingProfile = profiles.find(
@@ -746,7 +730,7 @@ export function describeAiSessionEntryModel(
     return `${entry.modelVendor}/${entry.modelName}`;
   }
 
-  return "Server default";
+  return options.unknownLabel ?? "Server default";
 }
 
 export function describeAiSessionEntryOrigin(
@@ -802,18 +786,4 @@ export function describeAiSessionExecutionFlow(
   }
 
   return "QraftBox";
-}
-
-export function describeAiSessionPromptContext(
-  promptContextState: AiSessionPromptContextState,
-): string {
-  if (promptContextState.selectedReferencePath === null) {
-    return promptContextState.changedFileCount > 0
-      ? `No file is selected. Prompts will use workspace-level context only while ${promptContextState.changedFileCount} changed files remain available in the current diff.`
-      : "No file is selected. Prompts will use workspace-level context only.";
-  }
-
-  return promptContextState.changedFileCount > 0
-    ? `Prompts will include ${promptContextState.selectedReferencePath} and stay aligned with the current diff (${promptContextState.changedFileCount} changed files).`
-    : `Prompts will include ${promptContextState.selectedReferencePath}.`;
 }

@@ -2,6 +2,27 @@ import type { DiffViewMode } from "../../../client-shared/src/contracts/diff";
 import type { FileTreeMode } from "../../../client-shared/src/contracts/files";
 import type { ScreenRouteState } from "../../../client-shared/src/contracts/navigation";
 
+function resolveFilesRouteSelectedPath(params: {
+  readonly currentRouteSelectedPath: string | null;
+  readonly filesSelectedPath: string | null;
+}): string | null {
+  return params.currentRouteSelectedPath !== null &&
+    params.currentRouteSelectedPath !== params.filesSelectedPath
+    ? params.currentRouteSelectedPath
+    : (params.filesSelectedPath ?? params.currentRouteSelectedPath);
+}
+
+function resolveFilesRouteSelectedLineNumber(params: {
+  readonly currentRouteSelectedPath: string | null;
+  readonly filesSelectedPath: string | null;
+  readonly currentRouteSelectedLineNumber: number | null;
+}): number | null {
+  return params.currentRouteSelectedPath !== null &&
+    params.currentRouteSelectedPath === params.filesSelectedPath
+    ? params.currentRouteSelectedLineNumber
+    : null;
+}
+
 export function resolveUiSynchronizedRouteState(options: {
   readonly currentRoute: ScreenRouteState;
   readonly filesSelectedPath: string | null;
@@ -30,11 +51,15 @@ export function resolveUiSynchronizedRouteState(options: {
   if (!activeWorkspaceIsGitRepo) {
     return {
       ...currentRoute,
-      selectedPath:
-        currentRoute.selectedPath !== null &&
-        currentRoute.selectedPath !== filesSelectedPath
-          ? currentRoute.selectedPath
-          : (filesSelectedPath ?? currentRoute.selectedPath),
+      selectedPath: resolveFilesRouteSelectedPath({
+        currentRouteSelectedPath: currentRoute.selectedPath,
+        filesSelectedPath,
+      }),
+      selectedLineNumber: resolveFilesRouteSelectedLineNumber({
+        currentRouteSelectedPath: currentRoute.selectedPath,
+        filesSelectedPath,
+        currentRouteSelectedLineNumber: currentRoute.selectedLineNumber,
+      }),
       selectedViewMode: "full-file",
       fileTreeMode: "all",
     };
@@ -42,11 +67,15 @@ export function resolveUiSynchronizedRouteState(options: {
 
   return {
     ...currentRoute,
-    selectedPath:
-      currentRoute.selectedPath !== null &&
-      currentRoute.selectedPath !== filesSelectedPath
-        ? currentRoute.selectedPath
-        : (filesSelectedPath ?? currentRoute.selectedPath),
+    selectedPath: resolveFilesRouteSelectedPath({
+      currentRouteSelectedPath: currentRoute.selectedPath,
+      filesSelectedPath,
+    }),
+    selectedLineNumber: resolveFilesRouteSelectedLineNumber({
+      currentRouteSelectedPath: currentRoute.selectedPath,
+      filesSelectedPath,
+      currentRouteSelectedLineNumber: currentRoute.selectedLineNumber,
+    }),
     selectedViewMode:
       currentRoute.selectedViewMode !== null &&
       currentRoute.selectedViewMode !== preferredViewMode

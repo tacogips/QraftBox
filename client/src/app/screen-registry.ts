@@ -262,9 +262,9 @@ const SCREEN_DEFINITION_MAP: Readonly<
 
 export const SOLID_SUPPORT_CRITERIA: readonly string[] = [
   "All screen definitions are at implementationStatus=implemented.",
-  "bun run check:frontend:migration passes, including nested Solid typecheck.",
-  "The Solid bundle is built at dist/client/index.html and served successfully by the backend.",
-  "Browser verification is recorded for Svelte and Solid against the same backend state for workspace and diff flows.",
+  "bun run check:frontend:migration passes, including nested current-frontend typecheck.",
+  "The current frontend bundle is built at dist/client/index.html and served successfully by the backend.",
+  "Browser verification is recorded for the legacy Svelte frontend and the current frontend against the same backend state for workspace and diff flows.",
   "No explicit legacy-support blocker remains open in the screen registry runtime status surface.",
 ];
 
@@ -338,7 +338,7 @@ function getGlobalSolidSupportBlockers(
       scope: "global",
       category: "build",
       summary:
-        "client dependencies are not installed in this workspace, so nested Solid typecheck/build cannot run yet.",
+        "client dependencies are not installed in this workspace, so nested current-frontend typecheck/build cannot run yet.",
     });
   }
 
@@ -348,7 +348,7 @@ function getGlobalSolidSupportBlockers(
       scope: "global",
       category: "build",
       summary:
-        "dist/client/index.html is not built yet, so the Solid bundle cannot be served for browser parity checks.",
+        "dist/client/index.html is not built yet, so the current frontend bundle cannot be served for browser parity checks.",
     });
   }
 
@@ -375,7 +375,7 @@ function getGlobalSolidSupportBlockers(
       scope: "global",
       category: "verification",
       summary:
-        "bun run check:frontend:migration has not yet been recorded as passing for the current Solid support baseline.",
+        "bun run check:frontend:migration has not yet been recorded as passing for the current frontend support baseline.",
     });
   }
 
@@ -388,7 +388,7 @@ function getGlobalSolidSupportBlockers(
       scope: "global",
       category: "verification",
       summary:
-        "Browser verification for the Solid and legacy Svelte support baseline has not yet been recorded from this workspace.",
+        "Browser verification for the current frontend and legacy Svelte support baseline has not yet been recorded from this workspace.",
     });
   }
 

@@ -406,7 +406,7 @@ function createBrowserVerificationCliConfig(
   return {
     port: 0,
     host: "127.0.0.1",
-    frontend,
+    frontend: frontend === "solid" ? "current" : frontend,
     open: false,
     watch: false,
     syncMode: "manual",

@@ -8,6 +8,7 @@ import type {
   AISessionInfo,
   PromptQueueItem,
 } from "../../../../client-shared/src/api/ai-sessions";
+import { buildScreenHash } from "../../../../client-shared/src/contracts/navigation";
 import type { FileContent } from "../../../../client-shared/src/contracts/files";
 import type { DiffOverviewState } from "../../../../client-shared/src/contracts/diff";
 import type { SessionFilters } from "../../../../src/types/claude-session";
@@ -193,15 +194,6 @@ export function readAiSessionOverviewRouteSearchFromHash(hash: string): string {
   return hash.slice(hashQueryStart);
 }
 
-export function replaceAiSessionOverviewRouteSearchInHash(
-  hash: string,
-  nextSearch: string,
-): string {
-  const hashQueryStart = hash.indexOf("?");
-  const hashPath = hashQueryStart < 0 ? hash : hash.slice(0, hashQueryStart);
-  return `${hashPath}${nextSearch}`;
-}
-
 export function didAiSessionHistoryFilterChange(params: {
   readonly currentSearchQuery: string;
   readonly currentSearchInTranscript: boolean;
@@ -226,7 +218,6 @@ export interface AiSessionScopeLoadingState {
   readonly selectedSessionLoading: boolean;
   readonly selectedSessionLoadingMore: boolean;
   readonly submitting: boolean;
-  readonly runningDefaultPromptAction: string | null;
 }
 
 const SESSION_QUERY_KEY = "ai_session_id";
@@ -339,6 +330,69 @@ export function createAiSessionDefaultPromptMessage(
   return wrapQraftboxInternalPrompt(action, promptContent, "session-action-v1");
 }
 
+export function isAiSessionComposerBusy(params: {
+  readonly submitting: boolean;
+  readonly modelProfilesLoading: boolean;
+  readonly runningDefaultPromptAction: AiSessionDefaultPromptAction | null;
+}): boolean {
+  return (
+    params.submitting ||
+    params.modelProfilesLoading ||
+    params.runningDefaultPromptAction !== null
+  );
+}
+
+export function canSubmitAiSessionComposerPrompt(params: {
+  readonly promptInput: string;
+  readonly submitting: boolean;
+  readonly modelProfilesLoading: boolean;
+  readonly runningDefaultPromptAction: AiSessionDefaultPromptAction | null;
+}): boolean {
+  return (
+    params.promptInput.trim().length > 0 &&
+    !isAiSessionComposerBusy({
+      submitting: params.submitting,
+      modelProfilesLoading: params.modelProfilesLoading,
+      runningDefaultPromptAction: params.runningDefaultPromptAction,
+    })
+  );
+}
+
+export interface AiSessionModelState {
+  readonly modelProfileId?: string | undefined;
+  readonly modelVendor?: string | undefined;
+  readonly modelName?: string | undefined;
+}
+
+export function resolveAiSessionSelectedModelState(params: {
+  readonly overviewModelState: AiSessionModelState | null;
+  readonly detailModelState: AiSessionModelState | null;
+}): AiSessionModelState {
+  return {
+    modelProfileId:
+      params.overviewModelState?.modelProfileId ??
+      params.detailModelState?.modelProfileId,
+    modelVendor:
+      params.overviewModelState?.modelVendor ??
+      params.detailModelState?.modelVendor,
+    modelName:
+      params.overviewModelState?.modelName ??
+      params.detailModelState?.modelName,
+  };
+}
+
+export function resolveAiSessionSubmitModelProfileId(params: {
+  readonly selectedQraftAiSessionId: QraftAiSessionId | null;
+  readonly selectedSessionModelProfileId?: string | undefined;
+  readonly draftModelProfileId: string | null;
+}): string | undefined {
+  if (params.selectedQraftAiSessionId !== null) {
+    return params.selectedSessionModelProfileId;
+  }
+
+  return params.draftModelProfileId ?? undefined;
+}
+
 export function parseAiSessionOverviewRouteState(
   locationSearch: string,
 ): AiSessionOverviewRouteState {
@@ -387,6 +441,15 @@ export function buildAiSessionOverviewRouteSearch(
   return serialized.length > 0 ? `?${serialized}` : "";
 }
 
+export function buildAiSessionScreenHash(params: {
+  readonly projectSlug: string | null;
+  readonly overviewRouteState: AiSessionOverviewRouteState;
+}): string {
+  return `${buildScreenHash(params.projectSlug, "ai-session")}${buildAiSessionOverviewRouteSearch(
+    params.overviewRouteState,
+  )}`;
+}
+
 export function createAiSessionScopeResetState(
   locationSearch: string,
 ): AiSessionScopeResetState {
@@ -407,7 +470,6 @@ export function createAiSessionScopeResetLoadingState(): AiSessionScopeLoadingSt
     selectedSessionLoading: false,
     selectedSessionLoadingMore: false,
     submitting: false,
-    runningDefaultPromptAction: null,
   };
 }
 
@@ -467,7 +529,7 @@ export function resolveAiSessionStreamSessionId(params: {
   }
 
   if (params.runtimeSession?.state === "running") {
-    return params.runtimeSession.id;
+    return params.runtimeSession.id as QraftAiSessionId;
   }
 
   return null;

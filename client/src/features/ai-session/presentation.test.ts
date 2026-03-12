@@ -3,6 +3,7 @@ import type {
   AIPromptContext,
   QraftAiSessionId,
 } from "../../../../src/types/ai";
+import { AIAgent } from "../../../../src/types/ai-agent";
 import type { ExtendedSessionEntry } from "../../../../src/types/claude-session";
 import type {
   AISessionInfo,
@@ -15,14 +16,12 @@ import {
   describeAiSessionExecutionFlow,
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
-  describeAiSessionPromptContext,
   mergePendingAiSessionTranscriptLines,
   reconcileAiSessionTranscriptLines,
   mergeLiveAiSessionTranscriptLine,
   mergeOptimisticUserTranscriptLine,
   resolveAiSessionCancelAction,
   describeAiSessionEntryModel,
-  describeAiSessionModelProfile,
   describeAiSessionTarget,
   extractAiSessionTranscriptText,
   formatAiSessionTimestamp,
@@ -801,26 +800,6 @@ describe("ai-session presentation helpers", () => {
     ).toBe(asQraftAiSessionId("qs-existing"));
   });
 
-  test("describes the selected model profile", () => {
-    expect(describeAiSessionModelProfile(null, [])).toBe(
-      "Using the server default AI profile.",
-    );
-    expect(
-      describeAiSessionModelProfile("profile-1", [
-        {
-          id: "profile-1",
-          name: "Claude Default",
-          vendor: "anthropics",
-          authMode: "cli_auth",
-          model: "claude-sonnet",
-          arguments: [],
-          createdAt: "2026-03-09T00:00:00.000Z",
-          updatedAt: "2026-03-09T00:00:00.000Z",
-        },
-      ]),
-    ).toBe("Using profile Claude Default (anthropics/claude-sonnet).");
-  });
-
   test("describes the model shown on a session entry", () => {
     expect(
       describeAiSessionEntryModel(
@@ -853,6 +832,19 @@ describe("ai-session presentation helpers", () => {
         [],
       ),
     ).toBe("openai/gpt-5");
+    expect(
+      describeAiSessionEntryModel(
+        {
+          modelProfileId: undefined,
+          modelVendor: undefined,
+          modelName: undefined,
+        },
+        [],
+        {
+          unknownLabel: "-",
+        },
+      ),
+    ).toBe("-");
   });
 
   test("describes session origin and agent badges", () => {
@@ -868,7 +860,7 @@ describe("ai-session presentation helpers", () => {
     ).toBe("CLIENT");
     expect(
       describeAiSessionEntryAgent({
-        aiAgent: "codex",
+        aiAgent: AIAgent.CODEX,
         sessionSource: "qraftbox",
         modelVendor: "openai",
       }),
@@ -882,37 +874,11 @@ describe("ai-session presentation helpers", () => {
     ).toBe("CLAUDE-CODE");
     expect(
       describeAiSessionExecutionFlow({
-        aiAgent: "codex",
+        aiAgent: AIAgent.CODEX,
         sessionSource: "codex-cli",
         modelVendor: "openai",
       }),
     ).toBe("QraftBox -> Codex");
-  });
-
-  test("describes the current prompt context from the files screen", () => {
-    expect(
-      describeAiSessionPromptContext({
-        references: [],
-        selectedReferencePath: null,
-        changedFileCount: 3,
-      }),
-    ).toBe(
-      "No file is selected. Prompts will use workspace-level context only while 3 changed files remain available in the current diff.",
-    );
-
-    expect(
-      describeAiSessionPromptContext({
-        references: [
-          {
-            path: "src/app.ts",
-          },
-        ],
-        selectedReferencePath: "src/app.ts",
-        changedFileCount: 3,
-      }),
-    ).toBe(
-      "Prompts will include src/app.ts and stay aligned with the current diff (3 changed files).",
-    );
   });
 
   test("extracts transcript text from message and tool events", () => {

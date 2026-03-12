@@ -143,7 +143,7 @@ describe("Route Registry", () => {
       }
     });
 
-    test("frontend status defaults to the post-cutover Solid frontend", async () => {
+    test("frontend status defaults to the post-cutover current frontend", async () => {
       const app = new Hono();
       mountAllRoutes(app, config);
 
@@ -154,7 +154,7 @@ describe("Route Registry", () => {
       expect(response.status).toBe(200);
       await expect(response.json()).resolves.toEqual(
         expect.objectContaining({
-          selectedFrontend: "solid",
+          selectedFrontend: "current",
         }),
       );
     });

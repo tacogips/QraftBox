@@ -8,6 +8,6 @@ export interface SolidSupportStatus {
 }
 
 export interface FrontendStatusResponse {
-  readonly selectedFrontend: "svelte" | "solid";
+  readonly selectedFrontend: "svelte" | "current";
   readonly solidSupportStatus: SolidSupportStatus;
 }

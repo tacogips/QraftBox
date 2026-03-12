@@ -1,8 +1,9 @@
 import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-export type FrontendTarget = "svelte" | "solid";
+export type FrontendTarget = "svelte" | "current";
 export const FRONTEND_TARGET_ENV_VAR = "QRAFTBOX_FRONTEND";
+export const FRONTEND_DEV_SERVER_URL_ENV_VAR = "QRAFTBOX_FRONTEND_DEV_URL";
 
 export interface FrontendBuildConfig {
   readonly target: FrontendTarget;
@@ -29,30 +30,47 @@ const FRONTEND_BUILD_CONFIGS: Record<FrontendTarget, FrontendBuildConfig> = {
     envClientDir: "QRAFTBOX_CLIENT_LEGACY_DIR",
     defaultBuildDirName: "client-legacy",
   },
-  solid: {
-    target: "solid",
+  current: {
+    target: "current",
     envClientDir: "QRAFTBOX_CLIENT_DIR",
     defaultBuildDirName: "client",
   },
 };
 
 export function isFrontendTarget(value: string): value is FrontendTarget {
-  return value === "svelte" || value === "solid";
+  return value === "svelte" || value === "current";
+}
+
+function resolveFrontendTargetAlias(value: string): FrontendTarget | null {
+  if (value === "solid") {
+    return "current";
+  }
+
+  return null;
+}
+
+function describeFrontendTarget(target: FrontendTarget): string {
+  return target === "current" ? "current frontend" : "legacy svelte frontend";
 }
 
 export function resolveFrontendTarget(
   value: string | undefined,
 ): FrontendTarget {
   if (value === undefined) {
-    return "solid";
+    return "current";
   }
 
   if (isFrontendTarget(value)) {
     return value;
   }
 
+  const aliasedTarget = resolveFrontendTargetAlias(value);
+  if (aliasedTarget !== null) {
+    return aliasedTarget;
+  }
+
   throw new Error(
-    `Invalid frontend target: ${value}. Must be one of: svelte, solid`,
+    `Invalid frontend target: ${value}. Must be one of: current, svelte`,
   );
 }
 
@@ -146,6 +164,15 @@ export function requireFrontendAssets(
   }
 
   throw new Error(
-    `Frontend assets for '${target}' were not found. Expected index.html under ${resolvedAssets.assetRoot}. Build the ${target} frontend or set the appropriate asset directory environment variable.`,
+    `Frontend assets for the ${describeFrontendTarget(target)} were not found. Expected index.html under ${resolvedAssets.assetRoot}. Build the ${describeFrontendTarget(target)} or set the appropriate asset directory environment variable.`,
   );
+}
+
+export function resolveFrontendDevServerUrl(): string | null {
+  const configuredUrl = process.env[FRONTEND_DEV_SERVER_URL_ENV_VAR]?.trim();
+  if (configuredUrl === undefined || configuredUrl.length === 0) {
+    return null;
+  }
+
+  return configuredUrl.endsWith("/") ? configuredUrl : `${configuredUrl}/`;
 }

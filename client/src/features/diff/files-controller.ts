@@ -79,14 +79,6 @@ function toErrorMessage(error: unknown, fallbackMessage: string): string {
   return fallbackMessage;
 }
 
-function serializeFileTree(tree: FileTreeNode | null): string {
-  return JSON.stringify(tree);
-}
-
-function serializeFileContent(fileContent: FileContent | null): string {
-  return JSON.stringify(fileContent);
-}
-
 export function createInitialFilesControllerState(): FilesControllerState {
   return {
     fileTreeMode: "diff",
@@ -328,21 +320,13 @@ export function createFilesController(
       }
 
       loadedAllFilesContextId = activeContextId;
-      if (
-        serializeFileTree(state.allFilesTree) !==
-          serializeFileTree(allFilesResponse.tree) ||
-        state.isAllFilesLoading ||
-        state.isAllFilesTreeStale ||
-        state.allFilesError !== null
-      ) {
-        updateState((currentState) => ({
-          ...currentState,
-          allFilesTree: allFilesResponse.tree,
-          isAllFilesLoading: false,
-          isAllFilesTreeStale: false,
-          allFilesError: null,
-        }));
-      }
+      updateState((currentState) => ({
+        ...currentState,
+        allFilesTree: allFilesResponse.tree,
+        isAllFilesLoading: false,
+        isAllFilesTreeStale: false,
+        allFilesError: null,
+      }));
     } catch (error) {
       if (
         requestId !== lastAllFilesTreeRequestId ||
@@ -409,19 +393,12 @@ export function createFilesController(
         return;
       }
 
-      if (
-        serializeFileContent(state.fileContent) !==
-          serializeFileContent(fileContent) ||
-        state.isFileContentLoading ||
-        state.fileContentError !== null
-      ) {
-        updateState((currentState) => ({
-          ...currentState,
-          fileContent,
-          isFileContentLoading: false,
-          fileContentError: null,
-        }));
-      }
+      updateState((currentState) => ({
+        ...currentState,
+        fileContent,
+        isFileContentLoading: false,
+        fileContentError: null,
+      }));
     } catch (error) {
       if (
         requestId !== lastFileContentRequestId ||

@@ -10,6 +10,7 @@ describe("createSolidBootstrapState", () => {
         contextId: null,
         selectedPath: null,
         selectedViewMode: null,
+        fileTreeMode: null,
         selectedLineNumber: null,
       },
       "/api",
