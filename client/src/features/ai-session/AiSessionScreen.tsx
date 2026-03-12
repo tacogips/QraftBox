@@ -164,6 +164,47 @@ function renderRefreshIcon(): JSX.Element {
   );
 }
 
+function renderCreatePurposeIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="M10 3.5 11.6 7l3.9.5-2.9 2.8.8 4-3.4-1.9-3.4 1.9.8-4-2.9-2.8 3.9-.5Z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path d="M14.5 4.5v3" stroke-linecap="round" />
+      <path d="M13 6h3" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderRefreshPurposeIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="M14.8 10.2a4.8 4.8 0 1 1-1.1-3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path d="M12.4 4.1h2.8v2.8" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="M10 7.2v1.8" stroke-linecap="round" />
+      <path d="M10 11.2V13" stroke-linecap="round" />
+      <path d="M7.9 10.1h1.8" stroke-linecap="round" />
+      <path d="M11.9 10.1h1.8" stroke-linecap="round" />
+    </svg>
+  );
+}
+
 function renderExpandPurposeIcon(expanded: boolean): JSX.Element {
   return expanded ? (
     <svg
@@ -173,6 +214,32 @@ function renderExpandPurposeIcon(expanded: boolean): JSX.Element {
       stroke-width="1.8"
     >
       <path d="m6 12 4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  ) : (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path d="m6 8 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  );
+}
+
+function renderComposerFooterToggleIcon(collapsed: boolean): JSX.Element {
+  return collapsed ? (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="m6 12 4-4 4 4"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   ) : (
     <svg
@@ -411,6 +478,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [runningDefaultPromptAction, setRunningDefaultPromptAction] =
     createSignal<AiSessionDefaultPromptAction | null>(null);
   const [isPurposeExpanded, setIsPurposeExpanded] = createSignal(false);
+  const [isComposerFooterCollapsed, setIsComposerFooterCollapsed] =
+    createSignal(false);
   const [selectedSessionDetail, setSelectedSessionDetail] =
     createSignal<ExtendedSessionEntry | null>(null);
   const [selectedSessionTranscript, setSelectedSessionTranscript] =
@@ -1010,6 +1079,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   createEffect(() => {
     const detailTarget = selectedSessionDetailTarget();
     setIsPurposeExpanded(false);
+    setIsComposerFooterCollapsed(false);
 
     if (detailTarget === null) {
       activeSelectedSessionDetailKey = null;
@@ -2495,7 +2565,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
           <Show when={showComposer()}>
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div class="flex h-[min(88vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+              <div class="flex h-full max-h-[920px] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                   <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
                     <div class="min-w-0">
@@ -2578,23 +2648,23 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         </span>
                       </button>
                       <Show when={canRunDraftSessionDefaultPrompt()}>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        <ToolbarIconButton
+                          label={describeDefaultPromptActionLabel(
+                            "ai-session-purpose",
+                          )}
                           disabled={composerBusy()}
                           onClick={() =>
                             void runDefaultPromptAction("ai-session-purpose")
                           }
                         >
-                          {describeDefaultPromptActionLabel(
-                            "ai-session-purpose",
-                          )}
-                        </button>
+                          {renderCreatePurposeIcon()}
+                        </ToolbarIconButton>
                       </Show>
                       <Show when={canRunSelectedSessionDefaultPrompts()}>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                        <ToolbarIconButton
+                          label={describeDefaultPromptActionLabel(
+                            "ai-session-refresh-purpose",
+                          )}
                           disabled={composerBusy()}
                           onClick={() =>
                             void runDefaultPromptAction(
@@ -2602,22 +2672,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             )
                           }
                         >
-                          {describeDefaultPromptActionLabel(
-                            "ai-session-refresh-purpose",
-                          )}
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={composerBusy()}
-                          onClick={() =>
-                            void runDefaultPromptAction("ai-session-resume")
-                          }
-                        >
-                          {describeDefaultPromptActionLabel(
-                            "ai-session-resume",
-                          )}
-                        </button>
+                          {renderRefreshPurposeIcon()}
+                        </ToolbarIconButton>
                       </Show>
                       <ToolbarIconButton
                         label="Reload transcript"
@@ -2802,133 +2858,156 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                     </Show>
                   </div>
                   <div class="border-t border-border-default bg-bg-primary px-4 py-3">
-                    <div class="grid gap-2">
-                      <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] md:items-end">
-                        <div class="min-w-0">
-                          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                            Session
-                          </p>
-                          <p class="mt-1 truncate text-sm text-text-primary">
-                            {describeAiSessionTarget({
-                              selectedQraftAiSessionId:
-                                selectedQraftAiSessionId(),
-                              draftSessionId: draftSessionId(),
-                            })}
-                          </p>
-                        </div>
-                        <Show
-                          when={selectedQraftAiSessionId() === null}
-                          fallback={
-                            <div class="flex flex-col gap-1 text-sm text-text-secondary">
+                    <div class="flex items-center gap-2">
+                      <ToolbarIconButton
+                        label={
+                          isComposerFooterCollapsed()
+                            ? "Expand session composer"
+                            : "Collapse session composer"
+                        }
+                        onClick={() =>
+                          setIsComposerFooterCollapsed(
+                            !isComposerFooterCollapsed(),
+                          )
+                        }
+                      >
+                        {renderComposerFooterToggleIcon(
+                          isComposerFooterCollapsed(),
+                        )}
+                      </ToolbarIconButton>
+                      <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                        Session
+                      </span>
+                    </div>
+                    <Show when={!isComposerFooterCollapsed()}>
+                      <div class="mt-3 grid gap-2">
+                        <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] md:items-end">
+                          <div class="min-w-0">
+                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                              Session
+                            </p>
+                            <p class="mt-1 truncate text-sm text-text-primary">
+                              {describeAiSessionTarget({
+                                selectedQraftAiSessionId:
+                                  selectedQraftAiSessionId(),
+                                draftSessionId: draftSessionId(),
+                              })}
+                            </p>
+                          </div>
+                          <Show
+                            when={selectedQraftAiSessionId() === null}
+                            fallback={
+                              <div class="flex flex-col gap-1 text-sm text-text-secondary">
+                                <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                                  Model profile
+                                </span>
+                                <p class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary">
+                                  {selectedSessionModelLabel()}
+                                </p>
+                              </div>
+                            }
+                          >
+                            <label class="flex flex-col gap-1 text-sm text-text-secondary">
                               <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
                                 Model profile
                               </span>
-                              <p class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary">
-                                {selectedSessionModelLabel()}
-                              </p>
-                            </div>
-                          }
-                        >
-                          <label class="flex flex-col gap-1 text-sm text-text-secondary">
-                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                              Model profile
-                            </span>
-                            <select
-                              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
-                              value={selectedModelProfileId() ?? ""}
-                              disabled={modelProfilesLoading()}
-                              onChange={(event) =>
-                                setSelectedModelProfileId(
-                                  event.currentTarget.value.length > 0
-                                    ? event.currentTarget.value
-                                    : null,
-                                )
-                              }
-                            >
-                              <option value="">
-                                Server default AI profile
-                              </option>
-                              <For each={modelProfiles()}>
-                                {(modelProfile) => (
-                                  <option value={modelProfile.id}>
-                                    {modelProfile.name} ({modelProfile.vendor}/
-                                    {modelProfile.model})
-                                  </option>
-                                )}
-                              </For>
-                            </select>
-                          </label>
-                        </Show>
-                      </div>
-                      <div class="pt-1">
-                        <div class="mb-1 flex items-center justify-between gap-3">
-                          <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                            Prompt
-                          </span>
+                              <select
+                                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
+                                value={selectedModelProfileId() ?? ""}
+                                disabled={modelProfilesLoading()}
+                                onChange={(event) =>
+                                  setSelectedModelProfileId(
+                                    event.currentTarget.value.length > 0
+                                      ? event.currentTarget.value
+                                      : null,
+                                  )
+                                }
+                              >
+                                <option value="">
+                                  Server default AI profile
+                                </option>
+                                <For each={modelProfiles()}>
+                                  {(modelProfile) => (
+                                    <option value={modelProfile.id}>
+                                      {modelProfile.name} ({modelProfile.vendor}/
+                                      {modelProfile.model})
+                                    </option>
+                                  )}
+                                </For>
+                              </select>
+                            </label>
+                          </Show>
                         </div>
-                        <textarea
-                          class="min-h-[96px] w-full rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm leading-6 text-text-primary outline-none transition focus:border-accent-emphasis"
-                          rows={3}
-                          value={promptInput()}
-                          onInput={(event) =>
-                            setPromptInput(event.currentTarget.value)
-                          }
-                          onKeyDown={handlePromptInputKeyDown}
-                        />
-                        <div class="mt-2 flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={promptSubmissionDisabled()}
-                            onClick={() => void submitPrompt(false)}
-                          >
-                            {submitting() ? "Submitting..." : "Queue prompt"}
-                          </button>
-                          <button
-                            type="button"
-                            class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={promptSubmissionDisabled()}
-                            onClick={() => void submitPrompt(true)}
-                          >
-                            Run now
-                          </button>
-                          <Show when={selectedQraftAiSessionId() !== null}>
+                        <div class="pt-1">
+                          <div class="mb-1 flex items-center justify-between gap-3">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                              Prompt
+                            </span>
+                          </div>
+                          <textarea
+                            class="min-h-[96px] w-full rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm leading-6 text-text-primary outline-none transition focus:border-accent-emphasis"
+                            rows={3}
+                            value={promptInput()}
+                            onInput={(event) =>
+                              setPromptInput(event.currentTarget.value)
+                            }
+                            onKeyDown={handlePromptInputKeyDown}
+                          />
+                          <div class="mt-2 flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={promptSubmissionDisabled()}
+                              onClick={() => void submitPrompt(false)}
+                            >
+                              {submitting() ? "Submitting..." : "Queue prompt"}
+                            </button>
                             <button
                               type="button"
                               class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
                               disabled={promptSubmissionDisabled()}
-                              onClick={() =>
-                                void restartSelectedSessionFromBeginning()
-                              }
+                              onClick={() => void submitPrompt(true)}
                             >
-                              Restart from beginning
+                              Run now
                             </button>
-                          </Show>
-                          <Show when={selectedSessionCancelAction() !== null}>
-                            <button
-                              type="button"
-                              class="ml-auto rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20"
-                              onClick={() => {
-                                const cancelAction =
-                                  selectedSessionCancelAction();
-                                if (cancelAction === null) {
-                                  return;
+                            <Show when={selectedQraftAiSessionId() !== null}>
+                              <button
+                                type="button"
+                                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                                disabled={promptSubmissionDisabled()}
+                                onClick={() =>
+                                  void restartSelectedSessionFromBeginning()
                                 }
-                                if (cancelAction.kind === "active-session") {
-                                  void cancelActiveSession(
-                                    cancelAction.targetId,
-                                  );
-                                  return;
-                                }
-                                void cancelQueuedPrompt(cancelAction.targetId);
-                              }}
-                            >
-                              {selectedSessionCancelAction()?.label}
-                            </button>
-                          </Show>
+                              >
+                                Restart from beginning
+                              </button>
+                            </Show>
+                            <Show when={selectedSessionCancelAction() !== null}>
+                              <button
+                                type="button"
+                                class="ml-auto rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20"
+                                onClick={() => {
+                                  const cancelAction =
+                                    selectedSessionCancelAction();
+                                  if (cancelAction === null) {
+                                    return;
+                                  }
+                                  if (cancelAction.kind === "active-session") {
+                                    void cancelActiveSession(
+                                      cancelAction.targetId,
+                                    );
+                                    return;
+                                  }
+                                  void cancelQueuedPrompt(cancelAction.targetId);
+                                }}
+                              >
+                                {selectedSessionCancelAction()?.label}
+                              </button>
+                            </Show>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </Show>
                   </div>
                 </div>
               </div>
