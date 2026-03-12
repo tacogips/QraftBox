@@ -432,8 +432,8 @@ describe("AI Routes", () => {
       const body = await res.text();
       expect(body).toContain("event: connected");
       expect(body).toContain("event: session_started");
-      expect(body).toContain("\"message\":\"Thinking...\"");
-      expect(body).toContain("\"content\":\"partial\"");
+      expect(body).toContain('"message":"Thinking..."');
+      expect(body).toContain('"content":"partial"');
       expect(body).toContain("event: completed");
     });
   });

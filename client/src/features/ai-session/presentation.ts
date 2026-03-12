@@ -114,9 +114,9 @@ export function buildAiSessionListEntries(
         : (historicalSession?.firstPrompt?.trim() ?? "");
 
     const titleCandidate =
-      activeSession.prompt.trim() ||
-      historicalSession?.summary.trim() ||
       historicalSession?.firstPrompt.trim() ||
+      historicalSession?.summary.trim() ||
+      activeSession.prompt.trim() ||
       "Active session";
 
     const detailCandidate =
@@ -583,14 +583,17 @@ export function mergePendingAiSessionTranscriptLines(params: {
   const shouldRenderOptimisticUser =
     normalizedOptimisticText !== null && persistedOptimisticUserIndex === -1;
   const liveAssistantDisplayText =
-    params.liveAssistantText !== null && params.liveAssistantText.trim().length > 0
+    params.liveAssistantText !== null &&
+    params.liveAssistantText.trim().length > 0
       ? params.liveAssistantText
       : params.liveAssistantPhase === "idle"
         ? null
         : (params.liveAssistantStatusText ?? "Thinking...");
   const shouldRenderLiveAssistant =
     liveAssistantDisplayText !== null &&
-    !transcriptTail.some((transcriptLine) => transcriptLine.role === "assistant");
+    !transcriptTail.some(
+      (transcriptLine) => transcriptLine.role === "assistant",
+    );
 
   return [
     ...persistedTranscriptLines,

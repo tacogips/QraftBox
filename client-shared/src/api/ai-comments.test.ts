@@ -154,9 +154,9 @@ describe("shared ai comments api", () => {
   });
 
   test("removes a queued comment", async () => {
-    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true })),
-    );
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true })));
     const apiClient = createAiCommentsApiClient({
       apiBaseUrl: "/custom-api/",
       fetchImplementation,
@@ -174,9 +174,11 @@ describe("shared ai comments api", () => {
   });
 
   test("clears all queued comments for a project", async () => {
-    const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValueOnce(
-      new Response(JSON.stringify({ success: true, deletedCount: 3 })),
-    );
+    const fetchImplementation = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ success: true, deletedCount: 3 })),
+      );
     const apiClient = createAiCommentsApiClient({
       apiBaseUrl: "/custom-api/",
       fetchImplementation,

@@ -97,7 +97,9 @@ export function createAiCommentsApiClient(
   const config = createAiCommentsApiClientConfig(options);
 
   return {
-    async listComments(projectPath: string): Promise<readonly QueuedAiComment[]> {
+    async listComments(
+      projectPath: string,
+    ): Promise<readonly QueuedAiComment[]> {
       const searchParams = new URLSearchParams({
         projectPath,
       });

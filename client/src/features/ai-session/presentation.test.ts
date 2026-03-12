@@ -197,6 +197,45 @@ describe("ai-session presentation helpers", () => {
     ]);
   });
 
+  test("prefers a refreshed qraftbox purpose for the active session title when available", () => {
+    const activeSessions: readonly AISessionInfo[] = [
+      createAiSessionInfo({
+        id: "qs-active",
+        state: "running",
+        prompt: "Continue migration",
+        createdAt: "2026-03-09T06:00:00.000Z",
+        currentActivity: "Applying patch",
+      }),
+    ];
+    const historicalSessions: readonly ExtendedSessionEntry[] = [
+      {
+        sessionId: "claude-1",
+        fullPath: "/tmp/claude-1.jsonl",
+        fileMtime: 1,
+        firstPrompt: "Refresh the current files preview purpose.",
+        summary: "Old summary",
+        messageCount: 1,
+        created: "2026-03-08T10:00:00.000Z",
+        modified: "2026-03-09T06:00:00.000Z",
+        gitBranch: "main",
+        projectPath: "/tmp/repo",
+        isSidechain: false,
+        source: "qraftbox",
+        projectEncoded: "tmp-repo",
+        qraftAiSessionId: asQraftAiSessionId("qs-active"),
+      },
+    ];
+
+    expect(
+      buildAiSessionListEntries(activeSessions, [], historicalSessions),
+    ).toEqual([
+      expect.objectContaining({
+        id: "active:qs-active",
+        title: "Refresh the current files preview purpose.",
+      }),
+    ]);
+  });
+
   test("prefers the newest queued prompt when summarizing active and historical sessions", () => {
     const activeSessions: readonly AISessionInfo[] = [
       createAiSessionInfo({

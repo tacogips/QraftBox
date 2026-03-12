@@ -9,6 +9,7 @@ import {
   type AISessionInfo,
   type AiSessionTranscriptResponse,
   type PromptQueueItem,
+  type SessionPurposeResponse,
 } from "./ai-sessions";
 
 describe("ai sessions api client", () => {
@@ -294,6 +295,43 @@ describe("ai sessions api client", () => {
     expect(requests).toEqual([
       "/api/ctx/ctx-1/claude-sessions/sessions/qs_history_1",
       "/api/ctx/ctx-1/claude-sessions/sessions/qs_history_1/transcript?offset=0&limit=25",
+    ]);
+  });
+
+  test("loads a refreshed session purpose through the dedicated purpose route", async () => {
+    const requests: string[] = [];
+    const fetchImplementation: typeof fetch = (async (
+      input: string | URL | Request,
+    ): Promise<Response> => {
+      const url = String(input);
+      requests.push(url);
+
+      return new Response(
+        JSON.stringify({
+          purpose:
+            "Stabilize files preview rendering without transcript noise.",
+          updatedAt: "2026-03-12T03:45:00.000Z",
+          source: "llm",
+        } satisfies SessionPurposeResponse),
+        { status: 200 },
+      );
+    }) as typeof fetch;
+
+    const apiClient = createAiSessionsApiClient({
+      apiBaseUrl: "/api",
+      fetchImplementation,
+    });
+
+    const purposeResponse = await apiClient.fetchClaudeSessionPurpose(
+      "ctx-1",
+      "qs_history_1" as QraftAiSessionId,
+    );
+
+    expect(purposeResponse.purpose).toBe(
+      "Stabilize files preview rendering without transcript noise.",
+    );
+    expect(requests).toEqual([
+      "/api/ctx/ctx-1/claude-sessions/sessions/qs_history_1/purpose",
     ]);
   });
 

@@ -513,10 +513,27 @@ export function App(props: AppProps): JSX.Element {
           }}
           selectedLineNumber={activeRoute().selectedLineNumber}
           onSelectLine={(lineNumber) => {
+            const nextRoute = {
+              ...activeRoute(),
+              selectedLineNumber: lineNumber,
+            };
             setActiveRoute((currentRoute) => ({
               ...currentRoute,
               selectedLineNumber: lineNumber,
             }));
+            const nextHash = buildScreenHash(
+              nextRoute.projectSlug,
+              nextRoute.screen,
+              {
+                selectedPath: nextRoute.selectedPath,
+                selectedViewMode: nextRoute.selectedViewMode,
+                fileTreeMode: nextRoute.fileTreeMode,
+                selectedLineNumber: nextRoute.selectedLineNumber,
+              },
+            );
+            if (window.location.hash !== nextHash) {
+              window.history.replaceState(window.history.state, "", nextHash);
+            }
           }}
           onOpenAiSession={(sessionId: QraftAiSessionId) => {
             const projectSlug = activeRoute().projectSlug;

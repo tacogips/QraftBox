@@ -78,7 +78,8 @@ describe("createFilesViewModel", () => {
 
             await filesViewModel.setFileTreeMode("ctx-reactivity", "all");
             await Promise.resolve();
-            const notificationCountAfterModeChange = fileContentNotificationCount;
+            const notificationCountAfterModeChange =
+              fileContentNotificationCount;
 
             await filesViewModel.toggleDirectory("ctx-reactivity", "src");
             await Promise.resolve();
