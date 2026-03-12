@@ -17,6 +17,7 @@ import {
 } from "../../../../client-shared/src/api/ai-comments";
 import { createAiSessionsApiClient } from "../../../../client-shared/src/api/ai-sessions";
 import { createModelConfigApiClient } from "../../../../client-shared/src/api/model-config";
+import { ToolbarIconButton } from "../../components/ToolbarIconButton";
 import {
   transformToCurrentState,
   type CurrentStateLine,
@@ -230,6 +231,30 @@ function renderTreeChevronIcon(isExpanded: boolean): JSX.Element {
         stroke-linecap="round"
         stroke-linejoin="round"
       />
+    </svg>
+  );
+}
+
+function renderSectionCollapseIcon(isExpanded: boolean): JSX.Element {
+  return isExpanded ? (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      aria-hidden="true"
+    >
+      <path d="m6 12 4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+  ) : (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      aria-hidden="true"
+    >
+      <path d="m6 8 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   );
 }
@@ -1075,7 +1100,6 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       : null;
   const queuedCommentCount = () => queuedComments().length;
   const hasQueuedComments = () => queuedCommentCount() > 0;
-
   function clearInlineCommentFeedback(): void {
     setFullFileQueuedNoticeOpen(false);
     setFullFileSubmitNoticeSessionId(null);
@@ -2243,518 +2267,313 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </Show>
               </aside>
 
-              <main class="qraftbox-file-preview-pane flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
-                <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
-                  <div class="flex min-w-0 flex-col gap-2">
-                    <div class="min-w-0">
-                      <div class="flex min-w-0 flex-wrap items-center gap-2">
-                        <p class="break-all text-base font-semibold text-text-primary">
-                          {selectedPreviewPath() ?? "Select a file"}
-                        </p>
-                        <Show when={selectedStatus() !== null}>
-                          <span
-                            class={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
-                              selectedStatus() ?? undefined,
-                            )}`}
+              <div class="flex min-h-0 flex-col gap-4">
+                <main class="qraftbox-file-preview-pane flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+                  <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
+                    <div class="flex min-w-0 flex-col gap-2">
+                      <div class="min-w-0">
+                        <div class="flex min-w-0 flex-wrap items-center gap-2">
+                          <p class="break-all text-base font-semibold text-text-primary">
+                            {selectedPreviewPath() ?? "Select a file"}
+                          </p>
+                          <Show when={selectedStatus() !== null}>
+                            <span
+                              class={`rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${getStatusBadgeClass(
+                                selectedStatus() ?? undefined,
+                              )}`}
+                            >
+                              {selectedStatus()}
+                            </span>
+                          </Show>
+                        </div>
+                      </div>
+
+                      <div class="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-text-secondary">
+                        <div class="flex shrink-0 flex-wrap items-center gap-2">
+                          <For each={availableModes()}>
+                            {(viewMode) => (
+                              <button
+                                type="button"
+                                class={
+                                  effectiveViewMode() === viewMode
+                                    ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
+                                    : "rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                                }
+                                disabled={effectiveViewMode() === viewMode}
+                                aria-label={`${renderViewModeLabel(viewMode)} view`}
+                                title={renderViewModeLabel(viewMode)}
+                                onClick={() => props.onChangeViewMode(viewMode)}
+                              >
+                                {renderViewModeIcon(viewMode)}
+                              </button>
+                            )}
+                          </For>
+                          <button
+                            type="button"
+                            class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={
+                              diffPathNavigation().previousPath === null
+                            }
+                            aria-label="Previous file"
+                            title="Previous file"
+                            onClick={() => {
+                              const previousPath =
+                                diffPathNavigation().previousPath;
+                              if (previousPath !== null) {
+                                props.onSelectPath(previousPath);
+                              }
+                            }}
                           >
-                            {selectedStatus()}
+                            {renderNavigationIcon("previous")}
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={diffPathNavigation().nextPath === null}
+                            aria-label="Next file"
+                            title="Next file"
+                            onClick={() => {
+                              const nextPath = diffPathNavigation().nextPath;
+                              if (nextPath !== null) {
+                                props.onSelectPath(nextPath);
+                              }
+                            }}
+                          >
+                            {renderNavigationIcon("next")}
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
+                            aria-label="Refresh preview"
+                            title="Refresh preview"
+                            onClick={() => props.onReload()}
+                          >
+                            {renderReloadIcon()}
+                          </button>
+                        </div>
+
+                        <Show when={selectedDiffFile() !== null}>
+                          <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 text-success-fg">
+                            +{selectedDiffFile()?.additions}
+                          </span>
+                          <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 text-danger-fg">
+                            -{selectedDiffFile()?.deletions}
                           </span>
                         </Show>
-                      </div>
-                    </div>
-
-                    <div class="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-text-secondary">
-                      <div class="flex shrink-0 flex-wrap items-center gap-2">
-                        <For each={availableModes()}>
-                          {(viewMode) => (
-                            <button
-                              type="button"
-                              class={
-                                effectiveViewMode() === viewMode
-                                  ? "rounded-md bg-accent-emphasis p-2 text-text-on-emphasis"
-                                  : "rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
-                              }
-                              disabled={effectiveViewMode() === viewMode}
-                              aria-label={`${renderViewModeLabel(viewMode)} view`}
-                              title={renderViewModeLabel(viewMode)}
-                              onClick={() => props.onChangeViewMode(viewMode)}
-                            >
-                              {renderViewModeIcon(viewMode)}
-                            </button>
+                        <For each={fileContentMetadata()}>
+                          {(metadataItem) => (
+                            <span class="rounded-full border border-border-default bg-bg-primary px-2 py-0.5">
+                              {metadataItem}
+                            </span>
                           )}
                         </For>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={diffPathNavigation().previousPath === null}
-                          aria-label="Previous file"
-                          title="Previous file"
-                          onClick={() => {
-                            const previousPath =
-                              diffPathNavigation().previousPath;
-                            if (previousPath !== null) {
-                              props.onSelectPath(previousPath);
-                            }
-                          }}
-                        >
-                          {renderNavigationIcon("previous")}
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={diffPathNavigation().nextPath === null}
-                          aria-label="Next file"
-                          title="Next file"
-                          onClick={() => {
-                            const nextPath = diffPathNavigation().nextPath;
-                            if (nextPath !== null) {
-                              props.onSelectPath(nextPath);
-                            }
-                          }}
-                        >
-                          {renderNavigationIcon("next")}
-                        </button>
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
-                          aria-label="Refresh preview"
-                          title="Refresh preview"
-                          onClick={() => props.onReload()}
-                        >
-                          {renderReloadIcon()}
-                        </button>
                       </div>
 
-                      <Show when={selectedDiffFile() !== null}>
-                        <span class="rounded-full border border-success-emphasis/30 bg-success-muted/15 px-2 py-0.5 text-success-fg">
-                          +{selectedDiffFile()?.additions}
-                        </span>
-                        <span class="rounded-full border border-danger-emphasis/30 bg-danger-muted/15 px-2 py-0.5 text-danger-fg">
-                          -{selectedDiffFile()?.deletions}
-                        </span>
+                      <Show when={selectedDiffFile()?.oldPath !== undefined}>
+                        <p class="text-xs text-text-secondary">
+                          Renamed from {selectedDiffFile()?.oldPath}
+                        </p>
                       </Show>
-                      <For each={fileContentMetadata()}>
-                        {(metadataItem) => (
-                          <span class="rounded-full border border-border-default bg-bg-primary px-2 py-0.5">
-                            {metadataItem}
-                          </span>
-                        )}
-                      </For>
                     </div>
-
-                    <Show when={selectedDiffFile()?.oldPath !== undefined}>
-                      <p class="text-xs text-text-secondary">
-                        Renamed from {selectedDiffFile()?.oldPath}
-                      </p>
-                    </Show>
                   </div>
-                </div>
 
-                <Show when={props.fileContentError !== null}>
-                  <div class="border-b border-danger-emphasis/30 bg-danger-muted/10 px-4 py-3 text-sm text-danger-fg">
-                    {props.fileContentError}
-                  </div>
-                </Show>
-
-                <div
-                  ref={previewContainerElement}
-                  class="min-h-0 flex-1 overflow-auto bg-bg-primary"
-                >
-                  <Show when={props.isFileContentLoading}>
-                    <div class="border-b border-border-default px-4 py-3 text-sm text-text-secondary">
-                      Loading file preview...
+                  <Show when={props.fileContentError !== null}>
+                    <div class="border-b border-danger-emphasis/30 bg-danger-muted/10 px-4 py-3 text-sm text-danger-fg">
+                      {props.fileContentError}
                     </div>
                   </Show>
 
-                  <Show
-                    when={selectedPreviewPath() !== null}
-                    fallback={
-                      <div class="flex min-h-full items-center justify-center px-6 py-16 text-center text-sm text-text-secondary">
-                        Select a changed file or repository file to inspect its
-                        contents here.
-                      </div>
-                    }
+                  <div
+                    ref={previewContainerElement}
+                    class="min-h-0 flex-1 overflow-auto bg-bg-primary"
                   >
-                    <Switch>
-                      <Match when={selectedDiffFile()?.isBinary === true}>
-                        <div class="m-4 rounded-2xl border border-border-default bg-bg-secondary p-6 text-sm text-text-secondary">
-                          Binary files are not previewed in the browser diff
-                          viewer.
-                        </div>
-                      </Match>
+                    <Show when={props.isFileContentLoading}>
+                      <div class="border-b border-border-default px-4 py-3 text-sm text-text-secondary">
+                        Loading file preview...
+                      </div>
+                    </Show>
 
-                      <Match when={effectiveViewMode() === "side-by-side"}>
-                        <div class="min-w-[840px]">
-                          <div>
-                            <For each={sideBySideRows()}>
-                              {(row) => (
-                                <Show
-                                  when={row.kind === "change"}
-                                  fallback={
-                                    <div class="border-y border-accent-emphasis/20 bg-diff-hunk-bg/30 px-4 py-2 font-mono text-xs text-accent-fg">
-                                      {row.kind === "hunk"
-                                        ? row.header
-                                        : undefined}
-                                    </div>
-                                  }
-                                >
-                                  <>
-                                    <div class="group/diffline grid grid-cols-[84px_minmax(0,1fr)_84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6">
-                                      <div
-                                        data-qraftbox-line={
-                                          row.kind === "change"
-                                            ? (row.left?.oldLine ?? undefined)
-                                            : undefined
-                                        }
-                                        class={`border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
-                                          row.kind === "change" &&
-                                            row.left !== null
-                                            ? row.left.type
-                                            : "blank",
-                                        )} ${getSelectedLineClass(
-                                          row.kind === "change" &&
-                                            row.left?.oldLine ===
-                                              props.selectedLineNumber,
-                                        )}`}
-                                        onClick={() => {
-                                          if (
-                                            row.kind === "change" &&
-                                            row.left?.oldLine !== undefined
-                                          ) {
-                                            props.onSelectLine(
-                                              row.left.oldLine,
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        {row.kind === "change" &&
-                                        row.left?.oldLine !== undefined
-                                          ? row.left.oldLine
-                                          : ""}
-                                      </div>
-                                      <div
-                                        class={`border-r border-border-default/50 px-4 py-1 whitespace-pre-wrap break-words text-text-primary ${getChangeRowClass(
-                                          row.kind === "change" &&
-                                            row.left !== null
-                                            ? row.left.type
-                                            : "blank",
-                                        )}`}
-                                      >
-                                        {row.kind === "change"
-                                          ? renderHighlightedTextLine({
-                                              tokens: highlightedBeforeLine(
-                                                row.left?.oldLine,
-                                              ),
-                                              fallbackText:
-                                                row.left?.content ?? "",
-                                            })
-                                          : ""}
-                                      </div>
-                                      <div
-                                        data-qraftbox-line={
-                                          row.kind === "change"
-                                            ? (row.right?.newLine ?? undefined)
-                                            : undefined
-                                        }
-                                        class={`relative border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
-                                          row.kind === "change" &&
-                                            row.right !== null
-                                            ? row.right.type
-                                            : "blank",
-                                        )} ${getSelectedLineClass(
-                                          row.kind === "change" &&
-                                            row.right?.newLine ===
-                                              props.selectedLineNumber &&
-                                            !isInlineCommentHighlightedLine(
-                                              row.right.newLine,
-                                              "diff",
-                                              "new",
-                                            ),
-                                        )} ${
-                                          row.kind === "change" &&
-                                          row.right?.newLine !== undefined
-                                            ? getInlineCommentLineClass({
-                                                isSelected:
-                                                  isActiveInlineCommentLine(
-                                                    row.right.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                                isRangeAnchor:
-                                                  isPendingInlineCommentAnchorLine(
-                                                    row.right.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                              })
-                                            : ""
-                                        }`}
-                                        onClick={() => {
-                                          if (
-                                            row.kind === "change" &&
-                                            row.right?.newLine !== undefined
-                                          ) {
-                                            props.onSelectLine(
-                                              row.right.newLine,
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        <Show
-                                          when={
-                                            canUseDiffInlineActions() &&
-                                            row.kind === "change" &&
-                                            row.right?.newLine !== undefined
-                                          }
-                                        >
-                                          {renderInlineCommentTriggerButton({
-                                            lineNumber: (
-                                              row as SideBySideChangeRow
-                                            ).right!.newLine!,
-                                            source: "diff",
-                                            side: "new",
-                                            hoverClass:
-                                              "group-hover/diffline:opacity-100",
-                                          })}
-                                        </Show>
-                                        <Show
-                                          when={
-                                            canUseDiffInlineActions() &&
-                                            row.kind === "change" &&
-                                            row.right?.newLine !== undefined
-                                          }
-                                          fallback={
-                                            row.kind === "change" &&
-                                            row.right?.newLine !== undefined
-                                              ? row.right.newLine
-                                              : ""
-                                          }
-                                        >
-                                          <button
-                                            type="button"
-                                            class={`rounded px-1 transition ${
-                                              row.kind === "change" &&
-                                              row.right?.newLine !== undefined
-                                                ? getInlineCommentLineButtonClass(
-                                                    {
-                                                      isSelected:
-                                                        isActiveInlineCommentLine(
-                                                          row.right.newLine,
-                                                          "diff",
-                                                          "new",
-                                                        ),
-                                                      isRangeAnchor:
-                                                        isPendingInlineCommentAnchorLine(
-                                                          row.right.newLine,
-                                                          "diff",
-                                                          "new",
-                                                        ),
-                                                    },
-                                                  )
-                                                : "hover:bg-bg-hover"
-                                            }`}
-                                            aria-label={`Select line ${
-                                              row.kind === "change"
-                                                ? (row.right?.newLine ?? "")
-                                                : ""
-                                            } for AI prompt`}
-                                            title={resolveInlineCommentLineButtonTitle(
-                                              row.kind === "change"
-                                                ? (row.right?.newLine ?? 0)
-                                                : 0,
-                                            )}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              if (
-                                                row.kind === "change" &&
-                                                row.right?.newLine !== undefined
-                                              ) {
-                                                handleInlineCommentSelection({
-                                                  lineNumber: row.right.newLine,
-                                                  source: "diff",
-                                                  side: "new",
-                                                  extendRange: event.shiftKey,
-                                                });
-                                              }
-                                            }}
-                                            onDblClick={(event) => {
-                                              event.stopPropagation();
-                                              if (
-                                                row.kind === "change" &&
-                                                row.right?.newLine !== undefined
-                                              ) {
-                                                handleInlineCommentRangeAnchor({
-                                                  lineNumber: row.right.newLine,
-                                                  source: "diff",
-                                                  side: "new",
-                                                });
-                                              }
-                                            }}
-                                          >
-                                            {row.kind === "change"
-                                              ? row.right?.newLine
-                                              : ""}
-                                          </button>
-                                        </Show>
-                                      </div>
-                                      <div
-                                        class={`px-4 py-1 whitespace-pre-wrap break-words text-text-primary ${getChangeRowClass(
-                                          row.kind === "change" &&
-                                            row.right !== null
-                                            ? row.right.type
-                                            : "blank",
-                                        )} ${
-                                          row.kind === "change" &&
-                                          row.right?.newLine !== undefined
-                                            ? getInlineCommentLineClass({
-                                                isSelected:
-                                                  isActiveInlineCommentLine(
-                                                    row.right.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                                isRangeAnchor:
-                                                  isPendingInlineCommentAnchorLine(
-                                                    row.right.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                              })
-                                            : ""
-                                        }`}
-                                      >
-                                        {row.kind === "change"
-                                          ? renderHighlightedTextLine({
-                                              tokens: highlightedAfterLine(
-                                                row.right?.newLine,
-                                              ),
-                                              fallbackText:
-                                                row.right?.content ?? "",
-                                            })
-                                          : ""}
-                                      </div>
-                                    </div>
-                                    <Show
-                                      when={
-                                        row.kind === "change" &&
-                                        activeInlineCommentSource() ===
-                                          "diff" &&
-                                        activeFullFileRange()?.endLine ===
-                                          row.right?.newLine
-                                      }
-                                    >
-                                      {renderInlineCommentComposer()}
-                                    </Show>
-                                  </>
-                                </Show>
-                              )}
-                            </For>
+                    <Show
+                      when={selectedPreviewPath() !== null}
+                      fallback={
+                        <div class="flex min-h-full items-center justify-center px-6 py-16 text-center text-sm text-text-secondary">
+                          Select a changed file or repository file to inspect
+                          its contents here.
+                        </div>
+                      }
+                    >
+                      <Switch>
+                        <Match when={selectedDiffFile()?.isBinary === true}>
+                          <div class="m-4 rounded-2xl border border-border-default bg-bg-secondary p-6 text-sm text-text-secondary">
+                            Binary files are not previewed in the browser diff
+                            viewer.
                           </div>
-                        </div>
-                      </Match>
+                        </Match>
 
-                      <Match when={effectiveViewMode() === "inline"}>
-                        <div class="min-w-[720px]">
-                          <For each={selectedDiffFile()?.chunks ?? []}>
-                            {(diffChunk) => (
-                              <div>
-                                <div class="border-y border-accent-emphasis/20 bg-diff-hunk-bg/30 px-4 py-2 font-mono text-xs text-accent-fg">
-                                  {diffChunk.header}
-                                </div>
-                                <For each={diffChunk.changes}>
-                                  {(diffChange) => (
+                        <Match when={effectiveViewMode() === "side-by-side"}>
+                          <div class="min-w-[840px]">
+                            <div>
+                              <For each={sideBySideRows()}>
+                                {(row) => (
+                                  <Show
+                                    when={row.kind === "change"}
+                                    fallback={
+                                      <div class="border-y border-accent-emphasis/20 bg-diff-hunk-bg/30 px-4 py-2 font-mono text-xs text-accent-fg">
+                                        {row.kind === "hunk"
+                                          ? row.header
+                                          : undefined}
+                                      </div>
+                                    }
+                                  >
                                     <>
-                                      <div
-                                        data-qraftbox-line={
-                                          resolveDisplayedLineNumber(
-                                            diffChange,
-                                          ) ?? undefined
-                                        }
-                                        class={`group/inlinerow grid grid-cols-[72px_72px_44px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getInlineRowAccentClass(
-                                          diffChange.type,
-                                        )} ${getSelectedLineClass(
-                                          resolveDisplayedLineNumber(
-                                            diffChange,
-                                          ) === props.selectedLineNumber &&
-                                            !(
-                                              diffChange.newLine !==
-                                                undefined &&
-                                              isInlineCommentHighlightedLine(
-                                                diffChange.newLine,
+                                      <div class="group/diffline grid grid-cols-[84px_minmax(0,1fr)_84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6">
+                                        <div
+                                          data-qraftbox-line={
+                                            row.kind === "change"
+                                              ? (row.left?.oldLine ?? undefined)
+                                              : undefined
+                                          }
+                                          class={`border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
+                                            row.kind === "change" &&
+                                              row.left !== null
+                                              ? row.left.type
+                                              : "blank",
+                                          )} ${getSelectedLineClass(
+                                            row.kind === "change" &&
+                                              row.left?.oldLine ===
+                                                props.selectedLineNumber,
+                                          )}`}
+                                          onClick={() => {
+                                            if (
+                                              row.kind === "change" &&
+                                              row.left?.oldLine !== undefined
+                                            ) {
+                                              props.onSelectLine(
+                                                row.left.oldLine,
+                                              );
+                                            }
+                                          }}
+                                        >
+                                          {row.kind === "change" &&
+                                          row.left?.oldLine !== undefined
+                                            ? row.left.oldLine
+                                            : ""}
+                                        </div>
+                                        <div
+                                          class={`border-r border-border-default/50 px-4 py-1 whitespace-pre-wrap break-words text-text-primary ${getChangeRowClass(
+                                            row.kind === "change" &&
+                                              row.left !== null
+                                              ? row.left.type
+                                              : "blank",
+                                          )}`}
+                                        >
+                                          {row.kind === "change"
+                                            ? renderHighlightedTextLine({
+                                                tokens: highlightedBeforeLine(
+                                                  row.left?.oldLine,
+                                                ),
+                                                fallbackText:
+                                                  row.left?.content ?? "",
+                                              })
+                                            : ""}
+                                        </div>
+                                        <div
+                                          data-qraftbox-line={
+                                            row.kind === "change"
+                                              ? (row.right?.newLine ??
+                                                undefined)
+                                              : undefined
+                                          }
+                                          class={`relative border-r border-border-default/50 px-4 py-1 text-right text-text-tertiary ${getChangeRowClass(
+                                            row.kind === "change" &&
+                                              row.right !== null
+                                              ? row.right.type
+                                              : "blank",
+                                          )} ${getSelectedLineClass(
+                                            row.kind === "change" &&
+                                              row.right?.newLine ===
+                                                props.selectedLineNumber &&
+                                              !isInlineCommentHighlightedLine(
+                                                row.right.newLine,
                                                 "diff",
                                                 "new",
-                                              )
-                                            ),
-                                        )} ${
-                                          diffChange.newLine !== undefined
-                                            ? getInlineCommentLineClass({
-                                                isSelected:
-                                                  isActiveInlineCommentLine(
-                                                    diffChange.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                                isRangeAnchor:
-                                                  isPendingInlineCommentAnchorLine(
-                                                    diffChange.newLine,
-                                                    "diff",
-                                                    "new",
-                                                  ),
-                                              })
-                                            : ""
-                                        }`}
-                                        onClick={() => {
-                                          const selectedLineNumber =
-                                            resolveDisplayedLineNumber(
-                                              diffChange,
-                                            );
-                                          if (selectedLineNumber !== null) {
-                                            props.onSelectLine(
-                                              selectedLineNumber,
-                                            );
-                                          }
-                                        }}
-                                      >
-                                        <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                              ),
+                                          )} ${
+                                            row.kind === "change" &&
+                                            row.right?.newLine !== undefined
+                                              ? getInlineCommentLineClass({
+                                                  isSelected:
+                                                    isActiveInlineCommentLine(
+                                                      row.right.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                  isRangeAnchor:
+                                                    isPendingInlineCommentAnchorLine(
+                                                      row.right.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                })
+                                              : ""
+                                          }`}
+                                          onClick={() => {
+                                            if (
+                                              row.kind === "change" &&
+                                              row.right?.newLine !== undefined
+                                            ) {
+                                              props.onSelectLine(
+                                                row.right.newLine,
+                                              );
+                                            }
+                                          }}
+                                        >
                                           <Show
                                             when={
                                               canUseDiffInlineActions() &&
-                                              diffChange.newLine !== undefined
+                                              row.kind === "change" &&
+                                              row.right?.newLine !== undefined
                                             }
                                           >
                                             {renderInlineCommentTriggerButton({
-                                              lineNumber: diffChange.newLine!,
+                                              lineNumber: (
+                                                row as SideBySideChangeRow
+                                              ).right!.newLine!,
                                               source: "diff",
                                               side: "new",
                                               hoverClass:
-                                                "group-hover/inlinerow:opacity-100",
+                                                "group-hover/diffline:opacity-100",
                                             })}
                                           </Show>
-                                          {diffChange.oldLine ?? ""}
-                                        </div>
-                                        <div class="px-4 py-1 text-right text-text-tertiary">
                                           <Show
                                             when={
                                               canUseDiffInlineActions() &&
-                                              diffChange.newLine !== undefined
+                                              row.kind === "change" &&
+                                              row.right?.newLine !== undefined
                                             }
-                                            fallback={diffChange.newLine ?? ""}
+                                            fallback={
+                                              row.kind === "change" &&
+                                              row.right?.newLine !== undefined
+                                                ? row.right.newLine
+                                                : ""
+                                            }
                                           >
                                             <button
                                               type="button"
                                               class={`rounded px-1 transition ${
-                                                diffChange.newLine !== undefined
+                                                row.kind === "change" &&
+                                                row.right?.newLine !== undefined
                                                   ? getInlineCommentLineButtonClass(
                                                       {
                                                         isSelected:
                                                           isActiveInlineCommentLine(
-                                                            diffChange.newLine,
+                                                            row.right.newLine,
                                                             "diff",
                                                             "new",
                                                           ),
                                                         isRangeAnchor:
                                                           isPendingInlineCommentAnchorLine(
-                                                            diffChange.newLine,
+                                                            row.right.newLine,
                                                             "diff",
                                                             "new",
                                                           ),
@@ -2763,20 +2582,25 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                                   : "hover:bg-bg-hover"
                                               }`}
                                               aria-label={`Select line ${
-                                                diffChange.newLine ?? ""
+                                                row.kind === "change"
+                                                  ? (row.right?.newLine ?? "")
+                                                  : ""
                                               } for AI prompt`}
                                               title={resolveInlineCommentLineButtonTitle(
-                                                diffChange.newLine ?? 0,
+                                                row.kind === "change"
+                                                  ? (row.right?.newLine ?? 0)
+                                                  : 0,
                                               )}
                                               onClick={(event) => {
                                                 event.stopPropagation();
                                                 if (
-                                                  diffChange.newLine !==
-                                                  undefined
+                                                  row.kind === "change" &&
+                                                  row.right?.newLine !==
+                                                    undefined
                                                 ) {
                                                   handleInlineCommentSelection({
                                                     lineNumber:
-                                                      diffChange.newLine,
+                                                      row.right.newLine,
                                                     source: "diff",
                                                     side: "new",
                                                     extendRange: event.shiftKey,
@@ -2786,13 +2610,14 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                               onDblClick={(event) => {
                                                 event.stopPropagation();
                                                 if (
-                                                  diffChange.newLine !==
-                                                  undefined
+                                                  row.kind === "change" &&
+                                                  row.right?.newLine !==
+                                                    undefined
                                                 ) {
                                                   handleInlineCommentRangeAnchor(
                                                     {
                                                       lineNumber:
-                                                        diffChange.newLine,
+                                                        row.right.newLine,
                                                       source: "diff",
                                                       side: "new",
                                                     },
@@ -2800,595 +2625,839 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                                 }
                                               }}
                                             >
-                                              {diffChange.newLine}
+                                              {row.kind === "change"
+                                                ? row.right?.newLine
+                                                : ""}
                                             </button>
                                           </Show>
                                         </div>
-                                        <div class="px-4 py-1 text-text-tertiary">
-                                          {diffChange.type === "context"
-                                            ? "·"
-                                            : diffChange.type === "add"
-                                              ? "+"
-                                              : "-"}
-                                        </div>
-                                        <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                          {renderHighlightedTextLine({
-                                            tokens:
-                                              diffChange.type === "delete"
-                                                ? highlightedBeforeLine(
-                                                    diffChange.oldLine,
-                                                  )
-                                                : highlightedAfterLine(
-                                                    diffChange.newLine,
-                                                  ),
-                                            fallbackText: diffChange.content,
-                                          })}
+                                        <div
+                                          class={`px-4 py-1 whitespace-pre-wrap break-words text-text-primary ${getChangeRowClass(
+                                            row.kind === "change" &&
+                                              row.right !== null
+                                              ? row.right.type
+                                              : "blank",
+                                          )} ${
+                                            row.kind === "change" &&
+                                            row.right?.newLine !== undefined
+                                              ? getInlineCommentLineClass({
+                                                  isSelected:
+                                                    isActiveInlineCommentLine(
+                                                      row.right.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                  isRangeAnchor:
+                                                    isPendingInlineCommentAnchorLine(
+                                                      row.right.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                })
+                                              : ""
+                                          }`}
+                                        >
+                                          {row.kind === "change"
+                                            ? renderHighlightedTextLine({
+                                                tokens: highlightedAfterLine(
+                                                  row.right?.newLine,
+                                                ),
+                                                fallbackText:
+                                                  row.right?.content ?? "",
+                                              })
+                                            : ""}
                                         </div>
                                       </div>
                                       <Show
                                         when={
+                                          row.kind === "change" &&
                                           activeInlineCommentSource() ===
                                             "diff" &&
                                           activeFullFileRange()?.endLine ===
-                                            diffChange.newLine
+                                            row.right?.newLine
                                         }
                                       >
                                         {renderInlineCommentComposer()}
                                       </Show>
                                     </>
-                                  )}
-                                </For>
-                              </div>
-                            )}
-                          </For>
-                        </div>
-                      </Match>
+                                  </Show>
+                                )}
+                              </For>
+                            </div>
+                          </div>
+                        </Match>
 
-                      <Match when={effectiveViewMode() === "current-state"}>
-                        <div class="min-w-[720px]">
-                          <Show
-                            when={currentStateLines().length > 0}
-                            fallback={
-                              <div class="px-6 py-12 text-sm text-text-secondary">
-                                No current-state preview is available for this
-                                file.
-                              </div>
-                            }
-                          >
-                            <For each={currentStateLines()}>
-                              {(currentStateLine) => (
+                        <Match when={effectiveViewMode() === "inline"}>
+                          <div class="min-w-[720px]">
+                            <For each={selectedDiffFile()?.chunks ?? []}>
+                              {(diffChunk) => (
                                 <div>
-                                  <Show
-                                    when={
-                                      currentStateLine.deletedBefore !==
-                                      undefined
-                                    }
-                                  >
-                                    <div class="border-b border-border-default/40 pl-[84px] font-mono">
-                                      <div class="px-4 py-0">
-                                        <div class="relative">
-                                          <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
-                                          <div class="relative flex justify-end">
-                                            <span class="bg-bg-primary px-2 text-[11px] tracking-[0.08em] text-danger-fg/35">
-                                              {getDeletedBlockIndicatorText(
-                                                currentStateLine,
+                                  <div class="border-y border-accent-emphasis/20 bg-diff-hunk-bg/30 px-4 py-2 font-mono text-xs text-accent-fg">
+                                    {diffChunk.header}
+                                  </div>
+                                  <For each={diffChunk.changes}>
+                                    {(diffChange) => (
+                                      <>
+                                        <div
+                                          data-qraftbox-line={
+                                            resolveDisplayedLineNumber(
+                                              diffChange,
+                                            ) ?? undefined
+                                          }
+                                          class={`group/inlinerow grid grid-cols-[72px_72px_44px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getInlineRowAccentClass(
+                                            diffChange.type,
+                                          )} ${getSelectedLineClass(
+                                            resolveDisplayedLineNumber(
+                                              diffChange,
+                                            ) === props.selectedLineNumber &&
+                                              !(
+                                                diffChange.newLine !==
+                                                  undefined &&
+                                                isInlineCommentHighlightedLine(
+                                                  diffChange.newLine,
+                                                  "diff",
+                                                  "new",
+                                                )
+                                              ),
+                                          )} ${
+                                            diffChange.newLine !== undefined
+                                              ? getInlineCommentLineClass({
+                                                  isSelected:
+                                                    isActiveInlineCommentLine(
+                                                      diffChange.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                  isRangeAnchor:
+                                                    isPendingInlineCommentAnchorLine(
+                                                      diffChange.newLine,
+                                                      "diff",
+                                                      "new",
+                                                    ),
+                                                })
+                                              : ""
+                                          }`}
+                                          onClick={() => {
+                                            const selectedLineNumber =
+                                              resolveDisplayedLineNumber(
+                                                diffChange,
+                                              );
+                                            if (selectedLineNumber !== null) {
+                                              props.onSelectLine(
+                                                selectedLineNumber,
+                                              );
+                                            }
+                                          }}
+                                        >
+                                          <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                            <Show
+                                              when={
+                                                canUseDiffInlineActions() &&
+                                                diffChange.newLine !== undefined
+                                              }
+                                            >
+                                              {renderInlineCommentTriggerButton(
+                                                {
+                                                  lineNumber:
+                                                    diffChange.newLine!,
+                                                  source: "diff",
+                                                  side: "new",
+                                                  hoverClass:
+                                                    "group-hover/inlinerow:opacity-100",
+                                                },
                                               )}
-                                            </span>
+                                            </Show>
+                                            {diffChange.oldLine ?? ""}
+                                          </div>
+                                          <div class="px-4 py-1 text-right text-text-tertiary">
+                                            <Show
+                                              when={
+                                                canUseDiffInlineActions() &&
+                                                diffChange.newLine !== undefined
+                                              }
+                                              fallback={
+                                                diffChange.newLine ?? ""
+                                              }
+                                            >
+                                              <button
+                                                type="button"
+                                                class={`rounded px-1 transition ${
+                                                  diffChange.newLine !==
+                                                  undefined
+                                                    ? getInlineCommentLineButtonClass(
+                                                        {
+                                                          isSelected:
+                                                            isActiveInlineCommentLine(
+                                                              diffChange.newLine,
+                                                              "diff",
+                                                              "new",
+                                                            ),
+                                                          isRangeAnchor:
+                                                            isPendingInlineCommentAnchorLine(
+                                                              diffChange.newLine,
+                                                              "diff",
+                                                              "new",
+                                                            ),
+                                                        },
+                                                      )
+                                                    : "hover:bg-bg-hover"
+                                                }`}
+                                                aria-label={`Select line ${
+                                                  diffChange.newLine ?? ""
+                                                } for AI prompt`}
+                                                title={resolveInlineCommentLineButtonTitle(
+                                                  diffChange.newLine ?? 0,
+                                                )}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  if (
+                                                    diffChange.newLine !==
+                                                    undefined
+                                                  ) {
+                                                    handleInlineCommentSelection(
+                                                      {
+                                                        lineNumber:
+                                                          diffChange.newLine,
+                                                        source: "diff",
+                                                        side: "new",
+                                                        extendRange:
+                                                          event.shiftKey,
+                                                      },
+                                                    );
+                                                  }
+                                                }}
+                                                onDblClick={(event) => {
+                                                  event.stopPropagation();
+                                                  if (
+                                                    diffChange.newLine !==
+                                                    undefined
+                                                  ) {
+                                                    handleInlineCommentRangeAnchor(
+                                                      {
+                                                        lineNumber:
+                                                          diffChange.newLine,
+                                                        source: "diff",
+                                                        side: "new",
+                                                      },
+                                                    );
+                                                  }
+                                                }}
+                                              >
+                                                {diffChange.newLine}
+                                              </button>
+                                            </Show>
+                                          </div>
+                                          <div class="px-4 py-1 text-text-tertiary">
+                                            {diffChange.type === "context"
+                                              ? "·"
+                                              : diffChange.type === "add"
+                                                ? "+"
+                                                : "-"}
+                                          </div>
+                                          <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                            {renderHighlightedTextLine({
+                                              tokens:
+                                                diffChange.type === "delete"
+                                                  ? highlightedBeforeLine(
+                                                      diffChange.oldLine,
+                                                    )
+                                                  : highlightedAfterLine(
+                                                      diffChange.newLine,
+                                                    ),
+                                              fallbackText: diffChange.content,
+                                            })}
+                                          </div>
+                                        </div>
+                                        <Show
+                                          when={
+                                            activeInlineCommentSource() ===
+                                              "diff" &&
+                                            activeFullFileRange()?.endLine ===
+                                              diffChange.newLine
+                                          }
+                                        >
+                                          {renderInlineCommentComposer()}
+                                        </Show>
+                                      </>
+                                    )}
+                                  </For>
+                                </div>
+                              )}
+                            </For>
+                          </div>
+                        </Match>
+
+                        <Match when={effectiveViewMode() === "current-state"}>
+                          <div class="min-w-[720px]">
+                            <Show
+                              when={currentStateLines().length > 0}
+                              fallback={
+                                <div class="px-6 py-12 text-sm text-text-secondary">
+                                  No current-state preview is available for this
+                                  file.
+                                </div>
+                              }
+                            >
+                              <For each={currentStateLines()}>
+                                {(currentStateLine) => (
+                                  <div>
+                                    <Show
+                                      when={
+                                        currentStateLine.deletedBefore !==
+                                        undefined
+                                      }
+                                    >
+                                      <div class="border-b border-border-default/40 pl-[84px] font-mono">
+                                        <div class="px-4 py-0">
+                                          <div class="relative">
+                                            <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
+                                            <div class="relative flex justify-end">
+                                              <span class="bg-bg-primary px-2 text-[11px] tracking-[0.08em] text-danger-fg/35">
+                                                {getDeletedBlockIndicatorText(
+                                                  currentStateLine,
+                                                )}
+                                              </span>
+                                            </div>
                                           </div>
                                         </div>
                                       </div>
-                                    </div>
-                                  </Show>
-                                  <Show
-                                    when={shouldRenderCurrentStateLine(
-                                      currentStateLine,
-                                    )}
-                                  >
-                                    <>
-                                      <div
-                                        data-qraftbox-line={
-                                          currentStateLine.lineNumber
-                                        }
-                                        class={`group/currentline grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
-                                          currentStateLine.changeType,
-                                        )} ${getSelectedLineClass(
-                                          currentStateLine.lineNumber ===
-                                            props.selectedLineNumber &&
-                                            !isInlineCommentHighlightedLine(
-                                              currentStateLine.lineNumber,
-                                              "current-state",
-                                              "new",
-                                            ),
-                                        )} ${getInlineCommentLineClass({
-                                          isSelected: isActiveInlineCommentLine(
-                                            currentStateLine.lineNumber,
-                                            "current-state",
-                                            "new",
-                                          ),
-                                          isRangeAnchor:
-                                            isPendingInlineCommentAnchorLine(
-                                              currentStateLine.lineNumber,
-                                              "current-state",
-                                              "new",
-                                            ),
-                                        })}`}
-                                        onClick={() =>
-                                          props.onSelectLine(
-                                            currentStateLine.lineNumber,
-                                          )
-                                        }
-                                      >
-                                        <div class="relative px-4 py-1 text-right text-text-tertiary">
-                                          <Show
-                                            when={canUseDiffInlineActions()}
-                                          >
-                                            {renderInlineCommentTriggerButton({
-                                              lineNumber:
+                                    </Show>
+                                    <Show
+                                      when={shouldRenderCurrentStateLine(
+                                        currentStateLine,
+                                      )}
+                                    >
+                                      <>
+                                        <div
+                                          data-qraftbox-line={
+                                            currentStateLine.lineNumber
+                                          }
+                                          class={`group/currentline grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
+                                            currentStateLine.changeType,
+                                          )} ${getSelectedLineClass(
+                                            currentStateLine.lineNumber ===
+                                              props.selectedLineNumber &&
+                                              !isInlineCommentHighlightedLine(
                                                 currentStateLine.lineNumber,
-                                              source: "current-state",
-                                              side: "new",
-                                              hoverClass:
-                                                "group-hover/currentline:opacity-100",
+                                                "current-state",
+                                                "new",
+                                              ),
+                                          )} ${getInlineCommentLineClass({
+                                            isSelected:
+                                              isActiveInlineCommentLine(
+                                                currentStateLine.lineNumber,
+                                                "current-state",
+                                                "new",
+                                              ),
+                                            isRangeAnchor:
+                                              isPendingInlineCommentAnchorLine(
+                                                currentStateLine.lineNumber,
+                                                "current-state",
+                                                "new",
+                                              ),
+                                          })}`}
+                                          onClick={() =>
+                                            props.onSelectLine(
+                                              currentStateLine.lineNumber,
+                                            )
+                                          }
+                                        >
+                                          <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                            <Show
+                                              when={canUseDiffInlineActions()}
+                                            >
+                                              {renderInlineCommentTriggerButton(
+                                                {
+                                                  lineNumber:
+                                                    currentStateLine.lineNumber,
+                                                  source: "current-state",
+                                                  side: "new",
+                                                  hoverClass:
+                                                    "group-hover/currentline:opacity-100",
+                                                },
+                                              )}
+                                            </Show>
+                                            <Show
+                                              when={canUseDiffInlineActions()}
+                                              fallback={
+                                                currentStateLine.lineNumber
+                                              }
+                                            >
+                                              <button
+                                                type="button"
+                                                class={`rounded px-1 transition ${getInlineCommentLineButtonClass(
+                                                  {
+                                                    isSelected:
+                                                      isActiveInlineCommentLine(
+                                                        currentStateLine.lineNumber,
+                                                        "current-state",
+                                                        "new",
+                                                      ),
+                                                    isRangeAnchor:
+                                                      isPendingInlineCommentAnchorLine(
+                                                        currentStateLine.lineNumber,
+                                                        "current-state",
+                                                        "new",
+                                                      ),
+                                                  },
+                                                )}`}
+                                                aria-label={`Select line ${currentStateLine.lineNumber} for AI prompt`}
+                                                title={resolveInlineCommentLineButtonTitle(
+                                                  currentStateLine.lineNumber,
+                                                )}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  handleInlineCommentSelection({
+                                                    lineNumber:
+                                                      currentStateLine.lineNumber,
+                                                    source: "current-state",
+                                                    side: "new",
+                                                    extendRange: event.shiftKey,
+                                                  });
+                                                }}
+                                                onDblClick={(event) => {
+                                                  event.stopPropagation();
+                                                  handleInlineCommentRangeAnchor(
+                                                    {
+                                                      lineNumber:
+                                                        currentStateLine.lineNumber,
+                                                      source: "current-state",
+                                                      side: "new",
+                                                    },
+                                                  );
+                                                }}
+                                              >
+                                                {currentStateLine.lineNumber}
+                                              </button>
+                                            </Show>
+                                          </div>
+                                          <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                            {renderHighlightedTextLine({
+                                              tokens: highlightedAfterLine(
+                                                currentStateLine.lineNumber,
+                                              ),
+                                              fallbackText:
+                                                currentStateLine.content,
                                             })}
-                                          </Show>
-                                          <Show
-                                            when={canUseDiffInlineActions()}
-                                            fallback={
+                                          </div>
+                                        </div>
+                                        <Show
+                                          when={
+                                            activeInlineCommentSource() ===
+                                              "current-state" &&
+                                            activeFullFileRange()?.endLine ===
                                               currentStateLine.lineNumber
-                                            }
-                                          >
+                                          }
+                                        >
+                                          {renderInlineCommentComposer()}
+                                        </Show>
+                                      </>
+                                    </Show>
+                                  </div>
+                                )}
+                              </For>
+                            </Show>
+                          </div>
+                        </Match>
+
+                        <Match when={effectiveViewMode() === "full-file"}>
+                          <div class="min-w-[720px]">
+                            <Show
+                              when={!isRenderableBinaryFile(props.fileContent)}
+                              fallback={renderBinaryFilePreview({
+                                fileContent: props.fileContent as FileContent,
+                                rawFileUrl: rawFileUrl(),
+                              })}
+                            >
+                              <Show
+                                when={props.fileContent?.isBinary !== true}
+                                fallback={
+                                  <div class="px-6 py-12 text-sm text-text-secondary">
+                                    Binary files are not previewed in the
+                                    full-file viewer.
+                                  </div>
+                                }
+                              >
+                                <Show
+                                  when={fullFileLines().length > 0}
+                                  fallback={
+                                    <div class="px-6 py-12 text-sm text-text-secondary">
+                                      The selected file is empty.
+                                    </div>
+                                  }
+                                >
+                                  <For each={highlightedFullFileLines()}>
+                                    {(lineTokens, lineIndex) => (
+                                      <>
+                                        <div
+                                          data-qraftbox-line={lineIndex() + 1}
+                                          class={`group/line grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
+                                            lineIndex() + 1 ===
+                                              props.selectedLineNumber &&
+                                              !isInlineCommentHighlightedLine(
+                                                lineIndex() + 1,
+                                                "full-file",
+                                                "new",
+                                              ),
+                                          )} ${getInlineCommentLineClass({
+                                            isSelected:
+                                              isActiveInlineCommentLine(
+                                                lineIndex() + 1,
+                                                "full-file",
+                                                "new",
+                                              ),
+                                            isRangeAnchor:
+                                              isPendingInlineCommentAnchorLine(
+                                                lineIndex() + 1,
+                                                "full-file",
+                                                "new",
+                                              ),
+                                          })}`}
+                                          onClick={() =>
+                                            props.onSelectLine(lineIndex() + 1)
+                                          }
+                                        >
+                                          <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                            <Show
+                                              when={canUseFullFileInlineActions()}
+                                            >
+                                              <button
+                                                type="button"
+                                                class="absolute left-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-accent-emphasis text-[11px] font-semibold text-text-on-emphasis opacity-0 transition group-hover/line:opacity-100 hover:brightness-110"
+                                                aria-label={
+                                                  "Add comment on line " +
+                                                  (lineIndex() + 1)
+                                                }
+                                                title={resolveInlineCommentLineButtonTitle(
+                                                  lineIndex() + 1,
+                                                )}
+                                                onClick={(event) => {
+                                                  event.stopPropagation();
+                                                  openInlineCommentComposer({
+                                                    lineNumber: lineIndex() + 1,
+                                                    source: "full-file",
+                                                    side: "new",
+                                                    extendRange: event.shiftKey,
+                                                  });
+                                                }}
+                                                onDblClick={(event) => {
+                                                  event.stopPropagation();
+                                                  openInlineCommentRangeAnchor({
+                                                    lineNumber: lineIndex() + 1,
+                                                    source: "full-file",
+                                                    side: "new",
+                                                  });
+                                                }}
+                                              >
+                                                +
+                                              </button>
+                                            </Show>
                                             <button
                                               type="button"
                                               class={`rounded px-1 transition ${getInlineCommentLineButtonClass(
                                                 {
                                                   isSelected:
                                                     isActiveInlineCommentLine(
-                                                      currentStateLine.lineNumber,
-                                                      "current-state",
+                                                      lineIndex() + 1,
+                                                      "full-file",
                                                       "new",
                                                     ),
                                                   isRangeAnchor:
                                                     isPendingInlineCommentAnchorLine(
-                                                      currentStateLine.lineNumber,
-                                                      "current-state",
+                                                      lineIndex() + 1,
+                                                      "full-file",
                                                       "new",
                                                     ),
                                                 },
                                               )}`}
-                                              aria-label={`Select line ${currentStateLine.lineNumber} for AI prompt`}
-                                              title={resolveInlineCommentLineButtonTitle(
-                                                currentStateLine.lineNumber,
-                                              )}
-                                              onClick={(event) => {
-                                                event.stopPropagation();
-                                                handleInlineCommentSelection({
-                                                  lineNumber:
-                                                    currentStateLine.lineNumber,
-                                                  source: "current-state",
-                                                  side: "new",
-                                                  extendRange: event.shiftKey,
-                                                });
-                                              }}
-                                              onDblClick={(event) => {
-                                                event.stopPropagation();
-                                                handleInlineCommentRangeAnchor({
-                                                  lineNumber:
-                                                    currentStateLine.lineNumber,
-                                                  source: "current-state",
-                                                  side: "new",
-                                                });
-                                              }}
-                                            >
-                                              {currentStateLine.lineNumber}
-                                            </button>
-                                          </Show>
-                                        </div>
-                                        <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                          {renderHighlightedTextLine({
-                                            tokens: highlightedAfterLine(
-                                              currentStateLine.lineNumber,
-                                            ),
-                                            fallbackText:
-                                              currentStateLine.content,
-                                          })}
-                                        </div>
-                                      </div>
-                                      <Show
-                                        when={
-                                          activeInlineCommentSource() ===
-                                            "current-state" &&
-                                          activeFullFileRange()?.endLine ===
-                                            currentStateLine.lineNumber
-                                        }
-                                      >
-                                        {renderInlineCommentComposer()}
-                                      </Show>
-                                    </>
-                                  </Show>
-                                </div>
-                              )}
-                            </For>
-                          </Show>
-                        </div>
-                      </Match>
-
-                      <Match when={effectiveViewMode() === "full-file"}>
-                        <div class="min-w-[720px]">
-                          <Show
-                            when={!isRenderableBinaryFile(props.fileContent)}
-                            fallback={renderBinaryFilePreview({
-                              fileContent: props.fileContent as FileContent,
-                              rawFileUrl: rawFileUrl(),
-                            })}
-                          >
-                            <Show
-                              when={props.fileContent?.isBinary !== true}
-                              fallback={
-                                <div class="px-6 py-12 text-sm text-text-secondary">
-                                  Binary files are not previewed in the
-                                  full-file viewer.
-                                </div>
-                              }
-                            >
-                              <Show
-                                when={fullFileLines().length > 0}
-                                fallback={
-                                  <div class="px-6 py-12 text-sm text-text-secondary">
-                                    The selected file is empty.
-                                  </div>
-                                }
-                              >
-                                <For each={highlightedFullFileLines()}>
-                                  {(lineTokens, lineIndex) => (
-                                    <>
-                                      <div
-                                        data-qraftbox-line={lineIndex() + 1}
-                                        class={`group/line grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
-                                          lineIndex() + 1 ===
-                                            props.selectedLineNumber &&
-                                            !isInlineCommentHighlightedLine(
-                                              lineIndex() + 1,
-                                              "full-file",
-                                              "new",
-                                            ),
-                                        )} ${getInlineCommentLineClass({
-                                          isSelected: isActiveInlineCommentLine(
-                                            lineIndex() + 1,
-                                            "full-file",
-                                            "new",
-                                          ),
-                                          isRangeAnchor:
-                                            isPendingInlineCommentAnchorLine(
-                                              lineIndex() + 1,
-                                              "full-file",
-                                              "new",
-                                            ),
-                                        })}`}
-                                        onClick={() =>
-                                          props.onSelectLine(lineIndex() + 1)
-                                        }
-                                      >
-                                        <div class="relative px-4 py-1 text-right text-text-tertiary">
-                                          <Show
-                                            when={canUseFullFileInlineActions()}
-                                          >
-                                            <button
-                                              type="button"
-                                              class="absolute left-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-accent-emphasis text-[11px] font-semibold text-text-on-emphasis opacity-0 transition group-hover/line:opacity-100 hover:brightness-110"
                                               aria-label={
-                                                "Add comment on line " +
-                                                (lineIndex() + 1)
+                                                "Select line " +
+                                                (lineIndex() + 1) +
+                                                " for AI prompt"
                                               }
                                               title={resolveInlineCommentLineButtonTitle(
                                                 lineIndex() + 1,
                                               )}
                                               onClick={(event) => {
                                                 event.stopPropagation();
-                                                openInlineCommentComposer({
-                                                  lineNumber: lineIndex() + 1,
-                                                  source: "full-file",
-                                                  side: "new",
-                                                  extendRange: event.shiftKey,
-                                                });
+                                                handleFullFileRangeSelection(
+                                                  lineIndex() + 1,
+                                                  event.shiftKey,
+                                                );
                                               }}
                                               onDblClick={(event) => {
                                                 event.stopPropagation();
-                                                openInlineCommentRangeAnchor({
-                                                  lineNumber: lineIndex() + 1,
-                                                  source: "full-file",
-                                                  side: "new",
-                                                });
+                                                handleFullFileRangeAnchor(
+                                                  lineIndex() + 1,
+                                                );
                                               }}
                                             >
-                                              +
+                                              {lineIndex() + 1}
                                             </button>
-                                          </Show>
-                                          <button
-                                            type="button"
-                                            class={`rounded px-1 transition ${getInlineCommentLineButtonClass(
-                                              {
-                                                isSelected:
-                                                  isActiveInlineCommentLine(
-                                                    lineIndex() + 1,
-                                                    "full-file",
-                                                    "new",
-                                                  ),
-                                                isRangeAnchor:
-                                                  isPendingInlineCommentAnchorLine(
-                                                    lineIndex() + 1,
-                                                    "full-file",
-                                                    "new",
-                                                  ),
-                                              },
-                                            )}`}
-                                            aria-label={
-                                              "Select line " +
-                                              (lineIndex() + 1) +
-                                              " for AI prompt"
-                                            }
-                                            title={resolveInlineCommentLineButtonTitle(
-                                              lineIndex() + 1,
-                                            )}
-                                            onClick={(event) => {
-                                              event.stopPropagation();
-                                              handleFullFileRangeSelection(
-                                                lineIndex() + 1,
-                                                event.shiftKey,
-                                              );
-                                            }}
-                                            onDblClick={(event) => {
-                                              event.stopPropagation();
-                                              handleFullFileRangeAnchor(
-                                                lineIndex() + 1,
-                                              );
-                                            }}
-                                          >
-                                            {lineIndex() + 1}
-                                          </button>
+                                          </div>
+                                          <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                            <Show
+                                              when={lineTokens.length > 0}
+                                              fallback={" "}
+                                            >
+                                              <For each={lineTokens}>
+                                                {(lineToken) => (
+                                                  <span
+                                                    class={lineToken.className}
+                                                    style={
+                                                      lineToken.color !==
+                                                      undefined
+                                                        ? {
+                                                            color:
+                                                              lineToken.color,
+                                                          }
+                                                        : undefined
+                                                    }
+                                                  >
+                                                    {lineToken.text.length > 0
+                                                      ? lineToken.text
+                                                      : " "}
+                                                  </span>
+                                                )}
+                                              </For>
+                                            </Show>
+                                          </div>
                                         </div>
-                                        <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                          <Show
-                                            when={lineTokens.length > 0}
-                                            fallback={" "}
-                                          >
-                                            <For each={lineTokens}>
-                                              {(lineToken) => (
-                                                <span
-                                                  class={lineToken.className}
-                                                  style={
-                                                    lineToken.color !==
-                                                    undefined
-                                                      ? {
-                                                          color:
-                                                            lineToken.color,
-                                                        }
-                                                      : undefined
-                                                  }
-                                                >
-                                                  {lineToken.text.length > 0
-                                                    ? lineToken.text
-                                                    : " "}
-                                                </span>
-                                              )}
-                                            </For>
-                                          </Show>
-                                        </div>
-                                      </div>
-                                      <Show
-                                        when={
-                                          activeInlineCommentSource() ===
-                                            "full-file" &&
-                                          activeFullFileRange()?.endLine ===
-                                            lineIndex() + 1
-                                        }
-                                      >
-                                        {renderInlineCommentComposer()}
-                                      </Show>
-                                    </>
-                                  )}
-                                </For>
+                                        <Show
+                                          when={
+                                            activeInlineCommentSource() ===
+                                              "full-file" &&
+                                            activeFullFileRange()?.endLine ===
+                                              lineIndex() + 1
+                                          }
+                                        >
+                                          {renderInlineCommentComposer()}
+                                        </Show>
+                                      </>
+                                    )}
+                                  </For>
+                                </Show>
                               </Show>
                             </Show>
-                          </Show>
-                        </div>
-                      </Match>
-                    </Switch>
-                  </Show>
-                </div>
-              </main>
-            </div>
-            <div class="rounded-2xl border border-border-default bg-bg-secondary">
-              <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
-                <button
-                  type="button"
-                  class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                  onClick={() =>
-                    setQueuedCommentsExpanded((currentValue) => !currentValue)
-                  }
-                >
-                  {queuedCommentsExpanded() ? "Hide comments" : "Show comments"}{" "}
-                  ({queuedCommentCount()})
-                </button>
-                <div class="flex items-center gap-2 text-xs text-text-secondary">
-                  <span>
-                    {props.diffOverview.stats.totalFiles} files changed
-                  </span>
-                  <span class="text-success-fg">
-                    +{props.diffOverview.stats.additions}
-                  </span>
-                  <span class="text-danger-fg">
-                    -{props.diffOverview.stats.deletions}
-                  </span>
-                </div>
-              </div>
-              <Show when={queuedCommentsExpanded()}>
-                <div class="space-y-3 px-4 py-3">
-                  <div class="flex flex-wrap items-center justify-between gap-3">
-                    <div class="text-xs font-medium text-text-primary">
-                      Comment List ({queuedCommentCount()})
+                          </div>
+                        </Match>
+                      </Switch>
+                    </Show>
+                  </div>
+                </main>
+                <div class="rounded-2xl border border-border-default bg-bg-secondary">
+                  <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <ToolbarIconButton
+                        label={
+                          queuedCommentsExpanded()
+                            ? "Hide comments"
+                            : "Show comments"
+                        }
+                        onClick={() =>
+                          setQueuedCommentsExpanded(
+                            (currentValue) => !currentValue,
+                          )
+                        }
+                      >
+                        {renderSectionCollapseIcon(queuedCommentsExpanded())}
+                      </ToolbarIconButton>
+                      <span class="text-xs font-medium text-text-secondary">
+                        Comments ({queuedCommentCount()})
+                      </span>
                     </div>
-                    <div class="flex flex-wrap items-center gap-2">
-                      <select
-                        class="max-w-64 rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none transition focus:border-accent-emphasis disabled:opacity-60"
-                        value={selectedModelProfileId() ?? ""}
-                        disabled={modelProfilesLoading()}
-                        aria-label="Profile for queued comment submit"
-                        onChange={(event) => {
-                          const nextValue = event.currentTarget.value.trim();
-                          setSelectedModelProfileId(
-                            nextValue.length > 0 ? nextValue : undefined,
-                          );
-                        }}
-                      >
-                        <option value="">Server default AI profile</option>
-                        <For each={modelProfiles()}>
-                          {(modelProfile) => (
-                            <option value={modelProfile.id}>
-                              {modelProfile.name} ({modelProfile.vendor}/
-                              {modelProfile.model})
-                            </option>
-                          )}
-                        </For>
-                      </select>
-                      <button
-                        type="button"
-                        class="rounded-md border border-accent-emphasis/40 bg-accent-muted/20 px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-muted/35 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!hasQueuedComments() || queuedCommentsBusy()}
-                        onClick={() => void submitQueuedComments()}
-                      >
-                        Submit comments
-                      </button>
-                      <button
-                        type="button"
-                        class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={!hasQueuedComments() || queuedCommentsBusy()}
-                        onClick={() => void clearQueuedComments()}
-                      >
-                        Clear all comments
-                      </button>
+                    <div class="flex items-center gap-2 text-xs text-text-secondary">
+                      <span>
+                        {props.diffOverview.stats.totalFiles} files changed
+                      </span>
+                      <span class="text-success-fg">
+                        +{props.diffOverview.stats.additions}
+                      </span>
+                      <span class="text-danger-fg">
+                        -{props.diffOverview.stats.deletions}
+                      </span>
                     </div>
                   </div>
-                  <Show when={fullFileSubmitNoticeSessionId() !== null}>
-                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-emphasis/40 bg-accent-muted/10 px-3 py-2 text-xs text-text-secondary">
-                      <span>AI session submitted.</span>
-                      <div class="flex items-center gap-2">
-                        <button
-                          type="button"
-                          class="text-accent-fg underline underline-offset-2 transition hover:opacity-80"
-                          onClick={() =>
-                            props.onOpenAiSession(
-                              fullFileSubmitNoticeSessionId()!,
-                            )
-                          }
-                        >
-                          Open session
-                        </button>
-                        <button
-                          type="button"
-                          class="text-text-secondary transition hover:text-text-primary"
-                          onClick={() => setFullFileSubmitNoticeSessionId(null)}
-                        >
-                          Close
-                        </button>
+                  <Show when={queuedCommentsExpanded()}>
+                    <div class="space-y-3 px-4 py-3">
+                      <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="text-xs font-medium text-text-primary">
+                          Comment List ({queuedCommentCount()})
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2">
+                          <select
+                            class="max-w-64 rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none transition focus:border-accent-emphasis disabled:opacity-60"
+                            value={selectedModelProfileId() ?? ""}
+                            disabled={modelProfilesLoading()}
+                            aria-label="Profile for queued comment submit"
+                            onChange={(event) => {
+                              const nextValue =
+                                event.currentTarget.value.trim();
+                              setSelectedModelProfileId(
+                                nextValue.length > 0 ? nextValue : undefined,
+                              );
+                            }}
+                          >
+                            <option value="">Server default AI profile</option>
+                            <For each={modelProfiles()}>
+                              {(modelProfile) => (
+                                <option value={modelProfile.id}>
+                                  {modelProfile.name} ({modelProfile.vendor}/
+                                  {modelProfile.model})
+                                </option>
+                              )}
+                            </For>
+                          </select>
+                          <button
+                            type="button"
+                            class="rounded-md border border-accent-emphasis/40 bg-accent-muted/20 px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-muted/35 disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={
+                              !hasQueuedComments() || queuedCommentsBusy()
+                            }
+                            onClick={() => void submitQueuedComments()}
+                          >
+                            Submit comments
+                          </button>
+                          <button
+                            type="button"
+                            class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={
+                              !hasQueuedComments() || queuedCommentsBusy()
+                            }
+                            onClick={() => void clearQueuedComments()}
+                          >
+                            Clear all comments
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  </Show>
-                  <Show when={queuedCommentsError() !== null}>
-                    <div class="rounded-lg border border-danger-emphasis/40 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
-                      {queuedCommentsError()}
-                    </div>
-                  </Show>
-                  <Show
-                    when={hasQueuedComments()}
-                    fallback={
-                      <div class="rounded-xl border border-dashed border-border-default bg-bg-primary/50 px-4 py-6 text-xs text-text-secondary">
-                        No queued comments.
-                      </div>
-                    }
-                  >
-                    <ul class="space-y-2">
-                      <For each={queuedComments()}>
-                        {(comment) => (
-                          <li class="rounded-xl border border-border-default bg-bg-primary px-3 py-2">
-                            <div class="flex items-start justify-between gap-3">
-                              <button
-                                type="button"
-                                class="text-left font-mono text-xs text-accent-fg transition hover:underline"
-                                onClick={() => jumpToQueuedComment(comment)}
-                              >
-                                {comment.filePath}:
-                                {createQueuedCommentLineRangeLabel(comment)}
-                              </button>
-                              <div class="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  class="text-xs text-text-secondary transition hover:text-text-primary"
-                                  onClick={() =>
-                                    startEditingQueuedComment(comment)
-                                  }
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  type="button"
-                                  class="text-xs text-text-secondary transition hover:text-danger-fg"
-                                  onClick={() =>
-                                    void removeQueuedComment(comment.id)
-                                  }
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                            <Show
-                              when={editingQueuedCommentId() === comment.id}
-                              fallback={
-                                <p class="mt-2 whitespace-pre-wrap break-words text-xs text-text-secondary">
-                                  {comment.prompt}
-                                </p>
+                      <Show when={fullFileSubmitNoticeSessionId() !== null}>
+                        <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-emphasis/40 bg-accent-muted/10 px-3 py-2 text-xs text-text-secondary">
+                          <span>AI session submitted.</span>
+                          <div class="flex items-center gap-2">
+                            <button
+                              type="button"
+                              class="text-accent-fg underline underline-offset-2 transition hover:opacity-80"
+                              onClick={() =>
+                                props.onOpenAiSession(
+                                  fullFileSubmitNoticeSessionId()!,
+                                )
                               }
                             >
-                              <div class="mt-2 space-y-2">
-                                <textarea
-                                  class="min-h-20 w-full resize-y rounded-lg border border-border-default bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none transition focus:border-accent-emphasis"
-                                  value={editingQueuedCommentPrompt()}
-                                  onInput={(event) =>
-                                    setEditingQueuedCommentPrompt(
-                                      event.currentTarget.value,
-                                    )
-                                  }
-                                />
-                                <div class="flex items-center gap-2">
+                              Open session
+                            </button>
+                            <button
+                              type="button"
+                              class="text-text-secondary transition hover:text-text-primary"
+                              onClick={() =>
+                                setFullFileSubmitNoticeSessionId(null)
+                              }
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </div>
+                      </Show>
+                      <Show when={queuedCommentsError() !== null}>
+                        <div class="rounded-lg border border-danger-emphasis/40 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
+                          {queuedCommentsError()}
+                        </div>
+                      </Show>
+                      <Show
+                        when={hasQueuedComments()}
+                        fallback={
+                          <div class="rounded-xl border border-dashed border-border-default bg-bg-primary/50 px-4 py-6 text-xs text-text-secondary">
+                            No queued comments.
+                          </div>
+                        }
+                      >
+                        <ul class="space-y-2">
+                          <For each={queuedComments()}>
+                            {(comment) => (
+                              <li class="rounded-xl border border-border-default bg-bg-primary px-3 py-2">
+                                <div class="flex items-start justify-between gap-3">
                                   <button
                                     type="button"
-                                    class="rounded-md bg-success-emphasis px-2.5 py-1 text-xs font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                                    disabled={
-                                      editingQueuedCommentPrompt().trim()
-                                        .length === 0 || queuedCommentsBusy()
-                                    }
-                                    onClick={() =>
-                                      void saveQueuedComment(comment.id)
-                                    }
+                                    class="text-left font-mono text-xs text-accent-fg transition hover:underline"
+                                    onClick={() => jumpToQueuedComment(comment)}
                                   >
-                                    Save
+                                    {comment.filePath}:
+                                    {createQueuedCommentLineRangeLabel(comment)}
                                   </button>
-                                  <button
-                                    type="button"
-                                    class="rounded-md border border-border-default bg-bg-primary px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                                    onClick={() => cancelEditingQueuedComment()}
-                                  >
-                                    Cancel edit
-                                  </button>
+                                  <div class="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      class="text-xs text-text-secondary transition hover:text-text-primary"
+                                      onClick={() =>
+                                        startEditingQueuedComment(comment)
+                                      }
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      class="text-xs text-text-secondary transition hover:text-danger-fg"
+                                      onClick={() =>
+                                        void removeQueuedComment(comment.id)
+                                      }
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
                                 </div>
-                              </div>
-                            </Show>
-                          </li>
-                        )}
-                      </For>
-                    </ul>
+                                <Show
+                                  when={editingQueuedCommentId() === comment.id}
+                                  fallback={
+                                    <p class="mt-2 whitespace-pre-wrap break-words text-xs text-text-secondary">
+                                      {comment.prompt}
+                                    </p>
+                                  }
+                                >
+                                  <div class="mt-2 space-y-2">
+                                    <textarea
+                                      class="min-h-20 w-full resize-y rounded-lg border border-border-default bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none transition focus:border-accent-emphasis"
+                                      value={editingQueuedCommentPrompt()}
+                                      onInput={(event) =>
+                                        setEditingQueuedCommentPrompt(
+                                          event.currentTarget.value,
+                                        )
+                                      }
+                                    />
+                                    <div class="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        class="rounded-md bg-success-emphasis px-2.5 py-1 text-xs font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                                        disabled={
+                                          editingQueuedCommentPrompt().trim()
+                                            .length === 0 ||
+                                          queuedCommentsBusy()
+                                        }
+                                        onClick={() =>
+                                          void saveQueuedComment(comment.id)
+                                        }
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        class="rounded-md border border-border-default bg-bg-primary px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                                        onClick={() =>
+                                          cancelEditingQueuedComment()
+                                        }
+                                      >
+                                        Cancel edit
+                                      </button>
+                                    </div>
+                                  </div>
+                                </Show>
+                              </li>
+                            )}
+                          </For>
+                        </ul>
+                      </Show>
+                    </div>
                   </Show>
                 </div>
-              </Show>
+              </div>
             </div>
           </div>
         </Match>

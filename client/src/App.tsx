@@ -27,6 +27,8 @@ import { ModelProfilesScreen } from "./features/model-config/ModelProfilesScreen
 import { createFilesViewModel } from "./features/diff/create-files-view-model";
 import { createDiffViewModel } from "./features/diff/create-diff-view-model";
 import { DiffScreen } from "./features/diff/DiffScreen";
+import { GitActionsBar } from "./features/diff/GitActionsBar";
+import { shouldShowGitActionsBar } from "./features/diff/git-actions-state";
 import { createDiffRealtimeController } from "./features/diff/realtime";
 import { refreshFilesScreenFromRealtime } from "./features/diff/realtime-refresh";
 import { createGitStateRefreshController } from "./features/diff/git-state-refresh";
@@ -148,6 +150,60 @@ function getSecondaryNavigationButtonClass(isActive: boolean): string {
     : "rounded-md border border-transparent px-3 py-2 text-sm text-text-secondary transition-colors hover:border-border-default hover:bg-bg-tertiary hover:text-text-primary";
 }
 
+function renderWorkspaceKindIcon(isGitRepo: boolean): JSX.Element {
+  if (isGitRepo) {
+    return (
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle
+          cx="3"
+          cy="3"
+          r="1.75"
+          stroke="currentColor"
+          stroke-width="1.2"
+        />
+        <circle
+          cx="13"
+          cy="5"
+          r="1.75"
+          stroke="currentColor"
+          stroke-width="1.2"
+        />
+        <circle
+          cx="8"
+          cy="13"
+          r="1.75"
+          stroke="currentColor"
+          stroke-width="1.2"
+        />
+        <path
+          d="M4.4 4.05 7 10.9M11.35 5.5 9.15 11.55"
+          stroke="currentColor"
+          stroke-width="1.2"
+          stroke-linecap="round"
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1H1.75Z" />
+    </svg>
+  );
+}
+
 export function App(props: AppProps): JSX.Element {
   const [activeRoute, setActiveRoute] = createStore<ScreenRouteState>(
     props.bootstrapState.route,
@@ -255,6 +311,12 @@ export function App(props: AppProps): JSX.Element {
     );
   const activeProjectLabel = () => activeWorkspaceTab()?.name ?? "No Project";
   const activeProjectPath = () => activeWorkspaceTab()?.path ?? "";
+  const shouldRenderHeaderGitActions = () =>
+    activeRoute.screen === "files" &&
+    shouldShowGitActionsBar({
+      isGitRepo: activeWorkspaceIsGitRepo(),
+      projectPath: activeProjectPath(),
+    });
 
   createEffect(
     on(
@@ -702,15 +764,54 @@ export function App(props: AppProps): JSX.Element {
             </Show>
           </div>
         </div>
-        <div class="flex items-center justify-between gap-3 border-t border-border-muted px-4 py-2 text-xs text-text-secondary">
-          <span class="truncate">
-            {activeContextId() === null
-              ? "No project open"
-              : activeProjectPath()}
-          </span>
-          <span>
-            {activeWorkspaceIsGitRepo() ? "Git workspace" : "Non-git workspace"}
-          </span>
+        <div class="flex flex-wrap items-center gap-3 border-t border-border-muted px-4 py-2 text-xs text-text-secondary">
+          <div class="flex min-w-0 items-center gap-2">
+            <span class="truncate">
+              {activeContextId() === null
+                ? "No project open"
+                : activeProjectPath()}
+            </span>
+            <Show when={activeContextId() !== null}>
+              <span
+                class="inline-flex items-center text-text-tertiary"
+                aria-label={
+                  activeWorkspaceIsGitRepo()
+                    ? "Git workspace"
+                    : "Folder workspace"
+                }
+                title={
+                  activeWorkspaceIsGitRepo()
+                    ? "Git workspace"
+                    : "Folder workspace"
+                }
+              >
+                {renderWorkspaceKindIcon(activeWorkspaceIsGitRepo())}
+              </span>
+            </Show>
+          </div>
+          <Show when={shouldRenderHeaderGitActions()}>
+            <GitActionsBar
+              apiBaseUrl={props.bootstrapState.apiBaseUrl}
+              projectPath={activeProjectPath()}
+              isGitRepo={activeWorkspaceIsGitRepo()}
+              hasChanges={diffViewModel.diffOverview().stats.totalFiles > 0}
+              onSuccess={() => {
+                if (activeContextId() === null) {
+                  return;
+                }
+
+                void diffViewModel.synchronize({
+                  screen: activeRoute.screen,
+                  activeContextId: activeContextId(),
+                  activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
+                });
+                void filesViewModel.refreshAllFilesTree(activeContextId());
+                void filesViewModel.refreshSelectedFileContent(
+                  activeContextId(),
+                );
+              }}
+            />
+          </Show>
         </div>
       </header>
       <main class="min-h-0 flex-1 overflow-hidden">
