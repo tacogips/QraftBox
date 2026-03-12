@@ -1,5 +1,6 @@
 import type { AIPromptContext } from "../../../../src/types/ai";
 import type { FileContent } from "../../../../client-shared/src/contracts/files";
+import type { QueuedAiComment } from "../../../../client-shared/src/api/ai-comments";
 
 export interface FullFileLineRange {
   readonly startLine: number;
@@ -79,6 +80,61 @@ export function createFullFilePromptContext(params: {
       content: selectedLines.join("\n"),
     },
     references: [],
+    diffSummary: undefined,
+  };
+}
+
+export function createQueuedCommentLineRangeLabel(comment: Pick<
+  QueuedAiComment,
+  "startLine" | "endLine"
+>): string {
+  return comment.startLine === comment.endLine
+    ? `L${comment.startLine}`
+    : `L${comment.startLine}-L${comment.endLine}`;
+}
+
+export function createQueuedCommentsBatchMessage(
+  comments: readonly QueuedAiComment[],
+): string {
+  const hasDiffContextComments = comments.some(
+    (comment) =>
+      comment.source === "diff" || comment.source === "current-state",
+  );
+  const batchHeader = hasDiffContextComments
+    ? "Please process the following queued file comments in one batch. For items marked [DIFF], answer in terms of old-vs-new changes and review intent."
+    : "Please process the following queued file comments in one batch and provide a single consolidated response.";
+
+  const sections = comments.map((comment, index) => {
+    const sourceLabel = comment.source === "full-file" ? "FULL_FILE" : "DIFF";
+    return `${index + 1}. [${sourceLabel}] ${comment.filePath}:${createQueuedCommentLineRangeLabel(
+      comment,
+    )}\n${comment.prompt}`;
+  });
+
+  return `${batchHeader}\n\n${sections.join("\n\n")}`;
+}
+
+export function createQueuedCommentsBatchContext(
+  comments: readonly QueuedAiComment[],
+): AIPromptContext | null {
+  const firstComment = comments[0];
+  if (firstComment === undefined) {
+    return null;
+  }
+
+  return {
+    primaryFile: {
+      path: firstComment.filePath,
+      startLine: firstComment.startLine,
+      endLine: firstComment.endLine,
+      content: "",
+    },
+    references: comments.map((comment) => ({
+      path: comment.filePath,
+      startLine: comment.startLine,
+      endLine: comment.endLine,
+      content: `[source:${comment.source}] ${comment.prompt}`,
+    })),
     diffSummary: undefined,
   };
 }

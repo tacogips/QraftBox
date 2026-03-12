@@ -30,6 +30,7 @@ import {
   resolveNextAiSessionTranscriptOffset,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  shouldRetireAiSessionLiveAssistantFromTranscript,
   shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   mergeAiSessionTranscriptLines,
   shouldAutoRefreshAiSessionOverview,
@@ -238,6 +239,102 @@ describe("ai-session state helpers", () => {
         liveAssistantPhase: "starting",
       }),
     ).toBe(false);
+  });
+
+  test("does not retire a new assistant placeholder because the previous turn already ended with an assistant message", () => {
+    expect(
+      shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: [
+          {
+            role: "user",
+            text: "say hello",
+          },
+          {
+            role: "assistant",
+            text: "Hello.",
+          },
+        ],
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "starting",
+        liveAssistantText: null,
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: [
+          {
+            role: "user",
+            text: "say hello",
+          },
+          {
+            role: "assistant",
+            text: "Hello.",
+          },
+          {
+            role: "user",
+            text: "follow up",
+          },
+          {
+            role: "assistant",
+            text: "Hello again.",
+          },
+        ],
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "thinking",
+        liveAssistantText: null,
+      }),
+    ).toBe(true);
+  });
+
+  test("retires a streamed assistant row only when the persisted assistant after the submit boundary matches it", () => {
+    expect(
+      shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: [
+          {
+            role: "user",
+            text: "say hello",
+          },
+          {
+            role: "assistant",
+            text: "Hello.",
+          },
+          {
+            role: "user",
+            text: "follow up",
+          },
+        ],
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "streaming",
+        liveAssistantText: "Hello again.",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: [
+          {
+            role: "user",
+            text: "say hello",
+          },
+          {
+            role: "assistant",
+            text: "Hello.",
+          },
+          {
+            role: "user",
+            text: "follow up",
+          },
+          {
+            role: "assistant",
+            text: "Hello again.",
+          },
+        ],
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "streaming",
+        liveAssistantText: "Hello again.",
+      }),
+    ).toBe(true);
   });
 
   test("prefers the selected session id over the draft id", () => {

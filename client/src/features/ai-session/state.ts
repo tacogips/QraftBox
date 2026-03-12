@@ -491,6 +491,45 @@ export function shouldPreserveAiSessionLiveAssistantStateOnStreamOpen(params: {
   );
 }
 
+export function shouldRetireAiSessionLiveAssistantFromTranscript(params: {
+  readonly transcriptLines: readonly {
+    readonly role: "assistant" | "user" | "system";
+    readonly text: string;
+  }[];
+  readonly optimisticAnchorIndex: number | null;
+  readonly liveAssistantPhase: "idle" | "starting" | "thinking" | "streaming";
+  readonly liveAssistantText: string | null;
+}): boolean {
+  if (params.liveAssistantPhase === "idle") {
+    return false;
+  }
+
+  const clampedAnchorIndex = Math.max(
+    0,
+    Math.min(
+      params.optimisticAnchorIndex ?? params.transcriptLines.length,
+      params.transcriptLines.length,
+    ),
+  );
+  const transcriptTail =
+    params.optimisticAnchorIndex === null
+      ? params.transcriptLines
+      : params.transcriptLines.slice(clampedAnchorIndex);
+  const lastPersistedAssistantLine = [...transcriptTail]
+    .reverse()
+    .find((transcriptLine) => transcriptLine.role === "assistant");
+
+  if (lastPersistedAssistantLine === undefined) {
+    return false;
+  }
+
+  if (params.liveAssistantText !== null) {
+    return lastPersistedAssistantLine.text === params.liveAssistantText;
+  }
+
+  return lastPersistedAssistantLine.text.trim().length > 0;
+}
+
 export interface AiSessionRequestToken {
   readonly requestId: number;
   readonly scopeKey: string;

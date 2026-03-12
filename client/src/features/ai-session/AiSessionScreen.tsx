@@ -71,6 +71,7 @@ import {
   resolveAiSessionStreamSessionId,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  shouldRetireAiSessionLiveAssistantFromTranscript,
   shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   shouldShowAiSessionComposer,
   shouldAutoRefreshAiSessionOverview,
@@ -909,41 +910,21 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   });
 
   createEffect(() => {
-    const currentLiveAssistantPhase = liveAssistantPhase();
-    if (currentLiveAssistantPhase === "idle") {
-      return;
-    }
-
-    const persistedTranscriptLines = selectedSessionTranscript();
-    const lastPersistedTranscriptLine =
-      persistedTranscriptLines[persistedTranscriptLines.length - 1];
-
-    if (lastPersistedTranscriptLine?.role !== "assistant") {
-      return;
-    }
-
-    const currentLiveAssistantText = liveAssistantText();
     if (
-      currentLiveAssistantText !== null &&
-      lastPersistedTranscriptLine.text === currentLiveAssistantText
+      !shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: selectedSessionTranscript(),
+        optimisticAnchorIndex: optimisticUserAnchorIndex(),
+        liveAssistantPhase: liveAssistantPhase(),
+        liveAssistantText: liveAssistantText(),
+      })
     ) {
-      setLiveAssistantText(null);
-      setLiveAssistantTimestamp(null);
-      setLiveAssistantPhase("idle");
-      setLiveAssistantStatusText(null);
       return;
     }
 
-    if (
-      (currentLiveAssistantPhase === "starting" ||
-        currentLiveAssistantPhase === "thinking") &&
-      lastPersistedTranscriptLine.text.trim().length > 0
-    ) {
-      setLiveAssistantText(null);
-      setLiveAssistantTimestamp(null);
-      setLiveAssistantPhase("idle");
-      setLiveAssistantStatusText(null);
-    }
+    setLiveAssistantText(null);
+    setLiveAssistantTimestamp(null);
+    setLiveAssistantPhase("idle");
+    setLiveAssistantStatusText(null);
   });
 
   createEffect(() => {
@@ -1015,6 +996,18 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       }
 
       showLiveAssistantPlaceholder("starting", "Thinking...", null);
+    };
+
+    const handleStreamOpen = (): void => {
+      if (liveAssistantPhase() === "streaming" && liveAssistantText() !== null) {
+        return;
+      }
+
+      showLiveAssistantPlaceholder(
+        "starting",
+        liveAssistantStatusText() ?? "Thinking...",
+        liveAssistantTimestamp(),
+      );
     };
 
     const handleSessionStarted = (event: Event): void => {
@@ -1154,6 +1147,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       }
     };
 
+    eventSource.addEventListener("open", handleStreamOpen);
     eventSource.addEventListener("connected", handleConnected);
     eventSource.addEventListener("session_started", handleSessionStarted);
     eventSource.addEventListener("thinking", handleThinkingEvent);

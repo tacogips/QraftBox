@@ -31,7 +31,15 @@ export interface AiCommentsApiClientOptions {
 }
 
 export interface AiCommentsApiClient {
+  listComments(projectPath: string): Promise<readonly QueuedAiComment[]>;
   addComment(input: QueueAiCommentInput): Promise<QueuedAiComment>;
+  updateComment(
+    projectPath: string,
+    commentId: string,
+    prompt: string,
+  ): Promise<QueuedAiComment>;
+  removeComment(projectPath: string, commentId: string): Promise<boolean>;
+  clearComments(projectPath: string): Promise<number>;
 }
 
 interface AiCommentsApiClientConfig {
@@ -89,6 +97,19 @@ export function createAiCommentsApiClient(
   const config = createAiCommentsApiClientConfig(options);
 
   return {
+    async listComments(projectPath: string): Promise<readonly QueuedAiComment[]> {
+      const searchParams = new URLSearchParams({
+        projectPath,
+      });
+      const response = await config.fetchImplementation(
+        `${config.apiBaseUrl}/ai-comments?${searchParams.toString()}`,
+      );
+      await ensureOk(response, "AI comment queue error");
+      const payload = (await response.json()) as {
+        comments: readonly QueuedAiComment[];
+      };
+      return payload.comments;
+    },
     async addComment(input: QueueAiCommentInput): Promise<QueuedAiComment> {
       const response = await config.fetchImplementation(
         `${config.apiBaseUrl}/ai-comments`,
@@ -103,6 +124,67 @@ export function createAiCommentsApiClient(
         comment: QueuedAiComment;
       };
       return payload.comment;
+    },
+    async updateComment(
+      projectPath: string,
+      commentId: string,
+      prompt: string,
+    ): Promise<QueuedAiComment> {
+      const searchParams = new URLSearchParams({
+        projectPath,
+      });
+      const response = await config.fetchImplementation(
+        `${config.apiBaseUrl}/ai-comments/${encodeURIComponent(
+          commentId,
+        )}?${searchParams.toString()}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        },
+      );
+      await ensureOk(response, "AI comment queue error");
+      const payload = (await response.json()) as {
+        comment: QueuedAiComment;
+      };
+      return payload.comment;
+    },
+    async removeComment(
+      projectPath: string,
+      commentId: string,
+    ): Promise<boolean> {
+      const searchParams = new URLSearchParams({
+        projectPath,
+      });
+      const response = await config.fetchImplementation(
+        `${config.apiBaseUrl}/ai-comments/${encodeURIComponent(
+          commentId,
+        )}?${searchParams.toString()}`,
+        {
+          method: "DELETE",
+        },
+      );
+      await ensureOk(response, "AI comment queue error");
+      const payload = (await response.json()) as {
+        success: boolean;
+      };
+      return payload.success;
+    },
+    async clearComments(projectPath: string): Promise<number> {
+      const searchParams = new URLSearchParams({
+        projectPath,
+      });
+      const response = await config.fetchImplementation(
+        `${config.apiBaseUrl}/ai-comments?${searchParams.toString()}`,
+        {
+          method: "DELETE",
+        },
+      );
+      await ensureOk(response, "AI comment queue error");
+      const payload = (await response.json()) as {
+        deletedCount: number;
+      };
+      return payload.deletedCount;
     },
   };
 }

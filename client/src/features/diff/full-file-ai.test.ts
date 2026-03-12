@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   collectFullFileLineRangeNumbers,
+  createQueuedCommentLineRangeLabel,
+  createQueuedCommentsBatchContext,
+  createQueuedCommentsBatchMessage,
   createFullFileCommentPlaceholder,
   createFullFilePromptContext,
   resolveFullFileLineRange,
@@ -62,6 +65,103 @@ describe("full-file ai helpers", () => {
         content: "beta\ngamma",
       },
       references: [],
+      diffSummary: undefined,
+    });
+  });
+
+  test("formats queued comment line ranges", () => {
+    expect(
+      createQueuedCommentLineRangeLabel({
+        startLine: 8,
+        endLine: 8,
+      }),
+    ).toBe("L8");
+    expect(
+      createQueuedCommentLineRangeLabel({
+        startLine: 8,
+        endLine: 10,
+      }),
+    ).toBe("L8-L10");
+  });
+
+  test("builds a consolidated batch message for queued comments", () => {
+    expect(
+      createQueuedCommentsBatchMessage([
+        {
+          id: "comment-1",
+          projectPath: "/tmp/repo",
+          filePath: "src/main.ts",
+          startLine: 2,
+          endLine: 4,
+          side: "new",
+          source: "full-file",
+          prompt: "Summarize this section.",
+          createdAt: 1,
+        },
+        {
+          id: "comment-2",
+          projectPath: "/tmp/repo",
+          filePath: "src/other.ts",
+          startLine: 9,
+          endLine: 9,
+          side: "new",
+          source: "diff",
+          prompt: "Review the changed line.",
+          createdAt: 2,
+        },
+      ]),
+    ).toBe(
+      "Please process the following queued file comments in one batch. For items marked [DIFF], answer in terms of old-vs-new changes and review intent.\n\n1. [FULL_FILE] src/main.ts:L2-L4\nSummarize this section.\n\n2. [DIFF] src/other.ts:L9\nReview the changed line.",
+    );
+  });
+
+  test("builds consolidated AI context for queued comments", () => {
+    expect(
+      createQueuedCommentsBatchContext([
+        {
+          id: "comment-1",
+          projectPath: "/tmp/repo",
+          filePath: "src/main.ts",
+          startLine: 2,
+          endLine: 4,
+          side: "new",
+          source: "full-file",
+          prompt: "Summarize this section.",
+          createdAt: 1,
+        },
+        {
+          id: "comment-2",
+          projectPath: "/tmp/repo",
+          filePath: "src/other.ts",
+          startLine: 9,
+          endLine: 9,
+          side: "new",
+          source: "diff",
+          prompt: "Review the changed line.",
+          createdAt: 2,
+        },
+      ]),
+    ).toEqual({
+      primaryFile: {
+        path: "src/main.ts",
+        startLine: 2,
+        endLine: 4,
+        content: "",
+      },
+      references: [
+        {
+          path: "src/main.ts",
+          startLine: 2,
+          endLine: 4,
+          content: "[source:full-file] Summarize this section.",
+        },
+        {
+          path: "src/other.ts",
+          startLine: 9,
+          endLine: 9,
+          content: "[source:diff] Review the changed line.",
+        },
+      ],
       diffSummary: undefined,
     });
   });

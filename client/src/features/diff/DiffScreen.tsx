@@ -8,8 +8,12 @@ import {
   Show,
   Switch,
 } from "solid-js";
-import { createAiCommentsApiClient } from "../../../../client-shared/src/api/ai-comments";
+import {
+  createAiCommentsApiClient,
+  type QueuedAiComment,
+} from "../../../../client-shared/src/api/ai-comments";
 import { createAiSessionsApiClient } from "../../../../client-shared/src/api/ai-sessions";
+import { createModelConfigApiClient } from "../../../../client-shared/src/api/model-config";
 import {
   transformToCurrentState,
   type CurrentStateLine,
@@ -38,6 +42,9 @@ import {
 } from "./syntax-highlighting";
 import {
   collectFullFileLineRangeNumbers,
+  createQueuedCommentLineRangeLabel,
+  createQueuedCommentsBatchContext,
+  createQueuedCommentsBatchMessage,
   createFullFileCommentPlaceholder,
   createFullFilePromptContext,
   type FullFileLineRange,
@@ -49,6 +56,7 @@ import {
   shouldShowFileTreeModeControls,
 } from "./file-tree-visibility";
 import { generateQraftAiSessionId } from "../../../../src/types/ai";
+import type { ModelProfile } from "../../../../src/types/model-config";
 
 export interface DiffScreenProps {
   readonly apiBaseUrl: string;
@@ -861,6 +869,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const aiSessionsApi = createAiSessionsApiClient({
     apiBaseUrl: props.apiBaseUrl,
   });
+  const modelConfigApi = createModelConfigApiClient({
+    apiBaseUrl: props.apiBaseUrl,
+  });
   const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
   const [highlightedFullFileLines, setHighlightedFullFileLines] = createSignal<
     readonly (readonly HighlightToken[])[]
@@ -883,7 +894,33 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   >(null);
   const [fullFileMutationPending, setFullFileMutationPending] =
     createSignal(false);
+  const [queuedComments, setQueuedComments] = createSignal<
+    readonly QueuedAiComment[]
+  >([]);
+  const [queuedCommentsExpanded, setQueuedCommentsExpanded] =
+    createSignal(true);
+  const [queuedCommentsError, setQueuedCommentsError] = createSignal<
+    string | null
+  >(null);
+  const [queuedCommentsBusy, setQueuedCommentsBusy] = createSignal(false);
+  const [editingQueuedCommentId, setEditingQueuedCommentId] = createSignal<
+    string | null
+  >(null);
+  const [editingQueuedCommentPrompt, setEditingQueuedCommentPrompt] =
+    createSignal("");
+  const [queuedCommentPendingJump, setQueuedCommentPendingJump] = createSignal<{
+    filePath: string;
+    lineNumber: number;
+  } | null>(null);
+  const [modelProfiles, setModelProfiles] = createSignal<
+    readonly ModelProfile[]
+  >([]);
+  const [selectedModelProfileId, setSelectedModelProfileId] = createSignal<
+    string | undefined
+  >(undefined);
+  const [modelProfilesLoading, setModelProfilesLoading] = createSignal(false);
   let previewContainerElement: HTMLDivElement | undefined;
+  let fullFileTextareaElement: HTMLTextAreaElement | undefined;
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
   const visibleTreeEntries = () =>
@@ -971,16 +1008,45 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
           props.fileContent.path,
         )
       : null;
+  const queuedCommentCount = () => queuedComments().length;
+  const hasQueuedComments = () => queuedCommentCount() > 0;
 
-  function resetFullFileInlineUi(clearSelectedLine: boolean): void {
+  function clearQueuedCommentsNotice(): void {
+    setQueuedCommentsError(null);
+    setFullFileSubmitNoticeSessionId(null);
+  }
+
+  function startEditingQueuedComment(comment: QueuedAiComment): void {
+    setEditingQueuedCommentId(comment.id);
+    setEditingQueuedCommentPrompt(comment.prompt);
+  }
+
+  function cancelEditingQueuedComment(): void {
+    setEditingQueuedCommentId(null);
+    setEditingQueuedCommentPrompt("");
+  }
+
+  function jumpToQueuedComment(comment: QueuedAiComment): void {
+    clearQueuedCommentsNotice();
+    setQueuedCommentPendingJump({
+      filePath: comment.filePath,
+      lineNumber: comment.startLine,
+    });
+
+    if (props.selectedPath !== comment.filePath) {
+      props.onSelectPath(comment.filePath);
+      return;
+    }
+
+    props.onSelectLine(comment.startLine);
+  }
+
+  function resetFullFileInlineUi(): void {
     setActiveFullFileRange(null);
     setFullFilePromptInput("");
     setFullFileQueuedNoticeOpen(false);
     setFullFileSubmitNoticeSessionId(null);
     setFullFileInlineError(null);
-    if (clearSelectedLine) {
-      props.onSelectLine(null);
-    }
   }
 
   function handleFullFileRangeSelection(
@@ -996,7 +1062,6 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     setFullFileQueuedNoticeOpen(false);
     setFullFileSubmitNoticeSessionId(null);
     setFullFileInlineError(null);
-    props.onSelectLine(nextRange.endLine);
   }
 
   async function submitFullFileComment(immediate: boolean): Promise<void> {
@@ -1037,7 +1102,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
         setFullFileSubmitNoticeSessionId(submitResult.sessionId);
         setFullFileQueuedNoticeOpen(false);
       } else {
-        await aiCommentsApi.addComment({
+        const savedComment = await aiCommentsApi.addComment({
           projectPath: props.projectPath,
           filePath: fileContent.path,
           startLine: activeRange.startLine,
@@ -1046,6 +1111,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
           source: "full-file",
           prompt,
         });
+        setQueuedComments((currentComments) => [...currentComments, savedComment]);
         setFullFileQueuedNoticeOpen(true);
         setFullFileSubmitNoticeSessionId(null);
       }
@@ -1059,6 +1125,122 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       );
     } finally {
       setFullFileMutationPending(false);
+    }
+  }
+
+  async function removeQueuedComment(commentId: string): Promise<void> {
+    const previousComments = queuedComments();
+    setQueuedComments((currentComments) =>
+      currentComments.filter((comment) => comment.id !== commentId),
+    );
+    if (editingQueuedCommentId() === commentId) {
+      cancelEditingQueuedComment();
+    }
+
+    try {
+      await aiCommentsApi.removeComment(props.projectPath, commentId);
+      clearQueuedCommentsNotice();
+    } catch (error) {
+      setQueuedComments(previousComments);
+      setQueuedCommentsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to remove queued AI comment.",
+      );
+    }
+  }
+
+  async function clearQueuedComments(): Promise<void> {
+    if (!hasQueuedComments()) {
+      return;
+    }
+
+    const previousComments = queuedComments();
+    setQueuedComments([]);
+    cancelEditingQueuedComment();
+    setQueuedCommentsBusy(true);
+    clearQueuedCommentsNotice();
+
+    try {
+      await aiCommentsApi.clearComments(props.projectPath);
+    } catch (error) {
+      setQueuedComments(previousComments);
+      setQueuedCommentsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to clear queued AI comments.",
+      );
+    } finally {
+      setQueuedCommentsBusy(false);
+    }
+  }
+
+  async function saveQueuedComment(commentId: string): Promise<void> {
+    const nextPrompt = editingQueuedCommentPrompt().trim();
+    if (nextPrompt.length === 0) {
+      setQueuedCommentsError("Prompt text is required.");
+      return;
+    }
+
+    setQueuedCommentsBusy(true);
+    clearQueuedCommentsNotice();
+
+    try {
+      const updatedComment = await aiCommentsApi.updateComment(
+        props.projectPath,
+        commentId,
+        nextPrompt,
+      );
+      setQueuedComments((currentComments) =>
+        currentComments.map((comment) =>
+          comment.id === commentId ? updatedComment : comment,
+        ),
+      );
+      cancelEditingQueuedComment();
+    } catch (error) {
+      setQueuedCommentsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to update queued AI comment.",
+      );
+    } finally {
+      setQueuedCommentsBusy(false);
+    }
+  }
+
+  async function submitQueuedComments(): Promise<void> {
+    const commentQueue = queuedComments();
+    const context = createQueuedCommentsBatchContext(commentQueue);
+
+    if (commentQueue.length === 0 || context === null) {
+      return;
+    }
+
+    setQueuedCommentsBusy(true);
+    clearQueuedCommentsNotice();
+
+    try {
+      const submitResult = await aiSessionsApi.submitPrompt({
+        runImmediately: true,
+        message: createQueuedCommentsBatchMessage(commentQueue),
+        projectPath: props.projectPath,
+        qraftAiSessionId: generateQraftAiSessionId(),
+        forceNewSession: true,
+        modelProfileId: selectedModelProfileId(),
+        context,
+      });
+      setFullFileSubmitNoticeSessionId(submitResult.sessionId);
+      await aiCommentsApi.clearComments(props.projectPath);
+      setQueuedComments([]);
+      cancelEditingQueuedComment();
+    } catch (error) {
+      setQueuedCommentsError(
+        error instanceof Error
+          ? error.message
+          : "Failed to submit queued AI comments.",
+      );
+    } finally {
+      setQueuedCommentsBusy(false);
     }
   }
 
@@ -1205,13 +1387,101 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   createEffect(() => {
     effectiveViewMode();
     props.fileContent?.path;
-    resetFullFileInlineUi(false);
+    resetFullFileInlineUi();
   });
 
   createEffect(() => {
+    const projectPath = props.projectPath.trim();
+    cancelEditingQueuedComment();
+    setQueuedCommentsError(null);
+    setFullFileSubmitNoticeSessionId(null);
+
+    if (projectPath.length === 0) {
+      setQueuedComments([]);
+      return;
+    }
+
+    let isDisposed = false;
+    setQueuedCommentsBusy(true);
+
+    void aiCommentsApi
+      .listComments(projectPath)
+      .then((comments) => {
+        if (!isDisposed) {
+          setQueuedComments(comments);
+        }
+      })
+      .catch((error) => {
+        if (!isDisposed) {
+          setQueuedCommentsError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load queued AI comments.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!isDisposed) {
+          setQueuedCommentsBusy(false);
+        }
+      });
+
+    onCleanup(() => {
+      isDisposed = true;
+    });
+  });
+
+  createEffect(() => {
+    let isDisposed = false;
+    setModelProfilesLoading(true);
+
+    void modelConfigApi
+      .fetchModelConfigState()
+      .then((modelConfigState) => {
+        if (isDisposed) {
+          return;
+        }
+        setModelProfiles(modelConfigState.profiles);
+        setSelectedModelProfileId(
+          modelConfigState.operationBindings.aiDefaultProfileId ?? undefined,
+        );
+      })
+      .catch(() => {
+        if (isDisposed) {
+          return;
+        }
+        setModelProfiles([]);
+        setSelectedModelProfileId(undefined);
+      })
+      .finally(() => {
+        if (!isDisposed) {
+          setModelProfilesLoading(false);
+        }
+      });
+
+    onCleanup(() => {
+      isDisposed = true;
+    });
+  });
+
+  createEffect(() => {
+    if (activeFullFileRange() === null) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      fullFileTextareaElement?.focus();
+    });
+  });
+
+  createEffect(() => {
+    props.fileContent?.path;
+    effectiveViewMode();
     const selectedLineNumber = props.selectedLineNumber;
     const targetLineNumber =
-      activeFullFileRange()?.endLine ?? selectedLineNumber;
+      queuedCommentPendingJump()?.lineNumber ??
+      activeFullFileRange()?.endLine ??
+      selectedLineNumber;
     if (targetLineNumber === null) {
       return;
     }
@@ -1223,6 +1493,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     selectedLineElement?.scrollIntoView({
       block: "center",
     });
+    if (queuedCommentPendingJump()?.lineNumber === targetLineNumber) {
+      setQueuedCommentPendingJump(null);
+    }
   });
 
   return (
@@ -2024,6 +2297,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       >
                                         <div class="border-y-2 border-accent-emphasis/60 bg-bg-secondary px-4 py-3">
                                           <textarea
+                                            ref={fullFileTextareaElement}
                                             class="min-h-28 w-full resize-y rounded-xl border border-border-default bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
                                             placeholder={fullFileCommentPlaceholder()}
                                             value={fullFilePromptInput()}
@@ -2050,7 +2324,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
 
                                               if (event.key === "Escape") {
                                                 event.preventDefault();
-                                                resetFullFileInlineUi(true);
+                                                resetFullFileInlineUi();
                                               }
                                             }}
                                           />
@@ -2089,9 +2363,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                               type="button"
                                               class="px-2 py-1 text-xs text-text-secondary transition hover:text-text-primary"
                                               disabled={fullFileMutationPending()}
-                                              onClick={() =>
-                                                resetFullFileInlineUi(true)
-                                              }
+                                              onClick={() => resetFullFileInlineUi()}
                                             >
                                               Cancel
                                             </button>
@@ -2128,9 +2400,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                                 <button
                                                   type="button"
                                                   class="text-text-secondary transition hover:text-text-primary"
-                                                  onClick={() =>
-                                                    resetFullFileInlineUi(true)
-                                                  }
+                                                  onClick={() => resetFullFileInlineUi()}
                                                 >
                                                   Close
                                                 </button>
@@ -2171,6 +2441,199 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                   </Show>
                 </div>
               </main>
+            </div>
+            <div class="rounded-2xl border border-border-default bg-bg-secondary">
+              <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
+                <button
+                  type="button"
+                  class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                  onClick={() =>
+                    setQueuedCommentsExpanded((currentValue) => !currentValue)
+                  }
+                >
+                  {queuedCommentsExpanded()
+                    ? "Hide comments"
+                    : "Show comments"}{" "}
+                  ({queuedCommentCount()})
+                </button>
+                <div class="flex items-center gap-2 text-xs text-text-secondary">
+                  <span>{props.diffOverview.stats.totalFiles} files changed</span>
+                  <span class="text-success-fg">
+                    +{props.diffOverview.stats.additions}
+                  </span>
+                  <span class="text-danger-fg">
+                    -{props.diffOverview.stats.deletions}
+                  </span>
+                </div>
+              </div>
+              <Show when={queuedCommentsExpanded()}>
+                <div class="space-y-3 px-4 py-3">
+                  <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="text-xs font-medium text-text-primary">
+                      Comment List ({queuedCommentCount()})
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                      <select
+                        class="max-w-64 rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none transition focus:border-accent-emphasis disabled:opacity-60"
+                        value={selectedModelProfileId() ?? ""}
+                        disabled={modelProfilesLoading()}
+                        aria-label="Profile for queued comment submit"
+                        onChange={(event) => {
+                          const nextValue = event.currentTarget.value.trim();
+                          setSelectedModelProfileId(
+                            nextValue.length > 0 ? nextValue : undefined,
+                          );
+                        }}
+                      >
+                        <option value="">Server default AI profile</option>
+                        <For each={modelProfiles()}>
+                          {(modelProfile) => (
+                            <option value={modelProfile.id}>
+                              {modelProfile.name} ({modelProfile.vendor}/
+                              {modelProfile.model})
+                            </option>
+                          )}
+                        </For>
+                      </select>
+                      <button
+                        type="button"
+                        class="rounded-md border border-accent-emphasis/40 bg-accent-muted/20 px-3 py-1.5 text-xs font-medium text-accent-fg transition hover:bg-accent-muted/35 disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!hasQueuedComments() || queuedCommentsBusy()}
+                        onClick={() => void submitQueuedComments()}
+                      >
+                        Submit comments
+                      </button>
+                      <button
+                        type="button"
+                        class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!hasQueuedComments() || queuedCommentsBusy()}
+                        onClick={() => void clearQueuedComments()}
+                      >
+                        Clear all comments
+                      </button>
+                    </div>
+                  </div>
+                  <Show when={fullFileSubmitNoticeSessionId() !== null}>
+                    <div class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-accent-emphasis/40 bg-accent-muted/10 px-3 py-2 text-xs text-text-secondary">
+                      <span>AI session submitted.</span>
+                      <div class="flex items-center gap-2">
+                        <button
+                          type="button"
+                          class="text-accent-fg underline underline-offset-2 transition hover:opacity-80"
+                          onClick={() =>
+                            props.onOpenAiSession(
+                              fullFileSubmitNoticeSessionId()!,
+                            )
+                          }
+                        >
+                          Open session
+                        </button>
+                        <button
+                          type="button"
+                          class="text-text-secondary transition hover:text-text-primary"
+                          onClick={() => setFullFileSubmitNoticeSessionId(null)}
+                        >
+                          Close
+                        </button>
+                      </div>
+                    </div>
+                  </Show>
+                  <Show when={queuedCommentsError() !== null}>
+                    <div class="rounded-lg border border-danger-emphasis/40 bg-danger-muted/10 px-3 py-2 text-xs text-danger-fg">
+                      {queuedCommentsError()}
+                    </div>
+                  </Show>
+                  <Show
+                    when={hasQueuedComments()}
+                    fallback={
+                      <div class="rounded-xl border border-dashed border-border-default bg-bg-primary/50 px-4 py-6 text-xs text-text-secondary">
+                        No queued comments.
+                      </div>
+                    }
+                  >
+                    <ul class="space-y-2">
+                      <For each={queuedComments()}>
+                        {(comment) => (
+                          <li class="rounded-xl border border-border-default bg-bg-primary px-3 py-2">
+                            <div class="flex items-start justify-between gap-3">
+                              <button
+                                type="button"
+                                class="text-left font-mono text-xs text-accent-fg transition hover:underline"
+                                onClick={() => jumpToQueuedComment(comment)}
+                              >
+                                {comment.filePath}:
+                                {createQueuedCommentLineRangeLabel(comment)}
+                              </button>
+                              <div class="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  class="text-xs text-text-secondary transition hover:text-text-primary"
+                                  onClick={() =>
+                                    startEditingQueuedComment(comment)
+                                  }
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  class="text-xs text-text-secondary transition hover:text-danger-fg"
+                                  onClick={() =>
+                                    void removeQueuedComment(comment.id)
+                                  }
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                            <Show
+                              when={editingQueuedCommentId() === comment.id}
+                              fallback={
+                                <p class="mt-2 whitespace-pre-wrap break-words text-xs text-text-secondary">
+                                  {comment.prompt}
+                                </p>
+                              }
+                            >
+                              <div class="mt-2 space-y-2">
+                                <textarea
+                                  class="min-h-20 w-full resize-y rounded-lg border border-border-default bg-bg-secondary px-3 py-2 text-xs text-text-primary outline-none transition focus:border-accent-emphasis"
+                                  value={editingQueuedCommentPrompt()}
+                                  onInput={(event) =>
+                                    setEditingQueuedCommentPrompt(
+                                      event.currentTarget.value,
+                                    )
+                                  }
+                                />
+                                <div class="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    class="rounded-md bg-success-emphasis px-2.5 py-1 text-xs font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                                    disabled={
+                                      editingQueuedCommentPrompt().trim()
+                                        .length === 0 || queuedCommentsBusy()
+                                    }
+                                    onClick={() =>
+                                      void saveQueuedComment(comment.id)
+                                    }
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="rounded-md border border-border-default bg-bg-primary px-2.5 py-1 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                                    onClick={() => cancelEditingQueuedComment()}
+                                  >
+                                    Cancel edit
+                                  </button>
+                                </div>
+                              </div>
+                            </Show>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </Show>
+                </div>
+              </Show>
             </div>
           </div>
         </Match>

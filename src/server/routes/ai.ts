@@ -35,6 +35,20 @@ interface ErrorResponse {
   readonly code: number;
 }
 
+function createStreamProgressEvent(
+  type: AIProgressEvent["type"],
+  sessionId: QraftAiSessionId,
+  data: AIProgressEvent["data"] = {},
+  timestamp = new Date().toISOString(),
+): AIProgressEvent {
+  return {
+    type,
+    sessionId,
+    timestamp,
+    data,
+  };
+}
+
 /**
  * Create AI routes
  *
@@ -363,6 +377,75 @@ export function createAIRoutes(context: AIServerContext): Hono {
       );
 
       try {
+        const currentSession = context.sessionManager.getSession(sessionId);
+        if (currentSession?.state === "running") {
+          await stream.writeSSE({
+            event: "session_started",
+            data: JSON.stringify(
+              createStreamProgressEvent(
+                "session_started",
+                sessionId,
+                {},
+                currentSession.startedAt,
+              ),
+            ),
+          });
+        }
+
+        if (
+          typeof currentSession?.currentActivity === "string" &&
+          currentSession.currentActivity.length > 0
+        ) {
+          await stream.writeSSE({
+            event: "thinking",
+            data: JSON.stringify(
+              createStreamProgressEvent("thinking", sessionId, {
+                message: currentSession.currentActivity,
+              }),
+            ),
+          });
+        }
+
+        if (
+          typeof currentSession?.lastAssistantMessage === "string" &&
+          currentSession.lastAssistantMessage.length > 0
+        ) {
+          await stream.writeSSE({
+            event: "message",
+            data: JSON.stringify(
+              createStreamProgressEvent("message", sessionId, {
+                role: "assistant",
+                content: currentSession.lastAssistantMessage,
+              }),
+            ),
+          });
+        }
+
+        if (
+          currentSession?.state === "completed" ||
+          currentSession?.state === "failed" ||
+          currentSession?.state === "cancelled"
+        ) {
+          const terminalEvent =
+            currentSession.state === "failed" ? "error" : currentSession.state;
+          await stream.writeSSE({
+            event: terminalEvent,
+            data: JSON.stringify(
+              createStreamProgressEvent(
+                terminalEvent,
+                sessionId,
+                currentSession.state === "failed"
+                  ? {
+                      message:
+                        currentSession.error ?? "Session execution failed",
+                    }
+                  : {},
+              ),
+            ),
+          });
+          return;
+        }
+
         // Stream events until session is done
         while (true) {
           let timedOutWaiting = false;

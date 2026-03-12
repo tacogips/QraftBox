@@ -397,6 +397,47 @@ describe("AI Routes", () => {
     });
   });
 
+  describe("GET /sessions/:id/stream", () => {
+    test("replays the current running snapshot for a newly opened SSE stream", async () => {
+      (sessionManager.getSession as Mock).mockReturnValue({
+        id: "qs_stream_1",
+        state: "running",
+        prompt: "Follow up",
+        projectPath: "/tmp/test-project",
+        createdAt: "2026-03-11T11:31:00.000Z",
+        startedAt: "2026-03-11T11:31:01.000Z",
+        context: {},
+        currentActivity: "Thinking...",
+        lastAssistantMessage: "partial",
+      });
+      (sessionManager.subscribe as Mock).mockImplementation(
+        (_sessionId, listener) => {
+          queueMicrotask(() => {
+            listener({
+              type: "completed",
+              sessionId: "qs_stream_1" as QraftAiSessionId,
+              timestamp: "2026-03-11T11:31:02.000Z",
+              data: {},
+            });
+          });
+          return () => {};
+        },
+      );
+
+      const res = await app.request("/sessions/qs_stream_1/stream", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain("event: connected");
+      expect(body).toContain("event: session_started");
+      expect(body).toContain("\"message\":\"Thinking...\"");
+      expect(body).toContain("\"content\":\"partial\"");
+      expect(body).toContain("event: completed");
+    });
+  });
+
   describe("session hidden routes", () => {
     test("GET /sessions/hidden returns hidden session IDs", async () => {
       const listHiddenMock = sessionManager.listHiddenQraftSessionIds as Mock;
