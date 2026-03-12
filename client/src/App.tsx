@@ -3,10 +3,12 @@ import {
   createSignal,
   For,
   type JSX,
+  on,
   onCleanup,
   onMount,
   Show,
 } from "solid-js";
+import { createStore } from "solid-js/store";
 import {
   buildScreenHash,
   parseAppHash,
@@ -86,6 +88,14 @@ function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
   );
 }
 
+function replaceWindowHash(nextHash: string): void {
+  if (window.location.hash === nextHash) {
+    return;
+  }
+
+  window.history.replaceState(window.history.state, "", nextHash);
+}
+
 function renderPlannedScreenPlaceholder(
   screen: ScreenRouteState["screen"],
 ): JSX.Element {
@@ -129,7 +139,7 @@ function getSecondaryNavigationButtonClass(isActive: boolean): string {
 }
 
 export function App(props: AppProps): JSX.Element {
-  const [activeRoute, setActiveRoute] = createSignal<ScreenRouteState>(
+  const [activeRoute, setActiveRoute] = createStore<ScreenRouteState>(
     props.bootstrapState.route,
   );
   const [headerMenuOpen, setHeaderMenuOpen] = createSignal(false);
@@ -142,7 +152,7 @@ export function App(props: AppProps): JSX.Element {
   const workspaceViewModel = createWorkspaceViewModel({
     initialRoute: props.bootstrapState.route,
     apiBaseUrl: props.bootstrapState.apiBaseUrl,
-    getCurrentRoute: activeRoute,
+    getCurrentRoute: () => activeRoute,
     onRouteChange(nextRoute) {
       setActiveRoute(nextRoute);
 
@@ -171,13 +181,13 @@ export function App(props: AppProps): JSX.Element {
       const currentWorkspaceState = workspaceViewModel.workspaceState();
       const activeWorkspaceTab = getActiveWorkspaceTab(currentWorkspaceState);
       await refreshFilesScreenFromRealtime({
-        activeScreen: activeRoute().screen,
+        activeScreen: activeRoute.screen,
         activeContextId: currentWorkspaceState.activeContextId,
         targetContextId: contextId,
         activeWorkspaceIsGitRepo: activeWorkspaceTab?.isGitRepo ?? false,
         refreshDiff: async (targetContextId: string): Promise<void> => {
           await diffViewModel.synchronize({
-            screen: activeRoute().screen,
+            screen: activeRoute.screen,
             activeContextId: targetContextId,
             activeWorkspaceIsGitRepo: true,
           });
@@ -192,13 +202,13 @@ export function App(props: AppProps): JSX.Element {
   });
   const gitStateRefreshController = createGitStateRefreshController({
     getContextId: () => workspaceViewModel.workspaceState().activeContextId,
-    getActiveScreen: () => activeRoute().screen,
+    getActiveScreen: () => activeRoute.screen,
     isGitRepo: () =>
       getActiveWorkspaceTab(workspaceViewModel.workspaceState())?.isGitRepo ??
       false,
     refreshContext: async (contextId: string): Promise<void> => {
       await diffViewModel.synchronize({
-        screen: activeRoute().screen,
+        screen: activeRoute.screen,
         activeContextId: contextId,
         activeWorkspaceIsGitRepo: true,
       });
@@ -209,9 +219,9 @@ export function App(props: AppProps): JSX.Element {
     const handleHashChange = (): void => {
       const nextRoute = parseWindowRoute();
       setHeaderMenuOpen(false);
-      setActiveRoute((currentRoute) =>
-        sameRoute(currentRoute, nextRoute) ? currentRoute : nextRoute,
-      );
+      if (!sameRoute(activeRoute, nextRoute)) {
+        setActiveRoute(nextRoute);
+      }
     };
 
     window.addEventListener("hashchange", handleHashChange);
@@ -224,32 +234,10 @@ export function App(props: AppProps): JSX.Element {
     });
   });
 
-  createEffect(() => {
-    const currentWorkspaceState = workspaceViewModel.workspaceState();
-    const activeWorkspaceTab = getActiveWorkspaceTab(currentWorkspaceState);
-    void diffViewModel.synchronize({
-      screen: activeRoute().screen,
-      activeContextId: currentWorkspaceState.activeContextId,
-      activeWorkspaceIsGitRepo: activeWorkspaceTab?.isGitRepo ?? false,
-    });
-  });
-
-  createEffect(() => {
-    const currentWorkspaceState = workspaceViewModel.workspaceState();
-    const activeWorkspaceTab = getActiveWorkspaceTab(currentWorkspaceState);
-    void filesViewModel.synchronize({
-      screen: activeRoute().screen,
-      activeContextId: currentWorkspaceState.activeContextId,
-      activeWorkspaceIsGitRepo: activeWorkspaceTab?.isGitRepo ?? false,
-      diffOverview: diffViewModel.diffOverview(),
-      preferredViewMode: diffViewModel.preferredViewMode(),
-    });
-  });
-
   const screenNavigationItems = () =>
     createScreenNavigationItems({
-      projectSlug: activeRoute().projectSlug,
-      screen: activeRoute().screen,
+      projectSlug: activeRoute.projectSlug,
+      screen: activeRoute.screen,
     });
   const activeContextId = () =>
     workspaceViewModel.workspaceState().activeContextId;
@@ -268,69 +256,124 @@ export function App(props: AppProps): JSX.Element {
   const activeProjectLabel = () => activeWorkspaceTab()?.name ?? "No Project";
   const activeProjectPath = () => activeWorkspaceTab()?.path ?? "";
 
+  createEffect(
+    on(
+      [() => activeRoute.screen, activeContextId, activeWorkspaceIsGitRepo],
+      ([activeScreen, nextContextId, workspaceIsGitRepo]) => {
+        void diffViewModel.synchronize({
+          screen: activeScreen,
+          activeContextId: nextContextId,
+          activeWorkspaceIsGitRepo: workspaceIsGitRepo,
+        });
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      [
+        () => activeRoute.screen,
+        activeContextId,
+        activeWorkspaceIsGitRepo,
+        diffViewModel.diffOverview,
+        diffViewModel.preferredViewMode,
+      ],
+      ([
+        activeScreen,
+        nextContextId,
+        workspaceIsGitRepo,
+        diffOverview,
+        preferredViewMode,
+      ]) => {
+        void filesViewModel.synchronize({
+          screen: activeScreen,
+          activeContextId: nextContextId,
+          activeWorkspaceIsGitRepo: workspaceIsGitRepo,
+          diffOverview,
+          preferredViewMode,
+        });
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      [() => activeRoute.screen, () => activeRoute.selectedViewMode],
+      ([activeScreen, routeSelectedViewMode]) => {
+        if (activeScreen !== "files") {
+          return;
+        }
+
+        if (
+          routeSelectedViewMode !== null &&
+          routeSelectedViewMode !== diffViewModel.preferredViewMode()
+        ) {
+          diffViewModel.setPreferredViewMode(routeSelectedViewMode);
+        }
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      [() => activeRoute.screen, () => activeRoute.fileTreeMode],
+      ([activeScreen, routeFileTreeMode]) => {
+        if (activeScreen !== "files") {
+          return;
+        }
+
+        if (
+          routeFileTreeMode !== null &&
+          routeFileTreeMode !== filesViewModel.fileTreeMode()
+        ) {
+          void filesViewModel.setFileTreeMode(
+            activeContextId(),
+            routeFileTreeMode,
+          );
+        }
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      [() => activeRoute.screen, () => activeRoute.selectedPath],
+      ([activeScreen, routeSelectedPath]) => {
+        if (activeScreen !== "files") {
+          return;
+        }
+
+        if (
+          routeSelectedPath === null ||
+          routeSelectedPath === filesViewModel.selectedPath()
+        ) {
+          return;
+        }
+
+        if (
+          diffViewModel
+            .diffOverview()
+            .files.some((diffFile) => diffFile.path === routeSelectedPath)
+        ) {
+          diffViewModel.selectPath(activeContextId(), routeSelectedPath);
+        }
+
+        const nextViewMode = resolveViewModeForPathSelection({
+          selectedPath: routeSelectedPath,
+          diffOverview: diffViewModel.diffOverview(),
+          preferredViewMode: diffViewModel.preferredViewMode(),
+        });
+        if (nextViewMode !== diffViewModel.preferredViewMode()) {
+          diffViewModel.setPreferredViewMode(nextViewMode);
+        }
+
+        void filesViewModel.selectPath(activeContextId(), routeSelectedPath);
+      },
+    ),
+  );
+
   createEffect(() => {
-    if (activeRoute().screen !== "files") {
-      return;
-    }
-
-    const routeSelectedViewMode = activeRoute().selectedViewMode;
-    if (
-      routeSelectedViewMode !== null &&
-      routeSelectedViewMode !== diffViewModel.preferredViewMode()
-    ) {
-      diffViewModel.setPreferredViewMode(routeSelectedViewMode);
-    }
-  });
-
-  createEffect(() => {
-    if (activeRoute().screen !== "files") {
-      return;
-    }
-
-    const routeFileTreeMode = activeRoute().fileTreeMode;
-    if (
-      routeFileTreeMode !== null &&
-      routeFileTreeMode !== filesViewModel.fileTreeMode()
-    ) {
-      void filesViewModel.setFileTreeMode(activeContextId(), routeFileTreeMode);
-    }
-  });
-
-  createEffect(() => {
-    if (activeRoute().screen !== "files") {
-      return;
-    }
-
-    const routeSelectedPath = activeRoute().selectedPath;
-    if (
-      routeSelectedPath === null ||
-      routeSelectedPath === filesViewModel.selectedPath()
-    ) {
-      return;
-    }
-
-    if (
-      diffViewModel
-        .diffOverview()
-        .files.some((diffFile) => diffFile.path === routeSelectedPath)
-    ) {
-      diffViewModel.selectPath(activeContextId(), routeSelectedPath);
-    }
-
-    const nextViewMode = resolveViewModeForPathSelection({
-      selectedPath: routeSelectedPath,
-      diffOverview: diffViewModel.diffOverview(),
-      preferredViewMode: diffViewModel.preferredViewMode(),
-    });
-    if (nextViewMode !== diffViewModel.preferredViewMode()) {
-      diffViewModel.setPreferredViewMode(nextViewMode);
-    }
-
-    void filesViewModel.selectPath(activeContextId(), routeSelectedPath);
-  });
-
-  createEffect(() => {
-    const currentRoute = activeRoute();
+    const currentRoute = activeRoute;
     const nextRoute = resolveUiSynchronizedRouteState({
       currentRoute,
       filesSelectedPath: filesViewModel.selectedPath(),
@@ -354,9 +397,7 @@ export function App(props: AppProps): JSX.Element {
           selectedLineNumber: nextRoute.selectedLineNumber,
         },
       );
-      if (window.location.hash !== nextHash) {
-        window.location.hash = nextHash;
-      }
+      replaceWindowHash(nextHash);
       return;
     }
 
@@ -367,6 +408,11 @@ export function App(props: AppProps): JSX.Element {
       fileTreeMode: nextRoute.fileTreeMode,
       selectedLineNumber: nextRoute.selectedLineNumber,
     });
+    if (currentRoute.screen === "files" && nextRoute.screen === "files") {
+      replaceWindowHash(nextHash);
+      return;
+    }
+
     if (window.location.hash !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -375,7 +421,7 @@ export function App(props: AppProps): JSX.Element {
   function navigateToScreen(screen: ScreenRouteState["screen"]): void {
     setHeaderMenuOpen(false);
     const nextRoute: ScreenRouteState = {
-      ...activeRoute(),
+      ...activeRoute,
       screen,
     };
     setActiveRoute(nextRoute);
@@ -392,7 +438,7 @@ export function App(props: AppProps): JSX.Element {
   }
 
   function renderActiveScreen(): JSX.Element {
-    if (activeRoute().screen === "project") {
+    if (activeRoute.screen === "project") {
       return (
         <WorkspaceShell
           workspaceState={workspaceViewModel.workspaceState()}
@@ -413,7 +459,7 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    if (activeRoute().screen === "files") {
+    if (activeRoute.screen === "files") {
       return (
         <DiffScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
@@ -438,10 +484,10 @@ export function App(props: AppProps): JSX.Element {
           fileContent={filesViewModel.fileContent()}
           projectPath={activeProjectPath()}
           onChangeViewMode={(mode) => {
-            setActiveRoute((currentRoute) => ({
-              ...currentRoute,
+            setActiveRoute({
+              ...activeRoute,
               selectedViewMode: mode,
-            }));
+            });
             diffViewModel.setPreferredViewMode(mode);
           }}
           onSelectPath={async (path: string) => {
@@ -450,12 +496,12 @@ export function App(props: AppProps): JSX.Element {
               diffOverview: diffViewModel.diffOverview(),
               preferredViewMode: diffViewModel.preferredViewMode(),
             });
-            setActiveRoute((currentRoute) => ({
-              ...currentRoute,
+            setActiveRoute({
+              ...activeRoute,
               selectedPath: path,
               selectedViewMode: nextViewMode,
               selectedLineNumber: null,
-            }));
+            });
             if (
               diffViewModel
                 .diffOverview()
@@ -469,10 +515,10 @@ export function App(props: AppProps): JSX.Element {
             await filesViewModel.selectPath(activeContextId(), path);
           }}
           onChangeFileTreeMode={async (mode) => {
-            setActiveRoute((currentRoute) => ({
-              ...currentRoute,
+            setActiveRoute({
+              ...activeRoute,
               fileTreeMode: mode,
-            }));
+            });
             const nextViewMode = resolveViewModeForFileTreeModeChange({
               previousFileTreeMode: filesViewModel.fileTreeMode(),
               nextFileTreeMode: mode,
@@ -504,23 +550,23 @@ export function App(props: AppProps): JSX.Element {
             }
 
             void diffViewModel.synchronize({
-              screen: activeRoute().screen,
+              screen: activeRoute.screen,
               activeContextId: activeContextId(),
               activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
             });
             void filesViewModel.refreshAllFilesTree(activeContextId());
             void filesViewModel.refreshSelectedFileContent(activeContextId());
           }}
-          selectedLineNumber={activeRoute().selectedLineNumber}
+          selectedLineNumber={activeRoute.selectedLineNumber}
           onSelectLine={(lineNumber) => {
             const nextRoute = {
-              ...activeRoute(),
+              ...activeRoute,
               selectedLineNumber: lineNumber,
             };
-            setActiveRoute((currentRoute) => ({
-              ...currentRoute,
+            setActiveRoute({
+              ...activeRoute,
               selectedLineNumber: lineNumber,
-            }));
+            });
             const nextHash = buildScreenHash(
               nextRoute.projectSlug,
               nextRoute.screen,
@@ -536,7 +582,7 @@ export function App(props: AppProps): JSX.Element {
             }
           }}
           onOpenAiSession={(sessionId: QraftAiSessionId) => {
-            const projectSlug = activeRoute().projectSlug;
+            const projectSlug = activeRoute.projectSlug;
             const baseHash =
               projectSlug !== null
                 ? `#/${projectSlug}/ai-session`
@@ -549,11 +595,11 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    if (activeRoute().screen === "system-info") {
+    if (activeRoute.screen === "system-info") {
       return <SystemInfoScreen apiBaseUrl={props.bootstrapState.apiBaseUrl} />;
     }
 
-    if (activeRoute().screen === "commits") {
+    if (activeRoute.screen === "commits") {
       return (
         <CommitsScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
@@ -563,7 +609,7 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    if (activeRoute().screen === "ai-session") {
+    if (activeRoute.screen === "ai-session") {
       return (
         <AiSessionScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
@@ -578,7 +624,7 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    if (activeRoute().screen === "terminal") {
+    if (activeRoute.screen === "terminal") {
       return (
         <TerminalScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
@@ -587,17 +633,17 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    if (activeRoute().screen === "notifications") {
+    if (activeRoute.screen === "notifications") {
       return <NotificationsScreen />;
     }
 
-    if (activeRoute().screen === "model-profiles") {
+    if (activeRoute.screen === "model-profiles") {
       return (
         <ModelProfilesScreen apiBaseUrl={props.bootstrapState.apiBaseUrl} />
       );
     }
 
-    if (activeRoute().screen === "action-defaults") {
+    if (activeRoute.screen === "action-defaults") {
       return (
         <ActionDefaultsScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
@@ -606,7 +652,7 @@ export function App(props: AppProps): JSX.Element {
       );
     }
 
-    return renderPlannedScreenPlaceholder(activeRoute().screen);
+    return renderPlannedScreenPlaceholder(activeRoute.screen);
   }
 
   return (
