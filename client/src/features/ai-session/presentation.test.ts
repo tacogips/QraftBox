@@ -12,6 +12,7 @@ import type {
 import {
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
+  describeAiSessionExecutionFlow,
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
@@ -840,6 +841,13 @@ describe("ai-session presentation helpers", () => {
         modelVendor: "anthropics",
       }),
     ).toBe("CLAUDE-CODE");
+    expect(
+      describeAiSessionExecutionFlow({
+        aiAgent: "codex",
+        sessionSource: "codex-cli",
+        modelVendor: "openai",
+      }),
+    ).toBe("QraftBox -> Codex");
   });
 
   test("describes the current prompt context from the files screen", () => {

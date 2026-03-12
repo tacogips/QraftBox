@@ -612,9 +612,9 @@ export function mergeAiSessionTranscriptLines<
 >(
   currentLines: readonly TranscriptLine[],
   nextLines: readonly TranscriptLine[],
-  append: boolean,
+  prependOlderLines: boolean,
 ): readonly TranscriptLine[] {
-  if (!append) {
+  if (!prependOlderLines) {
     return nextLines;
   }
 
@@ -622,12 +622,12 @@ export function mergeAiSessionTranscriptLines<
     return nextLines;
   }
 
-  const mergedLines = [...currentLines];
+  const mergedLines = [...nextLines];
   const existingTranscriptIds = new Set(
-    currentLines.map((transcriptLine) => transcriptLine.id),
+    nextLines.map((transcriptLine) => transcriptLine.id),
   );
 
-  for (const transcriptLine of nextLines) {
+  for (const transcriptLine of currentLines) {
     if (existingTranscriptIds.has(transcriptLine.id)) {
       continue;
     }
@@ -653,27 +653,18 @@ export function canLoadMoreAiSessionHistory(params: {
   return params.loadedCount < params.totalCount;
 }
 
-export function resolveNextAiSessionTranscriptOffset(params: {
-  readonly append: boolean;
-  readonly loadedEventCount: number;
+export function resolveLatestAiSessionTranscriptOffset(params: {
+  readonly totalCount: number;
+  readonly pageSize: number;
 }): number {
-  return params.append ? params.loadedEventCount : 0;
+  return Math.max(0, params.totalCount - params.pageSize);
 }
 
-export function resolveLoadedAiSessionTranscriptEventCount(params: {
-  readonly append: boolean;
-  readonly currentLoadedEventCount: number;
-  readonly responseOffset: number;
-  readonly responseEventCount: number;
+export function resolvePreviousAiSessionTranscriptOffset(params: {
+  readonly currentOffset: number;
+  readonly pageSize: number;
 }): number {
-  const nextLoadedEventCount =
-    params.responseOffset + params.responseEventCount;
-
-  if (!params.append) {
-    return nextLoadedEventCount;
-  }
-
-  return Math.max(params.currentLoadedEventCount, nextLoadedEventCount);
+  return Math.max(0, params.currentOffset - params.pageSize);
 }
 
 export function createAiSessionDetailRequestKey(params: {

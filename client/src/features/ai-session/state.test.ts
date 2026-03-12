@@ -24,11 +24,11 @@ import {
   normalizeAiSessionSearchQuery,
   normalizeAiSessionLiveAssistantStatusText,
   parseAiSessionOverviewRouteState,
-  resolveLoadedAiSessionTranscriptEventCount,
   resolveAiSessionRequestToken,
+  resolveLatestAiSessionTranscriptOffset,
   resolveAiSessionRuntimeSession,
   resolveAiSessionStreamSessionId,
-  resolveNextAiSessionTranscriptOffset,
+  resolvePreviousAiSessionTranscriptOffset,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
   shouldRetireAiSessionLiveAssistantFromTranscript,
@@ -738,19 +738,9 @@ describe("ai-session state helpers", () => {
     ]);
   });
 
-  test("appends unique transcript lines when loading more events", () => {
+  test("prepends older unique transcript lines when loading more events", () => {
     expect(
       mergeAiSessionTranscriptLines(
-        [
-          {
-            id: "line-1",
-            text: "first",
-          },
-          {
-            id: "line-2",
-            text: "second",
-          },
-        ],
         [
           {
             id: "line-2",
@@ -759,6 +749,16 @@ describe("ai-session state helpers", () => {
           {
             id: "line-3",
             text: "third",
+          },
+        ],
+        [
+          {
+            id: "line-1",
+            text: "first",
+          },
+          {
+            id: "line-2",
+            text: "second",
           },
         ],
         true,
@@ -794,49 +794,36 @@ describe("ai-session state helpers", () => {
     ).toBe(false);
   });
 
-  test("uses loaded transcript event count as the next backend pagination offset", () => {
+  test("resolves the latest transcript offset from total event count", () => {
     expect(
-      resolveNextAiSessionTranscriptOffset({
-        append: false,
-        loadedEventCount: 7,
+      resolveLatestAiSessionTranscriptOffset({
+        totalCount: 7,
+        pageSize: 200,
       }),
     ).toBe(0);
 
     expect(
-      resolveNextAiSessionTranscriptOffset({
-        append: true,
-        loadedEventCount: 7,
+      resolveLatestAiSessionTranscriptOffset({
+        totalCount: 275,
+        pageSize: 200,
       }),
-    ).toBe(7);
+    ).toBe(75);
   });
 
-  test("tracks loaded transcript events independently from rendered lines", () => {
+  test("resolves the previous transcript offset when loading older history", () => {
     expect(
-      resolveLoadedAiSessionTranscriptEventCount({
-        append: false,
-        currentLoadedEventCount: 80,
-        responseOffset: 0,
-        responseEventCount: 25,
+      resolvePreviousAiSessionTranscriptOffset({
+        currentOffset: 80,
+        pageSize: 25,
       }),
-    ).toBe(25);
+    ).toBe(55);
 
     expect(
-      resolveLoadedAiSessionTranscriptEventCount({
-        append: true,
-        currentLoadedEventCount: 25,
-        responseOffset: 25,
-        responseEventCount: 25,
+      resolvePreviousAiSessionTranscriptOffset({
+        currentOffset: 10,
+        pageSize: 25,
       }),
-    ).toBe(50);
-
-    expect(
-      resolveLoadedAiSessionTranscriptEventCount({
-        append: true,
-        currentLoadedEventCount: 50,
-        responseOffset: 25,
-        responseEventCount: 10,
-      }),
-    ).toBe(50);
+    ).toBe(0);
   });
 
   test("creates a stable selected-session detail request key", () => {

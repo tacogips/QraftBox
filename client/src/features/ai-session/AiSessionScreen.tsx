@@ -30,6 +30,7 @@ import {
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
   reconcileAiSessionTranscriptLines,
+  describeAiSessionExecutionFlow,
   describeAiSessionEntryAgent,
   describeAiSessionEntryOrigin,
   describeAiSessionPromptContext,
@@ -64,8 +65,8 @@ import {
   parseAiSessionOverviewRouteState,
   readAiSessionOverviewRouteSearchFromHash,
   replaceAiSessionOverviewRouteSearchInHash,
-  resolveLoadedAiSessionTranscriptEventCount,
-  resolveNextAiSessionTranscriptOffset,
+  resolveLatestAiSessionTranscriptOffset,
+  resolvePreviousAiSessionTranscriptOffset,
   resolveAiSessionRequestToken,
   resolveAiSessionRuntimeSession,
   resolveAiSessionStreamSessionId,
@@ -161,9 +162,38 @@ function renderJumpToLatestIcon(): JSX.Element {
       stroke="currentColor"
       stroke-width="1.8"
     >
-      <path d="M10 4v9" stroke-linecap="round" />
-      <path d="m6 10 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-      <path d="M5 16h10" stroke-linecap="round" />
+      <path
+        d="m6.5 6 3.5 3.5L13.5 6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="m6.5 10.5 3.5 3.5 3.5-3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderJumpToHeadIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="m6.5 14 3.5-3.5 3.5 3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="m6.5 9.5 3.5-3.5 3.5 3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   );
 }
@@ -178,6 +208,41 @@ function renderCloseIcon(): JSX.Element {
     >
       <path d="m5 5 10 10" stroke-linecap="round" />
       <path d="M15 5 5 15" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderCopyIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <rect x="7" y="7" width="9" height="9" rx="1.8" />
+      <path
+        d="M5 12H4a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 4 3h6A1.5 1.5 0 0 1 11.5 4.5V5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderCopiedIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="m4.5 10.5 3.5 3.5 7.5-8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
     </svg>
   );
 }
@@ -307,6 +372,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     selectedSessionTranscriptLoadedEventCount,
     setSelectedSessionTranscriptLoadedEventCount,
   ] = createSignal(0);
+  const [
+    selectedSessionTranscriptStartOffset,
+    setSelectedSessionTranscriptStartOffset,
+  ] = createSignal(0);
   const [selectedSessionTranscriptTotal, setSelectedSessionTranscriptTotal] =
     createSignal(0);
   const [selectedSessionLoading, setSelectedSessionLoading] =
@@ -345,6 +414,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   ] = createSignal<QraftAiSessionId | null>(null);
   const [showInjectedSystemPrompts, setShowInjectedSystemPrompts] =
     createSignal(loadInjectedSystemPromptVisibility());
+  const [copiedTranscriptLineId, setCopiedTranscriptLineId] = createSignal<
+    string | null
+  >(null);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -353,6 +425,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   let activeSelectedSessionStreamKey: string | null = null;
   let activeSelectedSessionEventSource: EventSource | null = null;
   let transcriptScrollContainer: HTMLDivElement | null = null;
+  let copiedTranscriptLineResetTimer: ReturnType<typeof setTimeout> | null =
+    null;
   const activityRequestGuard = createLatestAiSessionRequestGuard();
   const hiddenSessionsRequestGuard = createLatestAiSessionRequestGuard();
   const modelProfilesRequestGuard = createLatestAiSessionRequestGuard();
@@ -645,6 +719,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionDetail(null);
     setSelectedSessionTranscript([]);
     setSelectedSessionTranscriptLoadedEventCount(0);
+    setSelectedSessionTranscriptStartOffset(0);
     setSelectedSessionTranscriptTotal(0);
     setSelectedSessionError(null);
     setLiveAssistantText(null);
@@ -694,17 +769,15 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     readonly contextId: string;
     readonly qraftAiSessionId: QraftAiSessionId;
     readonly hasHistoricalSession: boolean;
-    readonly appendTranscript: boolean;
+    readonly loadOlderTranscript: boolean;
     readonly preserveExistingContent?: boolean | undefined;
   }): Promise<void> {
     const requestScopeKey = `${params.contextId}:${params.qraftAiSessionId}`;
     const requestToken = selectedSessionRequestGuard.issue(requestScopeKey);
-    const transcriptOffset = resolveNextAiSessionTranscriptOffset({
-      append: params.appendTranscript,
-      loadedEventCount: selectedSessionTranscriptLoadedEventCount(),
-    });
+    const currentTranscriptStartOffset = selectedSessionTranscriptStartOffset();
+    const currentLoadedEventCount = selectedSessionTranscriptLoadedEventCount();
 
-    if (params.appendTranscript) {
+    if (params.loadOlderTranscript) {
       setSelectedSessionLoadingMore(true);
     } else {
       if (params.preserveExistingContent !== true) {
@@ -712,42 +785,89 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         setSelectedSessionDetail(null);
         setSelectedSessionTranscript([]);
         setSelectedSessionTranscriptLoadedEventCount(0);
+        setSelectedSessionTranscriptStartOffset(0);
         setSelectedSessionTranscriptTotal(0);
       }
     }
     setSelectedSessionError(null);
 
     try {
-      const [sessionDetail, transcript] = await Promise.all(
-        params.appendTranscript
-          ? [
-              Promise.resolve(selectedSessionDetail()),
-              aiSessionsApi.fetchClaudeSessionTranscript(
+      const sessionDetailPromise =
+        params.loadOlderTranscript || params.preserveExistingContent === true
+          ? Promise.resolve(selectedSessionDetail())
+          : params.hasHistoricalSession
+            ? aiSessionsApi.fetchClaudeSession(
+                params.contextId,
+                params.qraftAiSessionId,
+              )
+            : Promise.resolve(null);
+
+      const transcriptPromise = params.loadOlderTranscript
+        ? (() => {
+            const previousTranscriptOffset =
+              resolvePreviousAiSessionTranscriptOffset({
+                currentOffset: currentTranscriptStartOffset,
+                pageSize: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
+              });
+            const previousTranscriptLimit = Math.max(
+              1,
+              currentTranscriptStartOffset - previousTranscriptOffset,
+            );
+
+            return aiSessionsApi.fetchClaudeSessionTranscript(
+              params.contextId,
+              params.qraftAiSessionId,
+              {
+                offset: previousTranscriptOffset,
+                limit: previousTranscriptLimit,
+              },
+            );
+          })()
+        : params.preserveExistingContent === true
+          ? aiSessionsApi.fetchClaudeSessionTranscript(
+              params.contextId,
+              params.qraftAiSessionId,
+              {
+                offset: currentTranscriptStartOffset,
+                limit: Math.min(
+                  Math.max(
+                    currentLoadedEventCount + SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
+                    SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
+                  ),
+                  1000,
+                ),
+              },
+            )
+          : (async () => {
+              const transcriptProbe =
+                await aiSessionsApi.fetchClaudeSessionTranscript(
+                  params.contextId,
+                  params.qraftAiSessionId,
+                  {
+                    offset: 0,
+                    limit: 1,
+                  },
+                );
+              const latestTranscriptOffset =
+                resolveLatestAiSessionTranscriptOffset({
+                  totalCount: transcriptProbe.total,
+                  pageSize: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
+                });
+
+              return aiSessionsApi.fetchClaudeSessionTranscript(
                 params.contextId,
                 params.qraftAiSessionId,
                 {
-                  offset: transcriptOffset,
+                  offset: latestTranscriptOffset,
                   limit: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
                 },
-              ),
-            ]
-          : [
-              params.hasHistoricalSession
-                ? aiSessionsApi.fetchClaudeSession(
-                    params.contextId,
-                    params.qraftAiSessionId,
-                  )
-                : Promise.resolve(null),
-              aiSessionsApi.fetchClaudeSessionTranscript(
-                params.contextId,
-                params.qraftAiSessionId,
-                {
-                  offset: 0,
-                  limit: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-                },
-              ),
-            ],
-      );
+              );
+            })();
+
+      const [sessionDetail, transcript] = await Promise.all([
+        sessionDetailPromise,
+        transcriptPromise,
+      ]);
 
       if (!selectedSessionRequestGuard.isCurrent(requestToken)) {
         return;
@@ -764,7 +884,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         const mergedTranscriptLines = mergeAiSessionTranscriptLines(
           currentTranscriptLines,
           nextTranscriptLines,
-          params.appendTranscript,
+          params.loadOlderTranscript,
         );
 
         return reconcileAiSessionTranscriptLines(
@@ -772,30 +892,41 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           mergedTranscriptLines,
         );
       });
-      setSelectedSessionTranscriptLoadedEventCount((currentLoadedEventCount) =>
-        resolveLoadedAiSessionTranscriptEventCount({
-          append: params.appendTranscript,
-          currentLoadedEventCount,
-          responseOffset: transcript.offset,
-          responseEventCount: transcript.events.length,
-        }),
+      setSelectedSessionTranscriptLoadedEventCount(
+        params.loadOlderTranscript
+          ? currentLoadedEventCount + transcript.events.length
+          : transcript.events.length,
       );
+      setSelectedSessionTranscriptStartOffset(transcript.offset);
       setSelectedSessionTranscriptTotal(transcript.total);
+
+      if (
+        !params.loadOlderTranscript &&
+        params.preserveExistingContent !== true
+      ) {
+        window.requestAnimationFrame(() => {
+          scrollSelectedTranscriptToLatest("auto");
+        });
+      }
     } catch (error) {
       if (!selectedSessionRequestGuard.isCurrent(requestToken)) {
         return;
       }
 
-      if (!params.appendTranscript && params.preserveExistingContent !== true) {
+      if (
+        !params.loadOlderTranscript &&
+        params.preserveExistingContent !== true
+      ) {
         setSelectedSessionDetail(null);
         setSelectedSessionTranscript([]);
         setSelectedSessionTranscriptLoadedEventCount(0);
+        setSelectedSessionTranscriptStartOffset(0);
         setSelectedSessionTranscriptTotal(0);
       }
       setSelectedSessionError(
         error instanceof Error
           ? error.message
-          : params.appendTranscript
+          : params.loadOlderTranscript
             ? "Failed to load more transcript events"
             : "Failed to load selected session details",
       );
@@ -836,6 +967,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setSelectedSessionDetail(null);
       setSelectedSessionTranscript([]);
       setSelectedSessionTranscriptLoadedEventCount(0);
+      setSelectedSessionTranscriptStartOffset(0);
       setSelectedSessionTranscriptTotal(0);
       setSelectedSessionError(null);
       setLiveAssistantText(null);
@@ -870,7 +1002,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setPreferredStreamRuntimeSessionOwnerQraftAiSessionId(null);
     void refreshSelectedSessionArtifacts({
       ...detailTarget,
-      appendTranscript: false,
+      loadOlderTranscript: false,
     });
   });
 
@@ -1143,7 +1275,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       ) {
         void refreshSelectedSessionArtifacts({
           ...detailTarget,
-          appendTranscript: false,
+          loadOlderTranscript: false,
           preserveExistingContent: true,
         });
       }
@@ -1228,7 +1360,69 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     if (pollTimer !== null) {
       clearInterval(pollTimer);
     }
+    if (copiedTranscriptLineResetTimer !== null) {
+      clearTimeout(copiedTranscriptLineResetTimer);
+    }
   });
+
+  async function writeTextToClipboard(text: string): Promise<void> {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof navigator.clipboard?.writeText === "function" &&
+      window.isSecureContext
+    ) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "");
+    textarea.setAttribute("aria-hidden", "true");
+    textarea.style.position = "fixed";
+    textarea.style.top = "0";
+    textarea.style.left = "-9999px";
+    textarea.style.opacity = "0";
+    textarea.style.fontSize = "16px";
+    textarea.style.pointerEvents = "none";
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) {
+      throw new Error("Clipboard copy failed");
+    }
+  }
+
+  async function copyTranscriptLine(
+    transcriptLine: AiSessionTranscriptLine,
+  ): Promise<void> {
+    const normalizedText = transcriptLine.text.trim();
+    if (normalizedText.length === 0) {
+      return;
+    }
+
+    try {
+      await writeTextToClipboard(normalizedText);
+      setCopiedTranscriptLineId(transcriptLine.id);
+      if (copiedTranscriptLineResetTimer !== null) {
+        clearTimeout(copiedTranscriptLineResetTimer);
+      }
+      copiedTranscriptLineResetTimer = setTimeout(() => {
+        setCopiedTranscriptLineId((currentCopiedTranscriptLineId) =>
+          currentCopiedTranscriptLineId === transcriptLine.id
+            ? null
+            : currentCopiedTranscriptLineId,
+        );
+        copiedTranscriptLineResetTimer = null;
+      }, 1500);
+    } catch {
+      setErrorMessage("Failed to copy the transcript message.");
+    }
+  }
 
   async function submitPromptMessage(
     message: string,
@@ -1671,10 +1865,21 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       return;
     }
 
+    const container = transcriptScrollContainer;
+    const previousScrollHeight = container?.scrollHeight ?? 0;
+    const previousScrollTop = container?.scrollTop ?? 0;
+
     await refreshSelectedSessionArtifacts({
       ...detailTarget,
-      appendTranscript: true,
+      loadOlderTranscript: true,
     });
+
+    if (container !== null) {
+      window.requestAnimationFrame(() => {
+        const nextScrollDelta = container.scrollHeight - previousScrollHeight;
+        container.scrollTop = previousScrollTop + nextScrollDelta;
+      });
+    }
   }
 
   async function loadMoreSessionHistory(): Promise<void> {
@@ -1799,7 +2004,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionError(null);
   }
 
-  function scrollSelectedTranscriptToLatest(): void {
+  function scrollSelectedTranscriptToLatest(
+    behavior: ScrollBehavior = "smooth",
+  ): void {
     const container = transcriptScrollContainer;
     if (container === null) {
       return;
@@ -1807,7 +2014,51 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     container.scrollTo({
       top: container.scrollHeight,
-      behavior: "smooth",
+      behavior,
+    });
+  }
+
+  function handleTranscriptScroll(): void {
+    const container = transcriptScrollContainer;
+    if (container === null || container.scrollTop > 120) {
+      return;
+    }
+
+    void loadMoreSelectedSessionTranscript();
+  }
+
+  async function jumpSelectedTranscriptToHead(): Promise<void> {
+    const detailTarget = selectedSessionDetailTarget();
+    if (
+      detailTarget === null ||
+      selectedSessionLoading() ||
+      selectedSessionLoadingMore()
+    ) {
+      return;
+    }
+
+    while (
+      canLoadMoreAiSessionTranscript({
+        loadedEventCount: selectedSessionTranscriptLoadedEventCount(),
+        totalCount: selectedSessionTranscriptTotal(),
+      })
+    ) {
+      const previousLoadedEventCount = selectedSessionTranscriptLoadedEventCount();
+      await refreshSelectedSessionArtifacts({
+        ...detailTarget,
+        loadOlderTranscript: true,
+      });
+
+      if (selectedSessionTranscriptLoadedEventCount() <= previousLoadedEventCount) {
+        break;
+      }
+    }
+
+    window.requestAnimationFrame(() => {
+      transcriptScrollContainer?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
     });
   }
 
@@ -1823,7 +2074,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     await refreshSelectedSessionArtifacts({
       ...detailTarget,
-      appendTranscript: false,
+      loadOlderTranscript: false,
       preserveExistingContent: true,
     });
   }
@@ -2238,9 +2489,16 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         {renderRefreshIcon()}
                       </ToolbarIconButton>
                       <ToolbarIconButton
+                        label="Jump to head"
+                        disabled={visibleSelectedSessionTranscript().length === 0}
+                        onClick={() => void jumpSelectedTranscriptToHead()}
+                      >
+                        {renderJumpToHeadIcon()}
+                      </ToolbarIconButton>
+                      <ToolbarIconButton
                         label="Jump to latest"
-                        disabled={selectedSessionTranscript().length === 0}
-                        onClick={scrollSelectedTranscriptToLatest}
+                        disabled={visibleSelectedSessionTranscript().length === 0}
+                        onClick={() => scrollSelectedTranscriptToLatest()}
                       >
                         {renderJumpToLatestIcon()}
                       </ToolbarIconButton>
@@ -2260,16 +2518,23 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                     ref={(element) => {
                       transcriptScrollContainer = element;
                     }}
+                    onScroll={handleTranscriptScroll}
                     class="min-h-0 flex-1 overflow-auto px-4 py-4"
                   >
                     <Show when={selectedSessionDetail() !== null}>
                       <div class="mb-4 grid gap-3 sm:grid-cols-3">
                         <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
                           <p class="uppercase tracking-wide text-text-tertiary">
-                            Source
+                            Execution flow
                           </p>
                           <p class="mt-1 text-sm text-text-primary">
-                            {selectedSessionDetail()?.source}
+                            {describeAiSessionExecutionFlow(
+                              selectedSessionEntry() ?? {
+                                aiAgent: undefined,
+                                sessionSource: undefined,
+                                modelVendor: undefined,
+                              },
+                            )}
                           </p>
                         </div>
                         <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
@@ -2310,6 +2575,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         Loading selected session transcript...
                       </p>
                     </Show>
+                    <Show when={selectedSessionLoadingMore()}>
+                      <p class="pb-3 text-xs text-text-secondary">
+                        Loading older transcript...
+                      </p>
+                    </Show>
                     <Show when={selectedSessionError() !== null}>
                       <p
                         role="alert"
@@ -2332,13 +2602,28 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                               >
                                 {transcriptLine.role}
                               </span>
-                              <span class="text-[11px] text-text-tertiary">
-                                {transcriptLine.timestamp === null
-                                  ? ""
-                                  : formatAiSessionTimestamp(
-                                      transcriptLine.timestamp,
-                                    )}
-                              </span>
+                              <div class="flex items-center gap-2">
+                                <span class="text-[11px] text-text-tertiary">
+                                  {transcriptLine.timestamp === null
+                                    ? ""
+                                    : formatAiSessionTimestamp(
+                                        transcriptLine.timestamp,
+                                      )}
+                                </span>
+                                <button
+                                  type="button"
+                                  class="rounded p-1 text-text-tertiary transition hover:bg-bg-hover hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                                  aria-label="Copy message to clipboard"
+                                  title="Copy to clipboard"
+                                  onClick={() => void copyTranscriptLine(transcriptLine)}
+                                >
+                                  <span class="block h-4 w-4">
+                                    {copiedTranscriptLineId() === transcriptLine.id
+                                      ? renderCopiedIcon()
+                                      : renderCopyIcon()}
+                                  </span>
+                                </button>
+                              </div>
                             </div>
                             <p
                               class={`whitespace-pre-wrap break-words text-sm leading-6 text-text-primary ${
@@ -2365,28 +2650,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           ? "Only injected system prompts are currently hidden for this session."
                           : "No transcript events are available for this session yet."}
                       </p>
-                    </Show>
-                    <Show
-                      when={canLoadMoreAiSessionTranscript({
-                        loadedEventCount:
-                          selectedSessionTranscriptLoadedEventCount(),
-                        totalCount: selectedSessionTranscriptTotal(),
-                      })}
-                    >
-                      <div class="flex justify-center pt-4">
-                        <button
-                          type="button"
-                          class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={selectedSessionLoadingMore()}
-                          onClick={() =>
-                            void loadMoreSelectedSessionTranscript()
-                          }
-                        >
-                          {selectedSessionLoadingMore()
-                            ? "Loading more transcript..."
-                            : "Load more transcript"}
-                        </button>
-                      </div>
                     </Show>
                   </div>
                 </div>

@@ -769,6 +769,22 @@ export function describeAiSessionEntryAgent(
   return null;
 }
 
+export function describeAiSessionExecutionFlow(
+  entry: Pick<AiSessionListEntry, "aiAgent" | "sessionSource" | "modelVendor">,
+): string {
+  const agentLabel = describeAiSessionEntryAgent(entry);
+
+  if (agentLabel === "CODEX") {
+    return "QraftBox -> Codex";
+  }
+
+  if (agentLabel === "CLAUDE-CODE") {
+    return "QraftBox -> Claude Code";
+  }
+
+  return "QraftBox";
+}
+
 export function describeAiSessionPromptContext(
   promptContextState: AiSessionPromptContextState,
 ): string {
