@@ -6,6 +6,7 @@ import {
   Show,
   type JSX,
 } from "solid-js";
+import { Portal } from "solid-js/web";
 import {
   createGitActionsApiClient,
   type GitActionName,
@@ -18,6 +19,7 @@ import {
   extractPullRequestUrl,
   getPullRequestActionLabel,
   resolvePullRequestBaseBranch,
+  resolveSelectedPullRequestBaseBranch,
   shouldShowCancelGitActionButton,
 } from "./git-actions-state";
 
@@ -124,8 +126,10 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
   const [prStatus, setPrStatus] = createSignal<PullRequestStatus | null>(null);
   const [prLoading, setPrLoading] = createSignal(false);
   const [selectedBaseBranch, setSelectedBaseBranch] = createSignal("");
+  const [pullRequestDialogOpen, setPullRequestDialogOpen] = createSignal(false);
 
   const prNumber = () => prStatus()?.pr?.number ?? null;
+  const pullRequestLink = () => prStatus()?.pr?.url ?? null;
   const primaryPrActionLabel = () => getPullRequestActionLabel(prNumber());
   const canRunPrimaryPrAction = () =>
     canRunPullRequestAction({
@@ -160,6 +164,7 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
     if (!props.isGitRepo) {
       setPrStatus(null);
       setSelectedBaseBranch("");
+      setPullRequestDialogOpen(false);
       return;
     }
 
@@ -169,10 +174,17 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
         props.projectPath,
       );
       setPrStatus(nextPullRequestStatus);
-      setSelectedBaseBranch(nextPullRequestStatus.baseBranch);
+      setSelectedBaseBranch((currentSelectedBaseBranch) =>
+        resolveSelectedPullRequestBaseBranch({
+          selectedBaseBranch: currentSelectedBaseBranch,
+          fallbackBaseBranch: nextPullRequestStatus.baseBranch,
+          availableBaseBranches: nextPullRequestStatus.availableBaseBranches,
+        }),
+      );
     } catch {
       setPrStatus(null);
       setSelectedBaseBranch("");
+      setPullRequestDialogOpen(false);
     } finally {
       setPrLoading(false);
     }
@@ -282,6 +294,7 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
     });
     const actionId = createActionId();
     const hasExistingPullRequest = prNumber() !== null;
+    setPullRequestDialogOpen(false);
 
     await runGitAction({
       action: "pr",
@@ -329,6 +342,36 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
     });
   }
 
+  function handleBaseBranchSelection(baseBranch: string): void {
+    setSelectedBaseBranch(baseBranch);
+  }
+
+  function openPullRequestDialog(): void {
+    if (!canRunPrimaryPrAction()) {
+      return;
+    }
+
+    setPullRequestDialogOpen(true);
+  }
+
+  createEffect(() => {
+    if (!pullRequestDialogOpen()) {
+      return;
+    }
+
+    const closeDialogOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") {
+        setPullRequestDialogOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeDialogOnEscape);
+
+    onCleanup(() => {
+      window.removeEventListener("keydown", closeDialogOnEscape);
+    });
+  });
+
   async function handleCancelCurrentAction(): Promise<void> {
     const currentActionId = activeActionId();
     if (currentActionId === null || !canCancelCurrentAction()) {
@@ -354,6 +397,7 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
       setNotice(null);
       setPrStatus(null);
       setSelectedBaseBranch("");
+      setPullRequestDialogOpen(false);
       return;
     }
 
@@ -371,22 +415,97 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
 
   return (
     <div class="contents">
-      <Show when={(prStatus()?.availableBaseBranches.length ?? 0) > 0}>
-        <div class="flex min-w-0 items-center">
-          <select
-            aria-label="Base branch"
-            class="w-28 rounded-md border border-border-default bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none transition focus:border-accent-emphasis disabled:cursor-not-allowed disabled:opacity-50"
-            value={selectedBaseBranch()}
-            disabled={operating() || prLoading()}
-            onChange={(event) =>
-              setSelectedBaseBranch(event.currentTarget.value)
-            }
+      <Show when={pullRequestDialogOpen()}>
+        <Portal>
+          <div
+            class="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 px-4"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) {
+                setPullRequestDialogOpen(false);
+              }
+            }}
           >
-            <For each={prStatus()?.availableBaseBranches ?? []}>
-              {(baseBranch) => <option value={baseBranch}>{baseBranch}</option>}
-            </For>
-          </select>
-        </div>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Choose pull request base branch"
+              class="flex max-h-[min(80vh,42rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/30"
+            >
+              <div class="border-b border-border-default px-5 py-4">
+                <div class="text-lg font-semibold text-text-primary">
+                  {primaryPrActionLabel()}
+                </div>
+                <div class="mt-1 text-sm text-text-secondary">
+                  Choose the base branch for this pull request.
+                </div>
+                <Show
+                  when={prStatus()?.pr !== null && prStatus()?.pr !== undefined}
+                >
+                  <a
+                    href={pullRequestLink() ?? undefined}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="mt-3 inline-flex w-fit items-center rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-sm font-medium text-text-primary transition hover:bg-bg-hover"
+                  >
+                    Open PR #{prNumber()}
+                  </a>
+                </Show>
+              </div>
+              <div class="border-b border-border-subtle bg-bg-primary/60 px-5 py-3 text-sm text-text-secondary">
+                Selected base branch:
+                <span class="ml-2 font-semibold text-text-primary">
+                  {resolvePullRequestBaseBranch({
+                    selectedBaseBranch: selectedBaseBranch(),
+                    fallbackBaseBranch: prStatus()?.baseBranch ?? "main",
+                  })}
+                </span>
+              </div>
+              <div class="max-h-80 overflow-y-auto p-3">
+                <div class="grid gap-2">
+                  <For each={prStatus()?.availableBaseBranches ?? []}>
+                    {(baseBranch) => (
+                      <button
+                        type="button"
+                        class={`flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left text-sm transition ${
+                          selectedBaseBranch() === baseBranch
+                            ? "border-accent-emphasis bg-accent-muted/20 text-text-primary"
+                            : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover"
+                        }`}
+                        onClick={() => handleBaseBranchSelection(baseBranch)}
+                      >
+                        <span class="truncate font-medium">{baseBranch}</span>
+                        <Show when={selectedBaseBranch() === baseBranch}>
+                          <span class="text-xs font-semibold text-accent-emphasis">
+                            Selected
+                          </span>
+                        </Show>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </div>
+              <div class="flex items-center justify-end gap-2 border-t border-border-default px-5 py-4">
+                <button
+                  type="button"
+                  class="rounded-md border border-border-default bg-bg-primary px-3 py-1.5 text-sm font-medium text-text-primary transition hover:bg-bg-hover"
+                  onClick={() => setPullRequestDialogOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  class={`rounded-md border px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${getGitActionButtonClass(
+                    "pr",
+                  )}`}
+                  disabled={operating() || prLoading()}
+                  onClick={() => void handlePullRequestAction()}
+                >
+                  {primaryPrActionLabel()}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Portal>
       </Show>
       <div class="ml-auto flex flex-wrap items-center justify-end gap-2">
         <button
@@ -438,13 +557,22 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
             "pr",
           )}`}
           disabled={!canRunPrimaryPrAction()}
-          onClick={() => void handlePullRequestAction()}
+          onClick={openPullRequestDialog}
         >
-          {getActionButtonLabel({
-            activePhase: operationPhase(),
-            buttonPhase: "creating-pr",
-            idleLabel: primaryPrActionLabel(),
-          })}
+          <span class="flex flex-col items-center leading-tight">
+            <span>
+              {getActionButtonLabel({
+                activePhase: operationPhase(),
+                buttonPhase: "creating-pr",
+                idleLabel: primaryPrActionLabel(),
+              })}
+            </span>
+            <Show when={prNumber() !== null}>
+              <span class="mt-1 text-[10px] font-medium opacity-90">
+                PR #{prNumber()}
+              </span>
+            </Show>
+          </span>
         </button>
         <Show when={canCancelCurrentAction() || cancellingOperation()}>
           <button

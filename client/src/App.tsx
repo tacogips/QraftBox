@@ -27,6 +27,7 @@ import { ModelProfilesScreen } from "./features/model-config/ModelProfilesScreen
 import { createFilesViewModel } from "./features/diff/create-files-view-model";
 import { createDiffViewModel } from "./features/diff/create-diff-view-model";
 import { DiffScreen } from "./features/diff/DiffScreen";
+import { BranchSwitcher } from "./features/diff/BranchSwitcher";
 import { GitActionsBar } from "./features/diff/GitActionsBar";
 import { shouldShowGitActionsBar } from "./features/diff/git-actions-state";
 import { createDiffRealtimeController } from "./features/diff/realtime";
@@ -317,6 +318,20 @@ export function App(props: AppProps): JSX.Element {
       isGitRepo: activeWorkspaceIsGitRepo(),
       projectPath: activeProjectPath(),
     });
+
+  function refreshActiveFilesWorkspace(): void {
+    if (activeContextId() === null) {
+      return;
+    }
+
+    void diffViewModel.synchronize({
+      screen: activeRoute.screen,
+      activeContextId: activeContextId(),
+      activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
+    });
+    void filesViewModel.refreshAllFilesTree(activeContextId());
+    void filesViewModel.refreshSelectedFileContent(activeContextId());
+  }
 
   createEffect(
     on(
@@ -788,6 +803,18 @@ export function App(props: AppProps): JSX.Element {
                 {renderWorkspaceKindIcon(activeWorkspaceIsGitRepo())}
               </span>
             </Show>
+            <Show
+              when={
+                shouldRenderHeaderGitActions() && activeWorkspaceIsGitRepo()
+              }
+            >
+              <BranchSwitcher
+                apiBaseUrl={props.bootstrapState.apiBaseUrl}
+                contextId={activeContextId()}
+                isGitRepo={activeWorkspaceIsGitRepo()}
+                onSuccess={refreshActiveFilesWorkspace}
+              />
+            </Show>
           </div>
           <Show when={shouldRenderHeaderGitActions()}>
             <GitActionsBar
@@ -795,20 +822,8 @@ export function App(props: AppProps): JSX.Element {
               projectPath={activeProjectPath()}
               isGitRepo={activeWorkspaceIsGitRepo()}
               hasChanges={diffViewModel.diffOverview().stats.totalFiles > 0}
-              onSuccess={() => {
-                if (activeContextId() === null) {
-                  return;
-                }
-
-                void diffViewModel.synchronize({
-                  screen: activeRoute.screen,
-                  activeContextId: activeContextId(),
-                  activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
-                });
-                void filesViewModel.refreshAllFilesTree(activeContextId());
-                void filesViewModel.refreshSelectedFileContent(
-                  activeContextId(),
-                );
+              onSuccess={(_actionName) => {
+                refreshActiveFilesWorkspace();
               }}
             />
           </Show>

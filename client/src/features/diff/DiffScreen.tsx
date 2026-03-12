@@ -2267,8 +2267,8 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </Show>
               </aside>
 
-              <div class="flex min-h-0 flex-col gap-4">
-                <main class="qraftbox-file-preview-pane flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+              <div class="flex min-h-0 min-w-0 flex-col gap-4">
+                <main class="qraftbox-file-preview-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
                   <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
                     <div class="flex min-w-0 flex-col gap-2">
                       <div class="min-w-0">
@@ -2385,7 +2385,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
 
                   <div
                     ref={previewContainerElement}
-                    class="min-h-0 flex-1 overflow-auto bg-bg-primary"
+                    class="min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain bg-bg-primary touch-pan-y"
                   >
                     <Show when={props.isFileContentLoading}>
                       <div class="border-b border-border-default px-4 py-3 text-sm text-text-secondary">

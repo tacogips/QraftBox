@@ -154,7 +154,7 @@
 
 .qraftbox-file-tree-pane,
 .qraftbox-file-preview-pane {
-  contain: layout paint;
+  contain: paint;
 }
 
 .qraftbox-file-preview-pane {

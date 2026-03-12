@@ -64,6 +64,38 @@ export function resolvePullRequestBaseBranch(options: {
   return fallbackBaseBranch.length > 0 ? fallbackBaseBranch : "main";
 }
 
+export function resolveSelectedPullRequestBaseBranch(options: {
+  readonly selectedBaseBranch: string;
+  readonly fallbackBaseBranch: string;
+  readonly availableBaseBranches: readonly string[];
+}): string {
+  const selectedBaseBranch = options.selectedBaseBranch.trim();
+  if (
+    selectedBaseBranch.length > 0 &&
+    options.availableBaseBranches.includes(selectedBaseBranch)
+  ) {
+    return selectedBaseBranch;
+  }
+
+  const fallbackBaseBranch = options.fallbackBaseBranch.trim();
+  if (
+    fallbackBaseBranch.length > 0 &&
+    options.availableBaseBranches.includes(fallbackBaseBranch)
+  ) {
+    return fallbackBaseBranch;
+  }
+
+  const firstAvailableBaseBranch = options.availableBaseBranches[0]?.trim();
+  if (
+    firstAvailableBaseBranch !== undefined &&
+    firstAvailableBaseBranch.length > 0
+  ) {
+    return firstAvailableBaseBranch;
+  }
+
+  return fallbackBaseBranch.length > 0 ? fallbackBaseBranch : "main";
+}
+
 export function extractPullRequestUrl(output: string): string | null {
   const pullRequestUrlMatch = /https:\/\/github\.com\/[^\s]+\/pull\/\d+/.exec(
     output,

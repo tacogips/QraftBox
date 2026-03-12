@@ -4,6 +4,7 @@ import {
   extractPullRequestUrl,
   getPullRequestActionLabel,
   resolvePullRequestBaseBranch,
+  resolveSelectedPullRequestBaseBranch,
   shouldShowCancelGitActionButton,
   shouldShowGitActionsBar,
 } from "./git-actions-state";
@@ -88,5 +89,29 @@ describe("diff git actions state helpers", () => {
         "Created https://github.com/tacogips/QraftBox/pull/42 successfully",
       ),
     ).toBe("https://github.com/tacogips/QraftBox/pull/42");
+  });
+
+  test("preserves a selected pull request base branch when it remains valid", () => {
+    expect(
+      resolveSelectedPullRequestBaseBranch({
+        selectedBaseBranch: "release",
+        fallbackBaseBranch: "main",
+        availableBaseBranches: ["main", "release", "develop"],
+      }),
+    ).toBe("release");
+    expect(
+      resolveSelectedPullRequestBaseBranch({
+        selectedBaseBranch: "missing",
+        fallbackBaseBranch: "develop",
+        availableBaseBranches: ["main", "develop"],
+      }),
+    ).toBe("develop");
+    expect(
+      resolveSelectedPullRequestBaseBranch({
+        selectedBaseBranch: "missing",
+        fallbackBaseBranch: "unknown",
+        availableBaseBranches: ["release", "develop"],
+      }),
+    ).toBe("release");
   });
 });

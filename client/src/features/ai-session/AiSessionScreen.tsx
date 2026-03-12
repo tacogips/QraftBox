@@ -196,7 +196,11 @@ function renderRefreshPurposeIcon(): JSX.Element {
         stroke-linecap="round"
         stroke-linejoin="round"
       />
-      <path d="M12.4 4.1h2.8v2.8" stroke-linecap="round" stroke-linejoin="round" />
+      <path
+        d="M12.4 4.1h2.8v2.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
       <path d="M10 7.2v1.8" stroke-linecap="round" />
       <path d="M10 11.2V13" stroke-linecap="round" />
       <path d="M7.9 10.1h1.8" stroke-linecap="round" />
@@ -235,11 +239,7 @@ function renderComposerFooterToggleIcon(collapsed: boolean): JSX.Element {
       stroke="currentColor"
       stroke-width="1.8"
     >
-      <path
-        d="m6 12 4-4 4 4"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
+      <path d="m6 12 4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
     </svg>
   ) : (
     <svg
@@ -2929,8 +2929,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                                 <For each={modelProfiles()}>
                                   {(modelProfile) => (
                                     <option value={modelProfile.id}>
-                                      {modelProfile.name} ({modelProfile.vendor}/
-                                      {modelProfile.model})
+                                      {modelProfile.name} ({modelProfile.vendor}
+                                      /{modelProfile.model})
                                     </option>
                                   )}
                                 </For>
@@ -2998,7 +2998,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                                     );
                                     return;
                                   }
-                                  void cancelQueuedPrompt(cancelAction.targetId);
+                                  void cancelQueuedPrompt(
+                                    cancelAction.targetId,
+                                  );
                                 }}
                               >
                                 {selectedSessionCancelAction()?.label}
