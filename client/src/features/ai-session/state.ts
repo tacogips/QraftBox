@@ -491,6 +491,43 @@ export function shouldPreserveAiSessionLiveAssistantStateOnStreamOpen(params: {
   );
 }
 
+export function normalizeAiSessionLiveAssistantStatusText(
+  statusText: string | null,
+): string | null {
+  if (statusText === null) {
+    return null;
+  }
+
+  const normalizedStatusText = statusText.replace(/\s+/g, " ").trim();
+  if (normalizedStatusText.length === 0) {
+    return null;
+  }
+
+  const normalizedStatusKey = normalizedStatusText.toLowerCase();
+  if (
+    normalizedStatusKey === "thinking" ||
+    normalizedStatusKey === "thinking..." ||
+    normalizedStatusKey === "starting session" ||
+    normalizedStatusKey === "starting session..." ||
+    normalizedStatusKey === "turnstarted" ||
+    normalizedStatusKey === "turn started"
+  ) {
+    return "Thinking...";
+  }
+
+  if (
+    !normalizedStatusText.includes(" ") &&
+    /^[A-Za-z][A-Za-z0-9._:-]*$/.test(normalizedStatusText) &&
+    /(Started|Starting|Created|Queued|Running|Updated)$/u.test(
+      normalizedStatusText,
+    )
+  ) {
+    return "Thinking...";
+  }
+
+  return normalizedStatusText;
+}
+
 export function shouldRetireAiSessionLiveAssistantFromTranscript(params: {
   readonly transcriptLines: readonly {
     readonly role: "assistant" | "user" | "system";

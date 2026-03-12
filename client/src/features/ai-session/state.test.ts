@@ -22,6 +22,7 @@ import {
   isAiSessionScopeCurrent,
   createLatestAiSessionRequestGuard,
   normalizeAiSessionSearchQuery,
+  normalizeAiSessionLiveAssistantStatusText,
   parseAiSessionOverviewRouteState,
   resolveLoadedAiSessionTranscriptEventCount,
   resolveAiSessionRequestToken,
@@ -239,6 +240,19 @@ describe("ai-session state helpers", () => {
         liveAssistantPhase: "starting",
       }),
     ).toBe(false);
+  });
+
+  test("normalizes opaque live assistant lifecycle markers to a stable thinking label", () => {
+    expect(normalizeAiSessionLiveAssistantStatusText("TurnStarted")).toBe(
+      "Thinking...",
+    );
+    expect(
+      normalizeAiSessionLiveAssistantStatusText("Starting session..."),
+    ).toBe("Thinking...");
+    expect(normalizeAiSessionLiveAssistantStatusText("Using grep...")).toBe(
+      "Using grep...",
+    );
+    expect(normalizeAiSessionLiveAssistantStatusText("")).toBeNull();
   });
 
   test("does not retire a new assistant placeholder because the previous turn already ended with an assistant message", () => {

@@ -566,13 +566,13 @@ describe("ai-session presentation helpers", () => {
       "assistant-1",
       "user-2",
       "assistant-2",
-      "optimistic-user",
       "user-3",
       "assistant-3",
+      "optimistic-user",
     ]);
   });
 
-  test("moves the live assistant row behind the persisted user once history catches up", () => {
+  test("keeps the live assistant row at the transcript tail after the persisted user catches up", () => {
     expect(
       mergePendingAiSessionTranscriptLines({
         transcriptLines: [
@@ -613,6 +613,40 @@ describe("ai-session presentation helpers", () => {
         liveAssistantStatusText: "Thinking...",
       }).map((transcriptLine) => transcriptLine.id),
     ).toEqual(["user-1", "assistant-1", "user-2", "live-assistant"]);
+  });
+
+  test("keeps optimistic user ahead of the live assistant while the turn is pending", () => {
+    expect(
+      mergePendingAiSessionTranscriptLines({
+        transcriptLines: [
+          {
+            id: "user-1",
+            role: "user",
+            text: "say hello",
+            timestamp: "2026-03-11T07:39:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+          {
+            id: "assistant-1",
+            role: "assistant",
+            text: "Hello.",
+            timestamp: "2026-03-11T07:40:00.000Z",
+            isInjectedSystemPrompt: false,
+            isLive: false,
+            isThinking: false,
+          },
+        ],
+        optimisticUserText: "follow up",
+        optimisticUserTimestamp: "2026-03-11T07:41:00.000Z",
+        optimisticAnchorIndex: 2,
+        liveAssistantPhase: "thinking",
+        liveAssistantText: null,
+        liveAssistantTimestamp: "2026-03-11T07:41:01.000Z",
+        liveAssistantStatusText: "Thinking...",
+      }).map((transcriptLine) => transcriptLine.id),
+    ).toEqual(["user-1", "assistant-1", "optimistic-user", "live-assistant"]);
   });
 
   test("preserves transcript row object identity when line content is unchanged", () => {

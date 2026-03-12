@@ -71,6 +71,7 @@ import {
   resolveAiSessionStreamSessionId,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  normalizeAiSessionLiveAssistantStatusText,
   shouldRetireAiSessionLiveAssistantFromTranscript,
   shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   shouldShowAiSessionComposer,
@@ -883,7 +884,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     if (normalizedOptimisticText.length === 0) {
       setOptimisticUserText(null);
       setOptimisticUserTimestamp(null);
-      setOptimisticUserAnchorIndex(null);
       return;
     }
 
@@ -906,7 +906,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     setOptimisticUserText(null);
     setOptimisticUserTimestamp(null);
-    setOptimisticUserAnchorIndex(null);
   });
 
   createEffect(() => {
@@ -925,6 +924,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setLiveAssistantTimestamp(null);
     setLiveAssistantPhase("idle");
     setLiveAssistantStatusText(null);
+    setOptimisticUserAnchorIndex(null);
   });
 
   createEffect(() => {
@@ -981,7 +981,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       timestamp: string | null,
     ): void => {
       setLiveAssistantPhase(phase);
-      setLiveAssistantStatusText(statusText);
+      setLiveAssistantStatusText(
+        normalizeAiSessionLiveAssistantStatusText(statusText),
+      );
       setLiveAssistantTimestamp(timestamp);
     };
 
@@ -1371,6 +1373,20 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     });
   }
 
+  const promptSubmissionDisabled = () =>
+    submitting() ||
+    modelProfilesLoading() ||
+    runningDefaultPromptAction() !== null;
+
+  function handlePromptInputKeyDown(event: KeyboardEvent): void {
+    if (!event.ctrlKey || event.key !== "Enter" || promptSubmissionDisabled()) {
+      return;
+    }
+
+    event.preventDefault();
+    void submitPrompt(false);
+  }
+
   async function restartSelectedSessionFromBeginning(): Promise<void> {
     await submitPromptMessage(promptInput().trim(), true, {
       clearComposerInput: false,
@@ -1748,6 +1764,33 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       return "bg-attention-emphasis/20 text-attention-fg";
     }
     return "bg-bg-tertiary text-text-secondary";
+  }
+
+  function getTranscriptLineCardClass(
+    transcriptLine: AiSessionTranscriptLine,
+  ): string {
+    if (transcriptLine.role === "assistant" && transcriptLine.isLive) {
+      return "rounded-xl border border-success-emphasis/40 bg-success-muted/10 p-4";
+    }
+    if (transcriptLine.role === "assistant" && transcriptLine.isThinking) {
+      return "rounded-xl border border-success-emphasis/30 bg-success-muted/10 p-4";
+    }
+    if (transcriptLine.role === "system") {
+      return "rounded-xl border border-attention-emphasis/25 bg-attention-muted/10 p-4";
+    }
+    return "rounded-xl border border-border-default bg-bg-primary p-4";
+  }
+
+  function getTranscriptLineRoleBadgeClass(
+    transcriptLine: AiSessionTranscriptLine,
+  ): string {
+    if (transcriptLine.role === "assistant") {
+      return "bg-success-muted text-success-fg";
+    }
+    if (transcriptLine.role === "system") {
+      return "bg-attention-emphasis/20 text-attention-fg";
+    }
+    return "bg-accent-muted text-accent-fg";
   }
 
   function dismissSessionDetail(): void {
@@ -2278,18 +2321,14 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                     <div class="space-y-3">
                       <For each={visibleSelectedSessionTranscript()}>
                         {(transcriptLine) => (
-                          <article class="rounded-xl border border-border-default bg-bg-primary p-4">
+                          <article
+                            class={getTranscriptLineCardClass(transcriptLine)}
+                          >
                             <div class="mb-2 flex items-center justify-between gap-3">
                               <span
-                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
-                                  transcriptLine.role === "assistant"
-                                    ? transcriptLine.isThinking
-                                      ? "bg-attention-emphasis/20 text-attention-fg"
-                                      : "bg-success-muted text-success-fg"
-                                    : transcriptLine.role === "system"
-                                      ? "bg-attention-emphasis/20 text-attention-fg"
-                                      : "bg-accent-muted text-accent-fg"
-                                }`}
+                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getTranscriptLineRoleBadgeClass(
+                                  transcriptLine,
+                                )}`}
                               >
                                 {transcriptLine.role}
                               </span>
@@ -2301,7 +2340,13 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                                     )}
                               </span>
                             </div>
-                            <p class="whitespace-pre-wrap break-words text-sm leading-6 text-text-primary">
+                            <p
+                              class={`whitespace-pre-wrap break-words text-sm leading-6 text-text-primary ${
+                                transcriptLine.isThinking
+                                  ? "animate-thinking-blink"
+                                  : ""
+                              }`}
+                            >
                               {transcriptLine.text}
                             </p>
                           </article>
@@ -2405,33 +2450,31 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         onInput={(event) =>
                           setPromptInput(event.currentTarget.value)
                         }
+                        onKeyDown={handlePromptInputKeyDown}
                       />
                     </label>
+
+                    <p class="text-xs leading-5 text-text-tertiary">
+                      Press Ctrl+Enter to queue the prompt. Use Run now only
+                      when you want immediate execution.
+                    </p>
 
                     <div class="grid gap-2">
                       <button
                         type="button"
                         class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={
-                          submitting() ||
-                          modelProfilesLoading() ||
-                          runningDefaultPromptAction() !== null
-                        }
-                        onClick={() => void submitPrompt(true)}
+                        disabled={promptSubmissionDisabled()}
+                        onClick={() => void submitPrompt(false)}
                       >
-                        {submitting() ? "Submitting..." : "Run now"}
+                        {submitting() ? "Submitting..." : "Queue prompt"}
                       </button>
                       <button
                         type="button"
                         class="rounded-md border border-border-default bg-bg-secondary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={
-                          submitting() ||
-                          modelProfilesLoading() ||
-                          runningDefaultPromptAction() !== null
-                        }
-                        onClick={() => void submitPrompt(false)}
+                        disabled={promptSubmissionDisabled()}
+                        onClick={() => void submitPrompt(true)}
                       >
-                        Queue prompt
+                        Run now
                       </button>
                       <button
                         type="button"

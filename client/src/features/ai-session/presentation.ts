@@ -566,12 +566,6 @@ export function mergePendingAiSessionTranscriptLines(params: {
         );
   const shouldRenderOptimisticUser =
     normalizedOptimisticText !== null && persistedOptimisticUserIndex === -1;
-  const assistantAnchorOffset =
-    shouldRenderOptimisticUser || persistedOptimisticUserIndex === -1
-      ? 0
-      : persistedOptimisticUserIndex + 1;
-  const assistantPrefix = transcriptTail.slice(0, assistantAnchorOffset);
-  const assistantSuffix = transcriptTail.slice(assistantAnchorOffset);
   const liveAssistantDisplayText =
     params.liveAssistantText !== null && params.liveAssistantText.trim().length > 0
       ? params.liveAssistantText
@@ -580,23 +574,10 @@ export function mergePendingAiSessionTranscriptLines(params: {
         : (params.liveAssistantStatusText ?? "Thinking...");
   const shouldRenderLiveAssistant =
     liveAssistantDisplayText !== null &&
-    !(
-      (params.liveAssistantPhase === "starting" ||
-        params.liveAssistantPhase === "thinking") &&
-      assistantSuffix.some((transcriptLine) => transcriptLine.role === "assistant")
-    ) &&
-    !(
-      params.liveAssistantPhase !== "starting" &&
-      params.liveAssistantPhase !== "thinking" &&
-      assistantSuffix.some(
-        (transcriptLine) =>
-          transcriptLine.role === "assistant" &&
-          transcriptLine.text === liveAssistantDisplayText,
-      )
-    );
+    !transcriptTail.some((transcriptLine) => transcriptLine.role === "assistant");
 
   return [
-    ...persistedTranscriptLines.slice(0, anchorIndex),
+    ...persistedTranscriptLines,
     ...(shouldRenderOptimisticUser
       ? [
           {
@@ -610,7 +591,6 @@ export function mergePendingAiSessionTranscriptLines(params: {
           } satisfies AiSessionTranscriptLine,
         ]
       : []),
-    ...assistantPrefix,
     ...(shouldRenderLiveAssistant
       ? [
           {
@@ -626,7 +606,6 @@ export function mergePendingAiSessionTranscriptLines(params: {
           } satisfies AiSessionTranscriptLine,
         ]
       : []),
-    ...assistantSuffix,
   ];
 }
 

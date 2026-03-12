@@ -1270,7 +1270,6 @@ export function createSessionManager(
 
       broadcastQueueUpdate();
 
-      // Try to dispatch immediately if capacity available
       processQueue();
 
       return { sessionId, promptId, worktreeId };

@@ -846,6 +846,129 @@ describe("createSessionManager", () => {
       expect(result.worktreeId).toBe(expectedWorktreeId);
     });
 
+    test("dispatches queued submissions automatically when queue capacity is available", async () => {
+      const config: AIConfig = {
+        ...DEFAULT_AI_CONFIG,
+        maxConcurrent: 2,
+      };
+      let executeCount = 0;
+
+      const mockRunner: AgentRunner = {
+        execute() {
+          executeCount++;
+          return {
+            async *events() {
+              yield {
+                type: "completed",
+                success: true,
+              } as AgentEvent;
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "queued only",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      const queue = manager.getPromptQueue("worktree_a" as WorktreeId);
+      expect(executeCount).toBe(1);
+      expect(queue).toHaveLength(0);
+    });
+
+    test("keeps queued submissions waiting while the same worktree is already running", async () => {
+      const config: AIConfig = {
+        ...DEFAULT_AI_CONFIG,
+        maxConcurrent: 2,
+      };
+      let releaseFirstExecution: (() => void) | null = null;
+      let executeCount = 0;
+
+      const mockRunner: AgentRunner = {
+        execute() {
+          executeCount++;
+          return {
+            async *events() {
+              yield {
+                type: "activity",
+                activity: "working",
+              } as AgentEvent;
+              await new Promise<void>((resolve) => {
+                if (executeCount === 1) {
+                  releaseFirstExecution = resolve;
+                } else {
+                  resolve();
+                }
+              });
+              yield {
+                type: "completed",
+                success: true,
+              } as AgentEvent;
+            },
+            async cancel() {},
+            async abort() {},
+          };
+        },
+      };
+
+      const manager = createSessionManager(
+        config,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        mockRunner,
+      );
+
+      manager.submitPrompt({
+        run_immediately: true,
+        message: "running first",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      manager.submitPrompt({
+        run_immediately: false,
+        message: "queued second",
+        project_path: "/tmp/project-a",
+        worktree_id: "worktree_a",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      let queue = manager.getPromptQueue("worktree_a" as WorktreeId);
+      expect(executeCount).toBe(1);
+      expect(queue).toHaveLength(2);
+      expect(queue.filter((item) => item.status === "running")).toHaveLength(1);
+      expect(queue.filter((item) => item.status === "queued")).toHaveLength(1);
+
+      expect(releaseFirstExecution).not.toBeNull();
+      releaseFirstExecution!();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      queue = manager.getPromptQueue("worktree_a" as WorktreeId);
+      expect(executeCount).toBe(2);
+      expect(queue.filter((item) => item.status === "queued")).toHaveLength(0);
+    });
+
     test("serializes same worktree while allowing different worktrees to run concurrently", async () => {
       const config: AIConfig = {
         ...DEFAULT_AI_CONFIG,
@@ -893,19 +1016,19 @@ describe("createSessionManager", () => {
       );
 
       manager.submitPrompt({
-        run_immediately: false,
+        run_immediately: true,
         message: "worktree A first",
         project_path: "/tmp/project-a",
         worktree_id: "worktree_a",
       });
       manager.submitPrompt({
-        run_immediately: false,
+        run_immediately: true,
         message: "worktree A second",
         project_path: "/tmp/project-a",
         worktree_id: "worktree_a",
       });
       manager.submitPrompt({
-        run_immediately: false,
+        run_immediately: true,
         message: "worktree B first",
         project_path: "/tmp/project-b",
         worktree_id: "worktree_b",

@@ -81,12 +81,26 @@
   }
 }
 
+@keyframes thinking-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
 .animate-session-glow {
   animation: session-glow 3s ease-in-out infinite;
 }
 
 .animate-spin-smooth {
   animation: spin-smooth 1.5s linear infinite;
+}
+
+.animate-thinking-blink {
+  animation: thinking-blink 1.1s ease-in-out infinite;
 }
 
 html,
