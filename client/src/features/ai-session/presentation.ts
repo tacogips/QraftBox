@@ -57,6 +57,19 @@ function getLatestPromptQueueItem(
   return latestPromptQueueItem;
 }
 
+function describeStandaloneQueuedSession(
+  latestPromptQueueItem: PromptQueueItem,
+  queuedPromptCount: number,
+): string {
+  if (queuedPromptCount > 1) {
+    return `${queuedPromptCount} queued prompts pending`;
+  }
+
+  return latestPromptQueueItem.status === "running"
+    ? "Queued prompt is running"
+    : "Queued prompt is waiting to run";
+}
+
 export function buildAiSessionListEntries(
   activeSessions: readonly AISessionInfo[],
   promptQueue: readonly PromptQueueItem[],
@@ -194,7 +207,10 @@ export function buildAiSessionListEntries(
     entries.set(qraftAiSessionId, {
       id: `queued:${latestPromptQueueItem.id}`,
       title: latestPromptQueueItem.message.trim() || "Queued prompt",
-      detail: `Queued prompt for ${qraftAiSessionId}`,
+      detail: describeStandaloneQueuedSession(
+        latestPromptQueueItem,
+        queuedPromptItems.length,
+      ),
       status: latestPromptQueueItem.status,
       qraftAiSessionId,
       lifecycleState: "queued",

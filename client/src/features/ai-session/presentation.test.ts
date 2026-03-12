@@ -137,7 +137,7 @@ describe("ai-session presentation helpers", () => {
       {
         id: "queued:prompt-2",
         title: "Queued only session",
-        detail: "Queued prompt for qs-queued-only",
+        detail: "Queued prompt is waiting to run",
         status: "queued",
         qraftAiSessionId: asQraftAiSessionId("qs-queued-only"),
         lifecycleState: "queued",

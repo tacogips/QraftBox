@@ -1,6 +1,7 @@
 import {
   createEffect,
   onCleanup,
+  on,
   createSignal,
   For,
   type JSX,
@@ -121,6 +122,46 @@ function resolveEmptyTreeText(
   }
 
   return "No files are available in the repository tree yet.";
+}
+
+function scheduleAfterNextPaint(callback: () => void): () => void {
+  if (typeof window === "undefined") {
+    const timeoutId = setTimeout(callback, 0);
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }
+
+  let timeoutId: number | null = null;
+  const animationFrameId = window.requestAnimationFrame(() => {
+    timeoutId = window.setTimeout(callback, 0);
+  });
+
+  return () => {
+    window.cancelAnimationFrame(animationFrameId);
+    if (timeoutId !== null) {
+      window.clearTimeout(timeoutId);
+    }
+  };
+}
+
+function createFullFileHighlightKey(
+  viewMode: DiffViewMode,
+  fileContent: FileContent | null,
+): string | null {
+  if (
+    viewMode !== "full-file" ||
+    fileContent === null ||
+    fileContent.isBinary === true
+  ) {
+    return null;
+  }
+
+  return [
+    fileContent.path,
+    fileContent.language,
+    fileContent.content,
+  ].join("\u0000");
 }
 
 function renderViewModeLabel(viewMode: DiffViewMode): string {
@@ -1094,6 +1135,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
           projectPath: props.projectPath,
           qraftAiSessionId: generateQraftAiSessionId(),
           forceNewSession: true,
+          modelProfileId: selectedModelProfileId(),
           context: createFullFilePromptContext({
             fileContent,
             range: activeRange,
@@ -1244,36 +1286,41 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     }
   }
 
-  createEffect(() => {
-    const fileContent = props.fileContent;
-    if (
-      effectiveViewMode() !== "full-file" ||
-      fileContent === null ||
-      fileContent.isBinary === true
-    ) {
-      setHighlightedFullFileLines([]);
-      return;
-    }
+  createEffect(
+    on(
+      () => createFullFileHighlightKey(effectiveViewMode(), props.fileContent),
+      (fullFileHighlightKey) => {
+        const fileContent = props.fileContent;
 
-    let isDisposed = false;
-    setHighlightedFullFileLines(createPlainHighlightedLines(fileContent));
+        if (fullFileHighlightKey === null || fileContent === null) {
+          setHighlightedFullFileLines([]);
+          return;
+        }
 
-    void highlightFullFileContent(
-      {
-        language: fileContent.language,
-        filePath: fileContent.path,
+        let isDisposed = false;
+        setHighlightedFullFileLines(createPlainHighlightedLines(fileContent));
+
+        const cancelScheduledHighlight = scheduleAfterNextPaint(() => {
+          void highlightFullFileContent(
+            {
+              language: fileContent.language,
+              filePath: fileContent.path,
+            },
+            fileContent.content,
+          ).then((nextHighlightedLines) => {
+            if (!isDisposed) {
+              setHighlightedFullFileLines(nextHighlightedLines);
+            }
+          });
+        });
+
+        onCleanup(() => {
+          isDisposed = true;
+          cancelScheduledHighlight();
+        });
       },
-      fileContent.content,
-    ).then((nextHighlightedLines) => {
-      if (!isDisposed) {
-        setHighlightedFullFileLines(nextHighlightedLines);
-      }
-    });
-
-    onCleanup(() => {
-      isDisposed = true;
-    });
-  });
+    ),
+  );
 
   createEffect(() => {
     const diffFile = selectedDiffFile();
@@ -1522,7 +1569,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
               class={`grid min-h-0 flex-1 gap-4 ${isFileTreeCollapsed() ? "xl:grid-cols-[56px_minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}
             >
               <aside
-                class={`flex min-h-0 h-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
+                class={`qraftbox-file-tree-pane flex min-h-0 h-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
               >
                 <div class="border-b border-border-default p-4">
                   <div
@@ -1771,7 +1818,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </Show>
               </aside>
 
-              <main class="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+              <main class="qraftbox-file-preview-pane flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
                 <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
                   <div class="flex min-w-0 flex-col gap-2">
                     <div class="min-w-0">

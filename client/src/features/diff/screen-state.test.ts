@@ -109,7 +109,7 @@ describe("screen-state", () => {
     const diffOverview = createDiffOverviewState(
       [
         {
-          path: "src/alpha.ts",
+          path: "src/zeta.ts",
           status: "modified",
           additions: 1,
           deletions: 0,
@@ -117,7 +117,7 @@ describe("screen-state", () => {
           isBinary: false,
         },
         {
-          path: "src/beta.ts",
+          path: "src/nested/beta.ts",
           status: "added",
           additions: 4,
           deletions: 0,
@@ -125,20 +125,76 @@ describe("screen-state", () => {
           isBinary: false,
         },
         {
-          path: "src/gamma.ts",
+          path: "src/nested/gamma.ts",
           status: "deleted",
           additions: 0,
           deletions: 3,
           chunks: [],
           isBinary: false,
         },
+        {
+          path: "README.md",
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          chunks: [],
+          isBinary: false,
+        },
       ],
-      "src/beta.ts",
+      "src/nested/beta.ts",
     );
 
-    expect(resolveDiffPathNavigation(diffOverview, "src/beta.ts")).toEqual({
-      previousPath: "src/alpha.ts",
-      nextPath: "src/gamma.ts",
+    expect(
+      resolveDiffPathNavigation(diffOverview, "src/nested/beta.ts"),
+    ).toEqual({
+      previousPath: null,
+      nextPath: "src/nested/gamma.ts",
+    });
+
+    expect(
+      resolveDiffPathNavigation(diffOverview, "src/nested/gamma.ts"),
+    ).toEqual({
+      previousPath: "src/nested/beta.ts",
+      nextPath: "src/zeta.ts",
+    });
+
+    expect(resolveDiffPathNavigation(diffOverview, "src/zeta.ts")).toEqual({
+      previousPath: "src/nested/gamma.ts",
+      nextPath: "README.md",
+    });
+
+    expect(resolveDiffPathNavigation(diffOverview, "README.md")).toEqual({
+      previousPath: "src/zeta.ts",
+      nextPath: null,
+    });
+  });
+
+  test("offers the first tree-ordered file when the current selection is missing", () => {
+    const diffOverview = createDiffOverviewState(
+      [
+        {
+          path: "src/zeta.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+        {
+          path: "src/nested/beta.ts",
+          status: "added",
+          additions: 4,
+          deletions: 0,
+          chunks: [],
+          isBinary: false,
+        },
+      ],
+      null,
+    );
+
+    expect(resolveDiffPathNavigation(diffOverview, "missing.ts")).toEqual({
+      previousPath: null,
+      nextPath: "src/nested/beta.ts",
     });
   });
 

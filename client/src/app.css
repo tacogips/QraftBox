@@ -103,6 +103,64 @@
   animation: thinking-blink 1.1s ease-in-out infinite;
 }
 
+.transcript-markdown p {
+  margin: 0.4rem 0;
+}
+
+.transcript-markdown ul,
+.transcript-markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+
+.transcript-markdown li + li {
+  margin-top: 0.15rem;
+}
+
+.transcript-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+  background: var(--color-bg-tertiary);
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.25rem;
+}
+
+.transcript-markdown pre {
+  margin: 0.5rem 0;
+  padding: 0.55rem 0.65rem;
+  overflow-x: auto;
+  border-radius: 0.35rem;
+  background: var(--color-bg-tertiary);
+}
+
+.transcript-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.transcript-markdown blockquote {
+  margin: 0.45rem 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--color-border-emphasis);
+  color: var(--color-text-secondary);
+}
+
+.transcript-markdown a {
+  color: var(--color-accent-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.qraftbox-file-tree-pane,
+.qraftbox-file-preview-pane {
+  contain: layout paint;
+}
+
+.qraftbox-file-preview-pane {
+  isolation: isolate;
+}
+
 html,
 body,
 #root {

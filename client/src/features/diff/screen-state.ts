@@ -7,6 +7,7 @@ import type {
   FileTreeMode,
   FileTreeNode,
 } from "../../../../client-shared/src/contracts/files";
+import { buildDiffFileTree } from "../../../../client-shared/src/contracts/files";
 
 export interface VisibleFileTreeEntry {
   readonly path: string;
@@ -104,7 +105,9 @@ export function resolveDiffPathNavigation(
   diffOverview: DiffOverviewState,
   selectedPath: string | null,
 ): DiffPathNavigation {
-  if (diffOverview.files.length === 0) {
+  const navigablePaths = collectDiffFilePathsInTreeOrder(diffOverview);
+
+  if (navigablePaths.length === 0) {
     return {
       previousPath: null,
       nextPath: null,
@@ -114,24 +117,48 @@ export function resolveDiffPathNavigation(
   if (selectedPath === null) {
     return {
       previousPath: null,
-      nextPath: diffOverview.files[0]?.path ?? null,
+      nextPath: navigablePaths[0] ?? null,
     };
   }
 
-  const selectedIndex = diffOverview.files.findIndex(
-    (diffFile) => diffFile.path === selectedPath,
+  const selectedIndex = navigablePaths.findIndex(
+    (navigablePath) => navigablePath === selectedPath,
   );
   if (selectedIndex === -1) {
     return {
       previousPath: null,
-      nextPath: diffOverview.files[0]?.path ?? null,
+      nextPath: navigablePaths[0] ?? null,
     };
   }
 
   return {
-    previousPath: diffOverview.files[selectedIndex - 1]?.path ?? null,
-    nextPath: diffOverview.files[selectedIndex + 1]?.path ?? null,
+    previousPath: navigablePaths[selectedIndex - 1] ?? null,
+    nextPath: navigablePaths[selectedIndex + 1] ?? null,
   };
+}
+
+function collectDiffFilePathsInTreeOrder(
+  diffOverview: DiffOverviewState,
+): readonly string[] {
+  const diffFileTree = buildDiffFileTree(diffOverview.files);
+  const navigablePaths: string[] = [];
+
+  function visitTreeNode(fileTreeNode: FileTreeNode): void {
+    if (fileTreeNode.isDirectory) {
+      for (const childNode of fileTreeNode.children ?? []) {
+        visitTreeNode(childNode);
+      }
+      return;
+    }
+
+    navigablePaths.push(fileTreeNode.path);
+  }
+
+  for (const childNode of diffFileTree.children ?? []) {
+    visitTreeNode(childNode);
+  }
+
+  return navigablePaths;
 }
 
 export function collectFileContentMetadata(

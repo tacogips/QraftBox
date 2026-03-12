@@ -28,6 +28,7 @@ tasks:
       PORT: '{{.PORT | default "7144"}}'
       HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
+      - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
       - bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
 
   dev:client:
@@ -70,6 +71,7 @@ tasks:
   start:
     desc: Run the application
     cmds:
+      - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
       - bun run start
 
   pm2:start:
@@ -179,6 +181,7 @@ tasks:
       PORT: '{{.PORT | default "7155"}}'
       HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
+      - bun -e "await import('commander')" >/dev/null 2>&1 || bun install
       - |
         for pid in $(ss -tlnp 2>/dev/null | grep ':{{.PORT}} ' | grep -oP 'pid=\K[0-9]+'); do
           kill "$pid" 2>/dev/null && echo "Killed PID $pid"

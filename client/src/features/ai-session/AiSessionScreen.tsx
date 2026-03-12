@@ -42,6 +42,7 @@ import {
   getQueuedPromptSummary,
   mergePendingAiSessionTranscriptLines,
 } from "./presentation";
+import { renderAiSessionMarkdown } from "./markdown";
 import {
   applyAiSessionSearchDraft,
   canApplyAiSessionScopedRequestResult,
@@ -2625,15 +2626,16 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                                 </button>
                               </div>
                             </div>
-                            <p
-                              class={`whitespace-pre-wrap break-words text-sm leading-6 text-text-primary ${
+                            <div
+                              class={`transcript-markdown break-words text-sm leading-6 text-text-primary ${
                                 transcriptLine.isThinking
                                   ? "animate-thinking-blink"
                                   : ""
                               }`}
-                            >
-                              {transcriptLine.text}
-                            </p>
+                              innerHTML={renderAiSessionMarkdown(
+                                transcriptLine.text,
+                              )}
+                            />
                           </article>
                         )}
                       </For>

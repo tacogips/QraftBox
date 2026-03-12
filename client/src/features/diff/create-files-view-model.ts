@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import type { DiffOverviewState } from "../../../../client-shared/src/contracts/diff";
 import type {
   FileTreeMode,
@@ -54,33 +54,33 @@ export { createInitialFilesControllerState } from "./files-controller";
 export function createFilesViewModel(
   options: CreateFilesControllerOptions = {},
 ): FilesViewModel {
-  const [filesState, setFilesState] = createSignal<FilesControllerState>(
+  const [filesState, setFilesState] = createStore<FilesControllerState>(
     createInitialFilesControllerState(),
   );
   const filesController = createFilesController({
     ...options,
     onStateChange(nextState) {
-      setFilesState(nextState);
+      setFilesState(reconcile(nextState));
       options.onStateChange?.(nextState);
     },
   });
-  setFilesState(filesController.getState());
+  setFilesState(reconcile(filesController.getState()));
 
   return {
-    fileTreeMode: (): FileTreeMode => filesState().fileTreeMode,
-    selectedPath: (): string | null => filesState().selectedPath,
+    fileTreeMode: (): FileTreeMode => filesState.fileTreeMode,
+    selectedPath: (): string | null => filesState.selectedPath,
     diffTree: (diffOverview): FileTreeNode | null =>
       createDiffTree(diffOverview),
-    allFilesTree: (): FileTreeNode | null => filesState().allFilesTree,
-    expandedPaths: (): ReadonlySet<string> => filesState().expandedPaths,
-    isAllFilesLoading: (): boolean => filesState().isAllFilesLoading,
-    isFileContentLoading: (): boolean => filesState().isFileContentLoading,
-    showIgnored: (): boolean => filesState().showIgnored,
-    showAllFiles: (): boolean => filesState().showAllFiles,
-    fileContent: () => filesState().fileContent,
-    fileContentError: (): string | null => filesState().fileContentError,
-    allFilesError: (): string | null => filesState().allFilesError,
-    isAllFilesTreeStale: (): boolean => filesState().isAllFilesTreeStale,
+    allFilesTree: (): FileTreeNode | null => filesState.allFilesTree,
+    expandedPaths: (): ReadonlySet<string> => filesState.expandedPaths,
+    isAllFilesLoading: (): boolean => filesState.isAllFilesLoading,
+    isFileContentLoading: (): boolean => filesState.isFileContentLoading,
+    showIgnored: (): boolean => filesState.showIgnored,
+    showAllFiles: (): boolean => filesState.showAllFiles,
+    fileContent: () => filesState.fileContent,
+    fileContentError: (): string | null => filesState.fileContentError,
+    allFilesError: (): string | null => filesState.allFilesError,
+    isAllFilesTreeStale: (): boolean => filesState.isAllFilesTreeStale,
     synchronize: (synchronizationOptions) =>
       filesController.synchronize(synchronizationOptions),
     selectPath: (activeContextId, path) =>
