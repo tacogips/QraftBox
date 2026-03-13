@@ -1,4 +1,9 @@
-import type { ScreenRouteState } from "./navigation";
+import {
+  buildScreenHash,
+  DEFAULT_APP_SCREEN,
+  parseAppHash,
+  type ScreenRouteState,
+} from "./navigation";
 import type { WorkspaceShellState } from "./workspace";
 
 export type WorkspaceRouteSyncPlan =
@@ -21,6 +26,32 @@ export function deriveRouteFromWorkspace(
   const activeWorkspaceTab = workspaceState.tabs.find(
     (workspaceTab) => workspaceTab.id === workspaceState.activeContextId,
   );
+
+  if (activeWorkspaceTab !== undefined && route.screen === "project") {
+    const defaultFilesRoute = parseAppHash(
+      buildScreenHash(activeWorkspaceTab.projectSlug, DEFAULT_APP_SCREEN),
+    );
+
+    return {
+      ...route,
+      ...defaultFilesRoute,
+      projectSlug: activeWorkspaceTab.projectSlug,
+      contextId: route.contextId,
+    };
+  }
+
+  if (activeWorkspaceTab !== undefined && route.projectSlug === null) {
+    const defaultProjectRoute = parseAppHash(
+      buildScreenHash(activeWorkspaceTab.projectSlug, route.screen),
+    );
+
+    return {
+      ...route,
+      ...defaultProjectRoute,
+      projectSlug: activeWorkspaceTab.projectSlug,
+      contextId: route.contextId,
+    };
+  }
 
   return {
     ...route,

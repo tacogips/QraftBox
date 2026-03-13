@@ -20,6 +20,7 @@ export interface FilesViewModel {
   readonly allFilesTree: () => FileTreeNode | null;
   readonly expandedPaths: () => ReadonlySet<string>;
   readonly isAllFilesLoading: () => boolean;
+  readonly isAllFilesTreeComplete: () => boolean;
   readonly isFileContentLoading: () => boolean;
   readonly showIgnored: () => boolean;
   readonly showAllFiles: () => boolean;
@@ -46,6 +47,7 @@ export interface FilesViewModel {
   ): Promise<void>;
   markAllFilesTreeStale(): void;
   refreshAllFilesTree(activeContextId: string | null): Promise<void>;
+  ensureCompleteAllFilesTree(activeContextId: string | null): Promise<void>;
   refreshSelectedFileContent(activeContextId: string | null): Promise<void>;
 }
 
@@ -74,6 +76,7 @@ export function createFilesViewModel(
     allFilesTree: (): FileTreeNode | null => filesState.allFilesTree,
     expandedPaths: (): ReadonlySet<string> => filesState.expandedPaths,
     isAllFilesLoading: (): boolean => filesState.isAllFilesLoading,
+    isAllFilesTreeComplete: (): boolean => filesState.isAllFilesTreeComplete,
     isFileContentLoading: (): boolean => filesState.isFileContentLoading,
     showIgnored: (): boolean => filesState.showIgnored,
     showAllFiles: (): boolean => filesState.showAllFiles,
@@ -98,6 +101,8 @@ export function createFilesViewModel(
     markAllFilesTreeStale: () => filesController.markAllFilesTreeStale(),
     refreshAllFilesTree: (activeContextId) =>
       filesController.refreshAllFilesTree(activeContextId),
+    ensureCompleteAllFilesTree: (activeContextId) =>
+      filesController.ensureCompleteAllFilesTree(activeContextId),
     refreshSelectedFileContent: (activeContextId) =>
       filesController.refreshSelectedFileContent(activeContextId),
   };

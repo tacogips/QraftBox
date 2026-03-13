@@ -14,11 +14,13 @@ function resolveFilesRouteSelectedPath(params: {
 
 function resolveFilesRouteSelectedLineNumber(params: {
   readonly currentRouteSelectedPath: string | null;
-  readonly filesSelectedPath: string | null;
   readonly currentRouteSelectedLineNumber: number | null;
 }): number | null {
-  return params.currentRouteSelectedPath !== null &&
-    params.currentRouteSelectedPath === params.filesSelectedPath
+  if (params.currentRouteSelectedLineNumber === null) {
+    return null;
+  }
+
+  return params.currentRouteSelectedPath !== null
     ? params.currentRouteSelectedLineNumber
     : null;
 }
@@ -45,6 +47,13 @@ export function resolveUiSynchronizedRouteState(options: {
       selectedViewMode: null,
       fileTreeMode: null,
       selectedLineNumber: null,
+      filesTab: undefined,
+      searchPattern: undefined,
+      searchScope: undefined,
+      searchCaseSensitive: undefined,
+      searchExcludeFileNames: undefined,
+      searchShowIgnored: undefined,
+      searchShowAllFiles: undefined,
     };
   }
 
@@ -57,13 +66,17 @@ export function resolveUiSynchronizedRouteState(options: {
       }),
       selectedLineNumber: resolveFilesRouteSelectedLineNumber({
         currentRouteSelectedPath: currentRoute.selectedPath,
-        filesSelectedPath,
         currentRouteSelectedLineNumber: currentRoute.selectedLineNumber,
       }),
       selectedViewMode: "full-file",
       fileTreeMode: "all",
     };
   }
+
+  const shouldResetGitFilesRouteDefaults =
+    currentRoute.selectedPath === null &&
+    currentRoute.selectedViewMode === "full-file" &&
+    currentRoute.fileTreeMode === "all";
 
   return {
     ...currentRoute,
@@ -73,17 +86,18 @@ export function resolveUiSynchronizedRouteState(options: {
     }),
     selectedLineNumber: resolveFilesRouteSelectedLineNumber({
       currentRouteSelectedPath: currentRoute.selectedPath,
-      filesSelectedPath,
       currentRouteSelectedLineNumber: currentRoute.selectedLineNumber,
     }),
-    selectedViewMode:
-      currentRoute.selectedViewMode !== null &&
-      currentRoute.selectedViewMode !== preferredViewMode
+    selectedViewMode: shouldResetGitFilesRouteDefaults
+      ? preferredViewMode
+      : currentRoute.selectedViewMode !== null &&
+          currentRoute.selectedViewMode !== preferredViewMode
         ? currentRoute.selectedViewMode
         : preferredViewMode,
-    fileTreeMode:
-      currentRoute.fileTreeMode !== null &&
-      currentRoute.fileTreeMode !== fileTreeMode
+    fileTreeMode: shouldResetGitFilesRouteDefaults
+      ? fileTreeMode
+      : currentRoute.fileTreeMode !== null &&
+          currentRoute.fileTreeMode !== fileTreeMode
         ? currentRoute.fileTreeMode
         : fileTreeMode,
   };

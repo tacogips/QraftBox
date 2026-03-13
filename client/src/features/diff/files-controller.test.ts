@@ -180,6 +180,70 @@ describe("createFilesController", () => {
     expect(filesController.getState().isAllFilesTreeStale).toBeFalse();
   });
 
+  test("loads a complete all-files tree on demand for file-name filtering", async () => {
+    const shallowRequests: boolean[] = [];
+    const filesApiClient: FilesApiClient = {
+      fetchAllFilesTree: async (_contextId, shallow) => {
+        shallowRequests.push(shallow);
+        return {
+          tree: {
+            name: "",
+            path: "",
+            isDirectory: true,
+            children: [
+              shallow
+                ? {
+                    name: "src",
+                    path: "src",
+                    isDirectory: true,
+                  }
+                : {
+                    name: "src",
+                    path: "src",
+                    isDirectory: true,
+                    children: [
+                      {
+                        name: "feature.ts",
+                        path: "src/feature.ts",
+                        isDirectory: false,
+                      },
+                    ],
+                  },
+            ],
+          },
+          totalFiles: 1,
+          changedFiles: 0,
+        };
+      },
+      fetchDirectoryChildren: async () => [],
+      fetchFileContent: async (_contextId, filePath) => ({
+        path: filePath,
+        content: filePath,
+        language: "typescript",
+      }),
+    };
+    const filesController = createFilesController({ filesApiClient });
+
+    await filesController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-filter-complete-tree",
+      activeWorkspaceIsGitRepo: true,
+      diffOverview: DIFF_OVERVIEW,
+      preferredViewMode: "side-by-side",
+    });
+    await filesController.setFileTreeMode("ctx-filter-complete-tree", "all");
+    await filesController.ensureCompleteAllFilesTree(
+      "ctx-filter-complete-tree",
+    );
+
+    expect(shallowRequests).toEqual([true, false]);
+    expect(filesController.getState().isAllFilesTreeComplete).toBeTrue();
+    expect(
+      filesController.getState().allFilesTree?.children?.[0]?.children?.[0]
+        ?.path,
+    ).toBe("src/feature.ts");
+  });
+
   test("does not keep diff-only expanded folders when switching to all-files mode", async () => {
     const filesApiClient: FilesApiClient = {
       fetchAllFilesTree: async () => ({

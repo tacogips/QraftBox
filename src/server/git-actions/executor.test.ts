@@ -38,11 +38,7 @@ describe("executeCreatePR", () => {
         }) as unknown as ReturnType<typeof Bun.spawn>;
       }
 
-      if (
-        command[0] === "gh" &&
-        command[1] === "pr" &&
-        command[2] === "view"
-      ) {
+      if (command[0] === "gh" && command[1] === "pr" && command[2] === "view") {
         return createMockSpawnResult({
           stderr: "no pull requests found for branch",
           exitCode: 1,
@@ -55,7 +51,9 @@ describe("executeCreatePR", () => {
     const gitActionResult = await executeCreatePR("/tmp/qraftbox-test", "main");
 
     expect(gitActionResult.success).toBe(false);
-    expect(gitActionResult.output).toContain("Pull request created successfully");
+    expect(gitActionResult.output).toContain(
+      "Pull request created successfully",
+    );
     expect(gitActionResult.error).toBe(
       "Create PR command completed but no pull request exists for the current branch",
     );
@@ -69,11 +67,7 @@ describe("executeCreatePR", () => {
         }) as unknown as ReturnType<typeof Bun.spawn>;
       }
 
-      if (
-        command[0] === "gh" &&
-        command[1] === "pr" &&
-        command[2] === "view"
-      ) {
+      if (command[0] === "gh" && command[1] === "pr" && command[2] === "view") {
         return createMockSpawnResult({
           stdout: JSON.stringify({
             number: 42,
@@ -91,6 +85,8 @@ describe("executeCreatePR", () => {
 
     expect(gitActionResult.success).toBe(true);
     expect(gitActionResult.error).toBeUndefined();
-    expect(gitActionResult.output).toContain("Pull request created successfully");
+    expect(gitActionResult.output).toContain(
+      "Pull request created successfully",
+    );
   });
 });

@@ -489,7 +489,7 @@ function createSearchRoutesWithMiddleware(): Hono<{
     // SearchRoutes have a different ServerContext interface that includes diffTarget
     const searchContext = {
       projectPath: serverContext.projectPath,
-      diffTarget: { type: "working-tree" as const },
+      diffTarget: { type: "working" as const },
     };
 
     const searchRoutes = createSearchRoutesImpl(searchContext as any);

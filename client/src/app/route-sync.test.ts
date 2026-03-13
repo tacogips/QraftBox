@@ -3,7 +3,7 @@ import type { ScreenRouteState } from "../../../client-shared/src/contracts/navi
 import { resolveUiSynchronizedRouteState } from "./route-sync";
 
 describe("resolveUiSynchronizedRouteState", () => {
-  test("preserves an in-flight route-selected path until the files state catches up", () => {
+  test("preserves an in-flight route-selected path and line until the files state catches up", () => {
     const currentRoute: ScreenRouteState = {
       projectSlug: "repo",
       screen: "files",
@@ -22,10 +22,7 @@ describe("resolveUiSynchronizedRouteState", () => {
         fileTreeMode: "diff",
         activeWorkspaceIsGitRepo: true,
       }),
-    ).toEqual({
-      ...currentRoute,
-      selectedLineNumber: null,
-    });
+    ).toEqual(currentRoute);
   });
 
   test("uses the files selection once the route and files state match", () => {
@@ -56,7 +53,7 @@ describe("resolveUiSynchronizedRouteState", () => {
     });
   });
 
-  test("clears the line anchor when the displayed files selection disappears", () => {
+  test("preserves the line anchor while the route-selected file is still pending", () => {
     const currentRoute: ScreenRouteState = {
       projectSlug: "repo",
       screen: "files",
@@ -75,6 +72,28 @@ describe("resolveUiSynchronizedRouteState", () => {
         fileTreeMode: "diff",
         activeWorkspaceIsGitRepo: true,
       }).selectedLineNumber,
+    ).toBe(14);
+  });
+
+  test("drops the line anchor when no route-selected file remains", () => {
+    const currentRoute: ScreenRouteState = {
+      projectSlug: "repo",
+      screen: "files",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: "side-by-side",
+      fileTreeMode: "diff",
+      selectedLineNumber: 14,
+    };
+
+    expect(
+      resolveUiSynchronizedRouteState({
+        currentRoute,
+        filesSelectedPath: "client/src/features/ai-session/state.ts",
+        preferredViewMode: "side-by-side",
+        fileTreeMode: "diff",
+        activeWorkspaceIsGitRepo: true,
+      }).selectedLineNumber,
     ).toBeNull();
   });
 
@@ -87,6 +106,13 @@ describe("resolveUiSynchronizedRouteState", () => {
       selectedViewMode: "side-by-side",
       fileTreeMode: "diff",
       selectedLineNumber: 14,
+      filesTab: "search",
+      searchPattern: "TODO",
+      searchScope: "all",
+      searchCaseSensitive: true,
+      searchExcludeFileNames: "Cargo.lock",
+      searchShowIgnored: true,
+      searchShowAllFiles: true,
     };
 
     expect(
@@ -103,6 +129,13 @@ describe("resolveUiSynchronizedRouteState", () => {
       selectedViewMode: null,
       fileTreeMode: null,
       selectedLineNumber: null,
+      filesTab: undefined,
+      searchPattern: undefined,
+      searchScope: undefined,
+      searchCaseSensitive: undefined,
+      searchExcludeFileNames: undefined,
+      searchShowIgnored: undefined,
+      searchShowAllFiles: undefined,
     });
   });
 
@@ -129,6 +162,32 @@ describe("resolveUiSynchronizedRouteState", () => {
       ...currentRoute,
       selectedViewMode: "full-file",
       fileTreeMode: "all",
+    });
+  });
+
+  test("restores git defaults for a pathless full-file all-files route", () => {
+    const currentRoute: ScreenRouteState = {
+      projectSlug: "repo",
+      screen: "files",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: "full-file",
+      fileTreeMode: "all",
+      selectedLineNumber: null,
+    };
+
+    expect(
+      resolveUiSynchronizedRouteState({
+        currentRoute,
+        filesSelectedPath: null,
+        preferredViewMode: "side-by-side",
+        fileTreeMode: "diff",
+        activeWorkspaceIsGitRepo: true,
+      }),
+    ).toEqual({
+      ...currentRoute,
+      selectedViewMode: "side-by-side",
+      fileTreeMode: "diff",
     });
   });
 });

@@ -29,6 +29,10 @@ export function getPullRequestActionLabel(prNumber: number | null): string {
   return prNumber === null ? "Create PR" : "Update PR";
 }
 
+export function getPullRequestButtonLabel(prNumber: number | null): string {
+  return prNumber === null ? "Create PR" : `PR #${prNumber.toString()}`;
+}
+
 export function canRunPullRequestAction(
   options: PullRequestActionAvailabilityOptions,
 ): boolean {

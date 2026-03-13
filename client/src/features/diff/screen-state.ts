@@ -24,6 +24,21 @@ export interface DiffPathNavigation {
   readonly nextPath: string | null;
 }
 
+function normalizeFileTreeFilter(filterText: string): string {
+  return filterText.trim().toLocaleLowerCase();
+}
+
+function matchesFileTreeFilter(
+  fileTreeNode: FileTreeNode,
+  normalizedFilterText: string,
+): boolean {
+  if (normalizedFilterText.length === 0) {
+    return true;
+  }
+
+  return fileTreeNode.name.toLocaleLowerCase().includes(normalizedFilterText);
+}
+
 export function resolveViewModeForFileTreeModeChange(options: {
   readonly previousFileTreeMode: FileTreeMode;
   readonly nextFileTreeMode: FileTreeMode;
@@ -99,6 +114,166 @@ export function collectVisibleFileTreeEntries(
   }
 
   return visibleEntries;
+}
+
+export function filterFileTreeByName(
+  fileTree: FileTreeNode | null,
+  filterText: string,
+): FileTreeNode | null {
+  if (fileTree === null) {
+    return null;
+  }
+
+  const normalizedFilterText = normalizeFileTreeFilter(filterText);
+  if (normalizedFilterText.length === 0) {
+    return fileTree;
+  }
+
+  function visitTreeNode(
+    fileTreeNode: FileTreeNode,
+    ancestorMatched: boolean,
+  ): FileTreeNode | null {
+    if (fileTreeNode.isDirectory) {
+      if (
+        fileTreeNode.children === undefined ||
+        fileTreeNode.children.length === 0
+      ) {
+        return null;
+      }
+
+      const directoryNameMatches = matchesFileTreeFilter(
+        fileTreeNode,
+        normalizedFilterText,
+      );
+      const filteredChildren = fileTreeNode.children
+        .map((childNode) =>
+          visitTreeNode(childNode, ancestorMatched || directoryNameMatches),
+        )
+        .filter((childNode): childNode is FileTreeNode => childNode !== null);
+
+      if (filteredChildren.length === 0) {
+        return null;
+      }
+
+      return {
+        ...fileTreeNode,
+        children: filteredChildren,
+      };
+    }
+
+    if (
+      !ancestorMatched &&
+      !matchesFileTreeFilter(fileTreeNode, normalizedFilterText)
+    ) {
+      return null;
+    }
+
+    return fileTreeNode;
+  }
+
+  return visitTreeNode(fileTree, false);
+}
+
+export function collectFileTreeFilterMatchPaths(
+  fileTree: FileTreeNode | null,
+  filterText: string,
+): ReadonlySet<string> {
+  if (fileTree === null) {
+    return new Set<string>();
+  }
+
+  const normalizedFilterText = normalizeFileTreeFilter(filterText);
+  if (normalizedFilterText.length === 0) {
+    return new Set<string>();
+  }
+
+  function collectPaths(
+    fileTreeNode: FileTreeNode,
+    ancestorPaths: readonly string[],
+  ): ReadonlySet<string> {
+    const matchPaths = new Set<string>();
+
+    if (fileTreeNode.isDirectory && fileTreeNode.children !== undefined) {
+      if (matchesFileTreeFilter(fileTreeNode, normalizedFilterText)) {
+        for (const ancestorPath of ancestorPaths) {
+          matchPaths.add(ancestorPath);
+        }
+        matchPaths.add(fileTreeNode.path);
+      }
+
+      for (const childNode of fileTreeNode.children) {
+        const childMatchPaths = collectPaths(childNode, [
+          ...ancestorPaths,
+          fileTreeNode.path,
+        ]);
+        for (const childMatchPath of childMatchPaths) {
+          matchPaths.add(childMatchPath);
+        }
+      }
+
+      return matchPaths;
+    }
+
+    if (matchesFileTreeFilter(fileTreeNode, normalizedFilterText)) {
+      for (const ancestorPath of ancestorPaths) {
+        matchPaths.add(ancestorPath);
+      }
+      matchPaths.add(fileTreeNode.path);
+    }
+
+    return matchPaths;
+  }
+
+  return collectPaths(fileTree, []);
+}
+
+export function countFileTreeFilterMatches(
+  fileTree: FileTreeNode | null,
+  filterText: string,
+): number {
+  if (fileTree === null) {
+    return 0;
+  }
+
+  const normalizedFilterText = normalizeFileTreeFilter(filterText);
+  if (normalizedFilterText.length === 0) {
+    return 0;
+  }
+
+  let matchCount = 0;
+
+  function visitTreeNode(fileTreeNode: FileTreeNode): void {
+    if (matchesFileTreeFilter(fileTreeNode, normalizedFilterText)) {
+      matchCount += 1;
+    }
+
+    for (const childNode of fileTreeNode.children ?? []) {
+      visitTreeNode(childNode);
+    }
+  }
+
+  visitTreeNode(fileTree);
+  return matchCount;
+}
+
+export function hasUnloadedDirectories(fileTree: FileTreeNode | null): boolean {
+  if (fileTree === null) {
+    return false;
+  }
+
+  function visitTreeNode(fileTreeNode: FileTreeNode): boolean {
+    if (!fileTreeNode.isDirectory) {
+      return false;
+    }
+
+    if (fileTreeNode.children === undefined) {
+      return true;
+    }
+
+    return fileTreeNode.children.some((childNode) => visitTreeNode(childNode));
+  }
+
+  return visitTreeNode(fileTree);
 }
 
 export function resolveDiffPathNavigation(

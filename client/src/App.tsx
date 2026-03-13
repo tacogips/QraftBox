@@ -33,6 +33,7 @@ import { shouldShowGitActionsBar } from "./features/diff/git-actions-state";
 import { createDiffRealtimeController } from "./features/diff/realtime";
 import { refreshFilesScreenFromRealtime } from "./features/diff/realtime-refresh";
 import { createGitStateRefreshController } from "./features/diff/git-state-refresh";
+import { resolveFilesSearchState } from "./features/diff/search-state";
 import {
   resolveViewModeForFileTreeModeChange,
   resolveViewModeForPathSelection,
@@ -43,6 +44,7 @@ import { SystemInfoScreen } from "./features/system-info/SystemInfoScreen";
 import { TerminalScreen } from "./features/terminal/TerminalScreen";
 import { WorkspaceShell } from "./features/workspace/WorkspaceShell";
 import { createWorkspaceViewModel } from "./features/workspace/create-workspace-view-model";
+import { WorktreeCreateButton } from "./features/worktree/WorktreeCreateButton";
 import type { QraftAiSessionId } from "../../src/types/ai";
 
 export interface AppProps {
@@ -88,7 +90,16 @@ function sameRoute(left: ScreenRouteState, right: ScreenRouteState): boolean {
     left.selectedPath === right.selectedPath &&
     left.selectedViewMode === right.selectedViewMode &&
     left.fileTreeMode === right.fileTreeMode &&
-    left.selectedLineNumber === right.selectedLineNumber
+    left.selectedLineNumber === right.selectedLineNumber &&
+    (left.filesTab ?? null) === (right.filesTab ?? null) &&
+    (left.searchPattern ?? "") === (right.searchPattern ?? "") &&
+    (left.searchScope ?? null) === (right.searchScope ?? null) &&
+    (left.searchCaseSensitive ?? false) ===
+      (right.searchCaseSensitive ?? false) &&
+    (left.searchExcludeFileNames ?? "") ===
+      (right.searchExcludeFileNames ?? "") &&
+    (left.searchShowIgnored ?? false) === (right.searchShowIgnored ?? false) &&
+    (left.searchShowAllFiles ?? false) === (right.searchShowAllFiles ?? false)
   );
 }
 
@@ -98,6 +109,13 @@ function buildRouteHash(route: ScreenRouteState): string {
     selectedViewMode: route.selectedViewMode,
     fileTreeMode: route.fileTreeMode,
     selectedLineNumber: route.selectedLineNumber,
+    filesTab: route.filesTab,
+    searchPattern: route.searchPattern,
+    searchScope: route.searchScope,
+    searchCaseSensitive: route.searchCaseSensitive,
+    searchExcludeFileNames: route.searchExcludeFileNames,
+    searchShowIgnored: route.searchShowIgnored,
+    searchShowAllFiles: route.searchShowAllFiles,
   });
 }
 
@@ -302,6 +320,18 @@ export function App(props: AppProps): JSX.Element {
     getActiveWorkspaceTab(workspaceViewModel.workspaceState());
   const activeWorkspaceIsGitRepo = () =>
     activeWorkspaceTab()?.isGitRepo ?? false;
+  const effectiveFileTreeMode = () =>
+    activeRoute.fileTreeMode ?? filesViewModel.fileTreeMode();
+  const effectiveFilesSearchState = () =>
+    resolveFilesSearchState({
+      route: activeRoute,
+      defaults: {
+        fileTreeMode: effectiveFileTreeMode(),
+        showIgnored: filesViewModel.showIgnored(),
+        showAllFiles: filesViewModel.showAllFiles(),
+        activeWorkspaceIsGitRepo: activeWorkspaceIsGitRepo(),
+      },
+    });
   const primaryNavigationItems = () =>
     screenNavigationItems().filter((navigationItem) =>
       PRIMARY_NAVIGATION_SCREENS.includes(navigationItem.screen),
@@ -393,7 +423,11 @@ export function App(props: AppProps): JSX.Element {
 
   createEffect(
     on(
-      [() => activeRoute.screen, () => activeRoute.fileTreeMode],
+      [
+        () => activeRoute.screen,
+        () => activeRoute.fileTreeMode,
+        activeContextId,
+      ],
       ([activeScreen, routeFileTreeMode]) => {
         if (activeScreen !== "files") {
           return;
@@ -414,7 +448,11 @@ export function App(props: AppProps): JSX.Element {
 
   createEffect(
     on(
-      [() => activeRoute.screen, () => activeRoute.selectedPath],
+      [
+        () => activeRoute.screen,
+        () => activeRoute.selectedPath,
+        activeContextId,
+      ],
       ([activeScreen, routeSelectedPath]) => {
         if (activeScreen !== "files") {
           return;
@@ -498,6 +536,7 @@ export function App(props: AppProps): JSX.Element {
     if (activeRoute.screen === "project") {
       return (
         <WorkspaceShell
+          apiBaseUrl={props.bootstrapState.apiBaseUrl}
           workspaceState={workspaceViewModel.workspaceState()}
           availableRecentProjects={workspaceViewModel.availableRecentProjects()}
           isLoading={workspaceViewModel.isLoading()}
@@ -505,7 +544,12 @@ export function App(props: AppProps): JSX.Element {
           isPickingDirectory={workspaceViewModel.isPickingDirectory()}
           errorMessage={workspaceViewModel.errorMessage()}
           newProjectPath={workspaceViewModel.newProjectPath()}
+          activeProjectContextId={activeContextId()}
+          activeProjectName={activeProjectLabel()}
+          activeProjectPath={activeProjectPath()}
+          activeProjectIsGitRepo={activeWorkspaceIsGitRepo()}
           onNewProjectPathInput={workspaceViewModel.setNewProjectPath}
+          onOpenProjectPath={workspaceViewModel.openProjectPath}
           onPickProjectDirectory={workspaceViewModel.pickProjectDirectory}
           onOpenProjectByPath={workspaceViewModel.openProjectByPath}
           onOpenRecentProject={workspaceViewModel.openRecentProject}
@@ -525,7 +569,7 @@ export function App(props: AppProps): JSX.Element {
           selectedPath={filesViewModel.selectedPath()}
           supportsDiff={activeWorkspaceIsGitRepo()}
           preferredViewMode={diffViewModel.preferredViewMode()}
-          fileTreeMode={filesViewModel.fileTreeMode()}
+          fileTreeMode={effectiveFileTreeMode()}
           diffTree={filesViewModel.diffTree(diffViewModel.diffOverview())}
           allFilesTree={filesViewModel.allFilesTree()}
           expandedPaths={filesViewModel.expandedPaths()}
@@ -540,6 +584,15 @@ export function App(props: AppProps): JSX.Element {
           fileContentError={filesViewModel.fileContentError()}
           fileContent={filesViewModel.fileContent()}
           projectPath={activeProjectPath()}
+          filesTab={effectiveFilesSearchState().filesTab}
+          searchPattern={effectiveFilesSearchState().searchPattern}
+          searchScope={effectiveFilesSearchState().searchScope}
+          searchCaseSensitive={effectiveFilesSearchState().searchCaseSensitive}
+          searchExcludeFileNames={
+            effectiveFilesSearchState().searchExcludeFileNames
+          }
+          searchShowIgnored={effectiveFilesSearchState().searchShowIgnored}
+          searchShowAllFiles={effectiveFilesSearchState().searchShowAllFiles}
           onChangeViewMode={(mode) => {
             setActiveRoute({
               ...activeRoute,
@@ -586,6 +639,172 @@ export function App(props: AppProps): JSX.Element {
             }
             await filesViewModel.setFileTreeMode(activeContextId(), mode);
           }}
+          onChangeFilesTab={(tab) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: tab,
+              searchScope: searchState.searchScope,
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+          }}
+          onChangeSearchPattern={(pattern) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: pattern,
+              searchScope: searchState.searchScope,
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+          }}
+          onChangeSearchScope={(scope) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: searchState.searchPattern,
+              searchScope: scope,
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored:
+                scope === "all" ? searchState.searchShowIgnored : false,
+              searchShowAllFiles:
+                scope === "all" ? searchState.searchShowAllFiles : false,
+            });
+          }}
+          onToggleSearchCaseSensitive={(value) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: searchState.searchPattern,
+              searchScope: searchState.searchScope,
+              searchCaseSensitive: value,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+          }}
+          onChangeSearchExcludeFileNames={(value) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: searchState.searchPattern,
+              searchScope: searchState.searchScope,
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: value,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+          }}
+          onToggleSearchShowIgnored={(value) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: searchState.searchPattern,
+              searchScope: "all",
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: value,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+          }}
+          onToggleSearchShowAllFiles={(value) => {
+            const searchState = effectiveFilesSearchState();
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: searchState.searchPattern,
+              searchScope: "all",
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: value,
+            });
+          }}
+          onSubmitSearch={(params) => {
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "search",
+              searchPattern: params.pattern,
+              searchScope: params.scope,
+              searchCaseSensitive: params.caseSensitive,
+              searchExcludeFileNames: params.excludeFileNames,
+              searchShowIgnored:
+                params.scope === "all" ? params.showIgnored : false,
+              searchShowAllFiles:
+                params.scope === "all" ? params.showAllFiles : false,
+            });
+          }}
+          onOpenSearchResult={(path, lineNumber) => {
+            const searchState = effectiveFilesSearchState();
+            const pathIsChangedFile = diffViewModel
+              .diffOverview()
+              .files.some((diffFile) => diffFile.path === path);
+            const nextViewMode = resolveViewModeForPathSelection({
+              selectedPath: path,
+              diffOverview: diffViewModel.diffOverview(),
+              preferredViewMode: diffViewModel.preferredViewMode(),
+            });
+
+            setActiveRoute({
+              ...activeRoute,
+              filesTab: "file",
+              selectedPath: path,
+              selectedLineNumber: lineNumber,
+              selectedViewMode: nextViewMode,
+              fileTreeMode: pathIsChangedFile
+                ? activeRoute.fileTreeMode
+                : "all",
+              searchPattern: searchState.searchPattern,
+              searchScope: searchState.searchScope,
+              searchCaseSensitive: searchState.searchCaseSensitive,
+              searchExcludeFileNames: searchState.searchExcludeFileNames,
+              searchShowIgnored: searchState.searchShowIgnored,
+              searchShowAllFiles: searchState.searchShowAllFiles,
+            });
+
+            if (pathIsChangedFile) {
+              diffViewModel.selectPath(activeContextId(), path);
+            }
+
+            if (nextViewMode !== diffViewModel.preferredViewMode()) {
+              diffViewModel.setPreferredViewMode(nextViewMode);
+            }
+
+            if (!pathIsChangedFile) {
+              void filesViewModel.setFileTreeMode(activeContextId(), "all");
+              if (
+                searchState.searchScope === "all" &&
+                searchState.searchShowIgnored !== filesViewModel.showIgnored()
+              ) {
+                void filesViewModel.setShowIgnored(
+                  activeContextId(),
+                  searchState.searchShowIgnored,
+                );
+              }
+              if (
+                searchState.searchScope === "all" &&
+                searchState.searchShowAllFiles !== filesViewModel.showAllFiles()
+              ) {
+                void filesViewModel.setShowAllFiles(
+                  activeContextId(),
+                  searchState.searchShowAllFiles,
+                );
+              }
+            }
+
+            void filesViewModel.selectPath(activeContextId(), path);
+          }}
           onToggleDirectory={async (path: string) => {
             await filesViewModel.toggleDirectory(activeContextId(), path);
           }}
@@ -613,6 +832,13 @@ export function App(props: AppProps): JSX.Element {
             });
             void filesViewModel.refreshAllFilesTree(activeContextId());
             void filesViewModel.refreshSelectedFileContent(activeContextId());
+          }}
+          onEnsureCompleteAllFilesTree={() => {
+            if (activeContextId() === null) {
+              return;
+            }
+
+            void filesViewModel.ensureCompleteAllFilesTree(activeContextId());
           }}
           selectedLineNumber={activeRoute.selectedLineNumber}
           onSelectLine={(lineNumber) => {
@@ -813,6 +1039,14 @@ export function App(props: AppProps): JSX.Element {
                 contextId={activeContextId()}
                 isGitRepo={activeWorkspaceIsGitRepo()}
                 onSuccess={refreshActiveFilesWorkspace}
+              />
+              <WorktreeCreateButton
+                apiBaseUrl={props.bootstrapState.apiBaseUrl}
+                contextId={activeContextId()}
+                projectPath={activeProjectPath()}
+                isGitRepo={activeWorkspaceIsGitRepo()}
+                triggerLabel="Create Worktree"
+                onOpenWorktreeProject={workspaceViewModel.openProjectPath}
               />
             </Show>
           </div>

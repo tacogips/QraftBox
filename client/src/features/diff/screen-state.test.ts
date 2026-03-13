@@ -2,9 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { createDiffOverviewState } from "../../../../client-shared/src/contracts/diff";
 import type { FileTreeNode } from "../../../../client-shared/src/contracts/files";
 import {
+  collectFileTreeFilterMatchPaths,
   collectFileContentMetadata,
   collectVisibleFileTreeEntries,
+  countFileTreeFilterMatches,
+  filterFileTreeByName,
   formatDiffStatusLabel,
+  hasUnloadedDirectories,
   resolveDiffPathNavigation,
   resolveViewModeForFileTreeModeChange,
   resolveViewModeForPathSelection,
@@ -103,6 +107,98 @@ describe("screen-state", () => {
         isExpandable: false,
       },
     ]);
+  });
+
+  test("filters the file tree by file name and keeps matching descendants", () => {
+    expect(filterFileTreeByName(SAMPLE_FILE_TREE, "feature")).toEqual({
+      name: "",
+      path: "",
+      isDirectory: true,
+      children: [
+        {
+          name: "src",
+          path: "src",
+          isDirectory: true,
+          children: [
+            {
+              name: "nested",
+              path: "src/nested",
+              isDirectory: true,
+              children: [
+                {
+                  name: "feature.ts",
+                  path: "src/nested/feature.ts",
+                  isDirectory: false,
+                  status: "added",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("treats a matching directory as a match for its descendants", () => {
+    expect(filterFileTreeByName(SAMPLE_FILE_TREE, "src")).toEqual({
+      name: "",
+      path: "",
+      isDirectory: true,
+      children: [
+        {
+          name: "src",
+          path: "src",
+          isDirectory: true,
+          children: [
+            {
+              name: "main.ts",
+              path: "src/main.ts",
+              isDirectory: false,
+              status: "modified",
+            },
+            {
+              name: "nested",
+              path: "src/nested",
+              isDirectory: true,
+              children: [
+                {
+                  name: "feature.ts",
+                  path: "src/nested/feature.ts",
+                  isDirectory: false,
+                  status: "added",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("collects ancestor paths for matching filter results", () => {
+    expect(
+      Array.from(
+        collectFileTreeFilterMatchPaths(SAMPLE_FILE_TREE, "feature"),
+      ).sort(),
+    ).toEqual(["", "src", "src/nested", "src/nested/feature.ts"]);
+  });
+
+  test("counts matching entries and detects unloaded directories", () => {
+    expect(countFileTreeFilterMatches(SAMPLE_FILE_TREE, "ts")).toBe(2);
+    expect(
+      hasUnloadedDirectories({
+        name: "",
+        path: "",
+        isDirectory: true,
+        children: [
+          {
+            name: "src",
+            path: "src",
+            isDirectory: true,
+          },
+        ],
+      }),
+    ).toBeTrue();
   });
 
   test("resolves previous and next diff paths around the current selection", () => {

@@ -29,6 +29,7 @@ export interface WorkspaceViewModel {
   refresh(): Promise<void>;
   activateTab(tabId: string): Promise<void>;
   closeTab(tabId: string): Promise<void>;
+  openProjectPath(path: string): Promise<void>;
   pickProjectDirectory(): Promise<void>;
   openProjectByPath(): Promise<void>;
   openRecentProject(path: string): Promise<void>;
@@ -132,6 +133,32 @@ export function createWorkspaceViewModel(
     }
   }
 
+  async function performOpenProjectPath(path: string): Promise<void> {
+    const trimmedProjectPath = path.trim();
+    if (trimmedProjectPath.length === 0) {
+      return;
+    }
+
+    const openResult = await workspaceApi.openWorkspaceTab(trimmedProjectPath);
+    applyWorkspaceSnapshot(openResult.workspaceSnapshot);
+  }
+
+  async function openProjectPath(path: string): Promise<void> {
+    setIsMutating(true);
+    setErrorMessage(null);
+
+    try {
+      await performOpenProjectPath(path);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to open project",
+      );
+      throw error;
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
   async function initialize(): Promise<void> {
     setIsLoading(true);
     setErrorMessage(null);
@@ -208,6 +235,7 @@ export function createWorkspaceViewModel(
         const workspaceSnapshot = await workspaceApi.closeWorkspaceTab(tabId);
         applyWorkspaceSnapshot(workspaceSnapshot);
       }, "Failed to close workspace tab"),
+    openProjectPath,
     pickProjectDirectory: async () => {
       if (isPickingDirectory()) {
         return;
@@ -229,8 +257,7 @@ export function createWorkspaceViewModel(
         }
 
         setNewProjectPath(selectedPath);
-        const openResult = await workspaceApi.openWorkspaceTab(selectedPath);
-        applyWorkspaceSnapshot(openResult.workspaceSnapshot);
+        await performOpenProjectPath(selectedPath);
         setNewProjectPath("");
       } catch (error) {
         setErrorMessage(
@@ -242,23 +269,21 @@ export function createWorkspaceViewModel(
         setIsPickingDirectory(false);
       }
     },
-    openProjectByPath: async () =>
-      runMutation(async () => {
-        const trimmedProjectPath = newProjectPath().trim();
-        if (trimmedProjectPath.length === 0) {
-          return;
-        }
-
-        const openResult =
-          await workspaceApi.openWorkspaceTab(trimmedProjectPath);
-        applyWorkspaceSnapshot(openResult.workspaceSnapshot);
+    openProjectByPath: async () => {
+      try {
+        await openProjectPath(newProjectPath());
         setNewProjectPath("");
-      }, "Failed to open project"),
-    openRecentProject: async (path: string) =>
-      runMutation(async () => {
-        const openResult = await workspaceApi.openWorkspaceTab(path);
-        applyWorkspaceSnapshot(openResult.workspaceSnapshot);
-      }, "Failed to open recent project"),
+      } catch {
+        // Error state is already reflected via the workspace view model.
+      }
+    },
+    openRecentProject: async (path: string) => {
+      try {
+        await openProjectPath(path);
+      } catch {
+        // Error state is already reflected via the workspace view model.
+      }
+    },
     removeRecentProject: async (path: string) =>
       runMutation(async () => {
         await workspaceApi.removeRecentProject(path);

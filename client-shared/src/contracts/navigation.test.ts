@@ -172,6 +172,45 @@ describe("navigation contracts", () => {
     );
   });
 
+  test("parses regex search query state from files hashes", () => {
+    expect(
+      parseAppHash(
+        "#/repo-slug/files?tab=search&search=TODO&search_scope=all&search_case=true&search_exclude=Cargo.lock%2Cpnpm-lock.yaml&search_ignored=false&search_all=true",
+      ),
+    ).toEqual({
+      projectSlug: "repo-slug",
+      screen: "files",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: "side-by-side",
+      fileTreeMode: "diff",
+      selectedLineNumber: null,
+      filesTab: "search",
+      searchPattern: "TODO",
+      searchScope: "all",
+      searchCaseSensitive: true,
+      searchExcludeFileNames: "Cargo.lock,pnpm-lock.yaml",
+      searchShowIgnored: false,
+      searchShowAllFiles: true,
+    });
+  });
+
+  test("builds files hashes with regex search state", () => {
+    expect(
+      buildScreenHash("repo-slug", "files", {
+        filesTab: "search",
+        searchPattern: "TODO",
+        searchScope: "all",
+        searchCaseSensitive: true,
+        searchExcludeFileNames: "Cargo.lock,pnpm-lock.yaml",
+        searchShowIgnored: false,
+        searchShowAllFiles: true,
+      }),
+    ).toBe(
+      "#/repo-slug/files?tab=search&search=TODO&search_scope=all&search_case=true&search_exclude=Cargo.lock%2Cpnpm-lock.yaml&search_ignored=false&search_all=true",
+    );
+  });
+
   test("omits default files-route state from built hashes", () => {
     expect(
       buildScreenHash("repo-slug", "files", {

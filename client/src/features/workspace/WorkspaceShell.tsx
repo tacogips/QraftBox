@@ -6,8 +6,10 @@ import type {
 import { SummaryCard } from "../../components/SummaryCard";
 import { ToolbarIconButton } from "../../components/ToolbarIconButton";
 import { createWorkspaceShellPresentation } from "./presentation";
+import { WorktreeCreateButton } from "../worktree/WorktreeCreateButton";
 
 export interface WorkspaceShellProps {
+  readonly apiBaseUrl: string;
   readonly workspaceState: WorkspaceShellState;
   readonly availableRecentProjects: readonly RecentProjectSummary[];
   readonly isLoading: boolean;
@@ -15,7 +17,12 @@ export interface WorkspaceShellProps {
   readonly isPickingDirectory: boolean;
   readonly errorMessage: string | null;
   readonly newProjectPath: string;
+  readonly activeProjectContextId: string | null;
+  readonly activeProjectName: string;
+  readonly activeProjectPath: string;
+  readonly activeProjectIsGitRepo: boolean;
   onNewProjectPathInput(path: string): void;
+  onOpenProjectPath(path: string): Promise<void>;
   onPickProjectDirectory(): Promise<void>;
   onOpenProjectByPath(): Promise<void>;
   onOpenRecentProject(path: string): Promise<void>;
@@ -129,6 +136,35 @@ export function WorkspaceShell(props: WorkspaceShellProps): JSX.Element {
               </div>
 
               <div class="min-h-0 flex-1 overflow-auto p-4">
+                <Show when={props.activeProjectContextId !== null}>
+                  <section class="mb-6 rounded-2xl border border-border-default bg-bg-secondary p-4">
+                    <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                      <div class="min-w-0">
+                        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-text-tertiary">
+                          Active project
+                        </p>
+                        <h3 class="mt-2 text-lg font-semibold text-text-primary">
+                          {props.activeProjectName}
+                        </h3>
+                        <p class="mt-1 font-mono text-xs text-text-secondary">
+                          {props.activeProjectPath}
+                        </p>
+                      </div>
+                      <Show when={props.activeProjectIsGitRepo}>
+                        <WorktreeCreateButton
+                          apiBaseUrl={props.apiBaseUrl}
+                          contextId={props.activeProjectContextId}
+                          projectPath={props.activeProjectPath}
+                          isGitRepo={props.activeProjectIsGitRepo}
+                          triggerLabel="Create Worktree Project"
+                          triggerClass="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+                          onOpenWorktreeProject={props.onOpenProjectPath}
+                        />
+                      </Show>
+                    </div>
+                  </section>
+                </Show>
+
                 <section class="space-y-3">
                   <div class="flex items-center justify-between gap-3">
                     <div>

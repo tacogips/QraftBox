@@ -3,6 +3,7 @@ import {
   canRunPullRequestAction,
   extractPullRequestUrl,
   getPullRequestActionLabel,
+  getPullRequestButtonLabel,
   resolvePullRequestBaseBranch,
   resolveSelectedPullRequestBaseBranch,
   shouldShowCancelGitActionButton,
@@ -34,6 +35,8 @@ describe("diff git actions state helpers", () => {
   test("derives the correct pull request action label and availability", () => {
     expect(getPullRequestActionLabel(null)).toBe("Create PR");
     expect(getPullRequestActionLabel(42)).toBe("Update PR");
+    expect(getPullRequestButtonLabel(null)).toBe("Create PR");
+    expect(getPullRequestButtonLabel(42)).toBe("PR #42");
     expect(
       canRunPullRequestAction({
         operating: false,

@@ -22,6 +22,7 @@ export interface FilesControllerState {
   readonly fileTreeMode: FileTreeMode;
   readonly selectedPath: string | null;
   readonly allFilesTree: FileTreeNode | null;
+  readonly isAllFilesTreeComplete: boolean;
   readonly expandedPaths: ReadonlySet<string>;
   readonly isAllFilesLoading: boolean;
   readonly isFileContentLoading: boolean;
@@ -68,6 +69,7 @@ export interface FilesController {
   ): Promise<void>;
   markAllFilesTreeStale(): void;
   refreshAllFilesTree(activeContextId: string | null): Promise<void>;
+  ensureCompleteAllFilesTree(activeContextId: string | null): Promise<void>;
   refreshSelectedFileContent(activeContextId: string | null): Promise<void>;
 }
 
@@ -84,6 +86,7 @@ export function createInitialFilesControllerState(): FilesControllerState {
     fileTreeMode: "diff",
     selectedPath: null,
     allFilesTree: null,
+    isAllFilesTreeComplete: false,
     expandedPaths: new Set<string>(),
     isAllFilesLoading: false,
     isFileContentLoading: false,
@@ -273,16 +276,22 @@ export function createFilesController(
 
   async function ensureAllFilesTree(
     activeContextId: string,
-    forceReload = false,
+    options: {
+      readonly forceReload?: boolean | undefined;
+      readonly shallow?: boolean | undefined;
+    } = {},
   ): Promise<void> {
+    const shouldForceReload = options.forceReload ?? false;
+    const shouldLoadShallowTree = options.shallow ?? true;
     const isBackgroundRefresh =
       state.allFilesTree !== null &&
       loadedAllFilesContextId === activeContextId;
-    if (!forceReload) {
+    if (!shouldForceReload) {
       const canReuseLoadedTree =
         state.allFilesTree !== null &&
         loadedAllFilesContextId === activeContextId &&
-        state.isAllFilesTreeStale === false;
+        state.isAllFilesTreeStale === false &&
+        (shouldLoadShallowTree || state.isAllFilesTreeComplete);
       if (canReuseLoadedTree) {
         return;
       }
@@ -293,10 +302,14 @@ export function createFilesController(
     const requestedShowIgnored = state.showIgnored;
     const requestedShowAllFiles = state.showAllFiles;
 
-    if (!isBackgroundRefresh || state.allFilesError !== null) {
+    if (
+      !isBackgroundRefresh ||
+      state.allFilesError !== null ||
+      !shouldLoadShallowTree
+    ) {
       updateState((currentState) => ({
         ...currentState,
-        isAllFilesLoading: !isBackgroundRefresh,
+        isAllFilesLoading: true,
         allFilesError: null,
       }));
     }
@@ -304,7 +317,7 @@ export function createFilesController(
     try {
       const allFilesResponse = await filesApiClient.fetchAllFilesTree(
         activeContextId,
-        true,
+        shouldLoadShallowTree,
         {
           showIgnored: requestedShowIgnored,
           showAllFiles: requestedShowAllFiles,
@@ -323,6 +336,7 @@ export function createFilesController(
       updateState((currentState) => ({
         ...currentState,
         allFilesTree: allFilesResponse.tree,
+        isAllFilesTreeComplete: !shouldLoadShallowTree,
         isAllFilesLoading: false,
         isAllFilesTreeStale: false,
         allFilesError: null,
@@ -457,6 +471,7 @@ export function createFilesController(
         updateState((currentState) => ({
           ...currentState,
           allFilesTree: null,
+          isAllFilesTreeComplete: false,
           allFilesError: null,
           fileContent: null,
           fileContentError: null,
@@ -614,6 +629,7 @@ export function createFilesController(
                   directoryPath,
                   childNodes,
                 ),
+          isAllFilesTreeComplete: false,
         }));
       } catch (error) {
         if (
@@ -655,10 +671,13 @@ export function createFilesController(
         ...currentState,
         showIgnored: value,
         allFilesTree: null,
+        isAllFilesTreeComplete: false,
         isAllFilesTreeStale: true,
       }));
       if (state.fileTreeMode === "all" && activeContextId !== null) {
-        await ensureAllFilesTree(activeContextId, true);
+        await ensureAllFilesTree(activeContextId, {
+          forceReload: true,
+        });
       }
     },
     async setShowAllFiles(activeContextId, value): Promise<void> {
@@ -666,10 +685,13 @@ export function createFilesController(
         ...currentState,
         showAllFiles: value,
         allFilesTree: null,
+        isAllFilesTreeComplete: false,
         isAllFilesTreeStale: true,
       }));
       if (state.fileTreeMode === "all" && activeContextId !== null) {
-        await ensureAllFilesTree(activeContextId, true);
+        await ensureAllFilesTree(activeContextId, {
+          forceReload: true,
+        });
       }
     },
     markAllFilesTreeStale(): void {
@@ -683,7 +705,18 @@ export function createFilesController(
         return;
       }
 
-      await ensureAllFilesTree(activeContextId, true);
+      await ensureAllFilesTree(activeContextId, {
+        forceReload: true,
+      });
+    },
+    async ensureCompleteAllFilesTree(activeContextId): Promise<void> {
+      if (activeContextId === null || state.fileTreeMode !== "all") {
+        return;
+      }
+
+      await ensureAllFilesTree(activeContextId, {
+        shallow: false,
+      });
     },
     async refreshSelectedFileContent(activeContextId): Promise<void> {
       if (

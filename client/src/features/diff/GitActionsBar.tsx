@@ -18,6 +18,7 @@ import {
   canRunPullRequestAction,
   extractPullRequestUrl,
   getPullRequestActionLabel,
+  getPullRequestButtonLabel,
   resolvePullRequestBaseBranch,
   resolveSelectedPullRequestBaseBranch,
   shouldShowCancelGitActionButton,
@@ -134,6 +135,7 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
   const prNumber = () => prStatus()?.pr?.number ?? null;
   const pullRequestLink = () => prStatus()?.pr?.url ?? null;
   const primaryPrActionLabel = () => getPullRequestActionLabel(prNumber());
+  const primaryPrButtonLabel = () => getPullRequestButtonLabel(prNumber());
   const canRunPrimaryPrAction = () =>
     canRunPullRequestAction({
       operating: operating(),
@@ -583,20 +585,11 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
           disabled={!canRunPrimaryPrAction()}
           onClick={openPullRequestDialog}
         >
-          <span class="flex flex-col items-center leading-tight">
-            <span>
-              {getActionButtonLabel({
-                activePhase: operationPhase(),
-                buttonPhase: "creating-pr",
-                idleLabel: primaryPrActionLabel(),
-              })}
-            </span>
-            <Show when={prNumber() !== null}>
-              <span class="mt-1 text-[10px] font-medium opacity-90">
-                PR #{prNumber()}
-              </span>
-            </Show>
-          </span>
+          {getActionButtonLabel({
+            activePhase: operationPhase(),
+            buttonPhase: "creating-pr",
+            idleLabel: primaryPrButtonLabel(),
+          })}
         </button>
         <Show when={canCancelCurrentAction() || cancellingOperation()}>
           <button
