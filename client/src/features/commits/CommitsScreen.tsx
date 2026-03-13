@@ -3,6 +3,7 @@ import {
   createSignal,
   For,
   type JSX,
+  onCleanup,
   Show,
   untrack,
 } from "solid-js";
@@ -30,6 +31,10 @@ export interface CommitsScreenProps {
 }
 
 const COMMIT_PAGE_SIZE = 50;
+
+function detectPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth <= 768;
+}
 
 function renderSearchIcon(): JSX.Element {
   return (
@@ -136,6 +141,9 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
   >([]);
   const [isFileDiffLoading, setIsFileDiffLoading] = createSignal(false);
   const [fileDiffError, setFileDiffError] = createSignal<string | null>(null);
+  const [isPhoneViewport, setIsPhoneViewport] = createSignal(
+    detectPhoneViewport(),
+  );
 
   let activeContextId: string | null = null;
   let diffCache = new Map<string, readonly DiffFile[]>();
@@ -152,6 +160,31 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
       commits().find((commitEntry) => commitEntry.hash === selectedHash) ?? null
     );
   };
+  const detailModalClass = () =>
+    isPhoneViewport()
+      ? "flex h-[min(92vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40"
+      : "flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40";
+  const detailHeaderClass = () =>
+    isPhoneViewport()
+      ? "flex flex-col gap-3 border-b border-border-default px-3 py-3"
+      : "flex items-center justify-between gap-3 border-b border-border-default px-4 py-3";
+  const commitHeadlineClass = () =>
+    isPhoneViewport()
+      ? "mt-2 break-words text-base font-semibold text-text-primary"
+      : "mt-2 truncate text-lg font-semibold text-text-primary";
+
+  createEffect(() => {
+    const syncPhoneViewport = () => {
+      setIsPhoneViewport(detectPhoneViewport());
+    };
+
+    syncPhoneViewport();
+    window.addEventListener("resize", syncPhoneViewport);
+
+    onCleanup(() => {
+      window.removeEventListener("resize", syncPhoneViewport);
+    });
+  });
 
   async function loadCommits(append: boolean): Promise<void> {
     const contextId = props.contextId;
@@ -535,10 +568,10 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
           </div>
 
           <Show when={expandedHash() !== null}>
-            <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div class="flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
-                <div class="flex min-w-0 flex-1 flex-col border-r border-border-default">
-                  <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
+            <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4">
+              <div class={detailModalClass()}>
+                <div class="flex min-w-0 flex-1 flex-col border-b border-border-default lg:border-b-0 lg:border-r">
+                  <div class={detailHeaderClass()}>
                     <div class="min-w-0">
                       <div class="flex flex-wrap items-center gap-2">
                         <span class="rounded bg-bg-tertiary px-2 py-1 font-mono text-[10px] font-bold text-accent-fg">
@@ -554,7 +587,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                           </span>
                         </Show>
                       </div>
-                      <h3 class="mt-2 truncate text-lg font-semibold text-text-primary">
+                      <h3 class={commitHeadlineClass()}>
                         {getCommitHeadline(selectedCommit()?.message ?? "")}
                       </h3>
                       <p class="mt-1 text-xs text-text-secondary">
@@ -573,7 +606,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                     </button>
                   </div>
 
-                  <div class="min-h-0 flex-1 overflow-auto px-4 py-4">
+                  <div class="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-4">
                     <Show when={isDetailLoading()}>
                       <p class="text-sm text-text-secondary">
                         Loading selected commit...
@@ -603,7 +636,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                             {commitDetail()!.message}
                           </p>
                           <Show when={commitDetail()!.body.trim().length > 0}>
-                            <pre class="mt-4 whitespace-pre-wrap rounded-lg border border-border-default bg-bg-secondary p-3 text-xs leading-6 text-text-secondary">
+                            <pre class="mt-4 whitespace-pre-wrap rounded-lg border border-border-default bg-bg-secondary p-3 text-xs leading-5 text-text-secondary sm:leading-6">
                               {commitDetail()!.body}
                             </pre>
                           </Show>
@@ -693,7 +726,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                                             </div>
                                           }
                                         >
-                                          <pre class="overflow-x-auto rounded-lg border border-border-default bg-[#020817] px-4 py-4 font-mono text-[12px] leading-6 text-slate-100">
+                                          <pre class="overflow-x-auto rounded-lg border border-border-default bg-[#020817] px-3 py-4 font-mono text-[11px] leading-5 text-slate-100 sm:px-4 sm:text-[12px] sm:leading-6">
                                             {fileDiffPreviewLines().join("\n")}
                                           </pre>
                                         </Show>
@@ -710,7 +743,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                   </div>
                 </div>
 
-                <aside class="flex w-full max-w-sm flex-col bg-bg-primary">
+                <aside class="flex w-full flex-col bg-bg-primary lg:max-w-sm">
                   <div class="border-b border-border-default px-4 py-3">
                     <p class="text-xs font-semibold uppercase tracking-[0.2em] text-text-tertiary">
                       Profile

@@ -569,8 +569,8 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
         <Show
           when={isConnected() || isConnecting()}
           fallback={
-            <div class="flex min-h-[420px] flex-1 items-start justify-start rounded-none border border-border-default bg-bg-secondary p-6 text-left">
-              <div class="flex flex-col items-start gap-4">
+            <div class="flex min-h-[420px] flex-1 items-center justify-center rounded-none border border-border-default bg-bg-secondary p-6 text-center">
+              <div class="flex max-w-md flex-col items-center gap-4">
                 <ToolbarIconButton
                   label="Connect terminal"
                   onClick={() => void connect()}
@@ -590,6 +590,10 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
                     />
                   </svg>
                 </ToolbarIconButton>
+                <p class="text-sm text-text-secondary">
+                  Start an interactive shell for this worktree without leaving
+                  QraftBox.
+                </p>
                 <Show when={connectionError() !== null}>
                   <p class="max-w-md text-sm text-danger-fg">
                     {connectionError()}
@@ -610,7 +614,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
                 ref={(element) => {
                   terminalControlsRef = element;
                 }}
-                class="flex flex-wrap items-center justify-between gap-2"
+                class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="rounded-full border border-border-default bg-bg-primary px-3 py-1.5 text-xs font-medium text-text-secondary">
@@ -793,7 +797,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
                 ref={(element) => {
                   terminalSessionMetaRef = element;
                 }}
-                class="text-xs text-text-tertiary"
+                class="break-all text-xs text-text-tertiary"
               >
                 session: {activeSessionId()}
               </p>

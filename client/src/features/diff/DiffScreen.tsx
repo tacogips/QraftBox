@@ -193,6 +193,10 @@ function scheduleAfterNextPaint(callback: () => void): () => void {
   };
 }
 
+function detectPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth <= 768;
+}
+
 function createFullFileHighlightKey(
   viewMode: DiffViewMode,
   fileContent: FileContent | null,
@@ -1065,6 +1069,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     apiBaseUrl: props.apiBaseUrl,
   });
   const [isFileTreeCollapsed, setIsFileTreeCollapsed] = createSignal(false);
+  const [isPhoneViewport, setIsPhoneViewport] = createSignal(
+    detectPhoneViewport(),
+  );
   const [highlightedFullFileLines, setHighlightedFullFileLines] = createSignal<
     readonly (readonly HighlightToken[])[]
   >([]);
@@ -1181,6 +1188,48 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     isFileTreeFilterFocused() || fileTreeFilterText().trim().length > 0;
   const fileTreeFilterMatchCount = () =>
     countFileTreeFilterMatches(activeTree(), fileTreeFilterText());
+  const isPhoneFileTreeOpen = () => isPhoneViewport() && !isFileTreeCollapsed();
+  const fileTreeLayoutClass = () => {
+    if (isPhoneViewport()) {
+      return "grid-cols-1";
+    }
+
+    return isFileTreeCollapsed()
+      ? "xl:grid-cols-[56px_minmax(0,1fr)]"
+      : "xl:grid-cols-[280px_minmax(0,1fr)]";
+  };
+  const fileTreePaneClass = () => {
+    const baseClass =
+      "qraftbox-file-tree-pane flex min-h-0 h-full flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary";
+
+    if (isPhoneViewport()) {
+      return `${baseClass} fixed inset-y-0 left-0 z-40 w-screen max-w-full transition-transform duration-300 ease-out ${isFileTreeCollapsed() ? "-translate-x-full pointer-events-none shadow-none" : "translate-x-0 shadow-2xl"}`;
+    }
+
+    return isFileTreeCollapsed() ? `${baseClass} items-center` : baseClass;
+  };
+  const shouldRenderFileTreeContents = () =>
+    isPhoneViewport() || !isFileTreeCollapsed();
+  const previewCodeTextClass = () =>
+    isPhoneViewport() ? "text-[12px] leading-5" : "text-[13px] leading-6";
+  const sideBySideColumnsClass = () =>
+    isPhoneViewport()
+      ? "grid-cols-[64px_minmax(0,1fr)_64px_minmax(0,1fr)]"
+      : "grid-cols-[84px_minmax(0,1fr)_84px_minmax(0,1fr)]";
+  const inlineColumnsClass = () =>
+    isPhoneViewport()
+      ? "grid-cols-[56px_56px_32px_minmax(0,1fr)]"
+      : "grid-cols-[72px_72px_44px_minmax(0,1fr)]";
+  const fullFileColumnsClass = () =>
+    isPhoneViewport()
+      ? "grid-cols-[64px_minmax(0,1fr)]"
+      : "grid-cols-[84px_minmax(0,1fr)]";
+  const deletedCurrentStateIndentClass = () =>
+    isPhoneViewport() ? "pl-[64px]" : "pl-[84px]";
+  const sideBySideContainerClass = () =>
+    isPhoneViewport() ? "min-w-[640px]" : "min-w-[840px]";
+  const compactViewerContainerClass = () =>
+    isPhoneViewport() ? "min-w-[560px]" : "min-w-[720px]";
   const diffPathNavigation = () =>
     resolveDiffPathNavigation(props.diffOverview, props.selectedPath);
   const fileContentMetadata = () =>
@@ -1391,6 +1440,21 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     });
     resetFullFileInlineUi();
     props.onSelectLine(lineNumber);
+  }
+
+  function setFileTreeVisibility(nextVisible: boolean): void {
+    setIsFileTreeCollapsed(!nextVisible);
+  }
+
+  function toggleFileTreeVisibility(): void {
+    setIsFileTreeCollapsed((currentValue) => !currentValue);
+  }
+
+  function handleFileTreePathSelect(path: string): void {
+    props.onSelectPath(path);
+    if (isPhoneViewport()) {
+      setFileTreeVisibility(false);
+    }
   }
 
   function selectInlineCommentRange(params: {
@@ -2030,6 +2094,32 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   });
 
   createEffect(() => {
+    const syncPhoneViewport = () => {
+      setIsPhoneViewport(detectPhoneViewport());
+    };
+
+    syncPhoneViewport();
+    window.addEventListener("resize", syncPhoneViewport);
+
+    onCleanup(() => {
+      window.removeEventListener("resize", syncPhoneViewport);
+    });
+  });
+
+  createEffect(
+    on(isPhoneViewport, (nextIsPhoneViewport, previousIsPhoneViewport) => {
+      if (nextIsPhoneViewport && previousIsPhoneViewport !== true) {
+        setFileTreeVisibility(false);
+        return;
+      }
+
+      if (!nextIsPhoneViewport && previousIsPhoneViewport === true) {
+        setFileTreeVisibility(true);
+      }
+    }),
+  );
+
+  createEffect(() => {
     effectiveViewMode();
     props.fileContent?.path;
     props.filesTab;
@@ -2348,15 +2438,23 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
         </Match>
         <Match when={true}>
           <div class="flex h-full min-h-0 flex-1 flex-col gap-4">
-            <div
-              class={`grid min-h-0 flex-1 gap-4 ${isFileTreeCollapsed() ? "xl:grid-cols-[56px_minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}
-            >
-              <aside
-                class={`qraftbox-file-tree-pane flex min-h-0 h-full flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
-              >
+            <div class={`grid min-h-0 flex-1 gap-4 ${fileTreeLayoutClass()}`}>
+              <Show when={isPhoneFileTreeOpen()}>
+                <button
+                  type="button"
+                  class="fixed inset-0 z-30 bg-black/45 backdrop-blur-sm"
+                  aria-label="Close file tree"
+                  onClick={() => setFileTreeVisibility(false)}
+                />
+              </Show>
+              <aside class={fileTreePaneClass()}>
                 <div class="border-b border-border-default p-4">
                   <div
-                    class={`flex items-center gap-2 ${isFileTreeCollapsed() ? "justify-center" : "justify-between"}`}
+                    class={`flex items-center gap-2 ${
+                      !isPhoneViewport() && isFileTreeCollapsed()
+                        ? "justify-center"
+                        : "justify-between"
+                    }`}
                   >
                     <button
                       type="button"
@@ -2371,15 +2469,13 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           ? "Expand file tree"
                           : "Collapse file tree"
                       }
-                      onClick={() =>
-                        setIsFileTreeCollapsed((currentValue) => !currentValue)
-                      }
+                      onClick={() => toggleFileTreeVisibility()}
                     >
                       {isFileTreeCollapsed()
                         ? renderNavigationIcon("next")
                         : renderNavigationIcon("previous")}
                     </button>
-                    <Show when={!isFileTreeCollapsed()}>
+                    <Show when={shouldRenderFileTreeContents()}>
                       <div class="flex min-w-0 flex-1 items-center justify-end gap-2">
                         <Show when={shouldShowDiffTreeControls()}>
                           <div
@@ -2550,7 +2646,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </div>
 
                 <Show
-                  when={!isFileTreeCollapsed()}
+                  when={shouldRenderFileTreeContents()}
                   fallback={
                     <div class="flex min-h-0 flex-1 items-start justify-center p-2">
                       <button
@@ -2558,7 +2654,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                         class="rounded-md border border-border-default bg-bg-primary p-2 text-text-primary transition hover:bg-bg-hover"
                         aria-label="Expand file tree"
                         title="Expand file tree"
-                        onClick={() => setIsFileTreeCollapsed(false)}
+                        onClick={() => setFileTreeVisibility(true)}
                       >
                         {renderTreeModeIcon(props.fileTreeMode)}
                       </button>
@@ -2617,7 +2713,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                         ? props.onToggleDirectory(
                                             treeEntry.path,
                                           )
-                                        : props.onSelectPath(treeEntry.path)
+                                        : handleFileTreePathSelect(
+                                            treeEntry.path,
+                                          )
                                     }
                                   >
                                     {renderFileTreeLeadingIcon(treeEntry)}
@@ -2646,29 +2744,55 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
               </aside>
 
               <div class="flex min-h-0 min-w-0 flex-col gap-4">
-                <div class="inline-flex w-fit rounded-lg border border-border-default bg-bg-secondary p-0.5">
-                  <button
-                    type="button"
-                    class={
-                      props.filesTab === "file"
-                        ? "rounded-md bg-accent-emphasis px-2.5 py-1.5 text-xs font-medium text-text-on-emphasis"
-                        : "rounded-md px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                    }
-                    onClick={() => props.onChangeFilesTab("file")}
-                  >
-                    File
-                  </button>
-                  <button
-                    type="button"
-                    class={
-                      props.filesTab === "search"
-                        ? "rounded-md bg-accent-emphasis px-2.5 py-1.5 text-xs font-medium text-text-on-emphasis"
-                        : "rounded-md px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
-                    }
-                    onClick={() => props.onChangeFilesTab("search")}
-                  >
-                    Regex Search
-                  </button>
+                <div class="flex flex-wrap items-center gap-2">
+                  <Show when={isPhoneViewport()}>
+                    <button
+                      type="button"
+                      class={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                        isPhoneFileTreeOpen()
+                          ? "border-accent-emphasis/50 bg-accent-muted/15 text-accent-fg"
+                          : "border-border-default bg-bg-secondary text-text-primary hover:bg-bg-hover"
+                      }`}
+                      aria-label={
+                        isPhoneFileTreeOpen()
+                          ? "Hide file tree"
+                          : "Show file tree"
+                      }
+                      title={
+                        isPhoneFileTreeOpen()
+                          ? "Hide file tree"
+                          : "Show file tree"
+                      }
+                      onClick={() => toggleFileTreeVisibility()}
+                    >
+                      {renderTreeModeIcon(props.fileTreeMode)}
+                      <span>Files</span>
+                    </button>
+                  </Show>
+                  <div class="inline-flex w-fit rounded-lg border border-border-default bg-bg-secondary p-0.5">
+                    <button
+                      type="button"
+                      class={
+                        props.filesTab === "file"
+                          ? "rounded-md bg-accent-emphasis px-2.5 py-1.5 text-xs font-medium text-text-on-emphasis"
+                          : "rounded-md px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                      }
+                      onClick={() => props.onChangeFilesTab("file")}
+                    >
+                      File
+                    </button>
+                    <button
+                      type="button"
+                      class={
+                        props.filesTab === "search"
+                          ? "rounded-md bg-accent-emphasis px-2.5 py-1.5 text-xs font-medium text-text-on-emphasis"
+                          : "rounded-md px-2.5 py-1.5 text-xs text-text-secondary transition hover:bg-bg-hover hover:text-text-primary"
+                      }
+                      onClick={() => props.onChangeFilesTab("search")}
+                    >
+                      Regex Search
+                    </button>
+                  </div>
                 </div>
 
                 <Show when={props.filesTab === "search"}>
@@ -3114,7 +3238,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           </Match>
 
                           <Match when={effectiveViewMode() === "side-by-side"}>
-                            <div class="min-w-[840px]">
+                            <div class={sideBySideContainerClass()}>
                               <div>
                                 <For each={sideBySideRows()}>
                                   {(row) => (
@@ -3129,7 +3253,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       }
                                     >
                                       <>
-                                        <div class="group/diffline grid grid-cols-[84px_minmax(0,1fr)_84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6">
+                                        <div
+                                          class={`group/diffline grid ${sideBySideColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()}`}
+                                        >
                                           <div
                                             data-qraftbox-line={
                                               row.kind === "change"
@@ -3374,7 +3500,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           </Match>
 
                           <Match when={effectiveViewMode() === "inline"}>
-                            <div class="min-w-[720px]">
+                            <div class={compactViewerContainerClass()}>
                               <For each={selectedDiffFile()?.chunks ?? []}>
                                 {(diffChunk) => (
                                   <div>
@@ -3390,7 +3516,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                                 diffChange,
                                               ) ?? undefined
                                             }
-                                            class={`group/inlinerow grid grid-cols-[72px_72px_44px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getInlineRowAccentClass(
+                                            class={`group/inlinerow grid ${inlineColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()} ${getInlineRowAccentClass(
                                               diffChange.type,
                                             )} ${getSelectedLineClass(
                                               resolveDisplayedLineNumber(
@@ -3554,7 +3680,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           </Match>
 
                           <Match when={effectiveViewMode() === "current-state"}>
-                            <div class="min-w-[720px]">
+                            <div class={compactViewerContainerClass()}>
                               <Show
                                 when={currentStateLines().length > 0}
                                 fallback={
@@ -3573,7 +3699,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                           undefined
                                         }
                                       >
-                                        <div class="border-b border-border-default/40 pl-[84px] font-mono">
+                                        <div
+                                          class={`border-b border-border-default/40 ${deletedCurrentStateIndentClass()} font-mono ${previewCodeTextClass()}`}
+                                        >
                                           <div class="px-4 py-0">
                                             <div class="relative">
                                               <div class="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-danger-emphasis/80" />
@@ -3598,7 +3726,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                             data-qraftbox-line={
                                               currentStateLine.lineNumber
                                             }
-                                            class={`group/currentline grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getCurrentStateLineClass(
+                                            class={`group/currentline grid ${fullFileColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()} ${getCurrentStateLineClass(
                                               currentStateLine.changeType,
                                             )} ${getSelectedLineClass(
                                               currentStateLine.lineNumber ===
@@ -3712,7 +3840,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                           </Match>
 
                           <Match when={effectiveViewMode() === "full-file"}>
-                            <div class="min-w-[720px]">
+                            <div class={compactViewerContainerClass()}>
                               <Show
                                 when={
                                   !isRenderableBinaryFile(props.fileContent)
@@ -3744,7 +3872,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                         <>
                                           <div
                                             data-qraftbox-line={lineIndex() + 1}
-                                            class={`group/line grid grid-cols-[84px_minmax(0,1fr)] border-b border-border-default/60 font-mono text-[13px] leading-6 ${getSelectedLineClass(
+                                            class={`group/line grid ${fullFileColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()} ${getSelectedLineClass(
                                               lineIndex() + 1 ===
                                                 props.selectedLineNumber &&
                                                 !isInlineCommentHighlightedLine(

@@ -121,6 +121,10 @@ const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
   },
 };
 
+function detectPhoneViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth <= 768;
+}
+
 function loadInjectedSystemPromptVisibility(): boolean {
   try {
     return (
@@ -532,6 +536,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     string | null
   >(null);
   const [errorMessage, setErrorMessage] = createSignal<string | null>(null);
+  const [isPhoneViewport, setIsPhoneViewport] = createSignal(
+    detectPhoneViewport(),
+  );
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activeScopeKey: string | null = null;
@@ -552,6 +559,22 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       selectedQraftAiSessionId: selectedQraftAiSessionId(),
       isDraftComposerOpen: isDraftComposerOpen(),
     });
+  const composerHeaderClass = () =>
+    isPhoneViewport()
+      ? "flex flex-col gap-3 border-b border-border-default px-3 py-3"
+      : "flex items-start justify-between gap-3 border-b border-border-default px-4 py-3";
+  const composerToolbarClass = () =>
+    isPhoneViewport()
+      ? "flex flex-wrap items-center justify-start gap-2"
+      : "flex items-center gap-2";
+  const composerFooterActionClass = () =>
+    isPhoneViewport()
+      ? "mt-2 grid gap-2"
+      : "mt-2 flex flex-wrap items-center gap-2";
+  const sessionTargetTextClass = () =>
+    isPhoneViewport()
+      ? "mt-1 break-words text-sm text-text-primary"
+      : "mt-1 truncate text-sm text-text-primary";
   const sessionEntries = () =>
     buildAiSessionListEntries(
       activeSessions(),
@@ -648,6 +671,19 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         hiddenSessionIdSet.has(sessionEntry.qraftAiSessionId) === false,
     );
   };
+
+  createEffect(() => {
+    const syncPhoneViewport = () => {
+      setIsPhoneViewport(detectPhoneViewport());
+    };
+
+    syncPhoneViewport();
+    window.addEventListener("resize", syncPhoneViewport);
+
+    onCleanup(() => {
+      window.removeEventListener("resize", syncPhoneViewport);
+    });
+  });
 
   createEffect(() => {
     try {
@@ -2564,10 +2600,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           </div>
 
           <Show when={showComposer()}>
-            <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div class="flex h-full max-h-[920px] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+            <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4">
+              <div class="flex h-[min(92vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
+                  <div class={composerHeaderClass()}>
                     <div class="min-w-0">
                       <Show when={selectedSessionEntry() !== null}>
                         <div class="flex flex-wrap items-center gap-2">
@@ -2610,7 +2646,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         {selectedComposerDescription()}
                       </p>
                     </div>
-                    <div class="flex items-center gap-2">
+                    <div class={composerToolbarClass()}>
                       <button
                         type="button"
                         class={`rounded-md border p-2 transition ${
@@ -2720,7 +2756,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       transcriptScrollContainer = element;
                     }}
                     onScroll={handleTranscriptScroll}
-                    class="min-h-0 flex-1 overflow-auto px-4 py-4"
+                    class="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-4"
                   >
                     <Show when={selectedSessionDetail() !== null}>
                       <div class="mb-4 grid gap-3 sm:grid-cols-3">
@@ -2857,7 +2893,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       </p>
                     </Show>
                   </div>
-                  <div class="border-t border-border-default bg-bg-primary px-4 py-3">
+                  <div class="border-t border-border-default bg-bg-primary px-3 py-3 sm:px-4">
                     <div class="flex items-center gap-2">
                       <ToolbarIconButton
                         label={
@@ -2886,7 +2922,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
                               Session
                             </p>
-                            <p class="mt-1 truncate text-sm text-text-primary">
+                            <p class={sessionTargetTextClass()}>
                               {describeAiSessionTarget({
                                 selectedQraftAiSessionId:
                                   selectedQraftAiSessionId(),
@@ -2953,7 +2989,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             }
                             onKeyDown={handlePromptInputKeyDown}
                           />
-                          <div class="mt-2 flex flex-wrap items-center gap-2">
+                          <div class={composerFooterActionClass()}>
                             <button
                               type="button"
                               class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
@@ -2985,7 +3021,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             <Show when={selectedSessionCancelAction() !== null}>
                               <button
                                 type="button"
-                                class="ml-auto rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20"
+                                class={`rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20 ${
+                                  isPhoneViewport() ? "" : "ml-auto"
+                                }`}
                                 onClick={() => {
                                   const cancelAction =
                                     selectedSessionCancelAction();
