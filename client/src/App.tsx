@@ -29,6 +29,7 @@ import { createDiffViewModel } from "./features/diff/create-diff-view-model";
 import { DiffScreen } from "./features/diff/DiffScreen";
 import { BranchSwitcher } from "./features/diff/BranchSwitcher";
 import { GitActionsBar } from "./features/diff/GitActionsBar";
+import { FilesTabToggle } from "./features/diff/FilesTabToggle";
 import { shouldShowGitActionsBar } from "./features/diff/git-actions-state";
 import { createDiffRealtimeController } from "./features/diff/realtime";
 import { refreshFilesScreenFromRealtime } from "./features/diff/realtime-refresh";
@@ -342,6 +343,8 @@ export function App(props: AppProps): JSX.Element {
     );
   const activeProjectLabel = () => activeWorkspaceTab()?.name ?? "No Project";
   const activeProjectPath = () => activeWorkspaceTab()?.path ?? "";
+  const shouldRenderFilesTabToggle = () =>
+    activeRoute.screen === "files" && activeContextId() !== null;
   const shouldRenderHeaderGitActions = () =>
     activeRoute.screen === "files" &&
     shouldShowGitActionsBar({
@@ -1048,6 +1051,48 @@ export function App(props: AppProps): JSX.Element {
                 isGitRepo={activeWorkspaceIsGitRepo()}
                 triggerLabel="Create Worktree"
                 onOpenWorktreeProject={workspaceViewModel.openProjectPath}
+              />
+              <Show when={shouldRenderFilesTabToggle()}>
+                <div class="ml-2">
+                  <FilesTabToggle
+                    filesTab={effectiveFilesSearchState().filesTab}
+                    onChangeFilesTab={(filesTab) => {
+                      const searchState = effectiveFilesSearchState();
+                      setActiveRoute({
+                        ...activeRoute,
+                        filesTab,
+                        searchScope: searchState.searchScope,
+                        searchCaseSensitive: searchState.searchCaseSensitive,
+                        searchExcludeFileNames:
+                          searchState.searchExcludeFileNames,
+                        searchShowIgnored: searchState.searchShowIgnored,
+                        searchShowAllFiles: searchState.searchShowAllFiles,
+                      });
+                    }}
+                  />
+                </div>
+              </Show>
+            </Show>
+            <Show
+              when={
+                shouldRenderFilesTabToggle() &&
+                !(shouldRenderHeaderGitActions() && activeWorkspaceIsGitRepo())
+              }
+            >
+              <FilesTabToggle
+                filesTab={effectiveFilesSearchState().filesTab}
+                onChangeFilesTab={(filesTab) => {
+                  const searchState = effectiveFilesSearchState();
+                  setActiveRoute({
+                    ...activeRoute,
+                    filesTab,
+                    searchScope: searchState.searchScope,
+                    searchCaseSensitive: searchState.searchCaseSensitive,
+                    searchExcludeFileNames: searchState.searchExcludeFileNames,
+                    searchShowIgnored: searchState.searchShowIgnored,
+                    searchShowAllFiles: searchState.searchShowAllFiles,
+                  });
+                }}
               />
             </Show>
           </div>

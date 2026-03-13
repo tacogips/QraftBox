@@ -10,6 +10,7 @@ import {
 import { CheckboxField } from "../../components/CheckboxField";
 import { SummaryCard } from "../../components/SummaryCard";
 import { ToolbarIconButton } from "../../components/ToolbarIconButton";
+import { AiSessionChatPane } from "./AiSessionChatPane";
 import {
   createAiSessionsApiClient,
   type AISessionInfo,
@@ -40,7 +41,6 @@ import {
   getQueuedPromptSummary,
   mergePendingAiSessionTranscriptLines,
 } from "./presentation";
-import { renderAiSessionMarkdown } from "./markdown";
 import {
   applyAiSessionSearchDraft,
   appendAiSessionSubmitContextReferences,
@@ -272,50 +272,6 @@ function renderRefreshPurposeIcon(): JSX.Element {
   );
 }
 
-function renderExpandPurposeIcon(expanded: boolean): JSX.Element {
-  return expanded ? (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path d="m6 12 4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  ) : (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path d="m6 8 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-
-function renderComposerFooterToggleIcon(collapsed: boolean): JSX.Element {
-  return collapsed ? (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path d="m6 12 4-4 4 4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  ) : (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path d="m6 8 4 4 4-4" stroke-linecap="round" stroke-linejoin="round" />
-    </svg>
-  );
-}
-
 function renderClearIcon(): JSX.Element {
   return (
     <svg
@@ -407,41 +363,6 @@ function renderCloseIcon(): JSX.Element {
     >
       <path d="m5 5 10 10" stroke-linecap="round" />
       <path d="M15 5 5 15" stroke-linecap="round" />
-    </svg>
-  );
-}
-
-function renderCopyIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <rect x="7" y="7" width="9" height="9" rx="1.8" />
-      <path
-        d="M5 12H4a1.5 1.5 0 0 1-1.5-1.5v-6A1.5 1.5 0 0 1 4 3h6A1.5 1.5 0 0 1 11.5 4.5V5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
-    </svg>
-  );
-}
-
-function renderCopiedIcon(): JSX.Element {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="1.8"
-    >
-      <path
-        d="m4.5 10.5 3.5 3.5 7.5-8"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      />
     </svg>
   );
 }
@@ -653,18 +574,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       selectedQraftAiSessionId: selectedQraftAiSessionId(),
       isDraftComposerOpen: isDraftComposerOpen(),
     });
-  const composerHeaderClass = () =>
-    isPhoneViewport()
-      ? "flex flex-col gap-3 border-b border-border-default px-3 py-3"
-      : "flex items-start justify-between gap-3 border-b border-border-default px-4 py-3";
-  const composerToolbarClass = () =>
-    isPhoneViewport()
-      ? "flex flex-wrap items-center justify-start gap-2"
-      : "flex items-center gap-2";
-  const composerFooterActionClass = () =>
-    isPhoneViewport()
-      ? "mt-2 grid gap-2"
-      : "mt-2 flex flex-wrap items-center gap-2";
   const sessionTargetTextClass = () =>
     isPhoneViewport()
       ? "mt-1 break-words text-sm text-text-primary"
@@ -2468,33 +2377,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     return "bg-bg-tertiary text-text-secondary";
   }
 
-  function getTranscriptLineCardClass(
-    transcriptLine: AiSessionTranscriptLine,
-  ): string {
-    if (transcriptLine.role === "assistant" && transcriptLine.isLive) {
-      return "rounded-xl border border-success-emphasis/40 bg-success-muted/10 p-4";
-    }
-    if (transcriptLine.role === "assistant" && transcriptLine.isThinking) {
-      return "rounded-xl border border-success-emphasis/30 bg-success-muted/10 p-4";
-    }
-    if (transcriptLine.role === "system") {
-      return "rounded-xl border border-attention-emphasis/25 bg-attention-muted/10 p-4";
-    }
-    return "rounded-xl border border-border-default bg-bg-primary p-4";
-  }
-
-  function getTranscriptLineRoleBadgeClass(
-    transcriptLine: AiSessionTranscriptLine,
-  ): string {
-    if (transcriptLine.role === "assistant") {
-      return "bg-success-muted text-success-fg";
-    }
-    if (transcriptLine.role === "system") {
-      return "bg-attention-emphasis/20 text-attention-fg";
-    }
-    return "bg-accent-muted text-accent-fg";
-  }
-
   function dismissSessionDetail(): void {
     setSelectedQraftAiSessionId(null);
     setIsDraftComposerOpen(false);
@@ -2913,10 +2795,16 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4">
               <div class="flex h-[min(96vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <div class={composerHeaderClass()}>
-                    <div class="min-w-0">
+                  <AiSessionChatPane
+                    heading={selectedComposerHeading()}
+                    description={selectedComposerDescription()}
+                    purposeExpanded={isPurposeExpanded()}
+                    onTogglePurposeExpanded={() =>
+                      setIsPurposeExpanded(!isPurposeExpanded())
+                    }
+                    headerBadges={
                       <Show when={selectedSessionEntry() !== null}>
-                        <div class="flex flex-wrap items-center gap-2">
+                        <>
                           <span
                             class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getSessionStatusBadgeClass(
                               selectedSessionEntry()?.status ?? "",
@@ -2927,188 +2815,126 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           <span class="rounded bg-bg-tertiary px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
                             {selectedSessionModelLabel()}
                           </span>
-                        </div>
+                        </>
                       </Show>
-                      <div class="mt-2 flex items-start gap-2">
-                        <h3
-                          class={`min-w-0 flex-1 whitespace-normal break-words text-lg font-semibold leading-7 text-text-primary ${
-                            isPurposeExpanded()
-                              ? ""
-                              : "overflow-hidden [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]"
-                          }`}
-                        >
-                          {selectedComposerHeading()}
-                        </h3>
-                        <ToolbarIconButton
-                          label={
-                            isPurposeExpanded()
-                              ? "Collapse purpose"
-                              : "Expand purpose"
-                          }
-                          onClick={() =>
-                            setIsPurposeExpanded(!isPurposeExpanded())
-                          }
-                        >
-                          {renderExpandPurposeIcon(isPurposeExpanded())}
-                        </ToolbarIconButton>
-                      </div>
-                      <p class="mt-1 text-xs text-text-secondary">
-                        {selectedComposerDescription()}
-                      </p>
-                    </div>
-                    <div class={composerToolbarClass()}>
-                      <button
-                        type="button"
-                        class={`rounded-md border p-2 transition ${
-                          showInjectedSystemPrompts()
-                            ? "border-accent-emphasis/50 bg-accent-muted text-accent-fg"
-                            : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover hover:text-text-primary"
-                        }`}
-                        aria-pressed={showInjectedSystemPrompts()}
-                        aria-label={
-                          showInjectedSystemPrompts()
-                            ? "Hide injected system prompts"
-                            : hiddenInjectedSystemPromptCount() > 0
-                              ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
-                              : "Show injected system prompts"
-                        }
-                        title={
-                          showInjectedSystemPrompts()
-                            ? "Hide injected system prompts"
-                            : hiddenInjectedSystemPromptCount() > 0
-                              ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
-                              : "Show injected system prompts"
-                        }
-                        onClick={() =>
-                          setShowInjectedSystemPrompts(
-                            !showInjectedSystemPrompts(),
-                          )
-                        }
-                      >
-                        <span class="block h-5 w-5">
-                          {renderSystemPromptVisibilityIcon(
+                    }
+                    toolbarActions={
+                      <>
+                        <button
+                          type="button"
+                          class={`rounded-md border p-2 transition ${
                             showInjectedSystemPrompts()
-                              ? 0
-                              : hiddenInjectedSystemPromptCount(),
-                          )}
-                        </span>
-                      </button>
-                      <Show when={canRunDraftSessionDefaultPrompt()}>
-                        <ToolbarIconButton
-                          label={describeDefaultPromptActionLabel(
-                            "ai-session-purpose",
-                          )}
-                          disabled={composerBusy()}
-                          onClick={() =>
-                            void runDefaultPromptAction("ai-session-purpose")
+                              ? "border-accent-emphasis/50 bg-accent-muted text-accent-fg"
+                              : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+                          }`}
+                          aria-pressed={showInjectedSystemPrompts()}
+                          aria-label={
+                            showInjectedSystemPrompts()
+                              ? "Hide injected system prompts"
+                              : hiddenInjectedSystemPromptCount() > 0
+                                ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
+                                : "Show injected system prompts"
                           }
-                        >
-                          {renderCreatePurposeIcon()}
-                        </ToolbarIconButton>
-                      </Show>
-                      <Show when={canRunSelectedSessionDefaultPrompts()}>
-                        <ToolbarIconButton
-                          label={describeDefaultPromptActionLabel(
-                            "ai-session-refresh-purpose",
-                          )}
-                          disabled={composerBusy()}
+                          title={
+                            showInjectedSystemPrompts()
+                              ? "Hide injected system prompts"
+                              : hiddenInjectedSystemPromptCount() > 0
+                                ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
+                                : "Show injected system prompts"
+                          }
                           onClick={() =>
-                            void runDefaultPromptAction(
-                              "ai-session-refresh-purpose",
+                            setShowInjectedSystemPrompts(
+                              !showInjectedSystemPrompts(),
                             )
                           }
                         >
-                          {renderRefreshPurposeIcon()}
+                          <span class="block h-5 w-5">
+                            {renderSystemPromptVisibilityIcon(
+                              showInjectedSystemPrompts()
+                                ? 0
+                                : hiddenInjectedSystemPromptCount(),
+                            )}
+                          </span>
+                        </button>
+                        <Show when={canRunDraftSessionDefaultPrompt()}>
+                          <ToolbarIconButton
+                            label={describeDefaultPromptActionLabel(
+                              "ai-session-purpose",
+                            )}
+                            disabled={composerBusy()}
+                            onClick={() =>
+                              void runDefaultPromptAction("ai-session-purpose")
+                            }
+                          >
+                            {renderCreatePurposeIcon()}
+                          </ToolbarIconButton>
+                        </Show>
+                        <Show when={canRunSelectedSessionDefaultPrompts()}>
+                          <ToolbarIconButton
+                            label={describeDefaultPromptActionLabel(
+                              "ai-session-refresh-purpose",
+                            )}
+                            disabled={composerBusy()}
+                            onClick={() =>
+                              void runDefaultPromptAction(
+                                "ai-session-refresh-purpose",
+                              )
+                            }
+                          >
+                            {renderRefreshPurposeIcon()}
+                          </ToolbarIconButton>
+                        </Show>
+                        <ToolbarIconButton
+                          label="Reload transcript"
+                          disabled={
+                            selectedSessionLoading() ||
+                            selectedSessionLoadingMore()
+                          }
+                          onClick={() => void reloadSelectedSessionArtifacts()}
+                        >
+                          {renderRefreshIcon()}
                         </ToolbarIconButton>
-                      </Show>
-                      <ToolbarIconButton
-                        label="Reload transcript"
-                        disabled={
-                          selectedSessionLoading() ||
-                          selectedSessionLoadingMore()
-                        }
-                        onClick={() => void reloadSelectedSessionArtifacts()}
-                      >
-                        {renderRefreshIcon()}
-                      </ToolbarIconButton>
-                      <ToolbarIconButton
-                        label="Jump to head"
-                        disabled={
-                          isTranscriptHistoryCollapsed() ||
-                          visibleSelectedSessionTranscript().length === 0
-                        }
-                        onClick={() => void jumpSelectedTranscriptToHead()}
-                      >
-                        {renderJumpToHeadIcon()}
-                      </ToolbarIconButton>
-                      <ToolbarIconButton
-                        label="Jump to latest"
-                        disabled={
-                          isTranscriptHistoryCollapsed() ||
-                          visibleSelectedSessionTranscript().length === 0
-                        }
-                        onClick={() => scrollSelectedTranscriptToLatest()}
-                      >
-                        {renderJumpToLatestIcon()}
-                      </ToolbarIconButton>
-                      <button
-                        type="button"
-                        class="rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
-                        aria-label="Close"
-                        title="Close"
-                        onClick={dismissSessionDetail}
-                      >
-                        <span class="block h-5 w-5">{renderCloseIcon()}</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div class="border-t border-border-default px-3 py-3 sm:px-4">
-                    <div class="flex items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                          Chat history
-                        </p>
-                        <p class="mt-1 text-sm text-text-secondary">
-                          {transcriptSectionSummary()}
-                        </p>
-                      </div>
-                      <ToolbarIconButton
-                        label={
-                          isTranscriptHistoryCollapsed()
-                            ? "Expand chat history"
-                            : "Collapse chat history"
-                        }
-                        onClick={() =>
-                          setIsTranscriptHistoryCollapsed(
-                            !isTranscriptHistoryCollapsed(),
-                          )
-                        }
-                      >
-                        {renderComposerFooterToggleIcon(
-                          isTranscriptHistoryCollapsed(),
-                        )}
-                      </ToolbarIconButton>
-                    </div>
-                  </div>
-
-                  <Show
-                    when={!isTranscriptHistoryCollapsed()}
-                    fallback={
-                      <div class="px-3 pb-3 text-sm text-text-secondary sm:px-4">
-                        Chat history is collapsed.
-                      </div>
+                        <ToolbarIconButton
+                          label="Jump to head"
+                          disabled={
+                            isTranscriptHistoryCollapsed() ||
+                            visibleSelectedSessionTranscript().length === 0
+                          }
+                          onClick={() => void jumpSelectedTranscriptToHead()}
+                        >
+                          {renderJumpToHeadIcon()}
+                        </ToolbarIconButton>
+                        <ToolbarIconButton
+                          label="Jump to latest"
+                          disabled={
+                            isTranscriptHistoryCollapsed() ||
+                            visibleSelectedSessionTranscript().length === 0
+                          }
+                          onClick={() => scrollSelectedTranscriptToLatest()}
+                        >
+                          {renderJumpToLatestIcon()}
+                        </ToolbarIconButton>
+                        <button
+                          type="button"
+                          class="rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
+                          aria-label="Close"
+                          title="Close"
+                          onClick={dismissSessionDetail}
+                        >
+                          <span class="block h-5 w-5">{renderCloseIcon()}</span>
+                        </button>
+                      </>
                     }
-                  >
-                    <div
-                      ref={(element) => {
-                        transcriptScrollContainer = element;
-                      }}
-                      onScroll={handleTranscriptScroll}
-                      class="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-4"
-                    >
+                    transcriptSummary={transcriptSectionSummary()}
+                    transcriptCollapsed={isTranscriptHistoryCollapsed()}
+                    onToggleTranscriptCollapsed={() =>
+                      setIsTranscriptHistoryCollapsed(
+                        !isTranscriptHistoryCollapsed(),
+                      )
+                    }
+                    metadata={
                       <Show when={selectedSessionDetail() !== null}>
-                        <div class="mb-4 grid gap-3 sm:grid-cols-3">
+                        <div class="grid gap-3 sm:grid-cols-3">
                           <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
                             <p class="uppercase tracking-wide text-text-tertiary">
                               Execution flow
@@ -3143,334 +2969,196 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                           </div>
                         </div>
                       </Show>
-
-                      <Show when={selectedSessionLoading()}>
-                        <p class="text-sm text-text-secondary">
-                          Loading selected session transcript...
-                        </p>
-                      </Show>
-                      <Show when={selectedSessionLoadingMore()}>
-                        <p class="pb-3 text-xs text-text-secondary">
-                          Loading older transcript...
-                        </p>
-                      </Show>
-                      <Show when={selectedSessionError() !== null}>
-                        <p
-                          role="alert"
-                          class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-3 py-2 text-sm text-danger-fg"
-                        >
-                          {selectedSessionError()}
-                        </p>
-                      </Show>
-                      <div class="space-y-3">
-                        <For each={visibleSelectedSessionTranscript()}>
-                          {(transcriptLine) => (
-                            <article
-                              class={getTranscriptLineCardClass(transcriptLine)}
-                            >
-                              <div class="mb-2 flex items-center justify-between gap-3">
-                                <span
-                                  class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getTranscriptLineRoleBadgeClass(
-                                    transcriptLine,
-                                  )}`}
-                                >
-                                  {transcriptLine.role}
-                                </span>
-                                <div class="flex items-center gap-2">
-                                  <span class="text-[11px] text-text-tertiary">
-                                    {transcriptLine.timestamp === null
-                                      ? ""
-                                      : formatAiSessionTimestamp(
-                                          transcriptLine.timestamp,
-                                        )}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    class="rounded p-1 text-text-tertiary transition hover:bg-bg-hover hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                                    aria-label="Copy message to clipboard"
-                                    title="Copy to clipboard"
-                                    onClick={() =>
-                                      void copyTranscriptLine(transcriptLine)
-                                    }
-                                  >
-                                    <span class="block h-4 w-4">
-                                      {copiedTranscriptLineId() ===
-                                      transcriptLine.id
-                                        ? renderCopiedIcon()
-                                        : renderCopyIcon()}
-                                    </span>
-                                  </button>
-                                </div>
-                              </div>
-                              <div
-                                class={`transcript-markdown break-words text-sm leading-6 text-text-primary ${
-                                  transcriptLine.isThinking
-                                    ? "animate-thinking-blink"
-                                    : ""
-                                }`}
-                                innerHTML={renderAiSessionMarkdown(
-                                  transcriptLine.text,
-                                )}
-                              />
-                            </article>
-                          )}
-                        </For>
-                      </div>
-                      <Show
-                        when={
-                          selectedQraftAiSessionId() !== null &&
-                          !selectedSessionLoading() &&
-                          selectedSessionError() === null &&
-                          visibleSelectedSessionTranscript().length === 0
-                        }
-                      >
-                        <p class="text-sm text-text-secondary">
-                          {hiddenInjectedSystemPromptCount() > 0
-                            ? "Only injected system prompts are currently hidden for this session."
-                            : "No transcript events are available for this session yet."}
-                        </p>
-                      </Show>
-                    </div>
-                  </Show>
-                  <div class="max-h-[45vh] shrink-0 overflow-y-auto border-t border-border-default bg-bg-primary px-3 py-3 sm:px-4">
-                    <div class="flex items-center gap-2">
-                      <ToolbarIconButton
-                        label={
-                          isComposerFooterCollapsed()
-                            ? "Expand session composer"
-                            : "Collapse session composer"
-                        }
-                        onClick={() =>
-                          setIsComposerFooterCollapsed(
-                            !isComposerFooterCollapsed(),
-                          )
-                        }
-                      >
-                        {renderComposerFooterToggleIcon(
-                          isComposerFooterCollapsed(),
-                        )}
-                      </ToolbarIconButton>
-                      <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                        Session
-                      </span>
-                    </div>
-                    <Show when={!isComposerFooterCollapsed()}>
-                      <div class="mt-3 grid gap-2">
-                        <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] md:items-end">
-                          <div class="min-w-0">
-                            <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                              Session
-                            </p>
-                            <p class={sessionTargetTextClass()}>
-                              {describeAiSessionTarget({
-                                selectedQraftAiSessionId:
-                                  selectedQraftAiSessionId(),
-                                draftSessionId: draftSessionId(),
-                              })}
-                            </p>
-                          </div>
-                          <Show
-                            when={selectedQraftAiSessionId() === null}
-                            fallback={
-                              <div class="flex flex-col gap-1 text-sm text-text-secondary">
-                                <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                                  Model profile
-                                </span>
-                                <p class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary">
-                                  {selectedSessionModelLabel()}
-                                </p>
-                              </div>
-                            }
-                          >
-                            <label class="flex flex-col gap-1 text-sm text-text-secondary">
+                    }
+                    transcriptContainerRef={(element) => {
+                      transcriptScrollContainer = element;
+                    }}
+                    onTranscriptScroll={handleTranscriptScroll}
+                    transcriptLoading={selectedSessionLoading()}
+                    transcriptLoadingMore={selectedSessionLoadingMore()}
+                    transcriptError={selectedSessionError()}
+                    transcriptLines={visibleSelectedSessionTranscript().map(
+                      (transcriptLine) => ({
+                        ...transcriptLine,
+                        timestamp:
+                          transcriptLine.timestamp === null
+                            ? null
+                            : formatAiSessionTimestamp(
+                                transcriptLine.timestamp,
+                              ),
+                      }),
+                    )}
+                    copiedTranscriptLineId={copiedTranscriptLineId()}
+                    onCopyTranscriptLine={(transcriptLine) =>
+                      copyTranscriptLine(transcriptLine)
+                    }
+                    emptyTranscriptText={
+                      hiddenInjectedSystemPromptCount() > 0
+                        ? "Only injected system prompts are currently hidden for this session."
+                        : "No transcript events are available for this session yet."
+                    }
+                    composerCollapsed={isComposerFooterCollapsed()}
+                    onToggleComposerCollapsed={() =>
+                      setIsComposerFooterCollapsed(!isComposerFooterCollapsed())
+                    }
+                    composerContext={
+                      <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(260px,320px)] md:items-end">
+                        <div class="min-w-0">
+                          <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                            Session
+                          </p>
+                          <p class={sessionTargetTextClass()}>
+                            {describeAiSessionTarget({
+                              selectedQraftAiSessionId:
+                                selectedQraftAiSessionId(),
+                              draftSessionId: draftSessionId(),
+                            })}
+                          </p>
+                        </div>
+                        <Show
+                          when={selectedQraftAiSessionId() === null}
+                          fallback={
+                            <div class="flex flex-col gap-1 text-sm text-text-secondary">
                               <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
                                 Model profile
                               </span>
-                              <select
-                                class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
-                                value={selectedModelProfileId() ?? ""}
-                                disabled={modelProfilesLoading()}
-                                onChange={(event) =>
-                                  setSelectedModelProfileId(
-                                    event.currentTarget.value.length > 0
-                                      ? event.currentTarget.value
-                                      : null,
-                                  )
-                                }
-                              >
-                                <option value="">
-                                  Server default AI profile
-                                </option>
-                                <For each={modelProfiles()}>
-                                  {(modelProfile) => (
-                                    <option value={modelProfile.id}>
-                                      {modelProfile.name} ({modelProfile.vendor}
-                                      /{modelProfile.model})
-                                    </option>
-                                  )}
-                                </For>
-                              </select>
-                            </label>
-                          </Show>
-                        </div>
-                        <div class="pt-1">
-                          <div class="mb-1 flex items-center justify-between gap-3">
-                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
-                              Prompt
-                            </span>
-                          </div>
-                          <textarea
-                            class="min-h-[96px] w-full rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm leading-6 text-text-primary outline-none transition focus:border-accent-emphasis"
-                            rows={3}
-                            value={promptInput()}
-                            onInput={(event) =>
-                              setPromptInput(event.currentTarget.value)
-                            }
-                            onKeyDown={handlePromptInputKeyDown}
-                          />
-                          <div class="mt-3 grid gap-2">
-                            <div
-                              class={
-                                isPhoneViewport()
-                                  ? "grid gap-2"
-                                  : "flex items-center justify-between gap-3"
-                              }
-                            >
-                              <div class="relative inline-flex max-w-full">
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  multiple
-                                  class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
-                                  aria-label="Attach images to the next prompt"
-                                  disabled={submitting()}
-                                  onChange={(event) =>
-                                    void handleImageAttachmentInput(event)
-                                  }
-                                />
-                                <div class="pointer-events-none inline-flex items-center gap-2 rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary">
-                                  <span class="block h-4 w-4 shrink-0">
-                                    {renderAttachImageIcon()}
-                                  </span>
-                                  <span class="truncate">
-                                    {imageAttachments().length > 0
-                                      ? `Add images (${imageAttachments().length})`
-                                      : "Attach images"}
-                                  </span>
-                                </div>
-                              </div>
-                              <p class="text-[11px] text-text-tertiary">
-                                Images only. Up to{" "}
-                                {formatAttachmentBytes(
-                                  MAX_IMAGE_ATTACHMENT_BYTES,
-                                )}{" "}
-                                each.
+                              <p class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary">
+                                {selectedSessionModelLabel()}
                               </p>
                             </div>
-                            <Show when={imageAttachments().length > 0}>
-                              <div class="grid gap-2">
-                                <For each={imageAttachments()}>
-                                  {(imageAttachment) => (
-                                    <div class="flex items-center gap-3 rounded-md border border-border-default bg-bg-primary p-2">
-                                      <img
-                                        src={imageAttachment.previewUrl}
-                                        alt={imageAttachment.fileName}
-                                        class="h-14 w-14 shrink-0 rounded-md border border-border-default object-cover"
-                                      />
-                                      <div class="min-w-0 flex-1">
-                                        <p class="truncate text-sm text-text-primary">
-                                          {imageAttachment.fileName}
-                                        </p>
-                                        <p class="text-[11px] text-text-tertiary">
-                                          {imageAttachment.mimeType} ·{" "}
-                                          {formatAttachmentBytes(
-                                            imageAttachment.sizeBytes,
-                                          )}
-                                        </p>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-                                        disabled={submitting()}
-                                        onClick={() =>
-                                          removeImageAttachment(
-                                            imageAttachment.id,
-                                          )
-                                        }
-                                      >
-                                        Remove
-                                      </button>
-                                    </div>
-                                  )}
-                                </For>
-                              </div>
-                            </Show>
-                            <Show when={attachmentError() !== null}>
-                              <p class="text-xs text-danger-fg">
-                                {attachmentError()}
-                              </p>
-                            </Show>
-                          </div>
-                          <div class={composerFooterActionClass()}>
-                            <button
-                              type="button"
-                              class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={promptSubmissionDisabled()}
-                              onClick={() => void submitPrompt(false)}
+                          }
+                        >
+                          <label class="flex flex-col gap-1 text-sm text-text-secondary">
+                            <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                              Model profile
+                            </span>
+                            <select
+                              class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-sm text-text-primary outline-none transition focus:border-accent-emphasis"
+                              value={selectedModelProfileId() ?? ""}
+                              disabled={modelProfilesLoading()}
+                              onChange={(event) =>
+                                setSelectedModelProfileId(
+                                  event.currentTarget.value.length > 0
+                                    ? event.currentTarget.value
+                                    : null,
+                                )
+                              }
                             >
-                              {submitting() ? "Submitting..." : "Queue prompt"}
-                            </button>
-                            <button
-                              type="button"
-                              class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                              disabled={promptSubmissionDisabled()}
-                              onClick={() => void submitPrompt(true)}
-                            >
-                              Run now
-                            </button>
-                            <Show when={selectedQraftAiSessionId() !== null}>
-                              <button
-                                type="button"
-                                class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
-                                disabled={promptSubmissionDisabled()}
-                                onClick={() =>
-                                  void restartSelectedSessionFromBeginning()
-                                }
-                              >
-                                Restart from beginning
-                              </button>
-                            </Show>
-                            <Show when={selectedSessionCancelAction() !== null}>
-                              <button
-                                type="button"
-                                class={`rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20 ${
-                                  isPhoneViewport() ? "" : "ml-auto"
-                                }`}
-                                onClick={() => {
-                                  const cancelAction =
-                                    selectedSessionCancelAction();
-                                  if (cancelAction === null) {
-                                    return;
-                                  }
-                                  if (cancelAction.kind === "active-session") {
-                                    void cancelActiveSession(
-                                      cancelAction.targetId,
-                                    );
-                                    return;
-                                  }
-                                  void cancelQueuedPrompt(
-                                    cancelAction.targetId,
-                                  );
-                                }}
-                              >
-                                {selectedSessionCancelAction()?.label}
-                              </button>
-                            </Show>
-                          </div>
+                              <option value="">
+                                Server default AI profile
+                              </option>
+                              <For each={modelProfiles()}>
+                                {(modelProfile) => (
+                                  <option value={modelProfile.id}>
+                                    {modelProfile.name} ({modelProfile.vendor}/
+                                    {modelProfile.model})
+                                  </option>
+                                )}
+                              </For>
+                            </select>
+                          </label>
+                        </Show>
+                      </div>
+                    }
+                    promptInput={promptInput()}
+                    onPromptInput={setPromptInput}
+                    onPromptKeyDown={handlePromptInputKeyDown}
+                    attachmentTrigger={
+                      <div class="relative inline-flex max-w-full">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                          aria-label="Attach images to the next prompt"
+                          disabled={submitting()}
+                          onChange={(event) =>
+                            void handleImageAttachmentInput(event)
+                          }
+                        />
+                        <div class="pointer-events-none inline-flex items-center gap-2 rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary">
+                          <span class="block h-4 w-4 shrink-0">
+                            {renderAttachImageIcon()}
+                          </span>
+                          <span class="truncate">
+                            {imageAttachments().length > 0
+                              ? `Add images (${imageAttachments().length})`
+                              : "Attach images"}
+                          </span>
                         </div>
                       </div>
-                    </Show>
-                  </div>
+                    }
+                    attachmentHint={`Images only. Up to ${formatAttachmentBytes(
+                      MAX_IMAGE_ATTACHMENT_BYTES,
+                    )} each.`}
+                    attachments={imageAttachments().map((imageAttachment) => ({
+                      id: imageAttachment.id,
+                      fileName: imageAttachment.fileName,
+                      mimeType: imageAttachment.mimeType,
+                      sizeLabel: formatAttachmentBytes(
+                        imageAttachment.sizeBytes,
+                      ),
+                      previewUrl: imageAttachment.previewUrl,
+                    }))}
+                    onRemoveAttachment={(attachmentId) =>
+                      removeImageAttachment(attachmentId)
+                    }
+                    attachmentError={attachmentError()}
+                    composerActions={
+                      <>
+                        <button
+                          type="button"
+                          class="rounded-md bg-accent-emphasis px-4 py-2 text-sm font-medium text-text-on-emphasis transition hover:bg-accent-fg disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={promptSubmissionDisabled()}
+                          onClick={() => void submitPrompt(false)}
+                        >
+                          {submitting() ? "Submitting..." : "Queue prompt"}
+                        </button>
+                        <button
+                          type="button"
+                          class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={promptSubmissionDisabled()}
+                          onClick={() => void submitPrompt(true)}
+                        >
+                          Run now
+                        </button>
+                        <Show when={selectedQraftAiSessionId() !== null}>
+                          <button
+                            type="button"
+                            class="rounded-md border border-border-default bg-bg-primary px-4 py-2 text-sm font-medium text-text-primary transition hover:bg-bg-hover disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={promptSubmissionDisabled()}
+                            onClick={() =>
+                              void restartSelectedSessionFromBeginning()
+                            }
+                          >
+                            Restart from beginning
+                          </button>
+                        </Show>
+                        <Show when={selectedSessionCancelAction() !== null}>
+                          <button
+                            type="button"
+                            class={`rounded-md border border-danger-emphasis/40 bg-danger-subtle px-4 py-2 text-sm font-medium text-danger-fg transition hover:bg-danger-emphasis/20 ${
+                              isPhoneViewport() ? "" : "ml-auto"
+                            }`}
+                            onClick={() => {
+                              const cancelAction =
+                                selectedSessionCancelAction();
+                              if (cancelAction === null) {
+                                return;
+                              }
+                              if (cancelAction.kind === "active-session") {
+                                void cancelActiveSession(cancelAction.targetId);
+                                return;
+                              }
+                              void cancelQueuedPrompt(cancelAction.targetId);
+                            }}
+                          >
+                            {selectedSessionCancelAction()?.label}
+                          </button>
+                        </Show>
+                      </>
+                    }
+                  />
                 </div>
               </div>
             </div>
