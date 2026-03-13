@@ -101,7 +101,7 @@ const IDLE_SESSION_POLL_MS = 20_000;
 const SESSION_HISTORY_PAGE_SIZE = 20;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
 const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY =
+const SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
   "qraftbox:session-transcript-show-system-prompts";
 const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
   Record<
@@ -184,11 +184,10 @@ function detectPhoneViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth <= 768;
 }
 
-function loadInjectedSystemPromptVisibility(): boolean {
+function loadSystemPromptVisibility(): boolean {
   try {
     return (
-      window.localStorage.getItem(SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY) ===
-      "true"
+      window.localStorage.getItem(SHOW_SYSTEM_PROMPTS_STORAGE_KEY) === "true"
     );
   } catch {
     return false;
@@ -543,8 +542,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     preferredStreamRuntimeSessionOwnerQraftAiSessionId,
     setPreferredStreamRuntimeSessionOwnerQraftAiSessionId,
   ] = createSignal<QraftAiSessionId | null>(null);
-  const [showInjectedSystemPrompts, setShowInjectedSystemPrompts] =
-    createSignal(loadInjectedSystemPromptVisibility());
+  const [showSystemPrompts, setShowSystemPrompts] = createSignal(
+    loadSystemPromptVisibility(),
+  );
   const [copiedTranscriptLineId, setCopiedTranscriptLineId] = createSignal<
     string | null
   >(null);
@@ -616,12 +616,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   };
   const visibleSelectedSessionTranscript = () =>
     displayedSelectedSessionTranscript().filter(
-      (transcriptLine) =>
-        showInjectedSystemPrompts() || !transcriptLine.isInjectedSystemPrompt,
+      (transcriptLine) => showSystemPrompts() || transcriptLine.role !== "system",
     );
-  const hiddenInjectedSystemPromptCount = () =>
+  const hiddenSystemPromptCount = () =>
     displayedSelectedSessionTranscript().filter(
-      (transcriptLine) => transcriptLine.isInjectedSystemPrompt,
+      (transcriptLine) => transcriptLine.role === "system",
     ).length;
   const transcriptSectionSummary = () => {
     if (selectedQraftAiSessionId() === null) {
@@ -796,6 +795,17 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   }
 
   createEffect(() => {
+    try {
+      window.localStorage.setItem(
+        SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
+        showSystemPrompts() ? "true" : "false",
+      );
+    } catch {
+      // localStorage unavailable
+    }
+  });
+
+  createEffect(() => {
     const syncPhoneViewport = () => {
       setIsPhoneViewport(detectPhoneViewport());
     };
@@ -806,17 +816,6 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     onCleanup(() => {
       window.removeEventListener("resize", syncPhoneViewport);
     });
-  });
-
-  createEffect(() => {
-    try {
-      window.localStorage.setItem(
-        SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY,
-        showInjectedSystemPrompts() ? "true" : "false",
-      );
-    } catch {
-      // localStorage unavailable
-    }
   });
 
   async function refreshHiddenSessions(scopeKey: string): Promise<void> {
@@ -2823,36 +2822,34 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                         <button
                           type="button"
                           class={`rounded-md border p-2 transition ${
-                            showInjectedSystemPrompts()
+                            showSystemPrompts()
                               ? "border-accent-emphasis/50 bg-accent-muted text-accent-fg"
                               : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover hover:text-text-primary"
                           }`}
-                          aria-pressed={showInjectedSystemPrompts()}
+                          aria-pressed={showSystemPrompts()}
                           aria-label={
-                            showInjectedSystemPrompts()
-                              ? "Hide injected system prompts"
-                              : hiddenInjectedSystemPromptCount() > 0
-                                ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
-                                : "Show injected system prompts"
+                            showSystemPrompts()
+                              ? "Hide system prompts"
+                              : hiddenSystemPromptCount() > 0
+                                ? `Show system prompts (${hiddenSystemPromptCount()} hidden)`
+                                : "Show system prompts"
                           }
                           title={
-                            showInjectedSystemPrompts()
-                              ? "Hide injected system prompts"
-                              : hiddenInjectedSystemPromptCount() > 0
-                                ? `Show injected system prompts (${hiddenInjectedSystemPromptCount()} hidden)`
-                                : "Show injected system prompts"
+                            showSystemPrompts()
+                              ? "Hide system prompts"
+                              : hiddenSystemPromptCount() > 0
+                                ? `Show system prompts (${hiddenSystemPromptCount()} hidden)`
+                                : "Show system prompts"
                           }
                           onClick={() =>
-                            setShowInjectedSystemPrompts(
-                              !showInjectedSystemPrompts(),
-                            )
+                            setShowSystemPrompts(!showSystemPrompts())
                           }
                         >
                           <span class="block h-5 w-5">
                             {renderSystemPromptVisibilityIcon(
-                              showInjectedSystemPrompts()
+                              showSystemPrompts()
                                 ? 0
-                                : hiddenInjectedSystemPromptCount(),
+                                : hiddenSystemPromptCount(),
                             )}
                           </span>
                         </button>
@@ -2993,8 +2990,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       copyTranscriptLine(transcriptLine)
                     }
                     emptyTranscriptText={
-                      hiddenInjectedSystemPromptCount() > 0
-                        ? "Only injected system prompts are currently hidden for this session."
+                      hiddenSystemPromptCount() > 0
+                        ? "Only system prompts are currently hidden for this session."
                         : "No transcript events are available for this session yet."
                     }
                     composerCollapsed={isComposerFooterCollapsed()}
