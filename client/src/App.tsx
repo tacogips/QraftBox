@@ -860,6 +860,7 @@ export function App(props: AppProps): JSX.Element {
               projectSlug: activeRoute.projectSlug,
               overviewRouteState: {
                 selectedSessionId: sessionId,
+                isDraftComposerOpen: false,
                 searchQuery: "",
                 searchInTranscript: true,
               },

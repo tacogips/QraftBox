@@ -1,8 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { QraftAiSessionId } from "../../../../src/types/ai";
-import type { PromptQueueItem } from "../../../../client-shared/src/api/ai-sessions";
+import type {
+  AISessionInfo,
+  PromptQueueItem,
+} from "../../../../client-shared/src/api/ai-sessions";
 import {
   applyAiSessionSearchDraft,
+  appendAiSessionSubmitContextReferences,
   buildAiSessionScreenHash,
   buildAiSessionOverviewRouteSearch,
   canSubmitAiSessionComposerPrompt,
@@ -12,6 +16,7 @@ import {
   canLoadMoreAiSessionTranscript,
   createAiSessionScopeResetLoadingState,
   createAiSessionDetailRequestKey,
+  createAiSessionImageAttachmentReferences,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
   hasAiSessionActivityEntry,
@@ -35,6 +40,7 @@ import {
   resolvePreviousAiSessionTranscriptOffset,
   resolveAiSessionTargetSessionId,
   resolveAiSessionSubmitTarget,
+  resolveAiSessionOverviewPollingMode,
   shouldRetireAiSessionLiveAssistantFromTranscript,
   shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
   mergeAiSessionTranscriptLines,
@@ -42,6 +48,7 @@ import {
   shouldShowAiSessionComposer,
   isAiSessionComposerBusy,
   readAiSessionOverviewRouteSearchFromHash,
+  sanitizeAiSessionAttachmentFileName,
   updateHiddenAiSessionIds,
 } from "./state";
 
@@ -55,6 +62,20 @@ function createPromptQueueItem(
 ): PromptQueueItem {
   return {
     project_path: "/tmp/repo",
+    ...overrides,
+  };
+}
+
+function createActiveSessionInfo(
+  overrides: Partial<AISessionInfo> = {},
+): AISessionInfo {
+  return {
+    id: "session-1",
+    state: "running",
+    prompt: "Review this change",
+    projectPath: "/tmp/repo",
+    createdAt: "2025-01-01T00:00:00.000Z",
+    context: {},
     ...overrides,
   };
 }
@@ -437,6 +458,52 @@ describe("ai-session state helpers", () => {
     ).toBe(false);
   });
 
+  test("uses active polling only when sessions or pending prompts are live", () => {
+    expect(
+      resolveAiSessionOverviewPollingMode({
+        activeSessions: [],
+        promptQueue: [],
+      }),
+    ).toBe("idle");
+
+    expect(
+      resolveAiSessionOverviewPollingMode({
+        activeSessions: [createActiveSessionInfo()],
+        promptQueue: [],
+      }),
+    ).toBe("active");
+
+    expect(
+      resolveAiSessionOverviewPollingMode({
+        activeSessions: [],
+        promptQueue: [
+          createPromptQueueItem({
+            id: "prompt-1",
+            message: "Queued work",
+            status: "queued",
+            created_at: "2025-01-01T00:00:00.000Z",
+            worktree_id: "wt-1",
+          }),
+        ],
+      }),
+    ).toBe("active");
+
+    expect(
+      resolveAiSessionOverviewPollingMode({
+        activeSessions: [],
+        promptQueue: [
+          createPromptQueueItem({
+            id: "prompt-2",
+            message: "Completed work",
+            status: "completed",
+            created_at: "2025-01-01T00:00:00.000Z",
+            worktree_id: "wt-1",
+          }),
+        ],
+      }),
+    ).toBe("idle");
+  });
+
   test("preserves restart-from-beginning as a force_new_session request on the selected session", () => {
     expect(
       resolveAiSessionSubmitTarget({
@@ -574,6 +641,7 @@ describe("ai-session state helpers", () => {
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
           selectedSessionId: asQraftAiSessionId("qs-1"),
+          isDraftComposerOpen: false,
           searchQuery: "continue migration",
           searchInTranscript: true,
         },
@@ -586,6 +654,7 @@ describe("ai-session state helpers", () => {
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
           selectedSessionId: asQraftAiSessionId("qs-1"),
+          isDraftComposerOpen: false,
           searchQuery: "focus refresh",
           searchInTranscript: true,
         },
@@ -598,6 +667,7 @@ describe("ai-session state helpers", () => {
         currentSearchInTranscript: true,
         nextOverviewRouteState: {
           selectedSessionId: asQraftAiSessionId("qs-1"),
+          isDraftComposerOpen: false,
           searchQuery: "continue migration",
           searchInTranscript: false,
         },
@@ -1021,6 +1091,75 @@ Summarize the initial session goal
     });
   });
 
+  test("creates upload references for image attachments", () => {
+    expect(
+      createAiSessionImageAttachmentReferences([
+        {
+          fileName: "design/mockup\\final.png",
+          mimeType: "image/png",
+          base64: "ZmFrZS1pbWFnZQ==",
+        },
+      ]),
+    ).toEqual([
+      {
+        path: "upload/design_mockup_final.png",
+        fileName: "design/mockup\\final.png",
+        mimeType: "image/png",
+        encoding: "base64",
+        content: "ZmFrZS1pbWFnZQ==",
+        attachmentKind: "image",
+      },
+    ]);
+  });
+
+  test("appends image attachment references without dropping primary file context", () => {
+    expect(
+      appendAiSessionSubmitContextReferences({
+        submitContext: {
+          primaryFile: {
+            path: "src/app.ts",
+            startLine: 1,
+            endLine: 1,
+            content: "console.log('qraftbox');",
+          },
+          references: [],
+          diffSummary: undefined,
+        },
+        additionalReferences: createAiSessionImageAttachmentReferences([
+          {
+            fileName: "mockup.png",
+            mimeType: "image/png",
+            base64: "ZmFrZS1pbWFnZQ==",
+          },
+        ]),
+      }),
+    ).toEqual({
+      primaryFile: {
+        path: "src/app.ts",
+        startLine: 1,
+        endLine: 1,
+        content: "console.log('qraftbox');",
+      },
+      references: [
+        {
+          path: "upload/mockup.png",
+          fileName: "mockup.png",
+          mimeType: "image/png",
+          encoding: "base64",
+          content: "ZmFrZS1pbWFnZQ==",
+          attachmentKind: "image",
+        },
+      ],
+      diffSummary: undefined,
+    });
+  });
+
+  test("sanitizes attachment file names for upload references", () => {
+    expect(sanitizeAiSessionAttachmentFileName("nested/path\\image.png")).toBe(
+      "nested_path_image.png",
+    );
+  });
+
   test("parses ai-session overview route state from the browser query string", () => {
     expect(
       parseAiSessionOverviewRouteState(
@@ -1028,6 +1167,7 @@ Summarize the initial session goal
       ),
     ).toEqual({
       selectedSessionId: asQraftAiSessionId("qs-existing"),
+      isDraftComposerOpen: false,
       searchQuery: "solid migration",
       searchInTranscript: false,
     });
@@ -1040,6 +1180,20 @@ Summarize the initial session goal
       ),
     ).toEqual({
       selectedSessionId: null,
+      isDraftComposerOpen: false,
+      searchQuery: "solid migration",
+      searchInTranscript: true,
+    });
+  });
+
+  test("parses a new-session modal flag from the browser query string", () => {
+    expect(
+      parseAiSessionOverviewRouteState(
+        "?new_session=true&session_search=solid%20migration&session_search_in_transcript=true",
+      ),
+    ).toEqual({
+      selectedSessionId: null,
+      isDraftComposerOpen: true,
       searchQuery: "solid migration",
       searchInTranscript: true,
     });
@@ -1049,6 +1203,7 @@ Summarize the initial session goal
     expect(
       buildAiSessionOverviewRouteSearch({
         selectedSessionId: asQraftAiSessionId("qs-existing"),
+        isDraftComposerOpen: false,
         searchQuery: "  solid migration  ",
         searchInTranscript: true,
       }),
@@ -1059,10 +1214,20 @@ Summarize the initial session goal
     expect(
       buildAiSessionOverviewRouteSearch({
         selectedSessionId: null,
+        isDraftComposerOpen: false,
         searchQuery: "   ",
         searchInTranscript: false,
       }),
     ).toBe("");
+
+    expect(
+      buildAiSessionOverviewRouteSearch({
+        selectedSessionId: null,
+        isDraftComposerOpen: true,
+        searchQuery: "",
+        searchInTranscript: true,
+      }),
+    ).toBe("?new_session=true");
   });
 
   test("builds ai-session screen hashes through the feature-owned route helper", () => {
@@ -1071,6 +1236,7 @@ Summarize the initial session goal
         projectSlug: "repo-slug",
         overviewRouteState: {
           selectedSessionId: asQraftAiSessionId("qs-selected"),
+          isDraftComposerOpen: false,
           searchQuery: "resume",
           searchInTranscript: false,
         },
@@ -1084,11 +1250,24 @@ Summarize the initial session goal
         projectSlug: null,
         overviewRouteState: {
           selectedSessionId: null,
+          isDraftComposerOpen: false,
           searchQuery: "",
           searchInTranscript: true,
         },
       }),
     ).toBe("#/ai-session");
+
+    expect(
+      buildAiSessionScreenHash({
+        projectSlug: null,
+        overviewRouteState: {
+          selectedSessionId: null,
+          isDraftComposerOpen: true,
+          searchQuery: "",
+          searchInTranscript: true,
+        },
+      }),
+    ).toBe("#/ai-session?new_session=true");
   });
 
   test("reuses url-backed session/search state when the ai-session scope resets", () => {
@@ -1099,7 +1278,19 @@ Summarize the initial session goal
     expect(scopeResetState.selectedSessionId).toBe(
       asQraftAiSessionId("qs-existing"),
     );
+    expect(scopeResetState.isDraftComposerOpen).toBe(false);
     expect(scopeResetState.searchQuery).toBe("solid migration");
+    expect(scopeResetState.searchInTranscript).toBe(true);
+    expect(scopeResetState.promptInput).toBe("");
+    expect(scopeResetState.draftSessionId.length).toBeGreaterThan(0);
+  });
+
+  test("reuses the new-session route flag when the ai-session scope resets", () => {
+    const scopeResetState = createAiSessionScopeResetState("?new_session=true");
+
+    expect(scopeResetState.selectedSessionId).toBeNull();
+    expect(scopeResetState.isDraftComposerOpen).toBe(true);
+    expect(scopeResetState.searchQuery).toBe("");
     expect(scopeResetState.searchInTranscript).toBe(true);
     expect(scopeResetState.promptInput).toBe("");
     expect(scopeResetState.draftSessionId.length).toBeGreaterThan(0);

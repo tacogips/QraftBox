@@ -62,6 +62,23 @@ export function shouldAutoRefreshAiSessionOverview(params: {
   return params.selectedQraftAiSessionId === null;
 }
 
+export type AiSessionOverviewPollingMode = "active" | "idle";
+
+export function resolveAiSessionOverviewPollingMode(params: {
+  readonly activeSessions: readonly AISessionInfo[];
+  readonly promptQueue: readonly PromptQueueItem[];
+}): AiSessionOverviewPollingMode {
+  const hasRunningPromptQueueItem = params.promptQueue.some(
+    (promptQueueItem) =>
+      promptQueueItem.status === "queued" ||
+      promptQueueItem.status === "running",
+  );
+
+  return params.activeSessions.length > 0 || hasRunningPromptQueueItem
+    ? "active"
+    : "idle";
+}
+
 export interface ResolvedAiSessionSubmitTarget {
   readonly qraftAiSessionId: QraftAiSessionId;
   readonly forceNewSession: boolean;
@@ -181,6 +198,7 @@ function countFileContentLines(fileContent: string): number {
 
 export interface AiSessionOverviewRouteState {
   readonly selectedSessionId: QraftAiSessionId | null;
+  readonly isDraftComposerOpen: boolean;
   readonly searchQuery: string;
   readonly searchInTranscript: boolean;
 }
@@ -221,6 +239,7 @@ export interface AiSessionScopeLoadingState {
 }
 
 const SESSION_QUERY_KEY = "ai_session_id";
+const SESSION_DRAFT_QUERY_KEY = "new_session";
 const SESSION_SEARCH_QUERY_KEY = "session_search";
 const SESSION_SEARCH_TRANSCRIPT_KEY = "session_search_in_transcript";
 
@@ -323,6 +342,48 @@ export function createAiSessionSubmitContext(
   };
 }
 
+export interface AiSessionImageAttachmentInput {
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly base64: string;
+}
+
+export function sanitizeAiSessionAttachmentFileName(fileName: string): string {
+  return fileName.replace(/[\\/]/g, "_");
+}
+
+export function createAiSessionImageAttachmentReferences(
+  imageAttachments: readonly AiSessionImageAttachmentInput[],
+): readonly FileReference[] {
+  return imageAttachments.map((imageAttachment) => ({
+    path: `upload/${sanitizeAiSessionAttachmentFileName(
+      imageAttachment.fileName,
+    )}`,
+    fileName: imageAttachment.fileName,
+    mimeType: imageAttachment.mimeType,
+    encoding: "base64",
+    content: imageAttachment.base64,
+    attachmentKind: "image",
+  }));
+}
+
+export function appendAiSessionSubmitContextReferences(params: {
+  readonly submitContext: AIPromptContext;
+  readonly additionalReferences: readonly FileReference[];
+}): AIPromptContext {
+  if (params.additionalReferences.length === 0) {
+    return params.submitContext;
+  }
+
+  return {
+    ...params.submitContext,
+    references: [
+      ...params.submitContext.references,
+      ...params.additionalReferences,
+    ],
+  };
+}
+
 export function createAiSessionDefaultPromptMessage(
   action: AiSessionDefaultPromptAction,
   promptContent: string,
@@ -397,17 +458,22 @@ export function parseAiSessionOverviewRouteState(
   locationSearch: string,
 ): AiSessionOverviewRouteState {
   const searchParams = new URLSearchParams(locationSearch);
-  const selectedSessionId = searchParams.get(SESSION_QUERY_KEY)?.trim();
+  const rawSelectedSessionId = searchParams.get(SESSION_QUERY_KEY)?.trim();
+  const draftComposerOpenParam = searchParams.get(SESSION_DRAFT_QUERY_KEY);
   const searchQuery = searchParams.get(SESSION_SEARCH_QUERY_KEY)?.trim() ?? "";
   const searchInTranscriptParam = searchParams.get(
     SESSION_SEARCH_TRANSCRIPT_KEY,
   );
+  const selectedSessionId =
+    typeof rawSelectedSessionId === "string" && rawSelectedSessionId.length > 0
+      ? (rawSelectedSessionId as QraftAiSessionId)
+      : null;
+  const isDraftComposerOpen =
+    selectedSessionId === null && draftComposerOpenParam === "true";
 
   return {
-    selectedSessionId:
-      typeof selectedSessionId === "string" && selectedSessionId.length > 0
-        ? (selectedSessionId as QraftAiSessionId)
-        : null,
+    selectedSessionId,
+    isDraftComposerOpen,
     searchQuery,
     searchInTranscript:
       searchInTranscriptParam === null
@@ -427,6 +493,8 @@ export function buildAiSessionOverviewRouteSearch(
     state.selectedSessionId.trim().length > 0
   ) {
     searchParams.set(SESSION_QUERY_KEY, state.selectedSessionId);
+  } else if (state.isDraftComposerOpen) {
+    searchParams.set(SESSION_DRAFT_QUERY_KEY, "true");
   }
 
   if (normalizedSearchQuery.length > 0) {

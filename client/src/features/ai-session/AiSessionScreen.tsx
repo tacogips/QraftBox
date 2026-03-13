@@ -43,6 +43,7 @@ import {
 import { renderAiSessionMarkdown } from "./markdown";
 import {
   applyAiSessionSearchDraft,
+  appendAiSessionSubmitContextReferences,
   canApplyAiSessionScopedRequestResult,
   buildAiSessionScreenHash,
   canSubmitAiSessionComposerPrompt,
@@ -51,6 +52,7 @@ import {
   canClearAiSessionSearch,
   type AiSessionRequestToken,
   createAiSessionDefaultPromptMessage,
+  createAiSessionImageAttachmentReferences,
   resolveAiSessionSelectedModelState,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
@@ -73,6 +75,7 @@ import {
   resolveAiSessionStreamSessionId,
   resolveAiSessionSubmitModelProfileId,
   resolveAiSessionSubmitTarget,
+  resolveAiSessionOverviewPollingMode,
   normalizeAiSessionLiveAssistantStatusText,
   shouldRetireAiSessionLiveAssistantFromTranscript,
   shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
@@ -93,9 +96,11 @@ export interface AiSessionScreenProps {
   readonly onOpenProjectScreen: (() => void) | undefined;
 }
 
-const ACTIVE_SESSION_POLL_MS = 5000;
-const SESSION_HISTORY_PAGE_SIZE = 50;
+const ACTIVE_SESSION_POLL_MS = 4000;
+const IDLE_SESSION_POLL_MS = 20_000;
+const SESSION_HISTORY_PAGE_SIZE = 20;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
+const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const SHOW_INJECTED_SYSTEM_PROMPTS_STORAGE_KEY =
   "qraftbox:session-transcript-show-system-prompts";
 const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
@@ -120,6 +125,60 @@ const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
     runningLabel: "Resuming...",
   },
 };
+
+interface ComposerImageAttachment {
+  readonly id: string;
+  readonly fileName: string;
+  readonly mimeType: string;
+  readonly sizeBytes: number;
+  readonly base64: string;
+  readonly previewUrl: string;
+}
+
+function createComposerImageAttachmentId(): string {
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createComposerImageAttachmentKey(params: {
+  readonly fileName: string;
+  readonly sizeBytes: number;
+  readonly mimeType: string;
+}): string {
+  return `${params.fileName}:${params.sizeBytes}:${params.mimeType}`;
+}
+
+function formatAttachmentBytes(sizeBytes: number): string {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function readImageFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fileReader = new FileReader();
+
+    fileReader.onload = () => {
+      if (typeof fileReader.result === "string") {
+        resolve(fileReader.result);
+        return;
+      }
+
+      reject(new Error("Failed to read image file."));
+    };
+
+    fileReader.onerror = () => {
+      reject(new Error("Failed to read image file."));
+    };
+
+    fileReader.readAsDataURL(file);
+  });
+}
 
 function detectPhoneViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth <= 768;
@@ -267,6 +326,29 @@ function renderClearIcon(): JSX.Element {
     >
       <path d="m5 5 10 10" stroke-linecap="round" />
       <path d="M15 5 5 15" stroke-linecap="round" />
+    </svg>
+  );
+}
+
+function renderAttachImageIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="M6.5 10.5 10 7l3.5 3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M4 15.5h12a1.5 1.5 0 0 0 1.5-1.5v-8A1.5 1.5 0 0 0 16 4.5H4A1.5 1.5 0 0 0 2.5 6v8A1.5 1.5 0 0 0 4 15.5Z"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <circle cx="6.5" cy="7" r="1" />
     </svg>
   );
 }
@@ -446,7 +528,9 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [draftSessionId, setDraftSessionId] = createSignal<QraftAiSessionId>(
     generateQraftAiSessionId(),
   );
-  const [isDraftComposerOpen, setIsDraftComposerOpen] = createSignal(false);
+  const [isDraftComposerOpen, setIsDraftComposerOpen] = createSignal(
+    initialOverviewRouteState.isDraftComposerOpen,
+  );
   const [searchDraftQuery, setSearchDraftQuery] = createSignal(
     initialOverviewRouteState.searchQuery,
   );
@@ -460,6 +544,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     initialOverviewRouteState.searchInTranscript,
   );
   const [promptInput, setPromptInput] = createSignal("");
+  const [attachmentError, setAttachmentError] = createSignal<string | null>(
+    null,
+  );
+  const [imageAttachments, setImageAttachments] = createSignal<
+    readonly ComposerImageAttachment[]
+  >([]);
   const [hiddenSessionIds, setHiddenSessionIds] = createSignal<
     readonly QraftAiSessionId[]
   >([]);
@@ -482,6 +572,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   const [runningDefaultPromptAction, setRunningDefaultPromptAction] =
     createSignal<AiSessionDefaultPromptAction | null>(null);
   const [isPurposeExpanded, setIsPurposeExpanded] = createSignal(false);
+  const [isTranscriptHistoryCollapsed, setIsTranscriptHistoryCollapsed] =
+    createSignal(initialOverviewRouteState.selectedSessionId === null);
   const [isComposerFooterCollapsed, setIsComposerFooterCollapsed] =
     createSignal(false);
   const [selectedSessionDetail, setSelectedSessionDetail] =
@@ -542,6 +634,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let activeScopeKey: string | null = null;
+  let activePollingConfigKey: string | null = null;
+  let lastPollingMode: "active" | "idle" | null = null;
   let activeSelectedSessionDetailKey: string | null = null;
   let activeSelectedSessionStreamKey: string | null = null;
   let activeSelectedSessionEventSource: EventSource | null = null;
@@ -620,6 +714,24 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     displayedSelectedSessionTranscript().filter(
       (transcriptLine) => transcriptLine.isInjectedSystemPrompt,
     ).length;
+  const transcriptSectionSummary = () => {
+    if (selectedQraftAiSessionId() === null) {
+      return "New sessions start without chat history.";
+    }
+
+    if (selectedSessionLoading()) {
+      return "Loading chat history...";
+    }
+
+    if (selectedSessionError() !== null) {
+      return "Chat history is unavailable right now.";
+    }
+
+    const transcriptLineCount = visibleSelectedSessionTranscript().length;
+    return transcriptLineCount > 0
+      ? `${transcriptLineCount} transcript entries`
+      : "No chat history yet.";
+  };
   const selectedSessionDetailTarget = () => {
     const qraftAiSessionId = selectedQraftAiSessionId();
     if (props.contextId === null || qraftAiSessionId === null) {
@@ -671,6 +783,108 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         hiddenSessionIdSet.has(sessionEntry.qraftAiSessionId) === false,
     );
   };
+
+  function clearImageAttachments(): void {
+    for (const imageAttachment of imageAttachments()) {
+      URL.revokeObjectURL(imageAttachment.previewUrl);
+    }
+
+    setImageAttachments([]);
+  }
+
+  function removeImageAttachment(imageAttachmentId: string): void {
+    const nextImageAttachments: ComposerImageAttachment[] = [];
+
+    for (const imageAttachment of imageAttachments()) {
+      if (imageAttachment.id === imageAttachmentId) {
+        URL.revokeObjectURL(imageAttachment.previewUrl);
+        continue;
+      }
+
+      nextImageAttachments.push(imageAttachment);
+    }
+
+    setImageAttachments(nextImageAttachments);
+  }
+
+  async function handleImageAttachmentInput(event: Event): Promise<void> {
+    const attachmentInput = event.currentTarget;
+    if (!(attachmentInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const selectedFiles = attachmentInput.files;
+    if (selectedFiles === null || selectedFiles.length === 0) {
+      return;
+    }
+
+    setAttachmentError(null);
+    const skippedMessages: string[] = [];
+    const existingAttachmentKeys = new Set(
+      imageAttachments().map((imageAttachment) =>
+        createComposerImageAttachmentKey({
+          fileName: imageAttachment.fileName,
+          sizeBytes: imageAttachment.sizeBytes,
+          mimeType: imageAttachment.mimeType,
+        }),
+      ),
+    );
+    const nextImageAttachments = [...imageAttachments()];
+
+    for (const selectedFile of Array.from(selectedFiles)) {
+      if (!selectedFile.type.startsWith("image/")) {
+        skippedMessages.push(
+          `${selectedFile.name}: only image files are supported.`,
+        );
+        continue;
+      }
+
+      if (selectedFile.size > MAX_IMAGE_ATTACHMENT_BYTES) {
+        skippedMessages.push(
+          `${selectedFile.name}: exceeds ${formatAttachmentBytes(
+            MAX_IMAGE_ATTACHMENT_BYTES,
+          )} limit.`,
+        );
+        continue;
+      }
+
+      const attachmentKey = createComposerImageAttachmentKey({
+        fileName: selectedFile.name,
+        sizeBytes: selectedFile.size,
+        mimeType: selectedFile.type,
+      });
+      if (existingAttachmentKeys.has(attachmentKey)) {
+        continue;
+      }
+
+      try {
+        const dataUrl = await readImageFileAsDataUrl(selectedFile);
+        const base64 = dataUrl.split(",", 2)[1];
+        if (base64 === undefined || base64.length === 0) {
+          skippedMessages.push(`${selectedFile.name}: failed to encode image.`);
+          continue;
+        }
+
+        nextImageAttachments.push({
+          id: createComposerImageAttachmentId(),
+          fileName: selectedFile.name,
+          mimeType: selectedFile.type,
+          sizeBytes: selectedFile.size,
+          base64,
+          previewUrl: URL.createObjectURL(selectedFile),
+        });
+        existingAttachmentKeys.add(attachmentKey);
+      } catch {
+        skippedMessages.push(`${selectedFile.name}: failed to read image.`);
+      }
+    }
+
+    setImageAttachments(nextImageAttachments);
+    setAttachmentError(
+      skippedMessages.length > 0 ? skippedMessages.join(" ") : null,
+    );
+    attachmentInput.value = "";
+  }
 
   createEffect(() => {
     const syncPhoneViewport = () => {
@@ -822,10 +1036,21 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     }
   }
 
-  function restartPolling(contextId: string, projectPath: string): void {
+  function restartPolling(params: {
+    readonly contextId: string;
+    readonly projectPath: string;
+    readonly scopeKey: string;
+    readonly pollingMode: "active" | "idle";
+  }): void {
     if (pollTimer !== null) {
       clearInterval(pollTimer);
     }
+
+    const refreshIntervalMs =
+      params.pollingMode === "active"
+        ? ACTIVE_SESSION_POLL_MS
+        : IDLE_SESSION_POLL_MS;
+
     pollTimer = setInterval(() => {
       if (
         !shouldAutoRefreshAiSessionOverview({
@@ -835,8 +1060,11 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         return;
       }
 
-      void refreshActivity(contextId, projectPath);
-    }, ACTIVE_SESSION_POLL_MS);
+      void refreshActivity(params.contextId, params.projectPath);
+      if (params.pollingMode === "idle") {
+        void refreshHiddenSessions(params.scopeKey);
+      }
+    }, refreshIntervalMs);
   }
 
   createEffect(() => {
@@ -846,18 +1074,22 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
     if (activeScopeKey !== nextScopeKey) {
       activeScopeKey = nextScopeKey;
+      clearImageAttachments();
       const scopeResetState = createAiSessionScopeResetState(
         readAiSessionOverviewRouteSearchFromHash(window.location.hash),
       );
       setSelectedQraftAiSessionId(scopeResetState.selectedSessionId);
-      setIsDraftComposerOpen(false);
+      setIsDraftComposerOpen(scopeResetState.isDraftComposerOpen);
       setDraftSessionId(scopeResetState.draftSessionId);
       setPromptInput(scopeResetState.promptInput);
+      setAttachmentError(null);
       setSearchDraftQuery(scopeResetState.searchQuery);
       setSearchDraftInTranscript(scopeResetState.searchInTranscript);
       setSearchQuery(scopeResetState.searchQuery);
       setSearchInTranscript(scopeResetState.searchInTranscript);
       setHistoryRequestedLimit(SESSION_HISTORY_PAGE_SIZE);
+      activePollingConfigKey = null;
+      lastPollingMode = null;
     }
 
     activityRequestGuard.invalidate();
@@ -898,6 +1130,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       clearInterval(pollTimer);
       pollTimer = null;
     }
+    activePollingConfigKey = null;
+    lastPollingMode = null;
 
     mutationRequestGuard.invalidate();
 
@@ -915,7 +1149,56 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     }
     void refreshHiddenSessions(nextScopeKey);
     void refreshModelProfiles(nextScopeKey);
-    restartPolling(contextId, projectPath);
+  });
+
+  createEffect(() => {
+    const contextId = props.contextId;
+    const projectPath = props.projectPath;
+    const scopeKey = createAiSessionScopeKey(contextId, projectPath);
+    const autoRefreshEnabled = shouldAutoRefreshAiSessionOverview({
+      selectedQraftAiSessionId: selectedQraftAiSessionId(),
+    });
+
+    if (
+      contextId === null ||
+      scopeKey === null ||
+      autoRefreshEnabled === false
+    ) {
+      if (pollTimer !== null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+      activePollingConfigKey = null;
+      lastPollingMode = null;
+      return;
+    }
+
+    const pollingMode = resolveAiSessionOverviewPollingMode({
+      activeSessions: activeSessions(),
+      promptQueue: promptQueue(),
+    });
+    const nextPollingConfigKey = `${scopeKey}:${pollingMode}`;
+    const previousPollingMode = lastPollingMode;
+
+    if (activePollingConfigKey === nextPollingConfigKey) {
+      return;
+    }
+
+    activePollingConfigKey = nextPollingConfigKey;
+    lastPollingMode = pollingMode;
+    restartPolling({
+      contextId,
+      projectPath,
+      scopeKey,
+      pollingMode,
+    });
+
+    if (previousPollingMode !== null && previousPollingMode !== pollingMode) {
+      void refreshActivity(contextId, projectPath);
+      if (pollingMode === "idle") {
+        void refreshHiddenSessions(scopeKey);
+      }
+    }
   });
 
   async function refreshSelectedSessionArtifacts(params: {
@@ -1098,6 +1381,8 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       projectSlug: props.projectSlug,
       overviewRouteState: {
         selectedSessionId,
+        isDraftComposerOpen:
+          selectedSessionId === null && isDraftComposerOpen(),
         searchQuery: searchQuery(),
         searchInTranscript: searchInTranscript(),
       },
@@ -1109,6 +1394,16 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         "",
         `${window.location.pathname}${window.location.search}${nextHash}`,
       );
+    }
+  });
+
+  createEffect(() => {
+    setIsTranscriptHistoryCollapsed(selectedQraftAiSessionId() === null);
+  });
+
+  createEffect(() => {
+    if (isTranscriptHistoryCollapsed()) {
+      transcriptScrollContainer = null;
     }
   });
 
@@ -1490,7 +1785,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         nextOverviewRouteState,
       });
       setSelectedQraftAiSessionId(nextOverviewRouteState.selectedSessionId);
-      setIsDraftComposerOpen(false);
+      setIsDraftComposerOpen(nextOverviewRouteState.isDraftComposerOpen);
       setSearchDraftQuery(nextOverviewRouteState.searchQuery);
       setSearchDraftInTranscript(nextOverviewRouteState.searchInTranscript);
       setSearchQuery(nextOverviewRouteState.searchQuery);
@@ -1522,6 +1817,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     if (copiedTranscriptLineResetTimer !== null) {
       clearTimeout(copiedTranscriptLineResetTimer);
     }
+    clearImageAttachments();
   });
 
   async function writeTextToClipboard(text: string): Promise<void> {
@@ -1588,6 +1884,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     runImmediately: boolean,
     options: {
       readonly clearComposerInput: boolean;
+      readonly includeComposerAttachments: boolean;
       readonly forceNewSession?: boolean | undefined;
       readonly requestToken?: AiSessionRequestToken | undefined;
     },
@@ -1618,10 +1915,15 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         draftSessionId: draftSessionId(),
         restartFromBeginning: options.forceNewSession === true,
       });
-      const submitContext = createAiSessionSubmitContext({
-        selectedPath: props.selectedPath,
-        fileContent: props.fileContent,
-        diffOverview: props.diffOverview,
+      const submitContext = appendAiSessionSubmitContextReferences({
+        submitContext: createAiSessionSubmitContext({
+          selectedPath: props.selectedPath,
+          fileContent: props.fileContent,
+          diffOverview: props.diffOverview,
+        }),
+        additionalReferences: options.includeComposerAttachments
+          ? createAiSessionImageAttachmentReferences(imageAttachments())
+          : [],
       });
       const submitResult = await aiSessionsApi.submitPrompt({
         runImmediately,
@@ -1650,6 +1952,10 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
       if (options.clearComposerInput) {
         setPromptInput("");
+      }
+      if (options.includeComposerAttachments) {
+        clearImageAttachments();
+        setAttachmentError(null);
       }
       setSelectedQraftAiSessionId(submitTarget.qraftAiSessionId);
       setIsDraftComposerOpen(false);
@@ -1728,12 +2034,14 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   async function submitPrompt(runImmediately: boolean): Promise<void> {
     await submitPromptMessage(promptInput().trim(), runImmediately, {
       clearComposerInput: true,
+      includeComposerAttachments: true,
     });
   }
 
   async function restartSelectedSessionFromBeginning(): Promise<void> {
     await submitPromptMessage(promptInput().trim(), true, {
       clearComposerInput: true,
+      includeComposerAttachments: true,
       forceNewSession: true,
     });
   }
@@ -1810,6 +2118,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
         true,
         {
           clearComposerInput: false,
+          includeComposerAttachments: false,
           requestToken,
         },
       );
@@ -1937,6 +2246,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setDraftSessionId(generateQraftAiSessionId());
     setSelectedQraftAiSessionId(null);
     setIsDraftComposerOpen(true);
+    setIsTranscriptHistoryCollapsed(true);
     setErrorMessage(null);
   }
 
@@ -2601,7 +2911,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
           <Show when={showComposer()}>
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-2 backdrop-blur-sm sm:p-4">
-              <div class="flex h-[min(92vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+              <div class="flex h-[min(96vh,920px)] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                   <div class={composerHeaderClass()}>
                     <div class="min-w-0">
@@ -2724,6 +3034,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       <ToolbarIconButton
                         label="Jump to head"
                         disabled={
+                          isTranscriptHistoryCollapsed() ||
                           visibleSelectedSessionTranscript().length === 0
                         }
                         onClick={() => void jumpSelectedTranscriptToHead()}
@@ -2733,6 +3044,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                       <ToolbarIconButton
                         label="Jump to latest"
                         disabled={
+                          isTranscriptHistoryCollapsed() ||
                           visibleSelectedSessionTranscript().length === 0
                         }
                         onClick={() => scrollSelectedTranscriptToLatest()}
@@ -2751,149 +3063,176 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                     </div>
                   </div>
 
-                  <div
-                    ref={(element) => {
-                      transcriptScrollContainer = element;
-                    }}
-                    onScroll={handleTranscriptScroll}
-                    class="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-4"
-                  >
-                    <Show when={selectedSessionDetail() !== null}>
-                      <div class="mb-4 grid gap-3 sm:grid-cols-3">
-                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
-                          <p class="uppercase tracking-wide text-text-tertiary">
-                            Execution flow
-                          </p>
-                          <p class="mt-1 text-sm text-text-primary">
-                            {describeAiSessionExecutionFlow(
-                              selectedSessionEntry() ?? {
-                                aiAgent: undefined,
-                                sessionSource: undefined,
-                                modelVendor: undefined,
-                              },
-                            )}
-                          </p>
-                        </div>
-                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
-                          <p class="uppercase tracking-wide text-text-tertiary">
-                            Branch
-                          </p>
-                          <p class="mt-1 text-sm text-text-primary">
-                            {selectedSessionDetail()?.gitBranch}
-                          </p>
-                        </div>
-                        <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
-                          <p class="uppercase tracking-wide text-text-tertiary">
-                            Updated
-                          </p>
-                          <p class="mt-1 text-sm text-text-primary">
-                            {formatAiSessionTimestamp(
-                              selectedSessionEntry()?.updatedAt ?? "",
-                            )}
-                          </p>
-                        </div>
+                  <div class="border-t border-border-default px-3 py-3 sm:px-4">
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <p class="text-[11px] font-semibold uppercase tracking-[0.16em] text-text-tertiary">
+                          Chat history
+                        </p>
+                        <p class="mt-1 text-sm text-text-secondary">
+                          {transcriptSectionSummary()}
+                        </p>
                       </div>
-                    </Show>
-
-                    <Show
-                      when={
-                        selectedQraftAiSessionId() === null &&
-                        selectedSessionLoading() === false
-                      }
-                    >
-                      <div class="mb-4 rounded-xl border border-dashed border-border-default bg-bg-primary p-4 text-sm leading-6 text-text-secondary">
-                        New sessions do not have transcript history yet. Add a
-                        prompt below to start one.
-                      </div>
-                    </Show>
-
-                    <Show when={selectedSessionLoading()}>
-                      <p class="text-sm text-text-secondary">
-                        Loading selected session transcript...
-                      </p>
-                    </Show>
-                    <Show when={selectedSessionLoadingMore()}>
-                      <p class="pb-3 text-xs text-text-secondary">
-                        Loading older transcript...
-                      </p>
-                    </Show>
-                    <Show when={selectedSessionError() !== null}>
-                      <p
-                        role="alert"
-                        class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-3 py-2 text-sm text-danger-fg"
+                      <ToolbarIconButton
+                        label={
+                          isTranscriptHistoryCollapsed()
+                            ? "Expand chat history"
+                            : "Collapse chat history"
+                        }
+                        onClick={() =>
+                          setIsTranscriptHistoryCollapsed(
+                            !isTranscriptHistoryCollapsed(),
+                          )
+                        }
                       >
-                        {selectedSessionError()}
-                      </p>
-                    </Show>
-                    <div class="space-y-3">
-                      <For each={visibleSelectedSessionTranscript()}>
-                        {(transcriptLine) => (
-                          <article
-                            class={getTranscriptLineCardClass(transcriptLine)}
-                          >
-                            <div class="mb-2 flex items-center justify-between gap-3">
-                              <span
-                                class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getTranscriptLineRoleBadgeClass(
-                                  transcriptLine,
-                                )}`}
-                              >
-                                {transcriptLine.role}
-                              </span>
-                              <div class="flex items-center gap-2">
-                                <span class="text-[11px] text-text-tertiary">
-                                  {transcriptLine.timestamp === null
-                                    ? ""
-                                    : formatAiSessionTimestamp(
-                                        transcriptLine.timestamp,
-                                      )}
-                                </span>
-                                <button
-                                  type="button"
-                                  class="rounded p-1 text-text-tertiary transition hover:bg-bg-hover hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
-                                  aria-label="Copy message to clipboard"
-                                  title="Copy to clipboard"
-                                  onClick={() =>
-                                    void copyTranscriptLine(transcriptLine)
-                                  }
-                                >
-                                  <span class="block h-4 w-4">
-                                    {copiedTranscriptLineId() ===
-                                    transcriptLine.id
-                                      ? renderCopiedIcon()
-                                      : renderCopyIcon()}
-                                  </span>
-                                </button>
-                              </div>
-                            </div>
-                            <div
-                              class={`transcript-markdown break-words text-sm leading-6 text-text-primary ${
-                                transcriptLine.isThinking
-                                  ? "animate-thinking-blink"
-                                  : ""
-                              }`}
-                              innerHTML={renderAiSessionMarkdown(
-                                transcriptLine.text,
-                              )}
-                            />
-                          </article>
+                        {renderComposerFooterToggleIcon(
+                          isTranscriptHistoryCollapsed(),
                         )}
-                      </For>
+                      </ToolbarIconButton>
                     </div>
-                    <Show
-                      when={
-                        !selectedSessionLoading() &&
-                        selectedSessionError() === null &&
-                        visibleSelectedSessionTranscript().length === 0
-                      }
-                    >
-                      <p class="text-sm text-text-secondary">
-                        {hiddenInjectedSystemPromptCount() > 0
-                          ? "Only injected system prompts are currently hidden for this session."
-                          : "No transcript events are available for this session yet."}
-                      </p>
-                    </Show>
                   </div>
-                  <div class="border-t border-border-default bg-bg-primary px-3 py-3 sm:px-4">
+
+                  <Show
+                    when={!isTranscriptHistoryCollapsed()}
+                    fallback={
+                      <div class="px-3 pb-3 text-sm text-text-secondary sm:px-4">
+                        Chat history is collapsed.
+                      </div>
+                    }
+                  >
+                    <div
+                      ref={(element) => {
+                        transcriptScrollContainer = element;
+                      }}
+                      onScroll={handleTranscriptScroll}
+                      class="min-h-0 flex-1 overflow-auto px-3 py-4 sm:px-4"
+                    >
+                      <Show when={selectedSessionDetail() !== null}>
+                        <div class="mb-4 grid gap-3 sm:grid-cols-3">
+                          <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                            <p class="uppercase tracking-wide text-text-tertiary">
+                              Execution flow
+                            </p>
+                            <p class="mt-1 text-sm text-text-primary">
+                              {describeAiSessionExecutionFlow(
+                                selectedSessionEntry() ?? {
+                                  aiAgent: undefined,
+                                  sessionSource: undefined,
+                                  modelVendor: undefined,
+                                },
+                              )}
+                            </p>
+                          </div>
+                          <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                            <p class="uppercase tracking-wide text-text-tertiary">
+                              Branch
+                            </p>
+                            <p class="mt-1 text-sm text-text-primary">
+                              {selectedSessionDetail()?.gitBranch}
+                            </p>
+                          </div>
+                          <div class="rounded-lg border border-border-default bg-bg-primary p-3 text-xs text-text-secondary">
+                            <p class="uppercase tracking-wide text-text-tertiary">
+                              Updated
+                            </p>
+                            <p class="mt-1 text-sm text-text-primary">
+                              {formatAiSessionTimestamp(
+                                selectedSessionEntry()?.updatedAt ?? "",
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </Show>
+
+                      <Show when={selectedSessionLoading()}>
+                        <p class="text-sm text-text-secondary">
+                          Loading selected session transcript...
+                        </p>
+                      </Show>
+                      <Show when={selectedSessionLoadingMore()}>
+                        <p class="pb-3 text-xs text-text-secondary">
+                          Loading older transcript...
+                        </p>
+                      </Show>
+                      <Show when={selectedSessionError() !== null}>
+                        <p
+                          role="alert"
+                          class="rounded-md border border-danger-emphasis/40 bg-danger-subtle px-3 py-2 text-sm text-danger-fg"
+                        >
+                          {selectedSessionError()}
+                        </p>
+                      </Show>
+                      <div class="space-y-3">
+                        <For each={visibleSelectedSessionTranscript()}>
+                          {(transcriptLine) => (
+                            <article
+                              class={getTranscriptLineCardClass(transcriptLine)}
+                            >
+                              <div class="mb-2 flex items-center justify-between gap-3">
+                                <span
+                                  class={`rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${getTranscriptLineRoleBadgeClass(
+                                    transcriptLine,
+                                  )}`}
+                                >
+                                  {transcriptLine.role}
+                                </span>
+                                <div class="flex items-center gap-2">
+                                  <span class="text-[11px] text-text-tertiary">
+                                    {transcriptLine.timestamp === null
+                                      ? ""
+                                      : formatAiSessionTimestamp(
+                                          transcriptLine.timestamp,
+                                        )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    class="rounded p-1 text-text-tertiary transition hover:bg-bg-hover hover:text-text-primary focus:outline-none focus:ring-1 focus:ring-accent-emphasis"
+                                    aria-label="Copy message to clipboard"
+                                    title="Copy to clipboard"
+                                    onClick={() =>
+                                      void copyTranscriptLine(transcriptLine)
+                                    }
+                                  >
+                                    <span class="block h-4 w-4">
+                                      {copiedTranscriptLineId() ===
+                                      transcriptLine.id
+                                        ? renderCopiedIcon()
+                                        : renderCopyIcon()}
+                                    </span>
+                                  </button>
+                                </div>
+                              </div>
+                              <div
+                                class={`transcript-markdown break-words text-sm leading-6 text-text-primary ${
+                                  transcriptLine.isThinking
+                                    ? "animate-thinking-blink"
+                                    : ""
+                                }`}
+                                innerHTML={renderAiSessionMarkdown(
+                                  transcriptLine.text,
+                                )}
+                              />
+                            </article>
+                          )}
+                        </For>
+                      </div>
+                      <Show
+                        when={
+                          selectedQraftAiSessionId() !== null &&
+                          !selectedSessionLoading() &&
+                          selectedSessionError() === null &&
+                          visibleSelectedSessionTranscript().length === 0
+                        }
+                      >
+                        <p class="text-sm text-text-secondary">
+                          {hiddenInjectedSystemPromptCount() > 0
+                            ? "Only injected system prompts are currently hidden for this session."
+                            : "No transcript events are available for this session yet."}
+                        </p>
+                      </Show>
+                    </div>
+                  </Show>
+                  <div class="max-h-[45vh] shrink-0 overflow-y-auto border-t border-border-default bg-bg-primary px-3 py-3 sm:px-4">
                     <div class="flex items-center gap-2">
                       <ToolbarIconButton
                         label={
@@ -2989,6 +3328,89 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
                             }
                             onKeyDown={handlePromptInputKeyDown}
                           />
+                          <div class="mt-3 grid gap-2">
+                            <div
+                              class={
+                                isPhoneViewport()
+                                  ? "grid gap-2"
+                                  : "flex items-center justify-between gap-3"
+                              }
+                            >
+                              <div class="relative inline-flex max-w-full">
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  class="absolute inset-0 h-full w-full cursor-pointer opacity-0 disabled:cursor-not-allowed"
+                                  aria-label="Attach images to the next prompt"
+                                  disabled={submitting()}
+                                  onChange={(event) =>
+                                    void handleImageAttachmentInput(event)
+                                  }
+                                />
+                                <div class="pointer-events-none inline-flex items-center gap-2 rounded-md border border-border-default bg-bg-primary px-3 py-2 text-sm font-medium text-text-primary">
+                                  <span class="block h-4 w-4 shrink-0">
+                                    {renderAttachImageIcon()}
+                                  </span>
+                                  <span class="truncate">
+                                    {imageAttachments().length > 0
+                                      ? `Add images (${imageAttachments().length})`
+                                      : "Attach images"}
+                                  </span>
+                                </div>
+                              </div>
+                              <p class="text-[11px] text-text-tertiary">
+                                Images only. Up to{" "}
+                                {formatAttachmentBytes(
+                                  MAX_IMAGE_ATTACHMENT_BYTES,
+                                )}{" "}
+                                each.
+                              </p>
+                            </div>
+                            <Show when={imageAttachments().length > 0}>
+                              <div class="grid gap-2">
+                                <For each={imageAttachments()}>
+                                  {(imageAttachment) => (
+                                    <div class="flex items-center gap-3 rounded-md border border-border-default bg-bg-primary p-2">
+                                      <img
+                                        src={imageAttachment.previewUrl}
+                                        alt={imageAttachment.fileName}
+                                        class="h-14 w-14 shrink-0 rounded-md border border-border-default object-cover"
+                                      />
+                                      <div class="min-w-0 flex-1">
+                                        <p class="truncate text-sm text-text-primary">
+                                          {imageAttachment.fileName}
+                                        </p>
+                                        <p class="text-[11px] text-text-tertiary">
+                                          {imageAttachment.mimeType} ·{" "}
+                                          {formatAttachmentBytes(
+                                            imageAttachment.sizeBytes,
+                                          )}
+                                        </p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        class="rounded-md border border-border-default bg-bg-secondary px-3 py-2 text-xs font-medium text-text-secondary transition hover:bg-bg-hover hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
+                                        disabled={submitting()}
+                                        onClick={() =>
+                                          removeImageAttachment(
+                                            imageAttachment.id,
+                                          )
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  )}
+                                </For>
+                              </div>
+                            </Show>
+                            <Show when={attachmentError() !== null}>
+                              <p class="text-xs text-danger-fg">
+                                {attachmentError()}
+                              </p>
+                            </Show>
+                          </div>
                           <div class={composerFooterActionClass()}>
                             <button
                               type="button"
