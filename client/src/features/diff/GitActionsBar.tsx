@@ -22,6 +22,7 @@ import {
   resolveSelectedPullRequestBaseBranch,
   shouldShowCancelGitActionButton,
 } from "./git-actions-state";
+import { createLatestRequestGuard } from "./latest-request-guard";
 
 export interface GitActionsBarProps {
   readonly apiBaseUrl: string;
@@ -116,6 +117,8 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
   const gitActionsApi = createGitActionsApiClient({
     apiBaseUrl: props.apiBaseUrl,
   });
+  const operationStatusRequestGuard = createLatestRequestGuard();
+  const pullRequestStatusRequestGuard = createLatestRequestGuard();
   const [operating, setOperating] = createSignal(false);
   const [operationPhase, setOperationPhase] =
     createSignal<GitOperationPhase>("idle");
@@ -162,17 +165,22 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
 
   async function refreshPullRequestStatus(): Promise<void> {
     if (!props.isGitRepo) {
+      pullRequestStatusRequestGuard.invalidate();
       setPrStatus(null);
       setSelectedBaseBranch("");
       setPullRequestDialogOpen(false);
       return;
     }
 
+    const currentRequestId = pullRequestStatusRequestGuard.issue();
     setPrLoading(true);
     try {
       const nextPullRequestStatus = await gitActionsApi.fetchPullRequestStatus(
         props.projectPath,
       );
+      if (!pullRequestStatusRequestGuard.isCurrent(currentRequestId)) {
+        return;
+      }
       setPrStatus(nextPullRequestStatus);
       setSelectedBaseBranch((currentSelectedBaseBranch) =>
         resolveSelectedPullRequestBaseBranch({
@@ -182,11 +190,16 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
         }),
       );
     } catch {
+      if (!pullRequestStatusRequestGuard.isCurrent(currentRequestId)) {
+        return;
+      }
       setPrStatus(null);
       setSelectedBaseBranch("");
       setPullRequestDialogOpen(false);
     } finally {
-      setPrLoading(false);
+      if (pullRequestStatusRequestGuard.isCurrent(currentRequestId)) {
+        setPrLoading(false);
+      }
     }
   }
 
@@ -195,8 +208,12 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
       return;
     }
 
+    const currentRequestId = operationStatusRequestGuard.issue();
     try {
       const nextOperationStatus = await gitActionsApi.fetchOperationStatus();
+      if (!operationStatusRequestGuard.isCurrent(currentRequestId)) {
+        return;
+      }
       setOperating(nextOperationStatus.operating);
       setOperationPhase(
         nextOperationStatus.operating ? nextOperationStatus.phase : "idle",
@@ -206,6 +223,9 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
         setCancellingOperation(false);
       }
     } catch {
+      if (!operationStatusRequestGuard.isCurrent(currentRequestId)) {
+        return;
+      }
       // Keep the local UI state when polling fails.
     }
   }
@@ -229,6 +249,8 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
     readonly successMessage: string;
     readonly fallbackErrorMessage: string;
   }): Promise<void> {
+    operationStatusRequestGuard.invalidate();
+    pullRequestStatusRequestGuard.invalidate();
     setLocalOperationLock(true);
     setOperating(true);
     setOperationPhase(options.phase);
@@ -390,6 +412,8 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
 
   createEffect(() => {
     if (!props.isGitRepo || props.projectPath.trim().length === 0) {
+      operationStatusRequestGuard.invalidate();
+      pullRequestStatusRequestGuard.invalidate();
       setOperating(false);
       setOperationPhase("idle");
       setActiveActionId(null);

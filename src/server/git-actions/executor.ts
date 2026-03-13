@@ -89,6 +89,8 @@ interface PRView {
 
 const PR_PLACEHOLDER_BODY = "Analyzing changes and generating description...";
 const PR_PLACEHOLDER_TITLE = "WIP: Analyzing changes...";
+const CREATE_PR_VERIFICATION_ERROR =
+  "Create PR command completed but no pull request exists for the current branch";
 
 function hasPlaceholderPRContent(pr: PRView): boolean {
   const body = (pr.body ?? "").trim().toLowerCase();
@@ -834,7 +836,15 @@ export async function executeCreatePR(
     }
 
     const currentPR = await getCurrentPRView(projectPath);
-    if (currentPR === null || !hasPlaceholderPRContent(currentPR)) {
+    if (currentPR === null) {
+      return {
+        success: false,
+        output: initial.output,
+        error: CREATE_PR_VERIFICATION_ERROR,
+      };
+    }
+
+    if (!hasPlaceholderPRContent(currentPR)) {
       return initial;
     }
 
@@ -858,7 +868,15 @@ export async function executeCreatePR(
     }
 
     const verifiedPR = await getCurrentPRView(projectPath);
-    if (verifiedPR !== null && hasPlaceholderPRContent(verifiedPR)) {
+    if (verifiedPR === null) {
+      return {
+        success: false,
+        output: `${initial.output}\n\n${recovery.output}`.trim(),
+        error: CREATE_PR_VERIFICATION_ERROR,
+      };
+    }
+
+    if (hasPlaceholderPRContent(verifiedPR)) {
       return {
         success: false,
         output: `${initial.output}\n\n${recovery.output}`.trim(),
