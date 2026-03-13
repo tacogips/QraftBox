@@ -390,7 +390,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
           </div>
         }
       >
-        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-primary">
+        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-border-default bg-bg-primary">
           <form
             class="flex flex-col gap-3 border-b border-border-default bg-bg-primary px-4 py-3 lg:flex-row lg:items-center"
             onSubmit={(event) => {
@@ -536,7 +536,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
 
           <Show when={expandedHash() !== null}>
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div class="flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+              <div class="flex h-[min(88vh,920px)] w-full max-w-7xl overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-w-0 flex-1 flex-col border-r border-border-default">
                   <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
                     <div class="min-w-0">

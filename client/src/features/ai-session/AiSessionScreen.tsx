@@ -2279,7 +2279,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           </div>
         }
       >
-        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-primary">
+        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-border-default bg-bg-primary">
           <form
             class="flex flex-col gap-3 border-b border-border-default bg-bg-primary px-4 py-3 lg:flex-row lg:items-center"
             onSubmit={(event) => {
@@ -2565,7 +2565,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
 
           <Show when={showComposer()}>
             <div class="absolute inset-0 z-40 flex items-start justify-center bg-black/60 p-4 backdrop-blur-sm">
-              <div class="flex h-full max-h-[920px] w-full max-w-7xl flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
+              <div class="flex h-full max-h-[920px] w-full max-w-7xl flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary shadow-2xl shadow-black/40">
                 <div class="flex min-h-0 min-w-0 flex-1 flex-col">
                   <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
                     <div class="min-w-0">

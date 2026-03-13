@@ -561,7 +561,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
       <Show
         when={props.contextId !== null}
         fallback={
-          <div class="flex min-h-[420px] items-center justify-center rounded-2xl border border-border-default bg-bg-secondary px-6 text-center text-sm text-text-secondary">
+          <div class="flex min-h-[420px] items-center justify-center rounded-none border border-border-default bg-bg-secondary px-6 text-center text-sm text-text-secondary">
             Open a project tab to start a terminal session.
           </div>
         }
@@ -569,7 +569,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
         <Show
           when={isConnected() || isConnecting()}
           fallback={
-            <div class="flex min-h-[420px] flex-1 items-start justify-start rounded-2xl border border-border-default bg-bg-secondary p-6 text-left">
+            <div class="flex min-h-[420px] flex-1 items-start justify-start rounded-none border border-border-default bg-bg-secondary p-6 text-left">
               <div class="flex flex-col items-start gap-4">
                 <ToolbarIconButton
                   label="Connect terminal"
@@ -599,7 +599,7 @@ export function TerminalScreen(props: TerminalScreenProps): JSX.Element {
             </div>
           }
         >
-          <div class="flex min-h-0 flex-1 flex-col gap-2 rounded-2xl border border-border-default bg-bg-secondary p-3">
+          <div class="flex min-h-0 flex-1 flex-col gap-2 rounded-none border border-border-default bg-bg-secondary p-3">
             <div
               ref={(element) => {
                 terminalContainerRef = element;

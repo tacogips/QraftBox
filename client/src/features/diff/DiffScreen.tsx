@@ -2352,7 +2352,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
               class={`grid min-h-0 flex-1 gap-4 ${isFileTreeCollapsed() ? "xl:grid-cols-[56px_minmax(0,1fr)]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}
             >
               <aside
-                class={`qraftbox-file-tree-pane flex min-h-0 h-full flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
+                class={`qraftbox-file-tree-pane flex min-h-0 h-full flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary ${isFileTreeCollapsed() ? "items-center" : ""}`}
               >
                 <div class="border-b border-border-default p-4">
                   <div
@@ -2672,7 +2672,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </div>
 
                 <Show when={props.filesTab === "search"}>
-                  <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+                  <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary">
                     <div class="border-b border-border-default px-4 py-4">
                       <div class="flex flex-col gap-4">
                         <div>
@@ -2944,7 +2944,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                 </Show>
 
                 <Show when={props.filesTab === "file"}>
-                  <main class="qraftbox-file-preview-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-default bg-bg-secondary">
+                  <main class="qraftbox-file-preview-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-border-default bg-bg-secondary">
                     <div class="sticky top-0 z-10 border-b border-border-default bg-bg-secondary/95 px-4 py-3 backdrop-blur">
                       <div class="flex min-w-0 flex-col gap-2">
                         <div class="min-w-0">
@@ -3897,7 +3897,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                       </Show>
                     </div>
                   </main>
-                  <div class="rounded-2xl border border-border-default bg-bg-secondary">
+                  <div class="rounded-none border border-border-default bg-bg-secondary">
                     <div class="flex items-center justify-between gap-3 border-b border-border-default px-4 py-3">
                       <div class="flex items-center gap-2">
                         <ToolbarIconButton
