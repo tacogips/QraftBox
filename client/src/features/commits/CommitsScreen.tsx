@@ -172,6 +172,10 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
     isPhoneViewport()
       ? "mt-2 break-words text-base font-semibold text-text-primary"
       : "mt-2 truncate text-lg font-semibold text-text-primary";
+  const detailCloseButtonClass = () =>
+    isPhoneViewport()
+      ? "self-end rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
+      : "rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis";
 
   createEffect(() => {
     const syncPhoneViewport = () => {
@@ -597,7 +601,7 @@ export function CommitsScreen(props: CommitsScreenProps): JSX.Element {
                     </div>
                     <button
                       type="button"
-                      class="rounded-md border border-danger-emphasis bg-danger-emphasis p-2 text-danger-fg shadow-sm shadow-danger-emphasis/20 transition hover:border-danger-fg hover:bg-danger-fg hover:text-text-on-emphasis"
+                      class={detailCloseButtonClass()}
                       aria-label="Close"
                       title="Close"
                       onClick={dismissCommitDetail}
