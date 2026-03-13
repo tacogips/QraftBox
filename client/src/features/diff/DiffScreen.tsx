@@ -4147,9 +4147,9 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                         <Show
                           when={hasQueuedComments()}
                           fallback={
-                            <div class="rounded-xl border border-dashed border-border-default bg-bg-primary/50 px-4 py-6 text-xs text-text-secondary">
+                            <p class="text-xs text-text-secondary">
                               No queued comments.
-                            </div>
+                            </p>
                           }
                         >
                           <ul class="space-y-2">
