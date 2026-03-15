@@ -30,6 +30,21 @@ interface ErrorResponse {
   readonly code: number;
 }
 
+function parseExcludedFileNames(
+  excludeFileNamesParam: string | undefined,
+): readonly string[] | undefined {
+  if (excludeFileNamesParam === undefined) {
+    return undefined;
+  }
+
+  const excludedFileNames = excludeFileNamesParam
+    .split(",")
+    .map((excludeFileName) => excludeFileName.trim())
+    .filter((excludeFileName) => excludeFileName.length > 0);
+
+  return excludedFileNames.length > 0 ? excludedFileNames : undefined;
+}
+
 /**
  * Create search routes
  *
@@ -59,7 +74,10 @@ export function createSearchRoutes(context: ServerContext): Hono {
     const filePath = c.req.query("file");
     const contextParam = c.req.query("context");
     const caseSensitiveParam = c.req.query("caseSensitive");
+    const excludeFileNamesParam = c.req.query("excludeFileNames");
     const maxResultsParam = c.req.query("maxResults");
+    const showIgnoredParam = c.req.query("showIgnored");
+    const showAllFilesParam = c.req.query("showAllFiles");
 
     // Validate required parameters
     if (pattern === undefined || pattern.length === 0) {
@@ -96,6 +114,9 @@ export function createSearchRoutes(context: ServerContext): Hono {
     const caseSensitive = caseSensitiveParam === "true";
     const maxResults =
       maxResultsParam !== undefined ? parseInt(maxResultsParam, 10) : undefined;
+    const showIgnored = showIgnoredParam === "true";
+    const showAllFiles = showAllFilesParam === "true";
+    const excludedFileNames = parseExcludedFileNames(excludeFileNamesParam);
 
     // Build search request
     const request: SearchRequest = {
@@ -104,7 +125,10 @@ export function createSearchRoutes(context: ServerContext): Hono {
       filePath: filePath ?? undefined,
       contextLines,
       caseSensitive,
+      excludeFileNames: excludeFileNamesParam ?? undefined,
       maxResults,
+      showIgnored,
+      showAllFiles,
     };
 
     // Validate request
@@ -127,8 +151,11 @@ export function createSearchRoutes(context: ServerContext): Hono {
         {
           pattern,
           caseSensitive,
+          excludeFileNames: excludedFileNames,
           contextLines,
           maxResults,
+          showIgnored,
+          showAllFiles,
         },
         // File reader using Bun's file API
         async (path: string) => {

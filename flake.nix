@@ -24,6 +24,7 @@
         pkgs-unstable = import nixpkgs-unstable { inherit system; };
 
         playwrightBrowsers = pkgs-unstable.playwright-driver.browsers;
+        agentBrowser = llm-agents.packages.${system}.agent-browser;
 
         devPackages = with pkgs; [
           # Bun runtime
@@ -45,13 +46,15 @@
           nodePackages.pm2
 
           # LLM agents
-          llm-agents.packages.${system}.agent-browser
+          agentBrowser
         ];
 
         bun = pkgs-unstable.bun;
 
       in
       {
+        packages.agent-browser = agentBrowser;
+
         # Installable package: wrapper that builds from source on first run
         packages.default = pkgs.writeShellScriptBin "qraftbox" ''
           set -euo pipefail
@@ -88,6 +91,7 @@
             echo "TypeScript version: $(tsc --version)"
             echo "Task version: $(task --version 2>/dev/null || echo 'not available')"
             echo "Playwright browsers: $PLAYWRIGHT_BROWSERS_PATH"
+            echo "agent-browser: $(command -v agent-browser || echo 'not available')"
           '';
         };
       }

@@ -199,3 +199,26 @@ export function createSPAFallback(indexPath: string): MiddlewareHandler {
     return c.html(content);
   };
 }
+
+export function createDevServerRedirectMiddleware(
+  devServerUrl: string,
+): MiddlewareHandler {
+  return async (c, next): Promise<Response | void> => {
+    const method = c.req.method;
+    if (method !== "GET" && method !== "HEAD") {
+      return next();
+    }
+
+    const requestPath = c.req.path;
+    if (requestPath.startsWith("/api") || requestPath.startsWith("/ws")) {
+      return next();
+    }
+
+    const requestUrl = new URL(c.req.url);
+    const redirectUrl = new URL(
+      `${requestPath}${requestUrl.search}`,
+      devServerUrl,
+    );
+    return c.redirect(redirectUrl.toString(), 307);
+  };
+}

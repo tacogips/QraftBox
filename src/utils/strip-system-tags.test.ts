@@ -84,6 +84,22 @@ describe("isInjectedSessionSystemPrompt", () => {
     ).toBe(true);
   });
 
+  it("detects permissions instructions wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "<permissions instructions>\nApproval policy is currently never.\n</permissions instructions>",
+      ),
+    ).toBe(true);
+  });
+
+  it("detects collaboration mode wrapper", () => {
+    expect(
+      isInjectedSessionSystemPrompt(
+        "<collaboration_mode># Collaboration Mode: Default\n## request_user_input availability\n</collaboration_mode>",
+      ),
+    ).toBe(true);
+  });
+
   it("detects turn aborted wrapper", () => {
     expect(
       isInjectedSessionSystemPrompt(

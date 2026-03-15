@@ -60,8 +60,12 @@ export function isInjectedSessionSystemPrompt(text: string): boolean {
     normalized.includes("<qraftbox-system-prompt") ||
     normalized.startsWith("# AGENTS.md instructions") ||
     normalized.startsWith("<environment_context>") ||
+    normalized.startsWith("<permissions instructions>") ||
+    normalized.startsWith("<collaboration_mode>") ||
     normalized.startsWith("<turn_aborted>") ||
     normalized.includes("## Rule of the Responses") ||
-    normalized.includes("## Autonomous Operation Policy")
+    normalized.includes("## Autonomous Operation Policy") ||
+    normalized.includes("Approval policy is currently never.") ||
+    normalized.includes("## request_user_input availability")
   );
 }

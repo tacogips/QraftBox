@@ -20,6 +20,7 @@ import {
   checkLargeFile,
   PARTIAL_CONTENT_LIMIT,
 } from "../git/binary.js";
+import { detectServerFileLanguage } from "../../../client-shared/src/syntax/language-detection";
 
 /**
  * Error response format
@@ -65,36 +66,6 @@ interface AutocompleteResponse {
     readonly path: string;
     readonly status?: string | undefined;
   }[];
-}
-
-/**
- * Detect language from file extension
- *
- * @param filePath - Path to the file
- * @returns Language name for syntax highlighting
- */
-function detectLanguage(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
-  const langMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    jsx: "javascript",
-    py: "python",
-    rs: "rust",
-    go: "go",
-    md: "markdown",
-    json: "json",
-    html: "html",
-    css: "css",
-    svelte: "svelte",
-    yaml: "yaml",
-    yml: "yaml",
-    toml: "toml",
-    sh: "shell",
-    bash: "shell",
-  };
-  return langMap[ext] ?? "plaintext";
 }
 
 /**
@@ -387,7 +358,7 @@ export function createFileRoutes(context: ServerContext): Hono {
       const lineCount =
         isBinary || rawContent.length === 0 ? 0 : rawContent.split("\n").length;
       const size = contentBuffer.length;
-      const language = detectLanguage(filePath);
+      const language = detectServerFileLanguage(filePath);
 
       const response: FileContentResponse = {
         path: filePath,

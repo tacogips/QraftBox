@@ -16,6 +16,7 @@ This document describes the current CLI interface as implemented in `src/cli/ind
 | --- | --- | --- |
 | `-p, --port <number>` | Server port | `7144` |
 | `-h, --host <string>` | Server host | `localhost` |
+| `--frontend <target>` | Frontend target: `solid` (default) or `svelte` (legacy) | `solid` |
 | `--open` | Open browser on start | `false` |
 | `--watch` / `--no-watch` | Enable/disable file watching | `true` |
 | `-s, --sync-mode <mode>` | Git sync mode: `manual`, `auto-push`, `auto-pull`, `auto` | `manual` |
@@ -29,7 +30,9 @@ This document describes the current CLI interface as implemented in `src/cli/ind
 
 | Name | Purpose |
 | --- | --- |
-| `QRAFTBOX_CLIENT_DIR` | Override client build directory for static assets |
+| `QRAFTBOX_FRONTEND` | Default frontend target when `--frontend` is omitted |
+| `QRAFTBOX_CLIENT_DIR` | Override Solid client build directory for static assets |
+| `QRAFTBOX_CLIENT_LEGACY_DIR` | Override legacy Svelte client build directory for static assets |
 | `QRAFTBOX_LOG_LEVEL` / `LOG_LEVEL` | Server log level |
 | `GITHUB_TOKEN` | GitHub API auth (highest priority) |
 | `GH_TOKEN` | GitHub API auth (fallback) |
@@ -45,3 +48,4 @@ This document describes the current CLI interface as implemented in `src/cli/ind
 ## Notes
 
 - `-h` is assigned to `--host`; CLI help is available via `--help`.
+- Solid is the default frontend; the legacy Svelte UI is only served when explicitly selected.

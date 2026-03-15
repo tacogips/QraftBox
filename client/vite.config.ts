@@ -1,18 +1,41 @@
 import { defineConfig } from "vite";
-import { svelte } from "@sveltejs/vite-plugin-svelte";
-import tailwindcss from "@tailwindcss/vite";
+import solidPlugin from "vite-plugin-solid";
+import { resolveViteAllowedHosts } from "../src/config/vite-allowed-hosts";
+import { ensureSocketDestroySoon } from "../src/config/vite-bun-compat";
 
 const apiProxyTarget =
   process.env["VITE_API_PROXY_TARGET"] ?? "http://localhost:7144";
 const wsProxyTarget =
   process.env["VITE_WS_PROXY_TARGET"] ?? "ws://localhost:7144";
+const allowedHosts = resolveViteAllowedHosts();
+
+function createBunSocketCompatPlugin() {
+  return {
+    name: "qraftbox-bun-socket-compat",
+    configureServer(devServer: {
+      readonly httpServer:
+        | {
+            on(
+              eventName: "connection",
+              listener: (socket: unknown) => void,
+            ): void;
+          }
+        | null
+        | undefined;
+    }) {
+      devServer.httpServer?.on("connection", (socket) => {
+        ensureSocketDestroySoon(
+          socket as Parameters<typeof ensureSocketDestroySoon>[0],
+        );
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [tailwindcss(), svelte()],
-  resolve: {
-    conditions: ["browser", "import", "module", "default"],
-  },
+  plugins: [solidPlugin(), createBunSocketCompatPlugin()],
   server: {
+    allowedHosts,
     proxy: {
       "/api": {
         target: apiProxyTarget,

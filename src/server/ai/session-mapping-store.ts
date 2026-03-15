@@ -143,7 +143,7 @@ class SessionMappingStoreImpl implements SessionMappingStore {
       SELECT claude_session_id
       FROM session_mappings
       WHERE qraft_ai_session_id = ?
-      ORDER BY created_at DESC
+      ORDER BY created_at DESC, rowid DESC
       LIMIT 1
     `);
 

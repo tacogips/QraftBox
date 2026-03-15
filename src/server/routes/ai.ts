@@ -35,6 +35,20 @@ interface ErrorResponse {
   readonly code: number;
 }
 
+function createStreamProgressEvent(
+  type: AIProgressEvent["type"],
+  sessionId: QraftAiSessionId,
+  data: AIProgressEvent["data"] = {},
+  timestamp = new Date().toISOString(),
+): AIProgressEvent {
+  return {
+    type,
+    sessionId,
+    timestamp,
+    data,
+  };
+}
+
 /**
  * Create AI routes
  *
@@ -168,11 +182,18 @@ export function createAIRoutes(context: AIServerContext): Hono {
    */
   app.get("/prompt-queue", (c) => {
     const worktreeId = c.req.query("worktree_id");
-    const prompts = context.sessionManager.getPromptQueue(
-      typeof worktreeId === "string" && worktreeId.length > 0
-        ? (worktreeId as WorktreeId)
-        : undefined,
-    );
+    const projectPath = c.req.query("projectPath");
+    const prompts = context.sessionManager
+      .getPromptQueue(
+        typeof worktreeId === "string" && worktreeId.length > 0
+          ? (worktreeId as WorktreeId)
+          : undefined,
+      )
+      .filter((prompt) =>
+        typeof projectPath === "string" && projectPath.length > 0
+          ? prompt.project_path === projectPath
+          : true,
+      );
     return c.json({ prompts });
   });
 
@@ -214,7 +235,27 @@ export function createAIRoutes(context: AIServerContext): Hono {
    * List all sessions.
    */
   app.get("/sessions", (c) => {
-    const sessions = context.sessionManager.listSessions();
+    const projectPath = c.req.query("projectPath");
+    const worktreeId = c.req.query("worktree_id");
+    const sessions = context.sessionManager.listSessions().filter((session) => {
+      if (
+        typeof projectPath === "string" &&
+        projectPath.length > 0 &&
+        session.projectPath !== projectPath
+      ) {
+        return false;
+      }
+
+      if (
+        typeof worktreeId === "string" &&
+        worktreeId.length > 0 &&
+        session.worktreeId !== worktreeId
+      ) {
+        return false;
+      }
+
+      return true;
+    });
     return c.json({ sessions });
   });
 
@@ -336,6 +377,75 @@ export function createAIRoutes(context: AIServerContext): Hono {
       );
 
       try {
+        const currentSession = context.sessionManager.getSession(sessionId);
+        if (currentSession?.state === "running") {
+          await stream.writeSSE({
+            event: "session_started",
+            data: JSON.stringify(
+              createStreamProgressEvent(
+                "session_started",
+                sessionId,
+                {},
+                currentSession.startedAt,
+              ),
+            ),
+          });
+        }
+
+        if (
+          typeof currentSession?.currentActivity === "string" &&
+          currentSession.currentActivity.length > 0
+        ) {
+          await stream.writeSSE({
+            event: "thinking",
+            data: JSON.stringify(
+              createStreamProgressEvent("thinking", sessionId, {
+                message: currentSession.currentActivity,
+              }),
+            ),
+          });
+        }
+
+        if (
+          typeof currentSession?.lastAssistantMessage === "string" &&
+          currentSession.lastAssistantMessage.length > 0
+        ) {
+          await stream.writeSSE({
+            event: "message",
+            data: JSON.stringify(
+              createStreamProgressEvent("message", sessionId, {
+                role: "assistant",
+                content: currentSession.lastAssistantMessage,
+              }),
+            ),
+          });
+        }
+
+        if (
+          currentSession?.state === "completed" ||
+          currentSession?.state === "failed" ||
+          currentSession?.state === "cancelled"
+        ) {
+          const terminalEvent =
+            currentSession.state === "failed" ? "error" : currentSession.state;
+          await stream.writeSSE({
+            event: terminalEvent,
+            data: JSON.stringify(
+              createStreamProgressEvent(
+                terminalEvent,
+                sessionId,
+                currentSession.state === "failed"
+                  ? {
+                      message:
+                        currentSession.error ?? "Session execution failed",
+                    }
+                  : {},
+              ),
+            ),
+          });
+          return;
+        }
+
         // Stream events until session is done
         while (true) {
           let timedOutWaiting = false;

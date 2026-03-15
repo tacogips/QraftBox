@@ -5,6 +5,7 @@
  */
 
 import { Hono } from "hono";
+import { streamSSE } from "hono/streaming";
 import type {
   ProjectInfo,
   SessionListResponse,
@@ -47,6 +48,8 @@ import { SessionRunner } from "claude-code-agent/src/sdk/index.js";
 import type { ModelConfigStore } from "../model-config/store.js";
 import type { AISessionInfo } from "../../types/ai.js";
 import { buildAgentAuthEnv } from "../ai/claude-env.js";
+import { RolloutWatcher } from "codex-agent";
+import { isCodexType } from "../codex/event-normalization.js";
 
 interface ClaudeSessionReaderLike {
   listProjects(pathFilter?: string): Promise<ProjectInfo[]>;
@@ -70,6 +73,11 @@ interface ClaudeSessionsRouteDependencies {
 interface ErrorResponse {
   readonly error: string;
   readonly code: number;
+}
+
+interface CodexTranscriptStreamEvent {
+  readonly content: string;
+  readonly timestamp: string;
 }
 
 /**
@@ -228,6 +236,41 @@ export function createClaudeSessionsRoutes(
   function resolveClaudeSessionId(
     qraftAiSessionId: string,
   ): string | undefined {
+    if (sessionManager !== undefined) {
+      // Prefer in-memory runtime/session-store state first when available.
+      // It is deterministic for a clientSession group and avoids stale SQL ties.
+      const direct = sessionManager.getSession(
+        qraftAiSessionId as QraftAiSessionId,
+      );
+      if (direct?.claudeSessionId !== undefined) {
+        return direct.claudeSessionId;
+      }
+
+      // qraftAiSessionId is typically the client session group ID,
+      // while actual session rows have distinct generated ids.
+      let bestMatch: AISessionInfo | undefined;
+      let bestTime = Number.NEGATIVE_INFINITY;
+      for (const session of sessionManager.listSessions()) {
+        if (
+          session.claudeSessionId === undefined ||
+          (session.clientSessionId !== qraftAiSessionId &&
+            session.id !== qraftAiSessionId)
+        ) {
+          continue;
+        }
+        const sessionTime = Date.parse(
+          session.completedAt ?? session.startedAt ?? session.createdAt,
+        );
+        if (sessionTime > bestTime) {
+          bestTime = sessionTime;
+          bestMatch = session;
+        }
+      }
+      if (bestMatch?.claudeSessionId !== undefined) {
+        return bestMatch.claudeSessionId;
+      }
+    }
+
     if (mappingStore !== undefined) {
       const mappedClaudeSessionId = mappingStore.findClaudeSessionIdSqlOnly(
         qraftAiSessionId as QraftAiSessionId,
@@ -237,39 +280,7 @@ export function createClaudeSessionsRoutes(
       }
     }
 
-    if (sessionManager === undefined) {
-      return undefined;
-    }
-
-    // Direct lookup (when qraftAiSessionId matches a concrete session row id)
-    const direct = sessionManager.getSession(
-      qraftAiSessionId as QraftAiSessionId,
-    );
-    if (direct?.claudeSessionId !== undefined) {
-      return direct.claudeSessionId;
-    }
-
-    // Fallback: qraftAiSessionId is typically the client session group ID,
-    // while actual session rows have distinct generated ids.
-    let bestMatch: AISessionInfo | undefined;
-    let bestTime = Number.NEGATIVE_INFINITY;
-    for (const session of sessionManager.listSessions()) {
-      if (
-        session.claudeSessionId === undefined ||
-        (session.clientSessionId !== qraftAiSessionId &&
-          session.id !== qraftAiSessionId)
-      ) {
-        continue;
-      }
-      const sessionTime = Date.parse(
-        session.completedAt ?? session.startedAt ?? session.createdAt,
-      );
-      if (sessionTime > bestTime) {
-        bestTime = sessionTime;
-        bestMatch = session;
-      }
-    }
-    return bestMatch?.claudeSessionId;
+    return undefined;
   }
 
   function resolveBestQraftSessionInfo(
@@ -374,6 +385,104 @@ export function createClaudeSessionsRoutes(
       limit: 200,
       total: events.length,
     };
+  }
+
+  function extractAssistantTextFromCodexRolloutLine(
+    line: unknown,
+  ): string | undefined {
+    if (typeof line !== "object" || line === null) {
+      return undefined;
+    }
+
+    const rawLine = line as {
+      type?: unknown;
+      payload?: unknown;
+    };
+    if (typeof rawLine.type !== "string") {
+      return undefined;
+    }
+
+    if (rawLine.type === "response_item") {
+      if (typeof rawLine.payload !== "object" || rawLine.payload === null) {
+        return undefined;
+      }
+      const payload = rawLine.payload as {
+        type?: unknown;
+        role?: unknown;
+        content?: unknown;
+      };
+      if (payload.type !== "message" || payload.role !== "assistant") {
+        return undefined;
+      }
+      if (!Array.isArray(payload.content)) {
+        return undefined;
+      }
+      const parts: string[] = [];
+      for (const item of payload.content) {
+        if (typeof item !== "object" || item === null) {
+          continue;
+        }
+        const block = item as { type?: unknown; text?: unknown };
+        if (
+          (block.type === "output_text" ||
+            block.type === "input_text" ||
+            block.type === "text") &&
+          typeof block.text === "string" &&
+          block.text.length > 0
+        ) {
+          parts.push(block.text);
+        }
+      }
+      const merged = parts.join("\n").trim();
+      return merged.length > 0 ? merged : undefined;
+    }
+
+    if (rawLine.type === "event_msg") {
+      if (typeof rawLine.payload !== "object" || rawLine.payload === null) {
+        return undefined;
+      }
+      const payload = rawLine.payload as {
+        type?: unknown;
+        message?: unknown;
+      };
+      if (!isCodexType(payload.type, "agent_message")) {
+        return undefined;
+      }
+
+      if (typeof payload.message === "string") {
+        const normalized = payload.message.trim();
+        return normalized.length > 0 ? normalized : undefined;
+      }
+
+      if (typeof payload.message !== "object" || payload.message === null) {
+        return undefined;
+      }
+      const messageObj = payload.message as {
+        content?: unknown;
+      };
+      const content = messageObj.content;
+      if (typeof content === "string") {
+        const normalized = content.trim();
+        return normalized.length > 0 ? normalized : undefined;
+      }
+      if (!Array.isArray(content)) {
+        return undefined;
+      }
+      const parts: string[] = [];
+      for (const item of content) {
+        if (typeof item !== "object" || item === null) {
+          continue;
+        }
+        const block = item as { text?: unknown };
+        if (typeof block.text === "string" && block.text.length > 0) {
+          parts.push(block.text);
+        }
+      }
+      const merged = parts.join("\n").trim();
+      return merged.length > 0 ? merged : undefined;
+    }
+
+    return undefined;
   }
 
   /**
@@ -1171,6 +1280,240 @@ export function createClaudeSessionsRoutes(
       };
       return c.json(errorResponse, 500);
     }
+  });
+
+  /**
+   * GET /api/claude/sessions/:id/transcript/stream
+   *
+   * Stream assistant updates for codex sessions via SSE.
+   * This complements transcript polling by pushing incremental assistant text
+   * as rollout lines are appended.
+   */
+  app.get("/sessions/:id/transcript/stream", async (c) => {
+    const qraftId = c.req.param("id");
+    if (!qraftId || qraftId.length === 0) {
+      const errorResponse: ErrorResponse = {
+        error: "Session ID is required",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    const runtimeSession = resolveBestQraftSessionInfo(qraftId);
+    if (
+      sessionManager !== undefined &&
+      runtimeSession !== undefined &&
+      runtimeSession.state === "running" &&
+      runtimeSession.aiAgent === AIAgent.CODEX
+    ) {
+      return streamSSE(c, async (stream) => {
+        const pendingMessages: CodexTranscriptStreamEvent[] = [];
+        let lastAssistantContent = "";
+        let resolveWait: (() => void) | null = null;
+        let terminal = false;
+
+        const enqueueAssistantMessage = (content: string): void => {
+          if (content.length === 0 || content === lastAssistantContent) {
+            return;
+          }
+          lastAssistantContent = content;
+          pendingMessages.push({
+            content,
+            timestamp: new Date().toISOString(),
+          });
+          if (resolveWait !== null) {
+            resolveWait();
+            resolveWait = null;
+          }
+        };
+
+        if (
+          typeof runtimeSession.lastAssistantMessage === "string" &&
+          runtimeSession.lastAssistantMessage.length > 0
+        ) {
+          enqueueAssistantMessage(runtimeSession.lastAssistantMessage);
+        }
+
+        const unsubscribe = sessionManager.subscribe(
+          runtimeSession.id as QraftAiSessionId,
+          (event) => {
+            if (event.type === "message") {
+              const payload =
+                typeof event.data === "object" && event.data !== null
+                  ? (event.data as { content?: unknown })
+                  : undefined;
+              if (typeof payload?.content === "string") {
+                enqueueAssistantMessage(payload.content);
+              }
+              return;
+            }
+
+            if (
+              event.type === "completed" ||
+              event.type === "error" ||
+              event.type === "cancelled"
+            ) {
+              terminal = true;
+              if (resolveWait !== null) {
+                resolveWait();
+                resolveWait = null;
+              }
+            }
+          },
+        );
+
+        await stream.writeSSE({
+          event: "connected",
+          data: JSON.stringify({ qraftAiSessionId: qraftId }),
+        });
+
+        try {
+          while (true) {
+            let timedOutWaiting = false;
+            if (pendingMessages.length === 0 && !terminal) {
+              await new Promise<void>((resolve) => {
+                resolveWait = resolve;
+                setTimeout(() => {
+                  timedOutWaiting = true;
+                  resolve();
+                }, 5000);
+              });
+            }
+
+            if (timedOutWaiting && pendingMessages.length === 0 && !terminal) {
+              await stream.writeSSE({
+                event: "ping",
+                data: JSON.stringify({
+                  qraftAiSessionId: qraftId,
+                  timestamp: new Date().toISOString(),
+                }),
+              });
+            }
+
+            while (pendingMessages.length > 0) {
+              const msg = pendingMessages.shift();
+              if (msg === undefined) {
+                continue;
+              }
+              await stream.writeSSE({
+                event: "assistant_message",
+                data: JSON.stringify(msg),
+              });
+            }
+
+            if (terminal && pendingMessages.length === 0) {
+              return;
+            }
+          }
+        } finally {
+          unsubscribe();
+        }
+      });
+    }
+
+    const claudeSessionId = resolveClaudeSessionId(qraftId);
+    if (claudeSessionId === undefined) {
+      const errorResponse: ErrorResponse = {
+        error: `Session not found: ${qraftId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    const session = await sessionReader.getSession(claudeSessionId);
+    if (session === null) {
+      const errorResponse: ErrorResponse = {
+        error: `Session not found: ${qraftId}`,
+        code: 404,
+      };
+      return c.json(errorResponse, 404);
+    }
+
+    if (
+      session.aiAgent !== AIAgent.CODEX &&
+      !session.sessionId.startsWith("codex-session-")
+    ) {
+      const errorResponse: ErrorResponse = {
+        error: "Transcript streaming is only supported for codex sessions",
+        code: 400,
+      };
+      return c.json(errorResponse, 400);
+    }
+
+    return streamSSE(c, async (stream) => {
+      const watcher = new RolloutWatcher();
+      const pendingMessages: CodexTranscriptStreamEvent[] = [];
+      let lastAssistantContent = "";
+      let resolveWait: (() => void) | null = null;
+
+      const onLine = (_path: string, line: unknown): void => {
+        const assistantText = extractAssistantTextFromCodexRolloutLine(line);
+        if (
+          assistantText === undefined ||
+          assistantText.length === 0 ||
+          assistantText === lastAssistantContent
+        ) {
+          return;
+        }
+        lastAssistantContent = assistantText;
+        pendingMessages.push({
+          content: assistantText,
+          timestamp: new Date().toISOString(),
+        });
+        if (resolveWait !== null) {
+          resolveWait();
+          resolveWait = null;
+        }
+      };
+
+      watcher.on("line", onLine);
+
+      await stream.writeSSE({
+        event: "connected",
+        data: JSON.stringify({ qraftAiSessionId: qraftId }),
+      });
+
+      await watcher.watchFile(session.fullPath);
+
+      try {
+        while (true) {
+          let timedOutWaiting = false;
+          if (pendingMessages.length === 0) {
+            await new Promise<void>((resolve) => {
+              resolveWait = resolve;
+              setTimeout(() => {
+                timedOutWaiting = true;
+                resolve();
+              }, 5000);
+            });
+          }
+
+          if (timedOutWaiting && pendingMessages.length === 0) {
+            await stream.writeSSE({
+              event: "ping",
+              data: JSON.stringify({
+                qraftAiSessionId: qraftId,
+                timestamp: new Date().toISOString(),
+              }),
+            });
+          }
+
+          while (pendingMessages.length > 0) {
+            const msg = pendingMessages.shift();
+            if (msg === undefined) {
+              continue;
+            }
+            await stream.writeSSE({
+              event: "assistant_message",
+              data: JSON.stringify(msg),
+            });
+          }
+        }
+      } finally {
+        watcher.off("line", onLine);
+        watcher.stop();
+      }
+    });
   });
 
   /**

@@ -4,6 +4,8 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
     "noEmit": true,
     "isolatedModules": true,
     "esModuleInterop": true,
@@ -12,8 +14,7 @@
   },
   "include": [
     "src/**/*.ts",
-    "src/**/*.svelte",
-    "components/**/*.ts",
-    "components/**/*.svelte"
+    "src/**/*.tsx",
+    "../client-shared/src/**/*.ts"
   ]
 }

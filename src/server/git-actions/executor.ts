@@ -5,9 +5,12 @@
  * This module spawns subprocesses to run git operations via Claude Code agent.
  */
 
+import type { Subprocess } from "bun";
 import { buildPrompt } from "./system-prompt.js";
 import type { ResolvedModelProfile } from "../../types/model-config.js";
 import { buildAgentAuthEnv } from "../ai/claude-env.js";
+import type { ProcessWorkerSource } from "../../../client-shared/src/api/workers.js";
+import { processWorkerStore } from "../workers/process-worker-store.js";
 
 /**
  * Result type for git action execution
@@ -59,6 +62,7 @@ let currentOperationPhase:
   | "pulling"
   | "creating-pr"
   | "initializing" = "idle";
+let currentOperationWorkerId: string | null = null;
 
 /**
  * Returns the current operation phase.
@@ -80,6 +84,10 @@ export function isGitOperationRunning(): boolean {
   return currentOperationPhase !== "idle";
 }
 
+export function getCurrentOperationWorkerId(): string | null {
+  return currentOperationWorkerId;
+}
+
 interface PRView {
   readonly number: number;
   readonly url: string;
@@ -89,6 +97,8 @@ interface PRView {
 
 const PR_PLACEHOLDER_BODY = "Analyzing changes and generating description...";
 const PR_PLACEHOLDER_TITLE = "WIP: Analyzing changes...";
+const CREATE_PR_VERIFICATION_ERROR =
+  "Create PR command completed but no pull request exists for the current branch";
 
 function hasPlaceholderPRContent(pr: PRView): boolean {
   const body = (pr.body ?? "").trim().toLowerCase();
@@ -99,56 +109,163 @@ function hasPlaceholderPRContent(pr: PRView): boolean {
   );
 }
 
+function readCommandOptionValue(
+  commandArguments: readonly string[],
+  optionName: string,
+): string | null {
+  const optionIndex = commandArguments.indexOf(optionName);
+  if (optionIndex === -1) {
+    return null;
+  }
+
+  const optionValue = commandArguments[optionIndex + 1];
+  if (
+    optionValue === undefined ||
+    optionValue.length === 0 ||
+    optionValue.startsWith("-")
+  ) {
+    return null;
+  }
+
+  return optionValue;
+}
+
+function formatWorkerCommandText(commandArguments: readonly string[]): string {
+  const executableName = commandArguments[0];
+  if (executableName === "claude") {
+    const modelName = readCommandOptionValue(commandArguments, "--model");
+    return modelName === null
+      ? "claude -p <prompt redacted>"
+      : `claude --model ${modelName} -p <prompt redacted>`;
+  }
+
+  if (executableName === "codex") {
+    const modelName = readCommandOptionValue(commandArguments, "--model");
+    return modelName === null
+      ? "codex <prompt redacted>"
+      : `codex --model ${modelName} <prompt redacted>`;
+  }
+
+  return commandArguments.join(" ");
+}
+
 async function runProcessWithTimeout(
   cmd: readonly string[],
   cwd: string,
   timeoutMs: number,
-  actionId?: string | undefined,
+  workerId?: string | undefined,
   env?: Record<string, string> | undefined,
 ): Promise<ProcessResult> {
-  if (actionId !== undefined && cancelledActions.has(actionId)) {
+  if (workerId !== undefined && cancelledActions.has(workerId)) {
     throw new Error("Operation cancelled");
   }
 
-  const proc = Bun.spawn([...cmd], {
-    cwd,
-    ...(env !== undefined
-      ? {
-          env: {
-            ...process.env,
-            ...env,
-          },
-        }
-      : {}),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const commandText = formatWorkerCommandText(cmd);
+  const commandId =
+    workerId === undefined
+      ? null
+      : processWorkerStore.recordCommandStart(workerId, {
+          commandText,
+          cwd,
+        });
 
-  if (actionId !== undefined) {
-    runningActionProcesses.set(actionId, proc);
+  let proc: Subprocess<"ignore", "pipe", "pipe">;
+  try {
+    proc = Bun.spawn([...cmd], {
+      cwd,
+      ...(env !== undefined
+        ? {
+            env: {
+              ...process.env,
+              ...env,
+            },
+          }
+        : {}),
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch (error) {
+    if (workerId !== undefined && commandId !== null) {
+      processWorkerStore.recordCommandOutput(workerId, {
+        commandId,
+        channel: "system",
+        text: `Failed to spawn command: ${commandText}`,
+      });
+      processWorkerStore.recordCommandExit(workerId, {
+        commandId,
+        exitCode: -1,
+        status: "failed",
+      });
+    }
+    throw error;
   }
 
-  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => {
-      try {
-        proc.kill();
-      } catch {
-        // noop
-      }
-      reject(new Error("Command timeout"));
-    }, timeoutMs);
-  });
+  if (workerId !== undefined) {
+    runningActionProcesses.set(workerId, proc);
+  }
+
+  let timedOut = false;
+  const timeoutHandle = setTimeout(() => {
+    timedOut = true;
+    if (workerId !== undefined) {
+      processWorkerStore.recordCommandOutput(workerId, {
+        commandId: commandId ?? undefined,
+        channel: "system",
+        text: `Command timed out after ${timeoutMs}ms: ${commandText}`,
+      });
+    }
+    try {
+      proc.kill();
+    } catch {
+      // noop
+    }
+  }, timeoutMs);
 
   try {
-    const [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
-      timeoutPromise,
+    const [stdout, stderr, exitCode] = await Promise.all([
+      readProcessOutputStream(proc.stdout, (outputChunk) => {
+        if (workerId === undefined) {
+          return;
+        }
+        processWorkerStore.recordCommandOutput(workerId, {
+          commandId: commandId ?? undefined,
+          channel: "stdout",
+          text: outputChunk,
+        });
+      }),
+      readProcessOutputStream(proc.stderr, (outputChunk) => {
+        if (workerId === undefined) {
+          return;
+        }
+        processWorkerStore.recordCommandOutput(workerId, {
+          commandId: commandId ?? undefined,
+          channel: "stderr",
+          text: outputChunk,
+        });
+      }),
+      proc.exited,
     ]);
+
+    const wasCancelled =
+      workerId !== undefined && cancelledActions.has(workerId);
+    if (workerId !== undefined && commandId !== null) {
+      processWorkerStore.recordCommandExit(workerId, {
+        commandId,
+        exitCode: timedOut ? -1 : exitCode,
+        status: wasCancelled
+          ? "cancelled"
+          : timedOut || exitCode !== 0
+            ? "failed"
+            : "completed",
+      });
+    }
+
+    if (timedOut) {
+      throw new Error("Command timeout");
+    }
+    if (wasCancelled) {
+      throw new Error("Operation cancelled");
+    }
 
     return {
       stdout,
@@ -156,20 +273,160 @@ async function runProcessWithTimeout(
       exitCode,
     };
   } finally {
-    if (timeoutHandle !== null) {
-      clearTimeout(timeoutHandle);
-    }
-    if (actionId !== undefined) {
-      runningActionProcesses.delete(actionId);
+    clearTimeout(timeoutHandle);
+    if (workerId !== undefined) {
+      runningActionProcesses.delete(workerId);
     }
   }
+}
+
+async function readProcessOutputStream(
+  stream: ReadableStream<Uint8Array> | Uint8Array | string | null | undefined,
+  onData: (outputChunk: string) => void,
+): Promise<string> {
+  if (typeof stream === "string") {
+    if (stream.length > 0) {
+      onData(stream);
+    }
+    return stream;
+  }
+
+  if (stream instanceof Uint8Array) {
+    const outputText = new TextDecoder().decode(stream);
+    if (outputText.length > 0) {
+      onData(outputText);
+    }
+    return outputText;
+  }
+
+  if (stream === null || stream === undefined) {
+    return "";
+  }
+
+  const outputReader = stream.getReader();
+  const textDecoder = new TextDecoder();
+  let outputText = "";
+
+  try {
+    while (true) {
+      const { value: outputBytes, done } = await outputReader.read();
+      if (done) {
+        break;
+      }
+      if (outputBytes !== undefined && outputBytes.byteLength > 0) {
+        const outputChunk = textDecoder.decode(outputBytes, { stream: true });
+        if (outputChunk.length > 0) {
+          outputText += outputChunk;
+          onData(outputChunk);
+        }
+      }
+    }
+
+    const finalChunk = textDecoder.decode();
+    if (finalChunk.length > 0) {
+      outputText += finalChunk;
+      onData(finalChunk);
+    }
+  } finally {
+    outputReader.releaseLock();
+  }
+
+  return outputText;
+}
+
+function createWorkerId(): string {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
+    return crypto.randomUUID();
+  }
+
+  return `worker-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function resolveWorkerId(workerId?: string | undefined): string {
+  return workerId ?? createWorkerId();
+}
+
+function resolveAgentWorkerSource(
+  modelProfile: ResolvedModelProfile | undefined,
+): ProcessWorkerSource {
+  return modelProfile?.vendor === "openai"
+    ? "codex-agent"
+    : "claude-code-agent";
+}
+
+function beginWorker(params: {
+  readonly workerId: string;
+  readonly title: string;
+  readonly projectPath: string;
+  readonly phase:
+    | "committing"
+    | "pushing"
+    | "pulling"
+    | "creating-pr"
+    | "initializing";
+  readonly source: ProcessWorkerSource;
+}): void {
+  currentOperationPhase = params.phase;
+  currentOperationWorkerId = params.workerId;
+  processWorkerStore.createWorker({
+    workerId: params.workerId,
+    title: params.title,
+    projectPath: params.projectPath,
+    phase: params.phase,
+    source: params.source,
+    canCancel: true,
+  });
+}
+
+function createCancelledResult(output: string): GitActionResult {
+  return {
+    success: false,
+    output,
+    error: "Operation cancelled by user",
+  };
+}
+
+function isWorkerCancelled(workerId?: string | undefined): boolean {
+  return workerId !== undefined && cancelledActions.has(workerId);
+}
+
+function createFailureResult(prefix: string, error: unknown): GitActionResult {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+  return {
+    success: false,
+    output: "",
+    error: `${prefix}: ${errorMessage}`,
+  };
+}
+
+function finalizeWorker(
+  workerId: string,
+  result: GitActionResult,
+): GitActionResult {
+  const status =
+    result.success === true
+      ? "completed"
+      : result.error === "Operation cancelled by user"
+        ? "cancelled"
+        : "failed";
+  processWorkerStore.completeWorker(workerId, {
+    status,
+    error: result.success ? undefined : result.error,
+  });
+  if (status === "cancelled") {
+    cancelledActions.delete(workerId);
+  }
+  return result;
 }
 
 async function runClaude(
   modelProfile: ResolvedModelProfile | undefined,
   projectPath: string,
   prompt: string,
-  actionId?: string | undefined,
+  workerId?: string | undefined,
 ): Promise<GitActionResult> {
   const profile = modelProfile ?? {
     profileId: "legacy-default",
@@ -212,17 +469,12 @@ async function runClaude(
       cmd,
       projectPath,
       5 * 60 * 1000,
-      actionId,
+      workerId,
       buildAgentAuthEnv(profile.vendor, profile.authMode),
     );
 
-    if (actionId !== undefined && cancelledActions.has(actionId)) {
-      cancelledActions.delete(actionId);
-      return {
-        success: false,
-        output: stdout,
-        error: "Operation cancelled by user",
-      };
+    if (isWorkerCancelled(workerId)) {
+      return createCancelledResult(stdout);
     }
 
     if (exitCode === 0) {
@@ -238,31 +490,24 @@ async function runClaude(
       error:
         stderr.length > 0 ? stderr : `Claude CLI exited with code ${exitCode}`,
     };
-  } catch (e) {
-    if (actionId !== undefined && cancelledActions.has(actionId)) {
-      cancelledActions.delete(actionId);
-      return {
-        success: false,
-        output: "",
-        error: "Operation cancelled by user",
-      };
+  } catch (error) {
+    if (isWorkerCancelled(workerId)) {
+      return createCancelledResult("");
     }
-
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute claude: ${errorMessage}`,
-    };
+    return createFailureResult("Failed to execute claude", error);
   }
 }
 
-async function getHeadCommitHash(projectPath: string): Promise<string | null> {
+async function getHeadCommitHash(
+  projectPath: string,
+  workerId?: string | undefined,
+): Promise<string | null> {
   try {
     const { stdout, exitCode } = await runProcessWithTimeout(
       ["git", "rev-parse", "HEAD"],
       projectPath,
       5_000,
+      workerId,
     );
     if (exitCode !== 0) {
       return null;
@@ -274,12 +519,16 @@ async function getHeadCommitHash(projectPath: string): Promise<string | null> {
   }
 }
 
-async function stageAllChanges(projectPath: string): Promise<GitActionResult> {
+async function stageAllChanges(
+  projectPath: string,
+  workerId?: string | undefined,
+): Promise<GitActionResult> {
   try {
     const { stdout, stderr, exitCode } = await runProcessWithTimeout(
       ["git", "add", "-A"],
       projectPath,
       30_000,
+      workerId,
     );
 
     if (exitCode === 0) {
@@ -292,24 +541,24 @@ async function stageAllChanges(projectPath: string): Promise<GitActionResult> {
       error:
         stderr.length > 0 ? stderr : `git add exited with code ${exitCode}`,
     };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to stage changes: ${errorMessage}`,
-    };
+  } catch (error) {
+    if (isWorkerCancelled(workerId)) {
+      return createCancelledResult("");
+    }
+    return createFailureResult("Failed to stage changes", error);
   }
 }
 
 async function listStagedFiles(
   projectPath: string,
+  workerId?: string | undefined,
 ): Promise<readonly string[]> {
   try {
     const { stdout, exitCode } = await runProcessWithTimeout(
       ["git", "diff", "--cached", "--name-only"],
       projectPath,
       10_000,
+      workerId,
     );
     if (exitCode !== 0) {
       return [];
@@ -326,6 +575,7 @@ async function listStagedFiles(
 async function commitStagedChangesFallback(
   projectPath: string,
   stagedFiles: readonly string[],
+  workerId?: string | undefined,
 ): Promise<GitActionResult> {
   const title = "chore: commit staged changes";
   const filesPreview = stagedFiles.slice(0, 20).map((file) => `- ${file}`);
@@ -340,6 +590,7 @@ async function commitStagedChangesFallback(
       ["git", "commit", "-m", title, "-m", body],
       projectPath,
       30_000,
+      workerId,
     );
 
     if (exitCode === 0) {
@@ -355,22 +606,24 @@ async function commitStagedChangesFallback(
       error:
         stderr.length > 0 ? stderr : `git commit exited with code ${exitCode}`,
     };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Fallback commit failed: ${errorMessage}`,
-    };
+  } catch (error) {
+    if (isWorkerCancelled(workerId)) {
+      return createCancelledResult("");
+    }
+    return createFailureResult("Fallback commit failed", error);
   }
 }
 
-async function getCurrentPRView(projectPath: string): Promise<PRView | null> {
+async function getCurrentPRView(
+  projectPath: string,
+  workerId?: string | undefined,
+): Promise<PRView | null> {
   try {
     const { stdout, exitCode } = await runProcessWithTimeout(
       ["gh", "pr", "view", "--json", "number,url,title,body"],
       projectPath,
       30 * 1000,
+      workerId,
     );
     if (exitCode !== 0) {
       return null;
@@ -487,67 +740,76 @@ export async function executeCommit(
   modelProfile?: ResolvedModelProfile | undefined,
   outputLanguage = "English",
 ): Promise<GitActionResult> {
-  currentOperationPhase = "committing";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "AI git commit",
+    projectPath,
+    phase: "committing",
+    source: resolveAgentWorkerSource(modelProfile),
+  });
   try {
-    const stageResult = await stageAllChanges(projectPath);
+    const stageResult = await stageAllChanges(projectPath, workerId);
     if (!stageResult.success) {
-      return {
+      return finalizeWorker(workerId, {
         success: false,
         output: stageResult.output,
         error: stageResult.error ?? "Failed to stage changes",
-      };
+      });
     }
 
-    const beforeHead = await getHeadCommitHash(projectPath);
+    const beforeHead = await getHeadCommitHash(projectPath, workerId);
 
     // Build prompt with commit system prompt
     const prompt = await buildPrompt("commit", customCtx, outputLanguage);
 
-    const result = await runClaude(modelProfile, projectPath, prompt, actionId);
+    const result = await runClaude(modelProfile, projectPath, prompt, workerId);
     if (!result.success) {
-      return result;
+      return finalizeWorker(workerId, result);
     }
 
-    const afterHead = await getHeadCommitHash(projectPath);
+    const afterHead = await getHeadCommitHash(projectPath, workerId);
     if (beforeHead === afterHead) {
-      const stagedFiles = await listStagedFiles(projectPath);
+      const stagedFiles = await listStagedFiles(projectPath, workerId);
       if (stagedFiles.length === 0) {
-        return {
+        return finalizeWorker(workerId, {
           success: false,
           output: result.output,
           error:
             "No commit was created and no staged changes remain. Stage files and try again.",
-        };
+        });
       }
 
       const fallbackCommit = await commitStagedChangesFallback(
         projectPath,
         stagedFiles,
+        workerId,
       );
       if (fallbackCommit.success) {
-        return {
+        return finalizeWorker(workerId, {
           success: true,
           output: `${result.output}\n\nFallback commit succeeded:\n${fallbackCommit.output}`,
-        };
+        });
       }
 
-      return {
+      return finalizeWorker(workerId, {
         success: false,
         output: result.output,
         error: fallbackCommit.error ?? "No commit was created",
-      };
+      });
     }
 
-    return result;
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute commit: ${errorMessage}`,
-    };
+    return finalizeWorker(workerId, result);
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute commit", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -562,73 +824,59 @@ export async function executeCommit(
  */
 export async function executePush(
   projectPath: string,
+  actionId?: string | undefined,
 ): Promise<GitActionResult> {
-  currentOperationPhase = "pushing";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "git push",
+    projectPath,
+    phase: "pushing",
+    source: "git",
+  });
   try {
-    // First, try standard git push
-    let proc = Bun.spawn(["git", "push"], {
-      cwd: projectPath,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    // Wait for process to complete (2 min timeout)
-    const timeoutMs = 2 * 60 * 1000;
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Git push timeout")), timeoutMs),
+    let { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "push"],
+      projectPath,
+      2 * 60 * 1000,
+      workerId,
     );
-
-    let [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
-      timeoutPromise,
-    ]);
 
     // If push failed due to no upstream tracking branch, try with -u origin HEAD
     if (exitCode !== 0 && stderr.includes("no upstream branch")) {
-      proc = Bun.spawn(["git", "push", "-u", "origin", "HEAD"], {
-        cwd: projectPath,
-        stdout: "pipe",
-        stderr: "pipe",
-      });
-
-      [stdout, stderr, exitCode] = await Promise.race([
-        Promise.all([
-          new Response(proc.stdout).text(),
-          new Response(proc.stderr).text(),
-          proc.exited,
-        ]),
-        timeoutPromise,
-      ]);
+      ({ stdout, stderr, exitCode } = await runProcessWithTimeout(
+        ["git", "push", "-u", "origin", "HEAD"],
+        projectPath,
+        2 * 60 * 1000,
+        workerId,
+      ));
     }
 
     if (exitCode === 0) {
       // Git writes push output to stderr (even on success)
       const output = stderr.length > 0 ? stderr : stdout;
-      return {
+      return finalizeWorker(workerId, {
         success: true,
         output,
-      };
+      });
     }
 
-    return {
+    return finalizeWorker(workerId, {
       success: false,
       output: stdout,
       error:
         stderr.length > 0 ? stderr : `Git push exited with code ${exitCode}`,
-    };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute push: ${errorMessage}`,
-    };
+    });
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute push", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -643,80 +891,66 @@ export async function executePush(
  */
 export async function executePull(
   projectPath: string,
+  actionId?: string | undefined,
 ): Promise<GitActionResult> {
-  currentOperationPhase = "pulling";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "git pull",
+    projectPath,
+    phase: "pulling",
+    source: "git",
+  });
   try {
-    // First, run git fetch origin
-    let proc = Bun.spawn(["git", "fetch", "origin"], {
-      cwd: projectPath,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    // Wait for process to complete (2 min timeout)
-    const timeoutMs = 2 * 60 * 1000;
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Git pull timeout")), timeoutMs),
+    let { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "fetch", "origin"],
+      projectPath,
+      2 * 60 * 1000,
+      workerId,
     );
 
-    let [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
-      timeoutPromise,
-    ]);
-
     if (exitCode !== 0) {
-      return {
+      return finalizeWorker(workerId, {
         success: false,
         output: stdout,
         error:
           stderr.length > 0 ? stderr : `Git fetch exited with code ${exitCode}`,
-      };
+      });
     }
 
     // Then run git pull
-    proc = Bun.spawn(["git", "pull"], {
-      cwd: projectPath,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
-      timeoutPromise,
-    ]);
+    ({ stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "pull"],
+      projectPath,
+      2 * 60 * 1000,
+      workerId,
+    ));
 
     if (exitCode === 0) {
       // Git writes pull output to stdout or stderr
       const output = stdout.length > 0 ? stdout : stderr;
-      return {
+      return finalizeWorker(workerId, {
         success: true,
         output,
-      };
+      });
     }
 
-    return {
+    return finalizeWorker(workerId, {
       success: false,
       output: stdout,
       error:
         stderr.length > 0 ? stderr : `Git pull exited with code ${exitCode}`,
-    };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute pull: ${errorMessage}`,
-    };
+    });
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute pull", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -730,52 +964,48 @@ export async function executePull(
  */
 export async function executeInit(
   projectPath: string,
+  actionId?: string | undefined,
 ): Promise<GitActionResult> {
-  currentOperationPhase = "initializing";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "git init",
+    projectPath,
+    phase: "initializing",
+    source: "git",
+  });
   try {
-    const proc = Bun.spawn(["git", "init"], {
-      cwd: projectPath,
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-
-    const timeoutMs = 30 * 1000;
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Git init timeout")), timeoutMs),
+    const { stdout, stderr, exitCode } = await runProcessWithTimeout(
+      ["git", "init"],
+      projectPath,
+      30 * 1000,
+      workerId,
     );
-
-    const [stdout, stderr, exitCode] = await Promise.race([
-      Promise.all([
-        new Response(proc.stdout).text(),
-        new Response(proc.stderr).text(),
-        proc.exited,
-      ]),
-      timeoutPromise,
-    ]);
 
     if (exitCode === 0) {
       const output = stdout.length > 0 ? stdout : stderr;
-      return {
+      return finalizeWorker(workerId, {
         success: true,
         output,
-      };
+      });
     }
 
-    return {
+    return finalizeWorker(workerId, {
       success: false,
       output: stdout,
       error:
         stderr.length > 0 ? stderr : `Git init exited with code ${exitCode}`,
-    };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute git init: ${errorMessage}`,
-    };
+    });
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute git init", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -798,7 +1028,14 @@ export async function executeCreatePR(
   modelProfile?: ResolvedModelProfile | undefined,
   outputLanguage = "English",
 ): Promise<GitActionResult> {
-  currentOperationPhase = "creating-pr";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "AI pull request creation",
+    projectPath,
+    phase: "creating-pr",
+    source: resolveAgentWorkerSource(modelProfile),
+  });
   try {
     // Build prompt with create-pr system prompt
     // Append base branch information to custom context
@@ -818,24 +1055,27 @@ export async function executeCreatePR(
       modelProfile,
       projectPath,
       prompt,
-      actionId,
+      workerId,
     );
     if (!initial.success) {
-      return initial;
+      return finalizeWorker(workerId, initial);
     }
 
-    if (actionId !== undefined && cancelledActions.has(actionId)) {
-      cancelledActions.delete(actionId);
-      return {
+    if (isWorkerCancelled(workerId)) {
+      return finalizeWorker(workerId, createCancelledResult(initial.output));
+    }
+
+    const currentPR = await getCurrentPRView(projectPath, workerId);
+    if (currentPR === null) {
+      return finalizeWorker(workerId, {
         success: false,
         output: initial.output,
-        error: "Operation cancelled by user",
-      };
+        error: CREATE_PR_VERIFICATION_ERROR,
+      });
     }
 
-    const currentPR = await getCurrentPRView(projectPath);
-    if (currentPR === null || !hasPlaceholderPRContent(currentPR)) {
-      return initial;
+    if (!hasPlaceholderPRContent(currentPR)) {
+      return finalizeWorker(workerId, initial);
     }
 
     const recoveryPrompt = buildPRRecoveryPrompt(
@@ -847,40 +1087,49 @@ export async function executeCreatePR(
       modelProfile,
       projectPath,
       recoveryPrompt,
-      actionId,
+      workerId,
     );
     if (!recovery.success) {
-      return {
+      return finalizeWorker(workerId, {
         success: false,
         output: `${initial.output}\n\n${recovery.output}`.trim(),
         error: `PR was created with placeholder content and recovery failed: ${recovery.error ?? "Unknown error"}`,
-      };
+      });
     }
 
-    const verifiedPR = await getCurrentPRView(projectPath);
-    if (verifiedPR !== null && hasPlaceholderPRContent(verifiedPR)) {
-      return {
+    const verifiedPR = await getCurrentPRView(projectPath, workerId);
+    if (verifiedPR === null) {
+      return finalizeWorker(workerId, {
+        success: false,
+        output: `${initial.output}\n\n${recovery.output}`.trim(),
+        error: CREATE_PR_VERIFICATION_ERROR,
+      });
+    }
+
+    if (hasPlaceholderPRContent(verifiedPR)) {
+      return finalizeWorker(workerId, {
         success: false,
         output: `${initial.output}\n\n${recovery.output}`.trim(),
         error:
           "PR body/title still has placeholder content after recovery attempt",
-      };
+      });
     }
 
-    return {
+    return finalizeWorker(workerId, {
       success: true,
       output:
         `${initial.output}\n\n[QraftBox] Placeholder PR content detected and auto-fixed.`.trim(),
-    };
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute create-pr: ${errorMessage}`,
-    };
+    });
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute create-pr", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -902,28 +1151,39 @@ export async function executeUpdatePR(
   modelProfile?: ResolvedModelProfile | undefined,
   outputLanguage = "English",
 ): Promise<GitActionResult> {
-  currentOperationPhase = "creating-pr";
+  const workerId = resolveWorkerId(actionId);
+  beginWorker({
+    workerId,
+    title: "AI pull request update",
+    projectPath,
+    phase: "creating-pr",
+    source: resolveAgentWorkerSource(modelProfile),
+  });
   try {
-    const currentPR = await getCurrentPRView(projectPath);
+    const currentPR = await getCurrentPRView(projectPath, workerId);
     if (currentPR === null) {
-      return {
+      return finalizeWorker(workerId, {
         success: false,
         output: "",
         error: "No existing PR found for current branch",
-      };
+      });
     }
 
     const prompt = buildPRUpdatePrompt(baseBranch, customCtx, outputLanguage);
-    return await runClaude(modelProfile, projectPath, prompt, actionId);
-  } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : String(e);
-    return {
-      success: false,
-      output: "",
-      error: `Failed to execute update-pr: ${errorMessage}`,
-    };
+    return finalizeWorker(
+      workerId,
+      await runClaude(modelProfile, projectPath, prompt, workerId),
+    );
+  } catch (error) {
+    return finalizeWorker(
+      workerId,
+      isWorkerCancelled(workerId)
+        ? createCancelledResult("")
+        : createFailureResult("Failed to execute update-pr", error),
+    );
   } finally {
     currentOperationPhase = "idle";
+    currentOperationWorkerId = null;
   }
 }
 
@@ -934,10 +1194,19 @@ export async function executeUpdatePR(
  * @returns true if a running process existed and cancel signal was sent
  */
 export async function cancelGitAction(actionId: string): Promise<boolean> {
+  const workerDetail = processWorkerStore.getWorker(actionId);
+  const canCancelWorker =
+    runningActionProcesses.has(actionId) ||
+    currentOperationWorkerId === actionId ||
+    workerDetail?.status === "running";
+  if (!canCancelWorker) {
+    return false;
+  }
+
   cancelledActions.add(actionId);
   const proc = runningActionProcesses.get(actionId);
   if (proc === undefined) {
-    return false;
+    return true;
   }
 
   try {

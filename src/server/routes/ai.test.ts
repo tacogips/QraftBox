@@ -315,6 +315,127 @@ describe("AI Routes", () => {
 
       expect(getPromptQueueMock).toHaveBeenCalledWith(undefined);
     });
+
+    test("filters prompt queue entries by projectPath when requested", async () => {
+      (sessionManager.getPromptQueue as Mock).mockReturnValue([
+        {
+          id: "prompt-a",
+          message: "Queued for alpha",
+          status: "queued",
+          created_at: "2026-03-09T06:00:00.000Z",
+          project_path: "/repo/alpha",
+          worktree_id: "alpha_123",
+        },
+        {
+          id: "prompt-b",
+          message: "Queued for beta",
+          status: "queued",
+          created_at: "2026-03-09T06:05:00.000Z",
+          project_path: "/repo/beta",
+          worktree_id: "beta_456",
+        },
+      ]);
+
+      const res = await app.request("/prompt-queue?projectPath=/repo/alpha", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        prompts: [
+          {
+            id: "prompt-a",
+            message: "Queued for alpha",
+            status: "queued",
+            created_at: "2026-03-09T06:00:00.000Z",
+            project_path: "/repo/alpha",
+            worktree_id: "alpha_123",
+          },
+        ],
+      });
+    });
+  });
+
+  describe("GET /sessions", () => {
+    test("filters active sessions by projectPath when requested", async () => {
+      (sessionManager.listSessions as Mock).mockReturnValue([
+        {
+          id: "qs_alpha",
+          state: "running",
+          prompt: "Alpha task",
+          projectPath: "/repo/alpha",
+          createdAt: "2026-03-09T06:00:00.000Z",
+          context: {},
+        },
+        {
+          id: "qs_beta",
+          state: "running",
+          prompt: "Beta task",
+          projectPath: "/repo/beta",
+          createdAt: "2026-03-09T06:05:00.000Z",
+          context: {},
+        },
+      ]);
+
+      const res = await app.request("/sessions?projectPath=/repo/alpha", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toEqual({
+        sessions: [
+          {
+            id: "qs_alpha",
+            state: "running",
+            prompt: "Alpha task",
+            projectPath: "/repo/alpha",
+            createdAt: "2026-03-09T06:00:00.000Z",
+            context: {},
+          },
+        ],
+      });
+    });
+  });
+
+  describe("GET /sessions/:id/stream", () => {
+    test("replays the current running snapshot for a newly opened SSE stream", async () => {
+      (sessionManager.getSession as Mock).mockReturnValue({
+        id: "qs_stream_1",
+        state: "running",
+        prompt: "Follow up",
+        projectPath: "/tmp/test-project",
+        createdAt: "2026-03-11T11:31:00.000Z",
+        startedAt: "2026-03-11T11:31:01.000Z",
+        context: {},
+        currentActivity: "Thinking...",
+        lastAssistantMessage: "partial",
+      });
+      (sessionManager.subscribe as Mock).mockImplementation(
+        (_sessionId, listener) => {
+          queueMicrotask(() => {
+            listener({
+              type: "completed",
+              sessionId: "qs_stream_1" as QraftAiSessionId,
+              timestamp: "2026-03-11T11:31:02.000Z",
+              data: {},
+            });
+          });
+          return () => {};
+        },
+      );
+
+      const res = await app.request("/sessions/qs_stream_1/stream", {
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain("event: connected");
+      expect(body).toContain("event: session_started");
+      expect(body).toContain('"message":"Thinking..."');
+      expect(body).toContain('"content":"partial"');
+      expect(body).toContain("event: completed");
+    });
   });
 
   describe("session hidden routes", () => {

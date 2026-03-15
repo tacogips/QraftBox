@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 vars:
   PROJECT_NAME: qraftbox
@@ -14,11 +14,12 @@ tasks:
     cmds:
       - bun install
       - cd client && bun install
+      - cd client-legacy && bun install
 
   dev:
     desc: Run backend + client dev servers with hot reload
     deps:
-      - dev:server
+      - dev:server:current
       - dev:client
 
   dev:server:
@@ -27,7 +28,28 @@ tasks:
       PORT: '{{.PORT | default "7144"}}'
       HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
+      - bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
       - bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
+
+  dev:server:current:
+    desc: Run backend server with watch and redirect frontend traffic to the current Vite dev server
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      FRONTEND_DEV_URL: '{{.FRONTEND_DEV_URL | default "http://127.0.0.1:5173"}}'
+    cmds:
+      - bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+      - QRAFTBOX_FRONTEND=current QRAFTBOX_FRONTEND_DEV_URL={{.FRONTEND_DEV_URL}} bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
+
+  dev:server:legacy:
+    desc: Run backend server with watch and redirect frontend traffic to the legacy Vite dev server
+    vars:
+      PORT: '{{.PORT | default "7144"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      FRONTEND_DEV_URL: '{{.FRONTEND_DEV_URL | default "http://127.0.0.1:5174"}}'
+    cmds:
+      - bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+      - QRAFTBOX_FRONTEND=svelte QRAFTBOX_FRONTEND_DEV_URL={{.FRONTEND_DEV_URL}} bun run --watch src/main.ts --port {{.PORT}} --host {{.HOST}}
 
   dev:client:
     desc: Run Vite dev server with HMR
@@ -38,9 +60,26 @@ tasks:
       API_TARGET_HOST: '{{.API_TARGET_HOST | default "127.0.0.1"}}'
       API_TARGET_PORT: '{{.API_TARGET_PORT | default "7144"}}'
     cmds:
-      - test -d node_modules/vite || bun install
-      - rm -rf node_modules/.vite/deps node_modules/.vite/deps_temp
-      - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}}
+      - bun -e "await import('vite')" >/dev/null 2>&1 || bun install
+      - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}} --strictPort --force
+
+  dev:client-legacy:
+    desc: Run the legacy Svelte Vite dev server with HMR
+    dir: client-legacy
+    vars:
+      PORT: '{{.PORT | default "5174"}}'
+      HOST: '{{.HOST | default "0.0.0.0"}}'
+      API_TARGET_HOST: '{{.API_TARGET_HOST | default "127.0.0.1"}}'
+      API_TARGET_PORT: '{{.API_TARGET_PORT | default "7144"}}'
+    cmds:
+      - bun -e "await import('vite')" >/dev/null 2>&1 || bun install
+      - VITE_API_PROXY_TARGET=http://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} VITE_WS_PROXY_TARGET=ws://{{.API_TARGET_HOST}}:{{.API_TARGET_PORT}} bun run dev -- --host {{.HOST}} --port {{.PORT}} --strictPort --force
+
+  dev-legacy:
+    desc: Run backend + legacy Svelte dev servers with hot reload
+    deps:
+      - dev:server:legacy
+      - dev:client-legacy
 
   build:
     desc: Build the project
@@ -50,6 +89,7 @@ tasks:
   start:
     desc: Run the application
     cmds:
+      - bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
       - bun run start
 
   pm2:start:
@@ -159,6 +199,7 @@ tasks:
       PORT: '{{.PORT | default "7155"}}'
       HOST: '{{.HOST | default "0.0.0.0"}}'
     cmds:
+      - bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
       - |
         for pid in $(ss -tlnp 2>/dev/null | grep ':{{.PORT}} ' | grep -oP 'pid=\K[0-9]+'); do
           kill "$pid" 2>/dev/null && echo "Killed PID $pid"
@@ -184,9 +225,14 @@ tasks:
       - rm -rf release
 
   build:client:
-    desc: Build client assets (Svelte SPA)
+    desc: Build client assets (Solid SPA)
     cmds:
       - cd client && bun install && bun run build
+
+  build:client:legacy:
+    desc: Build legacy client assets (Svelte SPA)
+    cmds:
+      - cd client-legacy && bun install && bun run build
 
   build:server:
     desc: Bundle server code
@@ -194,10 +240,12 @@ tasks:
       - bun build src/main.ts --outdir dist --target bun
 
   release:prepare:
-    desc: Typecheck, build client and server for release
+    desc: Verify frontend migration gates, then build client and server for release
     cmds:
-      - task: typecheck
+      - bun run check:frontend:migration:offline
+      - bun run typecheck:client
       - task: build:client
+      - task: build:client:legacy
       - task: build:server
 
   release:binary:
@@ -208,11 +256,12 @@ tasks:
     vars:
       VERSION:
         sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
-      RELEASE_DIR: 'release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}'
+      RELEASE_DIR: "release/{{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}"
     cmds:
       - mkdir -p {{.RELEASE_DIR}}/dist
       - bun build src/main.ts --compile --target {{.TARGET}} --outfile {{.RELEASE_DIR}}/{{.PROJECT_NAME}}
       - cp -r dist/client {{.RELEASE_DIR}}/dist/client
+      - cp -r dist/client-legacy {{.RELEASE_DIR}}/dist/client-legacy
       - cd release && tar -czf {{.PROJECT_NAME}}-v{{.VERSION}}-{{.SUFFIX}}.tar.gz $(basename {{.RELEASE_DIR}})
       - echo "Built {{.RELEASE_DIR}}.tar.gz"
 
@@ -265,9 +314,10 @@ tasks:
     cmds:
       - task: release:prepare
       - mkdir -p release/npm/dist release/npm/bin
-      # Copy bundled server and client assets
+      # Copy bundled server and both frontend bundles
       - cp dist/main.js release/npm/dist/
       - cp -r dist/client release/npm/dist/client
+      - cp -r dist/client-legacy release/npm/dist/client-legacy
       # Copy bin entry script
       - cp bin/qraftbox.js release/npm/bin/qraftbox.js
       - chmod +x release/npm/bin/qraftbox.js
@@ -328,7 +378,7 @@ tasks:
     vars:
       VERSION:
         sh: bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)"
-      TAG: 'v{{.VERSION}}'
+      TAG: "v{{.VERSION}}"
     cmds:
       # Verify gh CLI is available and authenticated
       - gh auth status

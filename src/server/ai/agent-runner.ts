@@ -16,11 +16,22 @@ import {
   type RunningSession,
   type AgentSessionAttachment,
 } from "claude-code-agent/src/sdk/index.js";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import {
+  SessionRunner as CodexSessionRunner,
+  toNormalizedEvents,
+} from "codex-agent";
 import type { ModelAuthMode } from "../../types/model-config.js";
 import { buildAgentAuthEnv } from "./claude-env.js";
+import {
+  asCodexRecord,
+  CODEX_MESSAGE_TEXT_KEYS,
+  CODEX_SESSION_ID_KEYS,
+  CODEX_THREAD_ID_KEYS,
+  CODEX_TOOL_NAME_KEYS,
+  isCodexType,
+  readCodexStringField,
+  readFirstCodexStringField,
+} from "../codex/event-normalization.js";
 
 const logger = createLogger("AgentRunner");
 const UUID_PATTERN =
@@ -28,22 +39,22 @@ const UUID_PATTERN =
 const AWAITING_INPUT_POLL_INTERVAL_MS = 100;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-  return value as Record<string, unknown>;
+  return asCodexRecord(value);
 }
 
 function readStringField(
   obj: Record<string, unknown>,
   key: string,
 ): string | undefined {
+  return readCodexStringField(obj, key);
+}
+
+function readRawStringField(
+  obj: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = obj[key];
-  if (typeof value !== "string") {
-    return undefined;
-  }
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
+  return typeof value === "string" ? value : undefined;
 }
 
 function isLikelyClaudeSessionId(value: string): boolean {
@@ -78,19 +89,6 @@ type CodexParsedEvent =
   | CodexToolResultEvent
   | CodexSessionDetectedEvent
   | null;
-
-function readFirstStringField(
-  obj: Record<string, unknown>,
-  keys: readonly string[],
-): string | undefined {
-  for (const key of keys) {
-    const value = readStringField(obj, key);
-    if (value !== undefined) {
-      return value;
-    }
-  }
-  return undefined;
-}
 
 /**
  * Build a Codex CLI command for non-interactive JSONL execution.
@@ -145,24 +143,19 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
     return null;
   }
 
-  const obj = asRecord(parsed);
+  const obj = asCodexRecord(parsed);
   if (obj === undefined) {
     return null;
   }
 
-  const lineType = readStringField(obj, "type");
+  const lineType = readCodexStringField(obj, "type");
   if (lineType === "thread.started") {
     const sessionId =
-      readFirstStringField(obj, [
-        "thread_id",
-        "threadId",
-        "session_id",
-        "sessionId",
-      ]) ??
+      readFirstCodexStringField(obj, CODEX_SESSION_ID_KEYS) ??
       (() => {
-        const thread = asRecord(obj["thread"]);
+        const thread = asCodexRecord(obj["thread"]);
         if (thread === undefined) return undefined;
-        return readFirstStringField(thread, ["id", "thread_id", "threadId"]);
+        return readFirstCodexStringField(thread, CODEX_THREAD_ID_KEYS);
       })();
     if (sessionId !== undefined) {
       return {
@@ -174,15 +167,10 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.started") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    const itemType = readStringField(item, "type");
-    if (itemType === "command_execution") {
-      const toolName = readFirstStringField(item, [
-        "tool_name",
-        "toolName",
-        "name",
-      ]);
+    if (isCodexType(item["type"], "command_execution")) {
+      const toolName = readFirstCodexStringField(item, CODEX_TOOL_NAME_KEYS);
       return {
         type: "tool_call",
         toolName: toolName ?? "local_shell_call",
@@ -192,28 +180,23 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.completed") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    const itemType = readStringField(item, "type");
 
-    if (itemType === "agent_message") {
-      const text = readFirstStringField(item, ["text", "content", "message"]);
+    if (isCodexType(item["type"], "agent_message")) {
+      const text = readFirstCodexStringField(item, CODEX_MESSAGE_TEXT_KEYS);
       if (text !== undefined) {
         return { type: "message", content: text };
       }
       return null;
     }
 
-    if (itemType === "command_execution") {
-      const toolName = readFirstStringField(item, [
-        "tool_name",
-        "toolName",
-        "name",
-      ]);
+    if (isCodexType(item["type"], "command_execution")) {
+      const toolName = readFirstCodexStringField(item, CODEX_TOOL_NAME_KEYS);
       const exitCodeRaw = item["exit_code"];
       const isError =
         (typeof exitCodeRaw === "number" && exitCodeRaw !== 0) ||
-        readStringField(item, "status") === "failed";
+        readCodexStringField(item, "status") === "failed";
       return {
         type: "tool_result",
         toolName: toolName ?? "local_shell_call",
@@ -225,16 +208,16 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "item.delta") {
-    const item = asRecord(obj["item"]);
+    const item = asCodexRecord(obj["item"]);
     if (item === undefined) return null;
-    if (readStringField(item, "type") !== "agent_message") {
+    if (!isCodexType(item["type"], "agent_message")) {
       return null;
     }
-    const delta = asRecord(obj["delta"]);
+    const delta = asCodexRecord(obj["delta"]);
     const text =
       (delta !== undefined
-        ? readFirstStringField(delta, ["text", "content"])
-        : undefined) ?? readFirstStringField(item, ["text"]);
+        ? readFirstCodexStringField(delta, ["text", "content"])
+        : undefined) ?? readFirstCodexStringField(item, ["text"]);
     if (text !== undefined) {
       return { type: "message", content: text, isDelta: true };
     }
@@ -242,13 +225,14 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "session_meta") {
-    const payload = asRecord(obj["payload"]);
-    const meta = payload !== undefined ? asRecord(payload["meta"]) : undefined;
+    const payload = asCodexRecord(obj["payload"]);
+    const meta =
+      payload !== undefined ? asCodexRecord(payload["meta"]) : undefined;
     const sessionId =
       meta !== undefined
-        ? readStringField(meta, "id")
+        ? readCodexStringField(meta, "id")
         : payload !== undefined
-          ? readStringField(payload, "id")
+          ? readCodexStringField(payload, "id")
           : undefined;
     if (sessionId !== undefined) {
       return {
@@ -260,15 +244,14 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "event_msg") {
-    const payload = asRecord(obj["payload"]);
+    const payload = asCodexRecord(obj["payload"]);
     if (payload === undefined) return null;
-    const eventType = readStringField(payload, "type");
-    if (eventType === "AgentMessage") {
+    if (isCodexType(payload["type"], "agent_message")) {
       const messageValue = payload["message"];
       if (typeof messageValue === "string" && messageValue.trim().length > 0) {
         return { type: "message", content: messageValue };
       }
-      const messageObj = asRecord(messageValue);
+      const messageObj = asCodexRecord(messageValue);
       const nestedContent =
         messageObj !== undefined ? messageObj["content"] : undefined;
       if (
@@ -280,9 +263,9 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
       if (Array.isArray(nestedContent)) {
         const parts: string[] = [];
         for (const item of nestedContent) {
-          const block = asRecord(item);
+          const block = asCodexRecord(item);
           if (block === undefined) continue;
-          const text = readStringField(block, "text");
+          const text = readCodexStringField(block, "text");
           if (text !== undefined) {
             parts.push(text);
           }
@@ -294,10 +277,10 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
       }
       return null;
     }
-    if (eventType === "ExecCommandBegin") {
+    if (isCodexType(payload["type"], "exec_command_begin")) {
       return { type: "tool_call", toolName: "local_shell_call" };
     }
-    if (eventType === "ExecCommandEnd") {
+    if (isCodexType(payload["type"], "exec_command_end")) {
       const exitCodeRaw = payload["exit_code"];
       const isError =
         typeof exitCodeRaw === "number" ? exitCodeRaw !== 0 : false;
@@ -311,22 +294,22 @@ export function parseCodexJsonLine(line: string): CodexParsedEvent {
   }
 
   if (lineType === "response_item") {
-    const payload = asRecord(obj["payload"]);
+    const payload = asCodexRecord(obj["payload"]);
     if (payload === undefined) return null;
-    const responseType = readStringField(payload, "type");
+    const responseType = readCodexStringField(payload, "type");
     if (
       responseType === "message" &&
-      readStringField(payload, "role") === "assistant"
+      readCodexStringField(payload, "role") === "assistant"
     ) {
       const content = payload["content"];
       if (!Array.isArray(content)) return null;
       const parts: string[] = [];
       for (const item of content) {
-        const block = asRecord(item);
+        const block = asCodexRecord(item);
         if (block === undefined) continue;
-        const blockType = readStringField(block, "type");
+        const blockType = readCodexStringField(block, "type");
         if (blockType !== "output_text" && blockType !== "input_text") continue;
-        const text = readStringField(block, "text");
+        const text = readCodexStringField(block, "text");
         if (text !== undefined) parts.push(text);
       }
       const combined = parts.join("\n").trim();
@@ -395,6 +378,99 @@ export function buildCodexMessageSnapshots(
   }
 
   return [incomingContent];
+}
+
+export function downsampleCodexMessageSnapshots(
+  snapshots: readonly string[],
+  maxUpdates: number,
+): readonly string[] {
+  if (snapshots.length <= 1 || maxUpdates <= 1) {
+    return snapshots;
+  }
+  if (snapshots.length <= maxUpdates) {
+    return snapshots;
+  }
+
+  const sampled: string[] = [];
+  const lastIndex = snapshots.length - 1;
+  const denominator = maxUpdates - 1;
+
+  for (let i = 0; i < maxUpdates; i += 1) {
+    const index = Math.round((i * lastIndex) / denominator);
+    const snapshot = snapshots[index];
+    if (snapshot !== undefined) {
+      sampled.push(snapshot);
+    }
+  }
+
+  const finalSnapshot = snapshots[lastIndex];
+  if (
+    finalSnapshot !== undefined &&
+    sampled[sampled.length - 1] !== finalSnapshot
+  ) {
+    sampled.push(finalSnapshot);
+  }
+  return sampled;
+}
+
+interface CodexStreamingSession {
+  readonly sessionId: string;
+  messages(): AsyncGenerator<unknown, void, undefined>;
+  waitForCompletion(): Promise<{
+    readonly success: boolean;
+    readonly exitCode: number;
+  }>;
+  cancel(): Promise<void>;
+}
+
+interface CodexAgentPathAttachment {
+  readonly type: "path";
+  readonly path: string;
+}
+
+interface CodexAgentBase64Attachment {
+  readonly type: "base64";
+  readonly data: string;
+  readonly mediaType?: string | undefined;
+}
+
+type CodexAgentAttachment =
+  | CodexAgentPathAttachment
+  | CodexAgentBase64Attachment;
+
+function toCodexAgentAttachments(
+  attachments: readonly AgentSessionAttachment[] | undefined,
+): readonly CodexAgentAttachment[] {
+  if (attachments === undefined || attachments.length === 0) {
+    return [];
+  }
+
+  const mapped: CodexAgentAttachment[] = [];
+  for (const attachment of attachments) {
+    const mimeType =
+      typeof attachment.mimeType === "string" ? attachment.mimeType : undefined;
+    const isImageMime = mimeType?.startsWith("image/") ?? false;
+
+    if (typeof attachment.path === "string" && attachment.path.length > 0) {
+      // Codex accepts file path images; allow unknown mime for path-based inputs.
+      mapped.push({ type: "path", path: attachment.path });
+      continue;
+    }
+
+    if (
+      attachment.encoding === "base64" &&
+      typeof attachment.content === "string" &&
+      attachment.content.length > 0 &&
+      isImageMime
+    ) {
+      mapped.push({
+        type: "base64",
+        data: attachment.content,
+        mediaType: mimeType,
+      });
+    }
+  }
+  return mapped;
 }
 
 /**
@@ -942,206 +1018,190 @@ class CodexAgentRunner implements AgentRunner {
     const channel = new EventChannel<AgentEvent>();
     let started = false;
     let cancelled = false;
-    let codexProcess:
-      | {
-          readonly stdout: ReadableStream<Uint8Array>;
-          readonly stderr: ReadableStream<Uint8Array>;
-          readonly exited: Promise<number>;
-          kill(): void;
-        }
-      | undefined;
-    let streamedAssistantContent = "";
-    let tempDirForResumeImages: string | undefined;
+    let runningSession: CodexStreamingSession | undefined;
 
     const startExecution = async (): Promise<void> => {
       try {
+        let streamedAssistantContent = "";
         let detectedSessionId: ClaudeSessionId | undefined =
           params.resumeSessionId;
 
-        const emitParsedEvent = (parsed: CodexParsedEvent): void => {
-          if (parsed === null) {
-            return;
-          }
-          if (parsed.type === "session_detected") {
-            if (
-              shouldEmitCodexSessionDetected(
-                detectedSessionId,
-                parsed.sessionId,
+        const codexAttachments = toCodexAgentAttachments(params.attachments);
+        const imagePaths = codexAttachments
+          .filter(
+            (attachment): attachment is CodexAgentPathAttachment =>
+              attachment.type === "path",
+          )
+          .map((attachment) => attachment.path);
+
+        const codexRunner = new CodexSessionRunner();
+        runningSession =
+          params.resumeSessionId !== undefined
+            ? await codexRunner.resumeSession(
+                params.resumeSessionId,
+                params.prompt,
+                {
+                  cwd: params.projectPath,
+                  model: params.model,
+                  additionalArgs:
+                    params.additionalArgs !== undefined
+                      ? [...params.additionalArgs]
+                      : undefined,
+                  streamGranularity: "char",
+                  images: imagePaths,
+                },
               )
-            ) {
-              channel.push({
-                type: "claude_session_detected",
-                claudeSessionId: parsed.sessionId,
+            : await codexRunner.startSession({
+                prompt: params.prompt,
+                cwd: params.projectPath,
+                model: params.model,
+                additionalArgs:
+                  params.additionalArgs !== undefined
+                    ? [...params.additionalArgs]
+                    : undefined,
+                streamGranularity: "char",
+                images: imagePaths,
               });
-            }
-            detectedSessionId = parsed.sessionId;
+        const activeSession = runningSession;
+        if (activeSession === undefined) {
+          throw new Error("Failed to start codex session");
+        }
+        let lastRenderedAssistantContent = "";
+        let lastRenderAt = 0;
+        const emitAssistantSnapshot = (): void => {
+          if (streamedAssistantContent === lastRenderedAssistantContent) {
             return;
           }
-          if (parsed.type === "message") {
-            const snapshots = buildCodexMessageSnapshots(
-              streamedAssistantContent,
-              parsed.content,
-              parsed.isDelta,
-            );
-            for (const snapshot of snapshots) {
-              streamedAssistantContent = snapshot;
-              channel.push({
-                type: "message",
-                role: "assistant",
-                content: snapshot,
-              });
-              channel.push({ type: "activity", activity: undefined });
-            }
-            return;
-          }
-          if (parsed.type === "tool_call") {
-            channel.push({
-              type: "tool_call",
-              toolName: parsed.toolName,
-              input: {},
-            });
-            channel.push({
-              type: "activity",
-              activity: `Using ${parsed.toolName}...`,
-            });
-            return;
-          }
-          if (parsed.type === "tool_result") {
-            channel.push({
-              type: "tool_result",
-              toolName: parsed.toolName,
-              output: undefined,
-              isError: parsed.isError,
-            });
-            channel.push({
-              type: "activity",
-              activity: `Processing ${parsed.toolName} result...`,
-            });
-          }
+          lastRenderedAssistantContent = streamedAssistantContent;
+          channel.push({
+            type: "message",
+            role: "assistant",
+            content: streamedAssistantContent,
+          });
+          channel.push({ type: "activity", activity: undefined });
         };
 
-        const streamToText = async (
-          stream: ReadableStream<Uint8Array>,
-        ): Promise<string> => {
-          const decoder = new TextDecoder();
-          let text = "";
-          for await (const chunk of stream) {
-            text += decoder.decode(chunk, { stream: true });
-          }
-          text += decoder.decode();
-          return text;
-        };
-
-        const extensionForMimeType = (mimeType: string): string => {
-          switch (mimeType.toLowerCase()) {
-            case "image/png":
-              return ".png";
-            case "image/jpeg":
-              return ".jpg";
-            case "image/webp":
-              return ".webp";
-            case "image/gif":
-              return ".gif";
-            default:
-              return ".img";
-          }
-        };
-
-        const materializeImagePaths = async (
-          attachments: readonly AgentSessionAttachment[] | undefined,
-        ): Promise<readonly string[]> => {
-          if (attachments === undefined || attachments.length === 0) {
-            return [];
-          }
-
-          const paths: string[] = [];
-          for (const attachment of attachments) {
-            if (
-              typeof attachment.mimeType !== "string" ||
-              !attachment.mimeType.startsWith("image/")
-            ) {
-              continue;
-            }
-
-            if (
-              typeof attachment.path === "string" &&
-              attachment.path.length > 0
-            ) {
-              paths.push(attachment.path);
-              continue;
-            }
-
-            if (
-              attachment.encoding === "base64" &&
-              typeof attachment.content === "string" &&
-              attachment.content.length > 0
-            ) {
-              if (tempDirForResumeImages === undefined) {
-                tempDirForResumeImages = await mkdtemp(
-                  join(tmpdir(), "qraftbox-codex-resume-"),
-                );
-              }
-              const extension = extensionForMimeType(attachment.mimeType);
-              const filePath = join(
-                tempDirForResumeImages,
-                `${paths.length}${extension}`,
-              );
-              const bytes = new Uint8Array(
-                Buffer.from(attachment.content, "base64"),
-              );
-              await writeFile(filePath, bytes);
-              paths.push(filePath);
-            }
-          }
-          return paths;
-        };
-
-        const imagePaths = await materializeImagePaths(params.attachments);
-        const command = buildCodexExecCommand(params, imagePaths);
-        const spawned = Bun.spawn({
-          cmd: command,
-          cwd: params.projectPath,
-          env: {
-            ...process.env,
-            ...buildAgentAuthEnv("openai", params.authMode),
-          },
-          stdout: "pipe",
-          stderr: "pipe",
-        });
-        codexProcess = spawned;
-        const stderrPromise = streamToText(spawned.stderr);
-        const decoder = new TextDecoder();
-        let buffered = "";
-
-        for await (const chunk of spawned.stdout) {
+        for await (const normalizedEvent of toNormalizedEvents(
+          activeSession.messages() as AsyncIterable<any>,
+        )) {
           if (cancelled) {
             break;
           }
-          buffered += decoder.decode(chunk, { stream: true });
-          let newlineIndex = buffered.indexOf("\n");
-          while (newlineIndex >= 0) {
-            const line = buffered.slice(0, newlineIndex);
-            buffered = buffered.slice(newlineIndex + 1);
-            emitParsedEvent(parseCodexJsonLine(line));
-            newlineIndex = buffered.indexOf("\n");
+
+          const payload = asRecord(normalizedEvent);
+          if (payload === undefined) {
+            continue;
+          }
+          const eventType = readStringField(payload, "type");
+          if (eventType === undefined) {
+            continue;
+          }
+
+          if (eventType === "session.started") {
+            const sessionId = readStringField(payload, "sessionId");
+            if (sessionId !== undefined) {
+              const castSessionId = sessionId as ClaudeSessionId;
+              if (
+                shouldEmitCodexSessionDetected(detectedSessionId, castSessionId)
+              ) {
+                channel.push({
+                  type: "claude_session_detected",
+                  claudeSessionId: castSessionId,
+                });
+              }
+              detectedSessionId = castSessionId;
+            }
+            continue;
+          }
+
+          if (eventType === "assistant.delta") {
+            const text = readRawStringField(payload, "text");
+            if (text === undefined) {
+              continue;
+            }
+            streamedAssistantContent += text;
+            const now = Date.now();
+            if (now - lastRenderAt >= 16 || text.includes("\n")) {
+              emitAssistantSnapshot();
+              lastRenderAt = now;
+            }
+            continue;
+          }
+
+          if (eventType === "assistant.snapshot") {
+            const content = readRawStringField(payload, "content");
+            if (content !== undefined) {
+              streamedAssistantContent = content;
+            }
+            continue;
+          }
+
+          if (eventType === "tool.call") {
+            const toolName = readStringField(payload, "name") ?? "unknown-tool";
+            const inputRaw = payload["input"];
+            const input =
+              typeof inputRaw === "object" && inputRaw !== null
+                ? (inputRaw as Record<string, unknown>)
+                : {};
+            channel.push({ type: "tool_call", toolName, input });
+            channel.push({
+              type: "activity",
+              activity: `Using ${toolName}...`,
+            });
+            continue;
+          }
+
+          if (eventType === "tool.result") {
+            const toolName = readStringField(payload, "name") ?? "unknown-tool";
+            const isError = payload["isError"] === true;
+            channel.push({
+              type: "tool_result",
+              toolName,
+              output: payload["output"],
+              isError,
+            });
+            channel.push({
+              type: "activity",
+              activity: `Processing ${toolName} result...`,
+            });
+            continue;
+          }
+
+          if (eventType === "activity") {
+            const message = readStringField(payload, "message");
+            channel.push({ type: "activity", activity: message });
+            continue;
+          }
+
+          if (eventType === "session.error") {
+            const errorRaw = payload["error"];
+            const nestedError = asRecord(errorRaw);
+            const errorMessage =
+              errorRaw instanceof Error
+                ? errorRaw.message
+                : typeof errorRaw === "string"
+                  ? errorRaw
+                  : nestedError !== undefined
+                    ? readStringField(nestedError, "message")
+                    : undefined;
+            channel.push({
+              type: "error",
+              message: errorMessage ?? "Codex session error",
+            });
+            continue;
           }
         }
-
-        buffered += decoder.decode();
-        if (buffered.trim().length > 0) {
-          emitParsedEvent(parseCodexJsonLine(buffered));
-        }
-
-        const exitCode = await spawned.exited;
-        const stderrText = (await stderrPromise).trim();
-        codexProcess = undefined;
+        emitAssistantSnapshot();
 
         if (cancelled) {
           channel.push({ type: "completed", success: false });
           return;
         }
 
-        if (exitCode === 0) {
+        const result = await activeSession.waitForCompletion();
+        runningSession = undefined;
+
+        if (result.success) {
           channel.push({ type: "activity", activity: undefined });
           channel.push({
             type: "completed",
@@ -1151,8 +1211,7 @@ class CodexAgentRunner implements AgentRunner {
           return;
         }
 
-        const fallbackError = `Codex execution failed (exit ${exitCode})`;
-        const errorMessage = stderrText.length > 0 ? stderrText : fallbackError;
+        const errorMessage = `Codex execution failed (exit ${result.exitCode})`;
         channel.push({ type: "error", message: errorMessage });
         channel.push({ type: "activity", activity: undefined });
         channel.push({
@@ -1176,9 +1235,6 @@ class CodexAgentRunner implements AgentRunner {
           });
         }
       } finally {
-        if (tempDirForResumeImages !== undefined) {
-          await rm(tempDirForResumeImages, { recursive: true, force: true });
-        }
         channel.close();
       }
     };
@@ -1194,17 +1250,17 @@ class CodexAgentRunner implements AgentRunner {
 
       async cancel(): Promise<void> {
         cancelled = true;
-        if (codexProcess !== undefined) {
-          codexProcess.kill();
-          codexProcess = undefined;
+        if (runningSession !== undefined) {
+          await runningSession.cancel();
+          runningSession = undefined;
         }
       },
 
       async abort(): Promise<void> {
         cancelled = true;
-        if (codexProcess !== undefined) {
-          codexProcess.kill();
-          codexProcess = undefined;
+        if (runningSession !== undefined) {
+          await runningSession.cancel();
+          runningSession = undefined;
         }
       },
     };

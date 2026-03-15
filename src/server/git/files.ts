@@ -10,7 +10,73 @@ import { join } from "node:path";
 import type { FileNode, FileStatus, FileStatusCode } from "../../types/git";
 import { createFileNode } from "../../types/git";
 import { execGit, unquoteGitPath } from "./executor";
+import { getChangedFiles } from "./diff.js";
 import { isBinaryExtension } from "./binary.js";
+
+const FILE_STATUS_PRIORITY: Readonly<Record<FileStatusCode, number>> = {
+  deleted: 60,
+  renamed: 50,
+  copied: 40,
+  added: 30,
+  modified: 20,
+  untracked: 10,
+  ignored: 0,
+};
+
+function pickPreferredStatus(
+  currentStatus: FileStatusCode | undefined,
+  nextStatus: FileStatusCode,
+): FileStatusCode {
+  if (currentStatus === undefined) {
+    return nextStatus;
+  }
+
+  return FILE_STATUS_PRIORITY[nextStatus] >= FILE_STATUS_PRIORITY[currentStatus]
+    ? nextStatus
+    : currentStatus;
+}
+
+function buildCollapsedStatusMap(
+  statuses: readonly FileStatus[],
+): ReadonlyMap<string, FileStatusCode> {
+  const statusMap = new Map<string, FileStatusCode>();
+  for (const status of statuses) {
+    const currentStatus = statusMap.get(status.path);
+    statusMap.set(
+      status.path,
+      pickPreferredStatus(currentStatus, status.status),
+    );
+  }
+  return statusMap;
+}
+
+function resolveDirectoryStatus(
+  statusMap: ReadonlyMap<string, FileStatusCode>,
+  directoryPath: string,
+): FileStatusCode | undefined {
+  const directoryPrefix = directoryPath.length > 0 ? `${directoryPath}/` : "";
+  let resolvedStatus: FileStatusCode | undefined;
+
+  for (const [path, status] of statusMap) {
+    if (
+      directoryPrefix.length > 0 &&
+      !path.startsWith(directoryPrefix) &&
+      path !== directoryPath
+    ) {
+      continue;
+    }
+    if (directoryPrefix.length === 0 && path.length === 0) {
+      continue;
+    }
+
+    resolvedStatus = pickPreferredStatus(
+      resolvedStatus,
+      status === "ignored" ? "ignored" : "modified",
+    );
+  }
+
+  return resolvedStatus;
+}
 
 /**
  * Get hierarchical file tree from git ls-files
@@ -60,12 +126,14 @@ export async function getFileTree(
     }
   } else {
     // Get all tracked files + untracked files
-    const [allFiles, untrackedFiles] = await Promise.all([
+    const [allFiles, untrackedFiles, changedFiles] = await Promise.all([
       getAllFiles(projectPath),
       getUntrackedFiles(projectPath),
+      getChangedFiles(projectPath).catch(() => []),
     ]);
     tree = buildTreeFromPaths([...allFiles, ...untrackedFiles]);
     tree = markUntrackedFiles(tree, new Set(untrackedFiles));
+    tree = mergeStatusIntoTree(tree, changedFiles);
   }
 
   // Mark binary files before returning
@@ -206,15 +274,18 @@ export async function getDirectoryChildren(
     Promise<{ exitCode: number; stdout: string; stderr: string }>,
     Promise<readonly string[]>,
     Promise<readonly string[]>,
+    Promise<readonly FileStatus[]>,
   ] = [
     execGit(args, { cwd: projectPath }),
     getUntrackedFiles(projectPath, dirPath),
     options?.showIgnored === true
       ? getIgnoredFiles(projectPath, dirPath)
       : Promise.resolve([]),
+    getChangedFiles(projectPath).catch(() => []),
   ];
 
-  const [result, untrackedFiles, ignoredFiles] = await Promise.all(promises);
+  const [result, untrackedFiles, ignoredFiles, changedFiles] =
+    await Promise.all(promises);
 
   if (result.exitCode !== 0) {
     throw new Error(`Failed to list files: ${result.stderr}`);
@@ -227,6 +298,7 @@ export async function getDirectoryChildren(
 
   const prefix = dirPath === "" ? "" : dirPath + "/";
   const prefixLen = prefix.length;
+  const statusMap = buildCollapsedStatusMap(changedFiles);
 
   // Track unique immediate children: name -> { type, status }
   const childrenMap = new Map<
@@ -240,12 +312,22 @@ export async function getDirectoryChildren(
     const slashIndex = relativePath.indexOf("/");
 
     if (slashIndex === -1) {
-      childrenMap.set(relativePath, { type: "file", status: undefined });
+      childrenMap.set(relativePath, {
+        type: "file",
+        status: statusMap.get(filePath),
+      });
     } else {
       const dirName = relativePath.substring(0, slashIndex);
-      if (!childrenMap.has(dirName)) {
-        childrenMap.set(dirName, { type: "directory", status: undefined });
-      }
+      const dirPathForStatus = prefix + dirName;
+      const currentChild = childrenMap.get(dirName);
+      const nextStatus =
+        currentChild?.status ??
+        resolveDirectoryStatus(statusMap, dirPathForStatus) ??
+        undefined;
+      childrenMap.set(dirName, {
+        type: "directory",
+        status: nextStatus,
+      });
     }
   }
 
@@ -256,13 +338,21 @@ export async function getDirectoryChildren(
 
     if (slashIndex === -1) {
       if (!childrenMap.has(relativePath)) {
-        childrenMap.set(relativePath, { type: "file", status: "untracked" });
+        childrenMap.set(relativePath, {
+          type: "file",
+          status: statusMap.get(filePath) ?? "untracked",
+        });
       }
     } else {
       const dirName = relativePath.substring(0, slashIndex);
-      if (!childrenMap.has(dirName)) {
-        childrenMap.set(dirName, { type: "directory", status: undefined });
-      }
+      const dirPathForStatus = prefix + dirName;
+      const currentChild = childrenMap.get(dirName);
+      childrenMap.set(dirName, {
+        type: "directory",
+        status:
+          currentChild?.status ??
+          resolveDirectoryStatus(statusMap, dirPathForStatus),
+      });
     }
   }
 
@@ -284,14 +374,52 @@ export async function getDirectoryChildren(
         const isDir = filePath.endsWith("/");
         childrenMap.set(relativePath, {
           type: isDir ? "directory" : "file",
-          status: "ignored",
+          status: isDir
+            ? (resolveDirectoryStatus(statusMap, prefix + relativePath) ??
+              "ignored")
+            : (statusMap.get(prefix + relativePath) ?? "ignored"),
         });
       }
     } else {
       const dirName = relativePath.substring(0, slashIndex);
       if (!childrenMap.has(dirName)) {
-        childrenMap.set(dirName, { type: "directory", status: "ignored" });
+        childrenMap.set(dirName, {
+          type: "directory",
+          status:
+            resolveDirectoryStatus(statusMap, prefix + dirName) ?? "ignored",
+        });
       }
+    }
+  }
+
+  // Add deleted files that no longer exist on disk but still belong in the tree.
+  for (const [statusPath, status] of statusMap) {
+    if (status !== "deleted") {
+      continue;
+    }
+
+    const relativePath = statusPath.substring(prefixLen);
+    if (relativePath.length === 0) {
+      continue;
+    }
+
+    const slashIndex = relativePath.indexOf("/");
+    if (slashIndex === -1) {
+      if (!childrenMap.has(relativePath)) {
+        childrenMap.set(relativePath, {
+          type: "file",
+          status: "deleted",
+        });
+      }
+      continue;
+    }
+
+    const dirName = relativePath.substring(0, slashIndex);
+    if (!childrenMap.has(dirName)) {
+      childrenMap.set(dirName, {
+        type: "directory",
+        status: resolveDirectoryStatus(statusMap, prefix + dirName),
+      });
     }
   }
 
@@ -677,17 +805,19 @@ async function getDirectoryChildrenFromFilesystem(
   // Try to get git status for annotation (gracefully handle non-git dirs)
   const gitArgs =
     dirPath === "" ? ["ls-files"] : ["ls-files", "--", dirPath + "/"];
-  const [gitResult, untrackedFiles] = await Promise.all([
+  const [gitResult, untrackedFiles, changedFiles] = await Promise.all([
     execGit(gitArgs, { cwd: projectPath }).catch(() => ({
       exitCode: 1,
       stdout: "",
       stderr: "",
     })),
     getUntrackedFiles(projectPath, dirPath),
+    getChangedFiles(projectPath).catch(() => []),
   ]);
 
   const prefix = dirPath === "" ? "" : dirPath + "/";
   const prefixLen = prefix.length;
+  const statusMap = buildCollapsedStatusMap(changedFiles);
 
   // Detect whether this is a git repository (git ls-files succeeded)
   const isGitRepo = gitResult.exitCode === 0;
@@ -729,18 +859,20 @@ async function getDirectoryChildrenFromFilesystem(
     if (!isGitRepo) {
       status = undefined;
     } else if (isDir) {
+      const directoryStatus = resolveDirectoryStatus(statusMap, path);
       if (trackedNames.has(entry.name) || untrackedNames.has(entry.name)) {
-        status = undefined;
+        status = directoryStatus;
       } else {
-        status = "ignored";
+        status = directoryStatus ?? "ignored";
       }
     } else {
+      const changedStatus = statusMap.get(path);
       if (trackedNames.has(entry.name)) {
-        status = undefined;
+        status = changedStatus;
       } else if (untrackedNames.has(entry.name)) {
-        status = "untracked";
+        status = changedStatus ?? "untracked";
       } else {
-        status = "ignored";
+        status = changedStatus ?? "ignored";
       }
     }
 
@@ -752,6 +884,32 @@ async function getDirectoryChildrenFromFilesystem(
       status,
       isBinary: !isDir && isBinaryExtension(path) ? true : undefined,
     });
+  }
+
+  if (isGitRepo) {
+    for (const [statusPath, status] of statusMap) {
+      if (status !== "deleted") {
+        continue;
+      }
+
+      const relativePath = statusPath.substring(prefixLen);
+      if (relativePath.length === 0 || relativePath.includes("/")) {
+        continue;
+      }
+
+      if (children.some((child) => child.path === statusPath)) {
+        continue;
+      }
+
+      children.push({
+        name: relativePath,
+        path: statusPath,
+        type: "file",
+        children: undefined,
+        status: "deleted",
+        isBinary: isBinaryExtension(statusPath) ? true : undefined,
+      });
+    }
   }
 
   // Sort: directories first, then files, alphabetically

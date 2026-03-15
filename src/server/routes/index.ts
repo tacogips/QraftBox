@@ -30,6 +30,7 @@ import { createLocalPromptRoutes } from "./local-prompts.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { PromptStore } from "../../types/local-prompt.js";
 import { createGitActionsRoutes } from "./git-actions.js";
+import { createWorkersRoutes } from "./workers.js";
 import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
@@ -42,6 +43,8 @@ import type { ModelConfigStore } from "../model-config/store.js";
 import { createModelConfigRoutes } from "./model-config.js";
 import { createAiCommentRoutes } from "./ai-comments.js";
 import type { AiCommentQueueStore } from "../ai/comment-queue-store.js";
+import { createFrontendStatusRoutes } from "./frontend-status.js";
+import type { FrontendTarget } from "../../config/frontend.js";
 
 /**
  * Route group definition
@@ -76,6 +79,7 @@ export interface MountRoutesConfig {
   readonly modelConfigStore?: ModelConfigStore | undefined;
   readonly temporaryProjectMode?: boolean | undefined;
   readonly aiCommentStore?: AiCommentQueueStore | undefined;
+  readonly selectedFrontend?: FrontendTarget | undefined;
 }
 
 /**
@@ -268,6 +272,10 @@ export function getNonContextRouteGroups(
       prefix: "/git-actions",
       routes: createGitActionsRoutes(config.modelConfigStore),
     },
+    {
+      prefix: "/workers",
+      routes: createWorkersRoutes(),
+    },
     // Model config routes - GET/POST/PATCH /api/model-config
     ...(config.modelConfigStore !== undefined
       ? [
@@ -287,6 +295,13 @@ export function getNonContextRouteGroups(
         },
       ),
     },
+    // Frontend selection and Solid support status - GET /api/frontend-status
+    {
+      prefix: "/frontend-status",
+      routes: createFrontendStatusRoutes({
+        selectedFrontend: config.selectedFrontend ?? "current",
+      }),
+    },
   ];
 }
 
@@ -303,6 +318,7 @@ export function getNonContextRouteGroups(
  * - /api/workspace - Workspace management
  * - /api/browse - Directory browsing
  * - /api/ai - AI operations
+ * - /api/frontend-status - Selected frontend plus Solid support status
  * - /api/ctx/:contextId/diff - Diff viewing
  * - /api/ctx/:contextId/files - File tree and content
  * - /api/ctx/:contextId/status - Working tree status
@@ -478,7 +494,7 @@ function createSearchRoutesWithMiddleware(): Hono<{
     // SearchRoutes have a different ServerContext interface that includes diffTarget
     const searchContext = {
       projectPath: serverContext.projectPath,
-      diffTarget: { type: "working-tree" as const },
+      diffTarget: { type: "working" as const },
     };
 
     const searchRoutes = createSearchRoutesImpl(searchContext as any);

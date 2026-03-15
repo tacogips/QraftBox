@@ -8,6 +8,7 @@
 import { describe, test, expect } from "vitest";
 import {
   buildCodexMessageSnapshots,
+  downsampleCodexMessageSnapshots,
   buildCodexExecCommand,
   createAgentRunner,
   extractClaudeSessionIdFromMessage,
@@ -181,6 +182,45 @@ describe("parseCodexJsonLine()", () => {
       isDelta: true,
     });
   });
+
+  test("parses assistant text from item.completed AgentMessage", () => {
+    const line =
+      '{"type":"item.completed","item":{"id":"item_1","type":"AgentMessage","text":"hello from codex"}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses assistant text from event_msg AgentMessage", () => {
+    const line =
+      '{"type":"event_msg","payload":{"type":"AgentMessage","message":{"content":[{"text":"hello from codex"}]}}}';
+    const parsed = parseCodexJsonLine(line);
+    expect(parsed).toEqual({
+      type: "message",
+      content: "hello from codex",
+    });
+  });
+
+  test("parses tool events from normalized event_msg aliases", () => {
+    const begin = parseCodexJsonLine(
+      '{"type":"event_msg","payload":{"type":"exec_command_begin"}}',
+    );
+    expect(begin).toEqual({
+      type: "tool_call",
+      toolName: "local_shell_call",
+    });
+
+    const end = parseCodexJsonLine(
+      '{"type":"event_msg","payload":{"type":"exec_command_end","exit_code":1}}',
+    );
+    expect(end).toEqual({
+      type: "tool_result",
+      toolName: "local_shell_call",
+      isError: true,
+    });
+  });
 });
 
 describe("shouldEmitCodexSessionDetected()", () => {
@@ -229,6 +269,21 @@ describe("buildCodexMessageSnapshots()", () => {
   test("falls back to a single snapshot when content is not a monotonic extension", () => {
     const snapshots = buildCodexMessageSnapshots("hello world", "hi", false);
     expect(snapshots).toEqual(["hi"]);
+  });
+});
+
+describe("downsampleCodexMessageSnapshots()", () => {
+  test("returns original snapshots when below maxUpdates", () => {
+    const snapshots = ["a", "ab", "abc"];
+    expect(downsampleCodexMessageSnapshots(snapshots, 10)).toEqual(snapshots);
+  });
+
+  test("keeps first and last snapshots while reducing count", () => {
+    const snapshots = Array.from({ length: 200 }, (_, i) => `m${i + 1}`);
+    const sampled = downsampleCodexMessageSnapshots(snapshots, 80);
+    expect(sampled.length).toBe(80);
+    expect(sampled[0]).toBe("m1");
+    expect(sampled[sampled.length - 1]).toBe("m200");
   });
 });
 

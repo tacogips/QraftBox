@@ -1,9 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  /* GitHub Dark Theme (Primer-based) */
-
-  /* Canvas / Background */
   --color-bg-primary: #0d1117;
   --color-bg-secondary: #151b23;
   --color-bg-tertiary: #1c2128;
@@ -14,46 +11,38 @@
   --color-bg-emphasis: #3d444d;
   --color-bg-overlay: #010409;
 
-  /* Text / Foreground */
   --color-text-primary: #f0f6fc;
   --color-text-secondary: #9198a1;
   --color-text-tertiary: #656c76;
   --color-text-disabled: #656c76;
   --color-text-on-emphasis: #ffffff;
 
-  /* Border */
   --color-border-default: #3d444d;
   --color-border-muted: #3d444db3;
   --color-border-emphasis: #656c76;
 
-  /* Accent (blue) */
   --color-accent-fg: #4493f8;
   --color-accent-emphasis: #1f6feb;
   --color-accent-muted: #388bfd26;
   --color-accent-subtle: #388bfd1a;
 
-  /* Success (green) */
   --color-success-fg: #3fb950;
   --color-success-emphasis: #238636;
   --color-success-muted: #2ea04366;
   --color-success-subtle: #2ea04326;
 
-  /* Danger (red) */
   --color-danger-fg: #f85149;
   --color-danger-emphasis: #da3633;
   --color-danger-muted: #f8514966;
   --color-danger-subtle: #f851491a;
 
-  /* Attention (yellow/warning) */
   --color-attention-fg: #d29922;
   --color-attention-emphasis: #9e6a03;
   --color-attention-muted: #bb800966;
 
-  /* Neutral */
   --color-neutral-emphasis: #656c76;
   --color-neutral-muted: #656c7633;
 
-  /* Diff-specific */
   --color-diff-add-bg: #2ea04326;
   --color-diff-add-num: #3fb9504d;
   --color-diff-add-word: #2ea04366;
@@ -62,23 +51,15 @@
   --color-diff-del-word: #f8514966;
   --color-diff-hunk-bg: #0c2d6b;
 
-  /* Header */
   --color-header-bg: #151b23f2;
   --color-header-border: #656c76;
-
-  /* Done / Merged (purple) */
   --color-done-fg: #a371f7;
   --color-done-emphasis: #8957e5;
   --color-done-muted: #8957e566;
-
-  /* Selection highlight */
   --color-selection-bg: #1f6febb3;
-
-  /* Segmented Control */
   --shadow-segmented-active: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
-/* Active session glow animation */
 @keyframes session-glow {
   0%,
   100% {
@@ -91,11 +72,6 @@
   }
 }
 
-.animate-session-glow {
-  animation: session-glow 3s ease-in-out infinite;
-}
-
-/* Spinning arrow for running status */
 @keyframes spin-smooth {
   from {
     transform: rotate(0deg);
@@ -105,16 +81,218 @@
   }
 }
 
+@keyframes thinking-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-session-glow {
+  animation: session-glow 3s ease-in-out infinite;
+}
+
 .animate-spin-smooth {
   animation: spin-smooth 1.5s linear infinite;
 }
 
-html,
-body {
-  margin: 0;
+.animate-thinking-blink {
+  animation: thinking-blink 1.1s ease-in-out infinite;
+}
+
+.qraftbox-markdown {
+  line-height: 1.7;
+}
+
+.qraftbox-markdown h1,
+.qraftbox-markdown h2,
+.qraftbox-markdown h3,
+.qraftbox-markdown h4,
+.qraftbox-markdown h5,
+.qraftbox-markdown h6 {
+  margin: 1.1rem 0 0.55rem;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.qraftbox-markdown h1 {
+  font-size: 1.875rem;
+}
+
+.qraftbox-markdown h2 {
+  font-size: 1.5rem;
+}
+
+.qraftbox-markdown h3 {
+  font-size: 1.25rem;
+}
+
+.qraftbox-markdown p {
+  margin: 0.4rem 0;
+}
+
+.qraftbox-markdown ul,
+.qraftbox-markdown ol {
+  margin: 0.4rem 0;
+  padding-left: 1.25rem;
+}
+
+.qraftbox-markdown li + li {
+  margin-top: 0.15rem;
+}
+
+.qraftbox-markdown hr {
+  margin: 1rem 0;
+  border: 0;
+  border-top: 1px solid var(--color-border-default);
+}
+
+.qraftbox-markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+  background: var(--color-bg-tertiary);
+  padding: 0.12rem 0.35rem;
+  border-radius: 0.25rem;
+}
+
+.qraftbox-markdown pre {
+  margin: 0.5rem 0;
+  padding: 0.55rem 0.65rem;
+  overflow-x: auto;
+  border-radius: 0.35rem;
+  background: var(--color-bg-tertiary);
+}
+
+.qraftbox-markdown pre code {
+  background: transparent;
   padding: 0;
+}
+
+.qraftbox-markdown blockquote {
+  margin: 0.45rem 0;
+  padding-left: 0.7rem;
+  border-left: 3px solid var(--color-border-emphasis);
+  color: var(--color-text-secondary);
+}
+
+.qraftbox-markdown table {
+  width: 100%;
+  margin: 0.8rem 0;
+  border-collapse: collapse;
+}
+
+.qraftbox-markdown th,
+.qraftbox-markdown td {
+  border: 1px solid var(--color-border-default);
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.qraftbox-markdown th {
+  background: var(--color-bg-tertiary);
+}
+
+.qraftbox-markdown a {
+  color: var(--color-accent-fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.qraftbox-markdown img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.8rem auto;
+  border-radius: 0.5rem;
+}
+
+.qraftbox-mermaid-source {
+  margin: 0.5rem 0;
+  padding: 0.75rem 0.9rem;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: var(--color-bg-tertiary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+}
+
+.qraftbox-mermaid-source.qraftbox-mermaid-error {
+  border: 1px solid var(--color-danger-emphasis);
+  color: var(--color-danger-fg);
+}
+
+.qraftbox-mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  margin: 0.8rem 0;
+  overflow-x: auto;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-bg-tertiary);
+}
+
+.qraftbox-mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.qraftbox-file-markdown-preview {
+  margin: 0 auto;
+  width: 100%;
+  max-width: 72rem;
+}
+
+.qraftbox-file-tree-pane,
+.qraftbox-file-preview-pane {
+  contain: paint;
+}
+
+.qraftbox-file-preview-pane {
+  isolation: isolate;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
   height: 100%;
+}
+
+body {
   overflow: hidden;
-  background-color: var(--color-bg-primary);
+  background: radial-gradient(
+      circle at top,
+      rgba(56, 139, 253, 0.12),
+      transparent 35%
+    ),
+    linear-gradient(180deg, #0d1117 0%, #0a0f14 100%);
   color: var(--color-text-primary);
+  font-family: "SF Pro Text", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+  padding: 0.75rem;
+}
+
+.terminal-host .xterm-viewport {
+  scrollbar-width: thin;
 }

@@ -17,6 +17,7 @@ describe("DEFAULT_CONFIG", () => {
   test("has correct default values", () => {
     expect(DEFAULT_CONFIG.PORT).toBe(7144);
     expect(DEFAULT_CONFIG.HOST).toBe("localhost");
+    expect(DEFAULT_CONFIG.FRONTEND).toBe("current");
     expect(DEFAULT_CONFIG.OPEN).toBe(false);
     expect(DEFAULT_CONFIG.WATCH).toBe(true);
     expect(DEFAULT_CONFIG.SYNC_MODE).toBe("manual");
@@ -38,6 +39,7 @@ describe("loadConfig", () => {
 
     expect(config.port).toBe(DEFAULT_CONFIG.PORT);
     expect(config.host).toBe(DEFAULT_CONFIG.HOST);
+    expect(config.frontend).toBe(DEFAULT_CONFIG.FRONTEND);
     expect(config.open).toBe(DEFAULT_CONFIG.OPEN);
     expect(config.watch).toBe(DEFAULT_CONFIG.WATCH);
     expect(config.syncMode).toBe(DEFAULT_CONFIG.SYNC_MODE);
@@ -108,11 +110,13 @@ describe("loadConfig", () => {
     const config = loadConfig({
       port: 3000,
       host: "127.0.0.1",
+      frontend: "current",
       open: false,
       syncMode: "auto",
     });
     expect(config.port).toBe(3000);
     expect(config.host).toBe("127.0.0.1");
+    expect(config.frontend).toBe("current");
     expect(config.open).toBe(false);
     expect(config.syncMode).toBe("auto");
     expect(config.watch).toBe(DEFAULT_CONFIG.WATCH);
@@ -141,6 +145,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -160,6 +165,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 0,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -181,6 +187,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 65536,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -202,6 +209,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144.5,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -223,6 +231,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 1,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -241,6 +250,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 65535,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -259,6 +269,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -278,6 +289,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "   ",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -297,6 +309,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -317,6 +330,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "manual",
@@ -335,6 +349,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "auto-push",
@@ -353,6 +368,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "auto-pull",
@@ -371,6 +387,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "auto",
@@ -389,6 +406,7 @@ describe("validateConfig", () => {
     const config = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: true,
       watch: true,
       syncMode: "invalid-mode" as never,
@@ -408,6 +426,7 @@ describe("validateConfig", () => {
     const config: CLIConfig = {
       port: 7144,
       host: "localhost",
+      frontend: "svelte",
       open: false,
       watch: false,
       syncMode: "manual",

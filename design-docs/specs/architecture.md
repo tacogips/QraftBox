@@ -1,10 +1,10 @@
 # Architecture
 
-This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-02-27.
+This document describes the current as-built architecture of QraftBox based on the repository state as of 2026-03-12.
 
 ## Overview
 
-QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-based HTTP server with WebSocket support, serves a Svelte 5 SPA, and executes git/AI/terminal operations on the local machine. The system is intentionally single-user and assumes localhost-only access.
+QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-based HTTP server with WebSocket support, serves a selectable frontend bundle (Solid by default, legacy Svelte on explicit request), and executes git/AI/terminal operations on the local machine. The system is intentionally single-user and assumes localhost-only access.
 
 ## Runtime Topology
 
@@ -13,7 +13,7 @@ QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-bas
 - WebSocket endpoints:
   - `ws://<host>:<port>/ws` for realtime events
   - `ws://<host>:<port>/ws/terminal/<sessionId>` for terminal sessions
-- Client SPA: built from `client/` and served via static middleware
+- Frontend bundle: built from `client/` or `client-legacy/` and selected at startup via `QRAFTBOX_FRONTEND` / `--frontend`
 
 ## Server Architecture
 
@@ -65,15 +65,60 @@ QraftBox is a local-first diff viewer and git operations tool. It runs a Bun-bas
 
 ## Client Architecture
 
-- Svelte 5 SPA built with Vite and Tailwind (`client/`).
-- `client/src/App.svelte` is the screen router and state hub using `$state` and `$derived`.
-- Feature controllers live in `client/src/lib/` (workspace, file view, AI runtime, realtime).
-- Stores live in `client/src/stores/` (diff, workspace, AI, queue, search, commits, etc.).
-- Screens: files/diff, commits, AI sessions, terminal, tools, system info, model config, project selection, worktree, GitHub ops.
+- Primary frontend: Solid SPA built with Vite in `client/`.
+- Legacy frontend: Svelte 5 SPA preserved in `client-legacy/` and served only when `QRAFTBOX_FRONTEND=svelte` or `--frontend svelte` is selected.
+- Shared frontend contracts: framework-neutral routing, API clients, DTO normalization, realtime helpers, and parity fixtures in `client-shared/`.
+- The primary app entrypoint is `client/src/main.tsx` and `client/src/App.tsx`.
+- Primary feature modules live under `client/src/features/` and `client/src/app/`.
+- Legacy Svelte feature code remains under `client-legacy/src/` and `client-legacy/components/`.
+- Screens currently wired in the primary Solid client include project/workspace, files/diff, AI sessions, commits, terminal, system info, notifications, model profiles, and action defaults.
+- The Solid app keeps file-selection and loaded file-preview state in a shared diff/files context that survives moves between `files` and `ai-session`; only the `files` route serializes that selection into the browser hash.
+- Shared navigation contracts now enforce that `path`/`view`/`tree`/`line` hash query state is parsed and emitted only for the `files` route, omit default files-route values that add no state, and drop meaningless line-only hash state so screen changes do not leak stale or noisy file-selection URLs.
+- Files-route line anchors now clear whenever the displayed files selection diverges from the route-selected path, preventing stale line highlights from carrying across per-workspace selection restores or route-driven file changes.
+- The Solid AI-session popup now restores the Svelte baseline's selected-session default actions by fetching Action Defaults prompt content for `ai-session-refresh-purpose` and `ai-session-resume`, wrapping it with the internal session-action marker, and submitting it against the currently selected Qraft session.
+- The Solid AI-session popup now also exposes the configured `ai-session-purpose` Action Default for new-session drafts, so initial-purpose generation uses the same feature-owned prompt flow as the selected-session refresh/resume actions instead of a handwritten draft prompt.
+- The Solid AI-session composer also preserves the selected-session restart-from-beginning flow through its feature-owned `forceNewSession` submit path, and keeps Queue/Run/Restart actions disabled until the prompt contains non-empty text so manual submission behavior matches the Svelte baseline again.
+- Selected-session model metadata in the Solid popup now resolves field-by-field from overview data plus loaded session detail, matching the Svelte baseline so resumed prompts and labels keep the correct model identity even when the overview card omits part of that metadata.
+- Files-to-session deep links now reuse the ai-session feature's full screen-hash builder, and selected-session model labels in the popup reuse one resolved label source so header and footer surfaces cannot diverge on partial overview metadata.
+- The AI-session screen now also writes its own selected-session/search hash state through that same feature-owned full screen-hash helper instead of manually replacing only the hash query, keeping route ownership consistent for deep links, local mutations, and future route-shape changes.
+
+## Frontend Selection And Legacy Support
+
+The Solid cutover has already happened on this branch. The current coexistence model is:
+
+- `client/` is the primary Solid implementation and the default served frontend.
+- `client-legacy/` preserves the older Svelte implementation for explicit fallback, comparison, and staged retirement.
+- `client-shared/` remains the framework-neutral contract layer used by both frontends.
+- `src/config/frontend.ts` is the single place that maps `solid` and `svelte` to build directories and environment overrides.
+
+Current post-cutover rules:
+
+- CLI/runtime frontend selection is now modeled explicitly as `svelte | solid`, with `--frontend` overriding `QRAFTBOX_FRONTEND`.
+- Default startup serves the Solid bundle from `dist/client/`.
+- Explicit legacy startup serves the Svelte bundle from `dist/client-legacy/`.
+- Frontend asset resolution is centralized in `src/config/frontend.ts`, and startup fails fast when the selected bundle is missing `index.html`.
+- Route-level frontend status reporting must use the same default (`solid`) whenever no explicit `selectedFrontend` value is injected, so `/api/frontend-status` cannot drift from the actual post-cutover runtime default in partial test or embedding setups.
+- Shared routing, API clients, DTO normalization, parity fixtures, and browser-verification helpers continue to live in `client-shared/`.
+- The support-status reporting surface in `client/src/app/screen-registry.ts` and `/api/frontend-status` tracks post-cutover legacy-retirement readiness rather than a pre-cutover go/no-go switch.
+- Repo-only support checks such as nested client dependencies and recorded migration/browser markers apply only when the server is running from a source checkout; packaged runtimes still report bundle-serving status but must not invent impossible workspace blockers.
+- The client code must model those two runtime baselines explicitly: a packaged-runtime baseline for pre-fetch/bootstrap behavior and a source-checkout baseline for repo-validation/reporting helpers. Leaving them as ambiguous "default" objects is a design smell because it hides which rule-set a caller is opting into.
+- The Solid client bootstrap must also default to packaged-safe support status until `/api/frontend-status` loads, so a failed runtime-status refresh cannot reintroduce impossible repo-only blockers in packaged installs.
+- That bootstrap fallback must treat `hasBuiltSolidBundle` as `true`, because the currently running Solid client could not have loaded without a built bundle; otherwise a failed runtime-status fetch would falsely report the active bundle as missing.
+- Source-checkout detection for those repo-only checks must verify the QraftBox repo layout specifically (root `package.json` name `qraftbox` plus `client/package.json` name `qraftbox-client`), not merely the presence of an arbitrary `client/` directory in the current working directory.
+- Source-checkout detection and all repo-only support facts must be resolved from the actual running QraftBox checkout first, using runtime-relative paths with `process.cwd()` only as a fallback.
+- Runtime-relative source-root detection must walk ancestor directories from those candidate paths instead of assuming the candidate already is the repo root; otherwise bundled or nested runtime paths can still misreport a real source checkout as packaged.
+- Repo-only browser and migration markers must also be ignored by screen-level blocker clearing outside a source checkout, so packaged runtimes cannot inherit stale repo-marker state from an arbitrary working directory.
+- `agent-browser` availability is only a prerequisite for recording browser verification. Once the current workspace already has a recorded browser-verification marker, the runtime support surface must treat that recorded fact as authoritative instead of re-blocking on the missing tool.
+- The offline migration verification command must include the Solid bootstrap fallback regression tests, otherwise packaged-safe support defaults can drift without failing the intended support baseline.
+- The recorded browser-verification marker currently covers the shared `project` and `files` smoke loop only; other screen-level parity blockers remain explicit until their own verification work lands.
+- Release artifacts and npm packages must include both frontend bundles while legacy support remains a documented runtime option.
+
+Design details are tracked in `design-docs/specs/design-solid-frontend-migration.md`.
 
 ## API Surface (Summary)
 
 Non-context routes (no workspace context required):
+
 - `GET /api/health`
 - `GET /api/workspace` (tabs, active context, recent projects)
 - `GET /api/browse` (directory listing)
@@ -85,6 +130,7 @@ Non-context routes (no workspace context required):
 - `GET /api/system-info`
 
 Context routes (require `contextId`):
+
 - `GET /api/ctx/:contextId/diff`
 - `GET /api/ctx/:contextId/files`
 - `GET /api/ctx/:contextId/status`
@@ -108,9 +154,18 @@ Context routes (require `contextId`):
 ## Build & Runtime
 
 - Runtime: Bun + Hono.
-- Client: Svelte 5 + Tailwind + Vite.
+- Frontends:
+  - Solid + Vite in `client/`
+  - Svelte 5 + Tailwind + Vite in `client-legacy/`
 - Server build output: `dist/` from `bun build src/main.ts`.
-- Client build output: `client/dist/` served by the server (resolved via `QRAFTBOX_CLIENT_DIR` or fallback search).
+- Frontend build outputs:
+  - `dist/client/` for Solid, overridable via `QRAFTBOX_CLIENT_DIR`
+  - `dist/client-legacy/` for Svelte, overridable via `QRAFTBOX_CLIENT_LEGACY_DIR`
+- Startup now fails fast when the selected frontend bundle is missing `index.html`.
+
+### Dual-Frontend Build Direction
+
+The build/runtime model now supports separate Solid and legacy Svelte frontend bundles while preserving one backend/runtime. Solid is the default served frontend, but the legacy Svelte bundle remains intentionally shippable until fallback support is retired.
 
 ## Security Model
 

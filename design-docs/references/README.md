@@ -17,6 +17,8 @@ This directory contains reference materials for system design and implementation
 | git-xnotes | https://github.com/tacogips/git-xnotes | Comment system for commits |
 | claude-code-agent | https://github.com/tacogips/claude-code-agent | Claude Code SDK for AI integration |
 | Svelte 5 | https://svelte.dev/docs/svelte | Svelte 5 documentation |
+| SolidJS Docs | https://docs.solidjs.com/ | SolidJS framework documentation |
+| vite-plugin-solid | https://github.com/solidjs/vite-plugin-solid | Official Solid integration for Vite |
 | svelte-tiny-virtual-list | https://github.com/jonasgeiler/svelte-tiny-virtual-list | Virtual list for Svelte |
 | Svelte Virtual List | https://virtuallist.svelte.page/ | Alternative virtual list (Svelte 5) |
 | Shiki | https://shiki.style/ | VS Code-quality syntax highlighter |

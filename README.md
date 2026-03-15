@@ -73,6 +73,7 @@ If you write code and use git, QraftBox helps you with these everyday tasks:
 - Orchestration
 - Workflow
 - Scheduling
+- Legacy Svelte retirement after remaining parity/fallback verification is complete
 
 ## How it Works (Simple Explanation)
 
@@ -152,9 +153,9 @@ There are 3 additional ways to install QraftBox. Pick whichever is easiest for y
 
 Before installing QraftBox, you need:
 
-| Tool | What it is | How to check if you have it |
-|------|-----------|----------------------------|
-| **Git** | Version control system | Run `git --version` in your terminal |
+| Tool    | What it is                                    | How to check if you have it          |
+| ------- | --------------------------------------------- | ------------------------------------ |
+| **Git** | Version control system                        | Run `git --version` in your terminal |
 | **Bun** | JavaScript runtime (like Node.js, but faster) | Run `bun --version` in your terminal |
 
 **Install Bun** (if you don't have it):
@@ -180,12 +181,12 @@ Pre-built binaries include everything needed. No Bun installation required.
 1. Go to the [Releases page](https://github.com/tacogips/QraftBox/releases)
 2. Download the file for your OS:
 
-   | Your computer | Download this file |
-   |---|---|
+   | Your computer                    | Download this file                    |
+   | -------------------------------- | ------------------------------------- |
    | Mac (Apple Silicon: M1/M2/M3/M4) | `qraftbox-vX.X.X-darwin-arm64.tar.gz` |
-   | Mac (Intel) | `qraftbox-vX.X.X-darwin-x64.tar.gz` |
-   | Linux (x86_64) | `qraftbox-vX.X.X-linux-x64.tar.gz` |
-   | Linux (ARM64) | `qraftbox-vX.X.X-linux-arm64.tar.gz` |
+   | Mac (Intel)                      | `qraftbox-vX.X.X-darwin-x64.tar.gz`   |
+   | Linux (x86_64)                   | `qraftbox-vX.X.X-linux-x64.tar.gz`    |
+   | Linux (ARM64)                    | `qraftbox-vX.X.X-linux-arm64.tar.gz`  |
 
 3. Extract and run:
 
@@ -239,14 +240,42 @@ cd QraftBox
 # Install dependencies
 bun install
 
-# Build the client (web UI)
+# Build the main client (Solid web UI)
 cd client && bun install && bun run build && cd ..
+
+# Optional: build the legacy Svelte frontend
+cd client-legacy && bun install && bun run build && cd ..
 
 # Start QraftBox
 bun run start
 ```
 
 Open `http://localhost:7144` in your browser.
+
+Release artifacts include both the default Solid frontend and the optional legacy Svelte frontend, so installed binaries and npm packages can still serve `--frontend svelte`.
+
+To serve the legacy Svelte frontend instead of the default Solid frontend:
+
+```bash
+QRAFTBOX_FRONTEND=svelte bun run start
+# or
+bun run start -- --frontend svelte
+```
+
+Migration verification is split into two stages:
+
+```bash
+# Runs root/server/shared-contract regression coverage without requiring client/node_modules
+bun run check:frontend:migration:offline
+
+# Full migration check after installing client dependencies
+bun install --cwd client
+bun run check:frontend:migration
+```
+
+The full migration check records its last successful pass in the workspace-local ignored marker `tmp-solid-migration-check.json`, which the Solid support-status UI reads through `/api/frontend-status` when QraftBox is running from a source checkout.
+
+The browser verification marker is narrower: `bun run verify:frontend:migration:browser` records the shared `project` and `files` smoke loop only. Other screens keep their explicit parity blockers until they are verified through their own follow-up checks.
 
 ---
 
@@ -299,6 +328,7 @@ qraftbox --host 0.0.0.0
 **Recommended: Use a VPN (Tailscale, WireGuard, ZeroTier)**
 
 The safest way to access QraftBox from another device is to use a VPN such as:
+
 - [Tailscale](https://tailscale.com/) (easiest setup, free for personal use)
 - [WireGuard](https://www.wireguard.com/)
 - [ZeroTier](https://www.zerotier.com/)
@@ -346,6 +376,7 @@ Usage: qraftbox [options] [projectPath]
 Options:
   -p, --port <number>              Server port (default: 7144)
   -h, --host <string>              Server host (default: "localhost")
+  --frontend <target>              Frontend target: solid (default) or svelte (legacy)
   --open                           Open browser automatically
   --watch                          Enable file watching (default: true)
   --no-watch                       Disable file watching
@@ -578,9 +609,9 @@ curl -fsSL https://raw.githubusercontent.com/tacogips/QraftBox/main/install.sh |
 
 QraftBox をインストールする前に、以下が必要です:
 
-| ツール | 説明 | インストール済みか確認する方法 |
-|--------|------|-------------------------------|
-| **Git** | バージョン管理システム | ターミナルで `git --version` を実行 |
+| ツール  | 説明                                    | インストール済みか確認する方法      |
+| ------- | --------------------------------------- | ----------------------------------- |
+| **Git** | バージョン管理システム                  | ターミナルで `git --version` を実行 |
 | **Bun** | JavaScriptランタイム（Node.jsの高速版） | ターミナルで `bun --version` を実行 |
 
 **Bun のインストール**（まだ入っていない場合）:
@@ -606,12 +637,12 @@ AI機能を使う場合は **Claude Code** も必要です: [https://docs.anthro
 1. [Releases ページ](https://github.com/tacogips/QraftBox/releases) にアクセス
 2. あなたのOSに合ったファイルをダウンロード:
 
-   | あなたのPC | ダウンロードするファイル |
-   |---|---|
+   | あなたのPC                       | ダウンロードするファイル              |
+   | -------------------------------- | ------------------------------------- |
    | Mac (Apple Silicon: M1/M2/M3/M4) | `qraftbox-vX.X.X-darwin-arm64.tar.gz` |
-   | Mac (Intel) | `qraftbox-vX.X.X-darwin-x64.tar.gz` |
-   | Linux (x86_64) | `qraftbox-vX.X.X-linux-x64.tar.gz` |
-   | Linux (ARM64) | `qraftbox-vX.X.X-linux-arm64.tar.gz` |
+   | Mac (Intel)                      | `qraftbox-vX.X.X-darwin-x64.tar.gz`   |
+   | Linux (x86_64)                   | `qraftbox-vX.X.X-linux-x64.tar.gz`    |
+   | Linux (ARM64)                    | `qraftbox-vX.X.X-linux-arm64.tar.gz`  |
 
 3. 展開して実行:
 
@@ -725,6 +756,7 @@ qraftbox --host 0.0.0.0
 **推奨: VPN を使用する（Tailscale、WireGuard、ZeroTier）**
 
 別のデバイスから QraftBox にアクセスする最も安全な方法は、以下のような VPN を使用することです:
+
 - [Tailscale](https://tailscale.com/)（最も簡単にセットアップ可能、個人利用は無料）
 - [WireGuard](https://www.wireguard.com/)
 - [ZeroTier](https://www.zerotier.com/)

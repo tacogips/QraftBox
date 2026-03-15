@@ -142,6 +142,22 @@ describe("Route Registry", () => {
         expect(group.routes).toBeInstanceOf(Hono);
       }
     });
+
+    test("frontend status defaults to the post-cutover current frontend", async () => {
+      const app = new Hono();
+      mountAllRoutes(app, config);
+
+      const response = await app.fetch(
+        new Request("http://localhost/api/frontend-status"),
+      );
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual(
+        expect.objectContaining({
+          selectedFrontend: "current",
+        }),
+      );
+    });
   });
 
   describe("mountAllRoutes", () => {

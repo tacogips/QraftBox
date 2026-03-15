@@ -1,9 +1,125 @@
 {
-  "lastUpdated": "2026-02-17T00:00:00Z",
+  "lastUpdated": "2026-03-12T06:35:27.000Z",
   "phases": {
     "1": {
       "status": "COMPLETED",
       "description": "As-built baseline documentation"
+    },
+    "2": {
+      "status": "COMPLETED",
+      "description": "Parallel Solid frontend migration planning"
+    },
+    "3": {
+      "status": "COMPLETED",
+      "description": "Post-cutover Solid alignment and legacy packaging"
+    },
+    "4": {
+      "status": "COMPLETED",
+      "description": "Migration-history alignment after Solid cutover"
+    },
+    "5": {
+      "status": "COMPLETED",
+      "description": "Post-cutover support-status architecture alignment"
+    },
+    "6": {
+      "status": "COMPLETED",
+      "description": "Browser verification scope alignment for post-cutover support status"
+    },
+    "7": {
+      "status": "COMPLETED",
+      "description": "Release verification alignment for the default Solid frontend"
+    },
+    "8": {
+      "status": "COMPLETED",
+      "description": "Post-cutover migration-design alignment for legacy retirement guidance"
+    },
+    "9": {
+      "status": "COMPLETED",
+      "description": "Frontend-status default alignment with the post-cutover Solid runtime default"
+    },
+    "10": {
+      "status": "COMPLETED",
+      "description": "Post-cutover support-language alignment for active design and Solid shell copy"
+    },
+    "11": {
+      "status": "COMPLETED",
+      "description": "Support-status truth-source alignment between runtime wording and design"
+    },
+    "12": {
+      "status": "COMPLETED",
+      "description": "Support-status runtime-scope alignment for packaged versus source-checkout environments"
+    },
+    "13": {
+      "status": "COMPLETED",
+      "description": "Repo-local browser-marker scope alignment for packaged versus source-checkout support reporting"
+    },
+    "14": {
+      "status": "COMPLETED",
+      "description": "Source-checkout detection alignment for repo-only Solid support checks"
+    },
+    "15": {
+      "status": "COMPLETED",
+      "description": "Bootstrap fallback alignment for packaged-safe Solid support status"
+    },
+    "16": {
+      "status": "COMPLETED",
+      "description": "Bootstrap built-bundle truthfulness alignment for Solid support status"
+    },
+    "17": {
+      "status": "COMPLETED",
+      "description": "Runtime source-root alignment for repo-only Solid support checks"
+    },
+    "18": {
+      "status": "COMPLETED",
+      "description": "Ancestor-walk runtime-root alignment and offline verification coverage for Solid support checks"
+    },
+    "19": {
+      "status": "COMPLETED",
+      "description": "Recorded browser-verification fact alignment for the browser-tool blocker"
+    },
+    "20": {
+      "status": "COMPLETED",
+      "description": "Explicit packaged-runtime versus source-checkout Solid support baselines"
+    },
+    "21": {
+      "status": "COMPLETED",
+      "description": "Shared files selection alignment between the Solid files and AI-session screens"
+    },
+    "22": {
+      "status": "COMPLETED",
+      "description": "Solid AI-session default prompt actions restored to Action Defaults parity"
+    },
+    "23": {
+      "status": "COMPLETED",
+      "description": "Shared route-hash scoping aligned with files-only selection semantics"
+    },
+    "24": {
+      "status": "COMPLETED",
+      "description": "Files route hash cleanup plus AI-session selected-model fallback alignment"
+    },
+    "25": {
+      "status": "COMPLETED",
+      "description": "AI-session route-helper reuse plus selected-model label consistency"
+    },
+    "26": {
+      "status": "COMPLETED",
+      "description": "Feature-owned AI-session screen-hash ownership alignment"
+    },
+    "27": {
+      "status": "COMPLETED",
+      "description": "Files-route line anchor ownership aligned with the displayed file selection"
+    },
+    "28": {
+      "status": "COMPLETED",
+      "description": "AI-session screen route mutations aligned with feature-owned full hash updates"
+    },
+    "29": {
+      "status": "COMPLETED",
+      "description": "Draft-session purpose action aligned with Action Defaults ownership"
+    },
+    "30": {
+      "status": "COMPLETED",
+      "description": "AI-session restart flow and empty-prompt gating realigned with the migration design"
     }
   },
   "plans": {
@@ -12,12 +128,519 @@
       "status": "Completed",
       "file": "current-system.md",
       "tasks": {
-        "TASK-001": { "status": "Completed", "parallelizable": true, "deps": [] },
-        "TASK-002": { "status": "Completed", "parallelizable": true, "deps": [] },
-        "TASK-003": { "status": "Completed", "parallelizable": true, "deps": [] },
-        "TASK-004": { "status": "Completed", "parallelizable": true, "deps": [] },
-        "TASK-005": { "status": "Completed", "parallelizable": true, "deps": [] },
-        "TASK-006": { "status": "Completed", "parallelizable": true, "deps": [] }
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        }
+      }
+    },
+    "solid-frontend-migration": {
+      "phase": 2,
+      "status": "Archived",
+      "file": "solid-frontend-migration.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": []
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": true,
+          "deps": ["TASK-002"]
+        },
+        "TASK-004": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001", "TASK-002"]
+        },
+        "TASK-005": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-004"]
+        },
+        "TASK-006": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-003", "TASK-005"]
+        },
+        "TASK-007": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-006"]
+        }
+      }
+    },
+    "solid-cutover-alignment": {
+      "phase": 3,
+      "status": "Completed",
+      "file": "solid-cutover-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-migration-history-alignment": {
+      "phase": 4,
+      "status": "Completed",
+      "file": "solid-migration-history-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-support-status-alignment": {
+      "phase": 5,
+      "status": "Completed",
+      "file": "solid-support-status-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-browser-verification-scope-alignment": {
+      "phase": 6,
+      "status": "Completed",
+      "file": "solid-browser-verification-scope-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-release-verification-alignment": {
+      "phase": 7,
+      "status": "Completed",
+      "file": "solid-release-verification-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-post-cutover-design-alignment": {
+      "phase": 8,
+      "status": "Completed",
+      "file": "solid-post-cutover-design-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-frontend-status-default-alignment": {
+      "phase": 9,
+      "status": "Completed",
+      "file": "solid-frontend-status-default-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-support-language-alignment": {
+      "phase": 10,
+      "status": "Completed",
+      "file": "solid-support-language-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-support-truth-source-alignment": {
+      "phase": 11,
+      "status": "Completed",
+      "file": "solid-support-truth-source-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-support-runtime-scope-alignment": {
+      "phase": 12,
+      "status": "Completed",
+      "file": "solid-support-runtime-scope-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-browser-marker-source-scope-alignment": {
+      "phase": 13,
+      "status": "Completed",
+      "file": "solid-browser-marker-source-scope-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-source-checkout-detection-alignment": {
+      "phase": 14,
+      "status": "Completed",
+      "file": "solid-source-checkout-detection-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-bootstrap-support-fallback-alignment": {
+      "phase": 15,
+      "status": "Completed",
+      "file": "solid-bootstrap-support-fallback-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-bootstrap-bundle-truthfulness-alignment": {
+      "phase": 16,
+      "status": "Completed",
+      "file": "solid-bootstrap-bundle-truthfulness-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-source-root-runtime-alignment": {
+      "phase": 17,
+      "status": "Completed",
+      "file": "solid-source-root-runtime-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-runtime-root-ancestor-alignment": {
+      "phase": 18,
+      "status": "Completed",
+      "file": "solid-runtime-root-ancestor-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "solid-browser-tool-blocker-alignment": {
+      "phase": 19,
+      "status": "Completed",
+      "file": "solid-browser-tool-blocker-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "solid-support-baseline-alignment": {
+      "phase": 20,
+      "status": "Completed",
+      "file": "solid-support-baseline-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        }
+      }
+    },
+    "files-ai-session-shared-selection-alignment": {
+      "phase": 21,
+      "status": "Completed",
+      "file": "files-ai-session-shared-selection-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        },
+        "TASK-003": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-default-action-parity-alignment": {
+      "phase": 22,
+      "status": "Completed",
+      "file": "ai-session-default-action-parity-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "route-hash-files-scope-alignment": {
+      "phase": 23,
+      "status": "Completed",
+      "file": "route-hash-files-scope-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "files-route-hash-cleanliness-and-ai-session-model-fallback-alignment": {
+      "phase": 24,
+      "status": "Completed",
+      "file": "files-route-hash-cleanliness-and-ai-session-model-fallback-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-route-helper-and-selected-model-label-alignment": {
+      "phase": 25,
+      "status": "Completed",
+      "file": "ai-session-route-helper-and-selected-model-label-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-feature-owned-route-hash-alignment": {
+      "phase": 26,
+      "status": "Completed",
+      "file": "ai-session-feature-owned-route-hash-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "files-route-line-anchor-alignment": {
+      "phase": 27,
+      "status": "Completed",
+      "file": "files-route-line-anchor-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-screen-full-hash-ownership-alignment": {
+      "phase": 28,
+      "status": "Completed",
+      "file": "ai-session-screen-full-hash-ownership-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-purpose-default-action-alignment": {
+      "phase": 29,
+      "status": "Completed",
+      "file": "ai-session-purpose-default-action-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
+      }
+    },
+    "ai-session-restart-flow-regression-alignment": {
+      "phase": 30,
+      "status": "Completed",
+      "file": "ai-session-restart-flow-regression-alignment.md",
+      "tasks": {
+        "TASK-001": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": []
+        },
+        "TASK-002": {
+          "status": "Completed",
+          "parallelizable": false,
+          "deps": ["TASK-001"]
+        }
       }
     }
   }

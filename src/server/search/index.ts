@@ -5,12 +5,17 @@
  * Supports three scopes: file, changed, and all (entire repository).
  */
 
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   SearchScope,
   SearchResult,
   SearchResultContext,
   ValidationResult,
 } from "../../types/search";
+import { getChangedFiles } from "../git/diff.js";
+import { execGit, unquoteGitPath } from "../git/executor.js";
+import { getAllFiles, getUntrackedFiles } from "../git/files.js";
 
 /**
  * Diff target for determining changed files
@@ -27,7 +32,10 @@ export interface SearchOptions {
   readonly pattern: string;
   readonly caseSensitive?: boolean | undefined;
   readonly contextLines?: number | undefined;
+  readonly excludeFileNames?: readonly string[] | undefined;
   readonly maxResults?: number | undefined;
+  readonly showIgnored?: boolean | undefined;
+  readonly showAllFiles?: boolean | undefined;
 }
 
 /**
@@ -259,8 +267,9 @@ export async function searchInFiles(
 export async function getFilesForScope(
   scope: SearchScope,
   filePath: string | undefined,
-  _diffTarget: DiffTarget,
-  _cwd: string,
+  diffTarget: DiffTarget,
+  cwd: string,
+  options: Pick<SearchOptions, "showIgnored" | "showAllFiles">,
 ): Promise<readonly string[]> {
   switch (scope) {
     case "file": {
@@ -271,19 +280,172 @@ export async function getFilesForScope(
     }
 
     case "changed": {
-      // TODO: Connect to actual git operations to get changed files
-      // For now, return empty array - will be connected when git operations are integrated
-      // This should call: getChangedFiles(diffTarget, cwd)
-      return [];
+      return listChangedSearchFiles(cwd, diffTarget);
     }
 
     case "all": {
-      // TODO: Connect to actual git operations to list all tracked files
-      // For now, return empty array - will be connected when git operations are integrated
-      // This should call: getAllTrackedFiles(cwd)
-      return [];
+      return listAllSearchFiles(cwd, options);
     }
   }
+}
+
+function normalizeSearchFilePaths(
+  filePaths: readonly string[],
+): readonly string[] {
+  return [...new Set(filePaths)].sort((leftPath, rightPath) =>
+    leftPath.localeCompare(rightPath),
+  );
+}
+
+function normalizeExcludedFileNames(
+  excludeFileNames: readonly string[] | undefined,
+): readonly string[] {
+  if (excludeFileNames === undefined) {
+    return [];
+  }
+
+  return excludeFileNames
+    .map((excludeFileName) => excludeFileName.trim().toLocaleLowerCase())
+    .filter((excludeFileName) => excludeFileName.length > 0);
+}
+
+function shouldExcludeSearchFile(
+  filePath: string,
+  excludedFileNames: readonly string[],
+): boolean {
+  if (excludedFileNames.length === 0) {
+    return false;
+  }
+
+  const normalizedFilePath = filePath.toLocaleLowerCase();
+  const normalizedFileName =
+    normalizedFilePath.split("/").at(-1) ?? normalizedFilePath;
+
+  return excludedFileNames.some((excludedFileName) =>
+    excludedFileName.includes("/")
+      ? normalizedFilePath.includes(excludedFileName)
+      : normalizedFileName === excludedFileName,
+  );
+}
+
+async function listIgnoredFiles(
+  projectPath: string,
+): Promise<readonly string[]> {
+  const gitResult = await execGit(
+    ["ls-files", "--others", "--ignored", "--exclude-standard"],
+    { cwd: projectPath },
+  );
+
+  if (gitResult.exitCode !== 0) {
+    return [];
+  }
+
+  return gitResult.stdout
+    .split("\n")
+    .map((rawPath) => unquoteGitPath(rawPath.trim()))
+    .filter((normalizedPath) => normalizedPath.length > 0);
+}
+
+async function listFilesystemFiles(
+  projectPath: string,
+  directoryPath = "",
+): Promise<readonly string[]> {
+  const absoluteDirectoryPath =
+    directoryPath.length > 0 ? join(projectPath, directoryPath) : projectPath;
+
+  let directoryEntries: readonly import("node:fs").Dirent[];
+  try {
+    directoryEntries = await readdir(absoluteDirectoryPath, {
+      withFileTypes: true,
+    });
+  } catch {
+    return [];
+  }
+
+  const discoveredPaths: string[] = [];
+
+  for (const directoryEntry of directoryEntries) {
+    if (directoryEntry.name === ".git" || directoryEntry.isSymbolicLink()) {
+      continue;
+    }
+
+    const relativePath =
+      directoryPath.length > 0
+        ? `${directoryPath}/${directoryEntry.name}`
+        : directoryEntry.name;
+
+    if (directoryEntry.isDirectory()) {
+      const nestedPaths = await listFilesystemFiles(projectPath, relativePath);
+      discoveredPaths.push(...nestedPaths);
+      continue;
+    }
+
+    if (directoryEntry.isFile()) {
+      discoveredPaths.push(relativePath);
+    }
+  }
+
+  return discoveredPaths;
+}
+
+async function listChangedSearchFiles(
+  projectPath: string,
+  diffTarget: DiffTarget,
+): Promise<readonly string[]> {
+  try {
+    const changedFileStatuses =
+      diffTarget.type === "working" || diffTarget.ref === undefined
+        ? await getChangedFiles(projectPath)
+        : await getChangedFiles(projectPath, diffTarget.ref);
+
+    return normalizeSearchFilePaths(
+      changedFileStatuses
+        .filter((fileStatus) => fileStatus.status !== "deleted")
+        .map((fileStatus) => fileStatus.path),
+    );
+  } catch {
+    return [];
+  }
+}
+
+async function listAllSearchFiles(
+  projectPath: string,
+  options: Pick<SearchOptions, "showIgnored" | "showAllFiles">,
+): Promise<readonly string[]> {
+  if (options.showAllFiles === true) {
+    return normalizeSearchFilePaths(await listFilesystemFiles(projectPath));
+  }
+
+  try {
+    const [trackedFiles, untrackedFiles, ignoredFiles] = await Promise.all([
+      getAllFiles(projectPath),
+      getUntrackedFiles(projectPath),
+      options.showIgnored === true
+        ? listIgnoredFiles(projectPath)
+        : Promise.resolve([]),
+    ]);
+
+    return normalizeSearchFilePaths([
+      ...trackedFiles,
+      ...untrackedFiles,
+      ...ignoredFiles,
+    ]);
+  } catch {
+    return normalizeSearchFilePaths(await listFilesystemFiles(projectPath));
+  }
+}
+
+function filterExcludedSearchFiles(
+  filePaths: readonly string[],
+  excludedFileNames: readonly string[],
+): readonly string[] {
+  if (excludedFileNames.length === 0) {
+    return filePaths;
+  }
+
+  return filePaths.filter(
+    (filePath) => !shouldExcludeSearchFile(filePath, excludedFileNames),
+  );
 }
 
 /**
@@ -310,9 +472,18 @@ export async function executeSearch(
   truncated: boolean;
 }> {
   const { maxResults = DEFAULT_MAX_RESULTS } = options;
+  const excludedFileNames = normalizeExcludedFileNames(
+    options.excludeFileNames,
+  );
 
   // Get files to search
-  const files = await getFilesForScope(scope, filePath, diffTarget, cwd);
+  const files = filterExcludedSearchFiles(
+    await getFilesForScope(scope, filePath, diffTarget, cwd, {
+      showIgnored: options.showIgnored,
+      showAllFiles: options.showAllFiles,
+    }),
+    excludedFileNames,
+  );
   const filesSearched = files.length;
 
   // Search in files

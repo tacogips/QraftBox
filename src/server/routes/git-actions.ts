@@ -21,6 +21,7 @@ import {
   cancelGitAction,
   getPRStatus,
   isGitOperationRunning,
+  getCurrentOperationWorkerId,
   getOperationPhase,
 } from "../git-actions/executor.js";
 import { isGitRepository } from "../git/executor.js";
@@ -63,6 +64,7 @@ interface CommitRequest {
  */
 interface PushRequest {
   readonly projectPath: string;
+  readonly actionId?: string;
 }
 
 /**
@@ -70,6 +72,7 @@ interface PushRequest {
  */
 interface PullRequest {
   readonly projectPath: string;
+  readonly actionId?: string;
 }
 
 /**
@@ -77,6 +80,7 @@ interface PullRequest {
  */
 interface InitRequest {
   readonly projectPath: string;
+  readonly actionId?: string;
 }
 
 /**
@@ -298,6 +302,7 @@ export function createGitActionsRoutes(
     return c.json({
       operating: isGitOperationRunning(),
       phase: getOperationPhase(),
+      workerId: getCurrentOperationWorkerId(),
     });
   });
 
@@ -374,7 +379,10 @@ export function createGitActionsRoutes(
       }
 
       // Execute push
-      const result: GitActionResult = await executePush(body.projectPath);
+      const result: GitActionResult = await executePush(
+        body.projectPath,
+        body.actionId,
+      );
 
       return c.json(result);
     } catch (e) {
@@ -413,7 +421,10 @@ export function createGitActionsRoutes(
       }
 
       // Execute pull
-      const result: GitActionResult = await executePull(body.projectPath);
+      const result: GitActionResult = await executePull(
+        body.projectPath,
+        body.actionId,
+      );
 
       return c.json(result);
     } catch (e) {
@@ -455,7 +466,10 @@ export function createGitActionsRoutes(
         return c.json(errorResponse, 400);
       }
 
-      const result: GitActionResult = await executeInit(body.projectPath);
+      const result: GitActionResult = await executeInit(
+        body.projectPath,
+        body.actionId,
+      );
       return c.json(result);
     } catch (e) {
       const errorMessage =

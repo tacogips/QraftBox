@@ -6,6 +6,7 @@
 
 import { describe, test, expect, mock, beforeEach, afterEach } from "bun:test";
 import { parseArgs, openBrowser, setupShutdownHandlers } from "./index";
+import { FRONTEND_TARGET_ENV_VAR } from "../config/frontend";
 
 describe("parseArgs", () => {
   test("parses default arguments", () => {
@@ -15,6 +16,7 @@ describe("parseArgs", () => {
     expect(config).toEqual({
       port: 7144,
       host: "localhost",
+      frontend: "current",
       open: false,
       watch: true,
       syncMode: "manual",
@@ -40,6 +42,38 @@ describe("parseArgs", () => {
     const config = parseArgs(args);
 
     expect(config.host).toBe("0.0.0.0");
+  });
+
+  test("parses frontend target", () => {
+    const args = ["node", "script.js", "--frontend", "current"];
+    const config = parseArgs(args);
+
+    expect(config.frontend).toBe("current");
+  });
+
+  test("accepts the legacy solid alias for the current frontend", () => {
+    const args = ["node", "script.js", "--frontend", "solid"];
+    const config = parseArgs(args);
+
+    expect(config.frontend).toBe("current");
+  });
+
+  test("uses QRAFTBOX_FRONTEND when CLI frontend is omitted", () => {
+    const originalValue = process.env[FRONTEND_TARGET_ENV_VAR];
+
+    try {
+      process.env[FRONTEND_TARGET_ENV_VAR] = "solid";
+      const args = ["node", "script.js"];
+      const config = parseArgs(args);
+
+      expect(config.frontend).toBe("current");
+    } finally {
+      if (originalValue === undefined) {
+        delete process.env[FRONTEND_TARGET_ENV_VAR];
+      } else {
+        process.env[FRONTEND_TARGET_ENV_VAR] = originalValue;
+      }
+    }
   });
 
   test("defaults open to false", () => {
@@ -160,6 +194,7 @@ describe("parseArgs", () => {
     expect(config).toEqual({
       port: 9000,
       host: "127.0.0.1",
+      frontend: "current",
       open: false,
       watch: false,
       syncMode: "auto",
@@ -195,6 +230,12 @@ describe("parseArgs", () => {
     const args = ["node", "script.js", "--sync-mode", "invalid-mode"];
 
     expect(() => parseArgs(args)).toThrow("Invalid sync mode");
+  });
+
+  test("throws error for invalid frontend target", () => {
+    const args = ["node", "script.js", "--frontend", "vue"];
+
+    expect(() => parseArgs(args)).toThrow("Invalid frontend target");
   });
 
   test("accepts valid port at lower boundary", () => {

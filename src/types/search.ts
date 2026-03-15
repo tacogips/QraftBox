@@ -22,7 +22,10 @@ export interface SearchRequest {
   readonly filePath?: string | undefined;
   readonly contextLines?: number | undefined;
   readonly caseSensitive?: boolean | undefined;
+  readonly excludeFileNames?: string | undefined;
   readonly maxResults?: number | undefined;
+  readonly showIgnored?: boolean | undefined;
+  readonly showAllFiles?: boolean | undefined;
 }
 
 /**

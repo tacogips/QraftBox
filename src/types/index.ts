@@ -5,6 +5,8 @@
  * including CLI configuration, view modes, and synchronization settings.
  */
 
+import type { FrontendTarget } from "../config/frontend";
+
 // Re-export ServerContext from its canonical location
 export type { ServerContext } from "../server/workspace/context-manager";
 
@@ -20,6 +22,7 @@ export type { ValidationResult } from "./workspace";
 export interface CLIConfig {
   readonly port: number;
   readonly host: string;
+  readonly frontend: FrontendTarget;
   readonly open: boolean;
   readonly watch: boolean;
   readonly syncMode: SyncMode;
@@ -57,3 +60,5 @@ export type ViewMode = "diff" | "current-state";
  * - "auto": Both auto-push and auto-pull enabled
  */
 export type SyncMode = "manual" | "auto-push" | "auto-pull" | "auto";
+
+export type { FrontendTarget } from "../config/frontend";

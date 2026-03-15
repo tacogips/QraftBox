@@ -40,3 +40,20 @@ This file captures as-built constraints, operational considerations, and known g
 ## Testing/Dev Overrides
 
 - `QRAFTBOX_TEST_CONFIG_DIR` and `QRAFTBOX_TEST_TOOLS_DIR` are used in tests to isolate filesystem state.
+
+## Frontend Cutover Notes
+
+- Solid is now the default frontend served from `client/`.
+- The legacy Svelte frontend remains supported from `client-legacy/` when `QRAFTBOX_FRONTEND=svelte` or `--frontend svelte` is used.
+- Migration validation should still compare both frontends against the same backend and repository state while legacy fallback remains supported.
+- Shared frontend logic should continue to live in framework-neutral TypeScript modules under `client-shared/`.
+- Hash-driven navigation parity remains part of the shared contract; both frontends must react to later `hashchange` events, not just the initial URL.
+- Browser verification should still be run for both frontends after significant UI changes while legacy comparison remains part of the support model.
+- The recorded browser-verification marker currently proves only the shared `project` and `files` smoke loop; screen-specific parity blockers for other routes must stay open until separately verified.
+- The recorded full migration check status is stored in the ignored workspace-local marker `tmp-solid-migration-check.json`, which is cleared before each `bun run check:frontend:migration` run and rewritten only after the full command succeeds.
+- Packaged binaries and npm installs do not have the source-checkout markers or nested frontend dependencies needed for repo verification, so the runtime support panel must treat those checks as not applicable there rather than as hard failures.
+- The client currently needs two explicit support-status baselines to preserve that rule cleanly: one for packaged-runtime bootstrap behavior and one for source-checkout-oriented report helpers and tests.
+- The initial Solid bootstrap state must follow the same packaged-safe rule, so a failed `/api/frontend-status` request does not temporarily or permanently fall back to impossible repo-only blockers.
+- The bootstrap fallback must also assume the active Solid bundle already exists, because the UI is executing from that bundle; `hasBuiltSolidBundle: false` is not a truthful fallback state once the app has loaded.
+- Runtime source-root discovery must walk ancestor directories from runtime-derived paths before falling back to `process.cwd()`, because source runs and bundled outputs can execute from nested directories below the repo root.
+- `bun run test:frontend:migration` is part of the support baseline and must include both bootstrap-state and support-status baseline regression coverage, not just route and shared-contract tests.
