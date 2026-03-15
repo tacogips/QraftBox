@@ -32,6 +32,25 @@ describe("detectHighlightLanguage", () => {
     );
     expect(detectHighlightLanguage({ filePath: "Makefile" })).toBe("makefile");
     expect(detectHighlightLanguage({ filePath: "flake.nix" })).toBe("nix");
+    expect(detectHighlightLanguage({ filePath: "src/Main.hs" })).toBe(
+      "haskell",
+    );
+    expect(detectHighlightLanguage({ filePath: "src/core.clj" })).toBe(
+      "clojure",
+    );
+    expect(detectHighlightLanguage({ filePath: "src/lib.rs" })).toBe("rust");
+    expect(detectHighlightLanguage({ filePath: "Cargo.toml" })).toBe("toml");
+    expect(detectHighlightLanguage({ filePath: "cmd/server.go" })).toBe("go");
+    expect(detectHighlightLanguage({ filePath: "src/app.erl" })).toBe(
+      "erlang",
+    );
+    expect(detectHighlightLanguage({ filePath: "src/Main.java" })).toBe(
+      "java",
+    );
+    expect(detectHighlightLanguage({ filePath: "src/Main.scala" })).toBe(
+      "scala",
+    );
+    expect(detectHighlightLanguage({ filePath: "lua/init.lua" })).toBe("lua");
     expect(detectHighlightLanguage({ filePath: "query.graphql" })).toBe(
       "graphql",
     );
@@ -49,6 +68,12 @@ describe("detectHighlightLanguage", () => {
         filePath: "unknown.custom",
       }),
     ).toBe("typescript");
+    expect(
+      detectHighlightLanguage({
+        language: "shell",
+        filePath: "unknown.custom",
+      }),
+    ).toBe("bash");
   });
 });
 
@@ -63,6 +88,7 @@ describe("highlightFullFileContent", () => {
   });
 
   test("returns line-based token arrays for supported languages", async () => {
+    const shikiModule = await import("shiki").catch(() => null);
     const highlightedLines = await highlightFullFileContent(
       {
         filePath: "bin/qraftbox.js",
@@ -71,6 +97,14 @@ describe("highlightFullFileContent", () => {
     );
 
     expect(highlightedLines).toHaveLength(2);
+    if (shikiModule === null) {
+      expect(highlightedLines).toEqual([
+        [{ text: 'const port = 5173;', className: "text-text-primary" }],
+        [{ text: 'console.log("ok");', className: "text-text-primary" }],
+      ]);
+      return;
+    }
+
     expect(highlightedLines[0]?.length).toBeGreaterThan(1);
     expect(
       highlightedLines[0]?.some(

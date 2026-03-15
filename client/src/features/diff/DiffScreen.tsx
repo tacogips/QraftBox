@@ -23,16 +23,38 @@ import {
 import { createModelConfigApiClient } from "../../../../client-shared/src/api/model-config";
 import { createSearchApiClient } from "../../../../client-shared/src/api/search";
 import { ToolbarIconButton } from "../../components/ToolbarIconButton";
+import {
+  enhanceMarkdownElements,
+  renderMarkdownHtml,
+} from "../../lib/markdown";
 import { AiSessionChatPane } from "../ai-session/AiSessionChatPane";
-import type { AiSessionTranscriptLine } from "../ai-session/presentation";
+import type {
+  AiSessionLiveAssistantPhase,
+  AiSessionTranscriptLine,
+} from "../ai-session/presentation";
 import {
   buildAiSessionListEntries,
   buildAiSessionTranscriptLines,
   describeAiSessionEntryModel,
   formatAiSessionTimestamp,
   mergePendingAiSessionTranscriptLines,
+  reconcileAiSessionTranscriptLines,
 } from "../ai-session/presentation";
-import { createAiSessionSubmitContext } from "../ai-session/state";
+import {
+  countAiSessionSystemPromptLines,
+  canLoadMoreAiSessionTranscript,
+  createAiSessionTranscriptPageState,
+  createAiSessionSubmitContext,
+  fetchAiSessionDetailArtifacts,
+  filterAiSessionTranscriptSystemPromptLines,
+  loadAiSessionShowSystemPromptsPreference,
+  normalizeAiSessionLiveAssistantStatusText,
+  persistAiSessionShowSystemPromptsPreference,
+  resolveAiSessionRuntimeSession,
+  resolveAiSessionStreamSessionId,
+  shouldPreserveAiSessionLiveAssistantStateOnStreamOpen,
+  shouldRetireAiSessionLiveAssistantFromTranscript,
+} from "../ai-session/state";
 import {
   type FilesSearchScope,
   type FilesTab,
@@ -101,6 +123,11 @@ import {
   resolveEmbeddedAiChatPaneModeOnSessionOpen,
   type EmbeddedAiChatPaneMode,
 } from "./ai-chat-pane-state";
+import {
+  isMarkdownPreviewFile,
+  resolveFullFileMarkdownPreviewMode,
+  type FullFileMarkdownPreviewMode,
+} from "./markdown-preview-state";
 
 export interface DiffScreenProps {
   readonly apiBaseUrl: string;
@@ -175,7 +202,6 @@ type SideBySideRow =
     }
   | SideBySideChangeRow;
 
-const EMBEDDED_AI_SESSION_POLL_MS = 4000;
 const EMBEDDED_AI_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
 
 function resolveEmptyTreeText(
@@ -239,6 +265,12 @@ function createFullFileHighlightKey(
   return [fileContent.path, fileContent.language, fileContent.content].join(
     "\u0000",
   );
+}
+
+function renderMarkdownPreviewModeLabel(
+  previewMode: FullFileMarkdownPreviewMode,
+): string {
+  return previewMode === "rendered" ? "Preview" : "Source";
 }
 
 function renderViewModeLabel(viewMode: DiffViewMode): string {
@@ -652,6 +684,125 @@ function renderAiChatPaneIcon(): JSX.Element {
         stroke-width="1.4"
         stroke-linecap="round"
       />
+    </svg>
+  );
+}
+
+function renderJumpToLatestIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="m6.5 6 3.5 3.5L13.5 6"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="m6.5 10.5 3.5 3.5 3.5-3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderJumpToHeadIcon(): JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+    >
+      <path
+        d="m6.5 14 3.5-3.5 3.5 3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="m6.5 9.5 3.5-3.5 3.5 3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderExternalLinkIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M9.5 2.75h3.75V6.5"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <path
+        d="M7 9 13.25 2.75"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+      />
+      <path
+        d="M13.25 8.5v2A1.75 1.75 0 0 1 11.5 12.25h-6A1.75 1.75 0 0 1 3.75 10.5v-6A1.75 1.75 0 0 1 5.5 2.75h2"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderSystemPromptVisibilityIcon(hiddenCount: number): JSX.Element {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 20 20"
+      fill="none"
+      aria-hidden="true"
+    >
+      <rect
+        x="3.5"
+        y="4"
+        width="13"
+        height="10"
+        rx="2"
+        stroke="currentColor"
+        stroke-width="1.8"
+      />
+      <path
+        d="M6.5 7.5h7"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      />
+      <path
+        d="M6.5 10.5h4"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+      />
+      <Show when={hiddenCount > 0}>
+        <path
+          d="M4 16 16 4"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+        />
+      </Show>
     </svg>
   );
 }
@@ -1127,6 +1278,8 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const [highlightedFullFileLines, setHighlightedFullFileLines] = createSignal<
     readonly (readonly HighlightToken[])[]
   >([]);
+  const [fullFileMarkdownPreviewMode, setFullFileMarkdownPreviewMode] =
+    createSignal<FullFileMarkdownPreviewMode>("source");
   const [beforeHighlightedLines, setBeforeHighlightedLines] = createSignal<
     readonly (readonly HighlightToken[])[]
   >([]);
@@ -1198,7 +1351,21 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     createSignal<readonly PromptQueueItem[]>([]);
   const [embeddedAiSessionTranscript, setEmbeddedAiSessionTranscript] =
     createSignal<readonly AiSessionTranscriptLine[]>([]);
+  const [
+    embeddedAiSessionTranscriptLoadedEventCount,
+    setEmbeddedAiSessionTranscriptLoadedEventCount,
+  ] = createSignal(0);
+  const [
+    embeddedAiSessionTranscriptStartOffset,
+    setEmbeddedAiSessionTranscriptStartOffset,
+  ] = createSignal(0);
+  const [
+    embeddedAiSessionTranscriptTotal,
+    setEmbeddedAiSessionTranscriptTotal,
+  ] = createSignal(0);
   const [embeddedAiSessionLoading, setEmbeddedAiSessionLoading] =
+    createSignal(false);
+  const [embeddedAiSessionLoadingMore, setEmbeddedAiSessionLoadingMore] =
     createSignal(false);
   const [embeddedAiSessionError, setEmbeddedAiSessionError] = createSignal<
     string | null
@@ -1211,6 +1378,14 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     embeddedAiSessionCopiedTranscriptLineId,
     setEmbeddedAiSessionCopiedTranscriptLineId,
   ] = createSignal<string | null>(null);
+  const [
+    embeddedAiSessionLiveAssistantPhase,
+    setEmbeddedAiSessionLiveAssistantPhase,
+  ] = createSignal<AiSessionLiveAssistantPhase>("idle");
+  const [
+    embeddedAiSessionShowSystemPrompts,
+    setEmbeddedAiSessionShowSystemPrompts,
+  ] = createSignal(loadAiSessionShowSystemPromptsPreference());
   const [
     embeddedAiSessionPurposeExpanded,
     setEmbeddedAiSessionPurposeExpanded,
@@ -1247,12 +1422,14 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     embeddedAiSessionLiveAssistantStatusText,
     setEmbeddedAiSessionLiveAssistantStatusText,
   ] = createSignal<string | null>(null);
-  const embeddedAiSessionLiveAssistantPhase = () =>
-    embeddedAiSessionLiveAssistantText() !== null
-      ? "thinking"
-      : embeddedAiSessionLiveAssistantStatusText() !== null
-        ? "starting"
-        : "idle";
+  const [
+    preferredEmbeddedAiStreamRuntimeSessionId,
+    setPreferredEmbeddedAiStreamRuntimeSessionId,
+  ] = createSignal<QraftAiSessionId | null>(null);
+  const [
+    preferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId,
+    setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId,
+  ] = createSignal<QraftAiSessionId | null>(null);
   const [fileTreeFilterText, setFileTreeFilterText] = createSignal("");
   const [isFileTreeFilterFocused, setIsFileTreeFilterFocused] =
     createSignal(false);
@@ -1280,13 +1457,17 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
   const [autoCenterLineSelection, setAutoCenterLineSelection] =
     createSignal(true);
   let lastSearchRequestId = 0;
-  let lastEmbeddedAiSessionRequestId = 0;
-  let embeddedAiSessionPollTimer: ReturnType<typeof setInterval> | null = null;
+  let lastEmbeddedAiSessionArtifactRequestId = 0;
+  let lastEmbeddedAiSessionActivityRequestId = 0;
+  let activeEmbeddedAiSessionStreamKey: string | null = null;
+  let activeEmbeddedAiSessionEventSource: EventSource | null = null;
   let embeddedAiSessionCopyResetTimer: ReturnType<typeof setTimeout> | null =
     null;
   let suppressNextSelectedLineAutoCenter = false;
   let previewContainerElement: HTMLDivElement | undefined;
   let fullFileTextareaElement: HTMLTextAreaElement | undefined;
+  let fullFileMarkdownPreviewElement: HTMLElement | undefined;
+  let embeddedAiTranscriptScrollContainer: HTMLDivElement | null = null;
   const activeTree = () =>
     props.fileTreeMode === "diff" ? props.diffTree : props.allFilesTree;
   const filteredActiveTree = () =>
@@ -1360,6 +1541,35 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     isPhoneViewport() ? "min-w-[640px]" : "min-w-[840px]";
   const compactViewerContainerClass = () =>
     isPhoneViewport() ? "min-w-[560px]" : "min-w-[720px]";
+  const isFullFileMarkdownPreviewAvailable = () =>
+    isMarkdownPreviewFile(props.fileContent);
+  const shouldRenderFullFileMarkdownPreview = () =>
+    isFullFileMarkdownPreviewAvailable() &&
+    fullFileMarkdownPreviewMode() === "rendered";
+  const fullFileViewerContainerClass = () =>
+    shouldRenderFullFileMarkdownPreview()
+      ? "min-w-0"
+      : compactViewerContainerClass();
+  const renderedFullFileMarkdownHtml = () => {
+    const fileContent = props.fileContent;
+    if (fileContent === null || fileContent.isBinary === true) {
+      return "";
+    }
+
+    return renderMarkdownHtml(fileContent.content, {
+      markdownFilePath: fileContent.path,
+      cacheScopeKey: `${props.contextId ?? ""}:${fileContent.path}`,
+      resolveFileUrl:
+        props.contextId === null
+          ? undefined
+          : (repoRelativePath) =>
+              buildRawFileUrl(
+                props.apiBaseUrl,
+                props.contextId as string,
+                repoRelativePath,
+              ),
+    });
+  };
   const diffPathNavigation = () =>
     resolveDiffPathNavigation(props.diffOverview, props.selectedPath);
   const fileContentMetadata = () =>
@@ -1410,6 +1620,19 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       ) ?? null
     );
   };
+  const embeddedAiRuntimeSession = () =>
+    resolveAiSessionRuntimeSession({
+      selectedQraftAiSessionId: embeddedAiSessionId(),
+      activeSessions: embeddedAiSessionActivity(),
+    });
+  const embeddedAiStreamSessionId = () =>
+    resolveAiSessionStreamSessionId({
+      selectedQraftAiSessionId: embeddedAiSessionId(),
+      preferredRuntimeSessionId: preferredEmbeddedAiStreamRuntimeSessionId(),
+      preferredRuntimeSessionOwnerQraftAiSessionId:
+        preferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(),
+      runtimeSession: embeddedAiRuntimeSession(),
+    });
   const displayedEmbeddedAiSessionTranscript = () =>
     mergePendingAiSessionTranscriptLines({
       transcriptLines: embeddedAiSessionTranscript(),
@@ -1421,8 +1644,15 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       liveAssistantTimestamp: embeddedAiSessionLiveAssistantTimestamp(),
       liveAssistantStatusText: embeddedAiSessionLiveAssistantStatusText(),
     });
+  const visibleEmbeddedAiSessionTranscript = () =>
+    filterAiSessionTranscriptSystemPromptLines({
+      transcriptLines: displayedEmbeddedAiSessionTranscript(),
+      showSystemPrompts: embeddedAiSessionShowSystemPrompts(),
+    });
+  const hiddenEmbeddedAiSystemPromptCount = () =>
+    countAiSessionSystemPromptLines(displayedEmbeddedAiSessionTranscript());
   const formattedEmbeddedAiSessionTranscript = () =>
-    displayedEmbeddedAiSessionTranscript().map((transcriptLine) => ({
+    visibleEmbeddedAiSessionTranscript().map((transcriptLine) => ({
       ...transcriptLine,
       timestamp:
         transcriptLine.timestamp === null
@@ -2176,7 +2406,11 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     setEmbeddedAiSessionActivity([]);
     setEmbeddedAiSessionPromptQueue([]);
     setEmbeddedAiSessionTranscript([]);
+    setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+    setEmbeddedAiSessionTranscriptStartOffset(0);
+    setEmbeddedAiSessionTranscriptTotal(0);
     setEmbeddedAiSessionLoading(false);
+    setEmbeddedAiSessionLoadingMore(false);
     setEmbeddedAiSessionError(null);
     setEmbeddedAiSessionPromptInput("");
     setEmbeddedAiSessionSubmitting(false);
@@ -2186,7 +2420,10 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     setEmbeddedAiSessionOptimisticUserAnchorIndex(null);
     setEmbeddedAiSessionLiveAssistantText(null);
     setEmbeddedAiSessionLiveAssistantTimestamp(null);
+    setEmbeddedAiSessionLiveAssistantPhase("idle");
     setEmbeddedAiSessionLiveAssistantStatusText(null);
+    setPreferredEmbeddedAiStreamRuntimeSessionId(null);
+    setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(null);
   }
 
   function clearEmbeddedAiSession(): void {
@@ -2207,71 +2444,146 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     );
   }
 
-  async function refreshEmbeddedAiSession(
-    sessionId: QraftAiSessionId,
-  ): Promise<void> {
+  async function refreshEmbeddedAiSessionActivity(): Promise<void> {
+    if (props.projectPath.trim().length === 0) {
+      return;
+    }
+
+    const requestId = lastEmbeddedAiSessionActivityRequestId + 1;
+    lastEmbeddedAiSessionActivityRequestId = requestId;
+
+    try {
+      const [nextActiveSessions, nextPromptQueue] = await Promise.all([
+        aiSessionsApi.fetchActiveSessions({
+          projectPath: props.projectPath,
+        }),
+        aiSessionsApi.fetchPromptQueue({
+          projectPath: props.projectPath,
+        }),
+      ]);
+
+      if (requestId !== lastEmbeddedAiSessionActivityRequestId) {
+        return;
+      }
+
+      setEmbeddedAiSessionActivity(nextActiveSessions);
+      setEmbeddedAiSessionPromptQueue(nextPromptQueue);
+    } catch {
+      // Preserve the current transcript view when lightweight status refreshes fail.
+    }
+  }
+
+  async function refreshEmbeddedAiSessionArtifacts(params: {
+    readonly sessionId: QraftAiSessionId;
+    readonly loadOlderTranscript?: boolean | undefined;
+    readonly preserveExistingContent?: boolean | undefined;
+  }): Promise<void> {
     if (props.contextId === null || props.projectPath.trim().length === 0) {
       return;
     }
 
-    const requestId = lastEmbeddedAiSessionRequestId + 1;
-    lastEmbeddedAiSessionRequestId = requestId;
-    setEmbeddedAiSessionLoading(true);
+    const requestId = lastEmbeddedAiSessionArtifactRequestId + 1;
+    lastEmbeddedAiSessionArtifactRequestId = requestId;
+    const loadOlderTranscript = params.loadOlderTranscript === true;
+    const preserveExistingContent = params.preserveExistingContent === true;
+
+    if (loadOlderTranscript) {
+      setEmbeddedAiSessionLoadingMore(true);
+    } else if (!preserveExistingContent) {
+      setEmbeddedAiSessionLoading(true);
+      setEmbeddedAiSessionHistory(null);
+      setEmbeddedAiSessionTranscript([]);
+      setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+      setEmbeddedAiSessionTranscriptStartOffset(0);
+      setEmbeddedAiSessionTranscriptTotal(0);
+    }
     setEmbeddedAiSessionError(null);
 
     try {
-      const [activeSessions, promptQueue, transcript, historySession] =
-        await Promise.all([
-          aiSessionsApi.fetchActiveSessions({
-            projectPath: props.projectPath,
-          }),
-          aiSessionsApi.fetchPromptQueue({
-            projectPath: props.projectPath,
-          }),
-          aiSessionsApi
-            .fetchClaudeSessionTranscript(props.contextId, sessionId, {
-              offset: 0,
-              limit: EMBEDDED_AI_SESSION_TRANSCRIPT_PAGE_SIZE,
-            })
-            .catch((error) => {
-              if (isEmbeddedAiSessionPendingResourceError(error)) {
-                return null;
-              }
-              throw error;
-            }),
-          aiSessionsApi
-            .fetchClaudeSession(props.contextId, sessionId)
-            .catch((error) => {
-              if (isEmbeddedAiSessionPendingResourceError(error)) {
-                return null;
-              }
-              throw error;
-            }),
-        ]);
+      const { sessionDetail, transcript } = await fetchAiSessionDetailArtifacts(
+        {
+          pageSize: EMBEDDED_AI_SESSION_TRANSCRIPT_PAGE_SIZE,
+          loadOlderTranscript,
+          preserveExistingContent,
+          hasHistoricalSession: true,
+          currentSessionDetail: embeddedAiSessionHistory(),
+          currentTranscriptStartOffset:
+            embeddedAiSessionTranscriptStartOffset(),
+          currentLoadedEventCount:
+            embeddedAiSessionTranscriptLoadedEventCount(),
+          fetchSessionDetail: () =>
+            aiSessionsApi.fetchClaudeSession(
+              props.contextId!,
+              params.sessionId,
+            ),
+          fetchTranscript: (query) =>
+            aiSessionsApi.fetchClaudeSessionTranscript(
+              props.contextId!,
+              params.sessionId,
+              query,
+            ),
+          isPendingResourceError: isEmbeddedAiSessionPendingResourceError,
+        },
+      );
 
       if (
-        requestId !== lastEmbeddedAiSessionRequestId ||
-        embeddedAiSessionId() !== sessionId
+        requestId !== lastEmbeddedAiSessionArtifactRequestId ||
+        embeddedAiSessionId() !== params.sessionId
       ) {
         return;
       }
 
-      setEmbeddedAiSessionActivity(activeSessions);
-      setEmbeddedAiSessionPromptQueue(promptQueue);
-      setEmbeddedAiSessionHistory(historySession);
-      setEmbeddedAiSessionTranscript(
-        transcript === null
-          ? []
-          : buildAiSessionTranscriptLines(transcript.events),
+      setEmbeddedAiSessionHistory(sessionDetail);
+      if (transcript === null) {
+        if (!preserveExistingContent) {
+          setEmbeddedAiSessionTranscript([]);
+          setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+          setEmbeddedAiSessionTranscriptStartOffset(0);
+          setEmbeddedAiSessionTranscriptTotal(0);
+        }
+        return;
+      }
+
+      const nextTranscriptState = createAiSessionTranscriptPageState({
+        currentTranscriptLines: embeddedAiSessionTranscript(),
+        nextTranscriptLines: buildAiSessionTranscriptLines(transcript.events, {
+          offset: transcript.offset,
+        }),
+        currentLoadedEventCount: embeddedAiSessionTranscriptLoadedEventCount(),
+        loadOlderTranscript,
+        transcriptOffset: transcript.offset,
+        transcriptTotal: transcript.total,
+        transcriptEventCount: transcript.events.length,
+      });
+
+      setEmbeddedAiSessionTranscript((currentTranscriptLines) =>
+        reconcileAiSessionTranscriptLines(
+          currentTranscriptLines,
+          nextTranscriptState.transcriptLines,
+        ),
       );
+      setEmbeddedAiSessionTranscriptLoadedEventCount(
+        nextTranscriptState.loadedEventCount,
+      );
+      setEmbeddedAiSessionTranscriptStartOffset(
+        nextTranscriptState.startOffset,
+      );
+      setEmbeddedAiSessionTranscriptTotal(nextTranscriptState.totalCount);
     } catch (error) {
       if (
-        requestId !== lastEmbeddedAiSessionRequestId ||
-        embeddedAiSessionId() !== sessionId
+        requestId !== lastEmbeddedAiSessionArtifactRequestId ||
+        embeddedAiSessionId() !== params.sessionId
       ) {
         return;
       }
 
+      if (!preserveExistingContent) {
+        setEmbeddedAiSessionHistory(null);
+        setEmbeddedAiSessionTranscript([]);
+        setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+        setEmbeddedAiSessionTranscriptStartOffset(0);
+        setEmbeddedAiSessionTranscriptTotal(0);
+      }
       setEmbeddedAiSessionError(
         error instanceof Error
           ? error.message
@@ -2279,10 +2591,14 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       );
     } finally {
       if (
-        requestId === lastEmbeddedAiSessionRequestId &&
-        embeddedAiSessionId() === sessionId
+        requestId === lastEmbeddedAiSessionArtifactRequestId &&
+        embeddedAiSessionId() === params.sessionId
       ) {
-        setEmbeddedAiSessionLoading(false);
+        if (loadOlderTranscript) {
+          setEmbeddedAiSessionLoadingMore(false);
+        } else {
+          setEmbeddedAiSessionLoading(false);
+        }
       }
     }
   }
@@ -2325,11 +2641,26 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       );
       setEmbeddedAiSessionLiveAssistantText(null);
       setEmbeddedAiSessionLiveAssistantTimestamp(null);
+      setEmbeddedAiSessionLiveAssistantPhase(
+        runImmediately ? "starting" : "idle",
+      );
       setEmbeddedAiSessionLiveAssistantStatusText(
         runImmediately ? "Thinking..." : null,
       );
-      await refreshEmbeddedAiSession(sessionId);
+      setPreferredEmbeddedAiStreamRuntimeSessionId(
+        runImmediately ? sessionId : null,
+      );
+      setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(
+        runImmediately ? sessionId : null,
+      );
+      await refreshEmbeddedAiSessionActivity();
     } catch (error) {
+      setEmbeddedAiSessionOptimisticUserText(null);
+      setEmbeddedAiSessionOptimisticUserTimestamp(null);
+      setEmbeddedAiSessionOptimisticUserAnchorIndex(null);
+      setEmbeddedAiSessionLiveAssistantPhase("idle");
+      setPreferredEmbeddedAiStreamRuntimeSessionId(null);
+      setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(null);
       setEmbeddedAiSessionError(
         error instanceof Error
           ? error.message
@@ -2389,20 +2720,151 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     }
   }
 
+  function scrollEmbeddedAiTranscriptToLatest(
+    behavior: ScrollBehavior = "smooth",
+  ): void {
+    const container = embeddedAiTranscriptScrollContainer;
+    if (container === null) {
+      return;
+    }
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    });
+  }
+
+  async function loadMoreEmbeddedAiSessionTranscript(): Promise<void> {
+    const sessionId = embeddedAiSessionId();
+    if (
+      sessionId === null ||
+      embeddedAiSessionLoading() ||
+      embeddedAiSessionLoadingMore() ||
+      !canLoadMoreAiSessionTranscript({
+        loadedEventCount: embeddedAiSessionTranscriptLoadedEventCount(),
+        totalCount: embeddedAiSessionTranscriptTotal(),
+      })
+    ) {
+      return;
+    }
+
+    const container = embeddedAiTranscriptScrollContainer;
+    const previousScrollHeight = container?.scrollHeight ?? 0;
+    const previousScrollTop = container?.scrollTop ?? 0;
+
+    await refreshEmbeddedAiSessionArtifacts({
+      sessionId,
+      loadOlderTranscript: true,
+    });
+
+    if (container !== null) {
+      window.requestAnimationFrame(() => {
+        const nextScrollDelta = container.scrollHeight - previousScrollHeight;
+        container.scrollTop = previousScrollTop + nextScrollDelta;
+      });
+    }
+  }
+
+  function handleEmbeddedAiTranscriptScroll(): void {
+    const container = embeddedAiTranscriptScrollContainer;
+    if (container === null || container.scrollTop > 120) {
+      return;
+    }
+
+    void loadMoreEmbeddedAiSessionTranscript();
+  }
+
+  async function jumpEmbeddedAiTranscriptToHead(): Promise<void> {
+    const sessionId = embeddedAiSessionId();
+    if (
+      sessionId === null ||
+      embeddedAiSessionLoading() ||
+      embeddedAiSessionLoadingMore()
+    ) {
+      return;
+    }
+
+    while (
+      canLoadMoreAiSessionTranscript({
+        loadedEventCount: embeddedAiSessionTranscriptLoadedEventCount(),
+        totalCount: embeddedAiSessionTranscriptTotal(),
+      })
+    ) {
+      const previousLoadedEventCount =
+        embeddedAiSessionTranscriptLoadedEventCount();
+      await refreshEmbeddedAiSessionArtifacts({
+        sessionId,
+        loadOlderTranscript: true,
+      });
+
+      if (
+        embeddedAiSessionTranscriptLoadedEventCount() <=
+        previousLoadedEventCount
+      ) {
+        break;
+      }
+    }
+
+    window.requestAnimationFrame(() => {
+      embeddedAiTranscriptScrollContainer?.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+  }
+
   createEffect(
-    on(embeddedAiSessionId, (sessionId) => {
+    on(embeddedAiSessionId, (sessionId, previousSessionId) => {
       if (sessionId === null) {
         setEmbeddedAiSessionHistory(null);
         setEmbeddedAiSessionActivity([]);
         setEmbeddedAiSessionPromptQueue([]);
         setEmbeddedAiSessionTranscript([]);
+        setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+        setEmbeddedAiSessionTranscriptStartOffset(0);
+        setEmbeddedAiSessionTranscriptTotal(0);
         setEmbeddedAiSessionError(null);
+        setEmbeddedAiSessionLiveAssistantText(null);
+        setEmbeddedAiSessionLiveAssistantTimestamp(null);
+        setEmbeddedAiSessionLiveAssistantPhase("idle");
+        setEmbeddedAiSessionLiveAssistantStatusText(null);
+        setEmbeddedAiSessionOptimisticUserText(null);
+        setEmbeddedAiSessionOptimisticUserTimestamp(null);
+        setEmbeddedAiSessionOptimisticUserAnchorIndex(null);
+        setPreferredEmbeddedAiStreamRuntimeSessionId(null);
+        setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(null);
         return;
       }
 
-      void refreshEmbeddedAiSession(sessionId);
+      if (previousSessionId !== sessionId) {
+        setEmbeddedAiSessionHistory(null);
+        setEmbeddedAiSessionTranscript([]);
+        setEmbeddedAiSessionTranscriptLoadedEventCount(0);
+        setEmbeddedAiSessionTranscriptStartOffset(0);
+        setEmbeddedAiSessionTranscriptTotal(0);
+        setEmbeddedAiSessionLiveAssistantText(null);
+        setEmbeddedAiSessionLiveAssistantTimestamp(null);
+        setEmbeddedAiSessionLiveAssistantPhase("idle");
+        setEmbeddedAiSessionLiveAssistantStatusText(null);
+        setEmbeddedAiSessionOptimisticUserText(null);
+        setEmbeddedAiSessionOptimisticUserTimestamp(null);
+        setEmbeddedAiSessionOptimisticUserAnchorIndex(null);
+        setPreferredEmbeddedAiStreamRuntimeSessionId(null);
+        setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(null);
+      }
+
+      void refreshEmbeddedAiSessionActivity();
+      void refreshEmbeddedAiSessionArtifacts({
+        sessionId,
+      });
     }),
   );
+
+  createEffect(() => {
+    persistAiSessionShowSystemPromptsPreference(
+      embeddedAiSessionShowSystemPrompts(),
+    );
+  });
 
   createEffect(
     on(
@@ -2423,29 +2885,6 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       },
     ),
   );
-
-  createEffect(() => {
-    const sessionId = embeddedAiSessionId();
-    if (embeddedAiSessionPollTimer !== null) {
-      clearInterval(embeddedAiSessionPollTimer);
-      embeddedAiSessionPollTimer = null;
-    }
-
-    if (sessionId === null || props.contextId === null) {
-      return;
-    }
-
-    embeddedAiSessionPollTimer = setInterval(() => {
-      void refreshEmbeddedAiSession(sessionId);
-    }, EMBEDDED_AI_SESSION_POLL_MS);
-
-    onCleanup(() => {
-      if (embeddedAiSessionPollTimer !== null) {
-        clearInterval(embeddedAiSessionPollTimer);
-        embeddedAiSessionPollTimer = null;
-      }
-    });
-  });
 
   createEffect(() => {
     const optimisticUserText = embeddedAiSessionOptimisticUserText();
@@ -2473,28 +2912,312 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
 
   createEffect(() => {
     if (
-      embeddedAiSessionLiveAssistantStatusText() === null ||
-      embeddedAiSessionTranscript().some(
-        (transcriptLine) => transcriptLine.role === "assistant",
-      ) === false
+      !shouldRetireAiSessionLiveAssistantFromTranscript({
+        transcriptLines: embeddedAiSessionTranscript(),
+        optimisticAnchorIndex: embeddedAiSessionOptimisticUserAnchorIndex(),
+        liveAssistantPhase: embeddedAiSessionLiveAssistantPhase(),
+        liveAssistantText: embeddedAiSessionLiveAssistantText(),
+      })
     ) {
       return;
     }
 
     setEmbeddedAiSessionLiveAssistantText(null);
     setEmbeddedAiSessionLiveAssistantTimestamp(null);
+    setEmbeddedAiSessionLiveAssistantPhase("idle");
     setEmbeddedAiSessionLiveAssistantStatusText(null);
     setEmbeddedAiSessionOptimisticUserAnchorIndex(null);
   });
 
-  onCleanup(() => {
-    if (embeddedAiSessionPollTimer !== null) {
-      clearInterval(embeddedAiSessionPollTimer);
+  createEffect(() => {
+    const contextId = props.contextId;
+    const selectedSessionKey = embeddedAiSessionId();
+    const streamSessionId = embeddedAiStreamSessionId();
+    const nextStreamKey =
+      contextId !== null &&
+      selectedSessionKey !== null &&
+      streamSessionId !== null
+        ? `${streamSessionId}:${selectedSessionKey}`
+        : null;
+
+    if (nextStreamKey === activeEmbeddedAiSessionStreamKey) {
+      return;
     }
+
+    const preserveLiveAssistantState =
+      shouldPreserveAiSessionLiveAssistantStateOnStreamOpen({
+        selectedQraftAiSessionId: selectedSessionKey,
+        streamSessionId,
+        preferredRuntimeSessionId: preferredEmbeddedAiStreamRuntimeSessionId(),
+        preferredRuntimeSessionOwnerQraftAiSessionId:
+          preferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(),
+        liveAssistantPhase: embeddedAiSessionLiveAssistantPhase(),
+      });
+
+    activeEmbeddedAiSessionStreamKey = nextStreamKey;
+    activeEmbeddedAiSessionEventSource?.close();
+    activeEmbeddedAiSessionEventSource = null;
+    setEmbeddedAiSessionLiveAssistantText(null);
+    if (!preserveLiveAssistantState) {
+      setEmbeddedAiSessionLiveAssistantTimestamp(null);
+      setEmbeddedAiSessionLiveAssistantPhase("idle");
+      setEmbeddedAiSessionLiveAssistantStatusText(null);
+    }
+
+    if (
+      contextId === null ||
+      selectedSessionKey === null ||
+      streamSessionId === null
+    ) {
+      return;
+    }
+
+    const eventSource = new EventSource(
+      `${props.apiBaseUrl}/ai/sessions/${encodeURIComponent(streamSessionId)}/stream`,
+    );
+    activeEmbeddedAiSessionEventSource = eventSource;
+
+    const showLiveAssistantPlaceholder = (
+      phase: Exclude<AiSessionLiveAssistantPhase, "idle">,
+      statusText: string | null,
+      timestamp: string | null,
+    ): void => {
+      setEmbeddedAiSessionLiveAssistantPhase(phase);
+      setEmbeddedAiSessionLiveAssistantStatusText(
+        normalizeAiSessionLiveAssistantStatusText(statusText),
+      );
+      setEmbeddedAiSessionLiveAssistantTimestamp(timestamp);
+    };
+
+    const resolvePayloadTimestamp = (payload: {
+      readonly timestamp?: unknown;
+    }): string | null =>
+      typeof payload.timestamp === "string" ? payload.timestamp : null;
+
+    const handleConnected = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      showLiveAssistantPlaceholder("starting", "Thinking...", null);
+    };
+
+    const handleStreamOpen = (): void => {
+      if (
+        embeddedAiSessionLiveAssistantPhase() === "streaming" &&
+        embeddedAiSessionLiveAssistantText() !== null
+      ) {
+        return;
+      }
+
+      showLiveAssistantPlaceholder(
+        "starting",
+        embeddedAiSessionLiveAssistantStatusText() ?? "Thinking...",
+        embeddedAiSessionLiveAssistantTimestamp(),
+      );
+    };
+
+    const handleSessionStarted = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          "Thinking...",
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
+
+    const handleThinkingEvent = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: {
+            readonly message?: unknown;
+          };
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          typeof payload.data?.message === "string" &&
+            payload.data.message.length > 0
+            ? payload.data.message
+            : "Thinking...",
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
+
+    const handleToolLifecycleEvent = (
+      event: Event,
+      resolveStatusText: (payload: {
+        readonly data?: Record<string, unknown> | undefined;
+      }) => string,
+    ): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: Record<string, unknown>;
+          readonly timestamp?: unknown;
+        };
+        showLiveAssistantPlaceholder(
+          "thinking",
+          resolveStatusText(payload),
+          resolvePayloadTimestamp(payload),
+        );
+      } catch {
+        showLiveAssistantPlaceholder("thinking", "Thinking...", null);
+      }
+    };
+
+    const handleAssistantMessage = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      try {
+        const payload = JSON.parse(event.data) as {
+          readonly data?: {
+            readonly role?: unknown;
+            readonly content?: unknown;
+          };
+          readonly timestamp?: unknown;
+        };
+
+        if (payload.data?.role !== "assistant") {
+          return;
+        }
+
+        if (typeof payload.data.content !== "string") {
+          return;
+        }
+
+        setEmbeddedAiSessionLiveAssistantPhase("streaming");
+        setEmbeddedAiSessionLiveAssistantText(payload.data.content);
+        setEmbeddedAiSessionLiveAssistantTimestamp(
+          typeof payload.timestamp === "string" ? payload.timestamp : null,
+        );
+        setEmbeddedAiSessionLiveAssistantStatusText(null);
+      } catch {
+        // Ignore malformed SSE payloads.
+      }
+    };
+
+    const handleTerminalEvent = (event: Event): void => {
+      if (!(event instanceof MessageEvent)) {
+        return;
+      }
+
+      eventSource.close();
+      if (activeEmbeddedAiSessionEventSource === eventSource) {
+        activeEmbeddedAiSessionEventSource = null;
+        activeEmbeddedAiSessionStreamKey = null;
+      }
+      setPreferredEmbeddedAiStreamRuntimeSessionId(null);
+      setPreferredEmbeddedAiStreamRuntimeSessionOwnerQraftAiSessionId(null);
+      if (embeddedAiSessionLiveAssistantText() === null) {
+        setEmbeddedAiSessionLiveAssistantTimestamp(null);
+        setEmbeddedAiSessionLiveAssistantPhase("idle");
+        setEmbeddedAiSessionLiveAssistantStatusText(null);
+      }
+
+      void refreshEmbeddedAiSessionActivity();
+
+      if (embeddedAiSessionId() === selectedSessionKey) {
+        void refreshEmbeddedAiSessionArtifacts({
+          sessionId: selectedSessionKey,
+          preserveExistingContent: true,
+        });
+      }
+    };
+
+    eventSource.addEventListener("open", handleStreamOpen);
+    eventSource.addEventListener("connected", handleConnected);
+    eventSource.addEventListener("session_started", handleSessionStarted);
+    eventSource.addEventListener("thinking", handleThinkingEvent);
+    eventSource.addEventListener("tool_use", (event) =>
+      handleToolLifecycleEvent(event, (payload) => {
+        const toolName = payload.data?.toolName;
+        return typeof toolName === "string" && toolName.length > 0
+          ? `Using ${toolName}...`
+          : "Thinking...";
+      }),
+    );
+    eventSource.addEventListener("tool_result", (event) =>
+      handleToolLifecycleEvent(event, (payload) => {
+        const toolName = payload.data?.toolName;
+        return typeof toolName === "string" && toolName.length > 0
+          ? `Processing ${toolName} result...`
+          : "Thinking...";
+      }),
+    );
+    eventSource.addEventListener("message", handleAssistantMessage);
+    eventSource.addEventListener("completed", handleTerminalEvent);
+    eventSource.addEventListener("cancelled", handleTerminalEvent);
+    eventSource.addEventListener("error", handleTerminalEvent);
+  });
+
+  onCleanup(() => {
+    activeEmbeddedAiSessionEventSource?.close();
     if (embeddedAiSessionCopyResetTimer !== null) {
       clearTimeout(embeddedAiSessionCopyResetTimer);
     }
   });
+
+  createEffect(
+    on(
+      () =>
+        [
+          props.fileContent?.path ?? null,
+          props.fileContent?.language ?? "",
+        ] as const,
+      () => {
+        setFullFileMarkdownPreviewMode(
+          resolveFullFileMarkdownPreviewMode({
+            fileContent: props.fileContent,
+          }),
+        );
+      },
+      {
+        defer: false,
+      },
+    ),
+  );
+
+  createEffect(
+    on(
+      () =>
+        [
+          renderedFullFileMarkdownHtml(),
+          shouldRenderFullFileMarkdownPreview(),
+        ] as const,
+      ([, shouldRenderMarkdownPreview]) => {
+        if (!shouldRenderMarkdownPreview) {
+          return;
+        }
+
+        if (fullFileMarkdownPreviewElement !== undefined) {
+          enhanceMarkdownElements(fullFileMarkdownPreviewElement);
+        }
+      },
+    ),
+  );
 
   createEffect(
     on(
@@ -4454,7 +5177,49 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                               </Match>
 
                               <Match when={effectiveViewMode() === "full-file"}>
-                                <div class={compactViewerContainerClass()}>
+                                <div class={fullFileViewerContainerClass()}>
+                                  <Show
+                                    when={isFullFileMarkdownPreviewAvailable()}
+                                  >
+                                    <div class="flex items-center justify-end border-b border-border-default/60 bg-bg-secondary px-4 py-2">
+                                      <div class="inline-flex items-center gap-1 rounded-md border border-border-default bg-bg-primary p-1">
+                                        <For
+                                          each={
+                                            [
+                                              "source",
+                                              "rendered",
+                                            ] as const satisfies readonly FullFileMarkdownPreviewMode[]
+                                          }
+                                        >
+                                          {(previewMode) => (
+                                            <button
+                                              type="button"
+                                              class={`rounded px-3 py-1.5 text-xs font-medium transition ${
+                                                fullFileMarkdownPreviewMode() ===
+                                                previewMode
+                                                  ? "bg-accent-emphasis text-text-on-emphasis"
+                                                  : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+                                              }`}
+                                              aria-pressed={
+                                                fullFileMarkdownPreviewMode() ===
+                                                previewMode
+                                              }
+                                              aria-label={`Show ${renderMarkdownPreviewModeLabel(previewMode).toLowerCase()} markdown view`}
+                                              onClick={() =>
+                                                setFullFileMarkdownPreviewMode(
+                                                  previewMode,
+                                                )
+                                              }
+                                            >
+                                              {renderMarkdownPreviewModeLabel(
+                                                previewMode,
+                                              )}
+                                            </button>
+                                          )}
+                                        </For>
+                                      </div>
+                                    </div>
+                                  </Show>
                                   <Show
                                     when={
                                       !isRenderableBinaryFile(props.fileContent)
@@ -4477,93 +5242,34 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                       }
                                     >
                                       <Show
-                                        when={fullFileLines().length > 0}
+                                        when={shouldRenderFullFileMarkdownPreview()}
                                         fallback={
-                                          <div class="px-6 py-12 text-sm text-text-secondary">
-                                            The selected file is empty.
-                                          </div>
-                                        }
-                                      >
-                                        <For each={highlightedFullFileLines()}>
-                                          {(lineTokens, lineIndex) => (
-                                            <>
-                                              <div
-                                                data-qraftbox-line={
-                                                  lineIndex() + 1
-                                                }
-                                                class={`group/line grid ${fullFileColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()} ${getSelectedLineClass(
-                                                  lineIndex() + 1 ===
-                                                    props.selectedLineNumber &&
-                                                    !isInlineCommentHighlightedLine(
-                                                      lineIndex() + 1,
-                                                      "full-file",
-                                                      "new",
-                                                    ),
-                                                )} ${getInlineCommentLineClass({
-                                                  isSelected:
-                                                    isActiveInlineCommentLine(
-                                                      lineIndex() + 1,
-                                                      "full-file",
-                                                      "new",
-                                                    ),
-                                                  isRangeAnchor:
-                                                    isPendingInlineCommentAnchorLine(
-                                                      lineIndex() + 1,
-                                                      "full-file",
-                                                      "new",
-                                                    ),
-                                                })}`}
-                                                onClick={() =>
-                                                  selectPreviewLine(
-                                                    lineIndex() + 1,
-                                                  )
-                                                }
-                                              >
-                                                <div class="relative px-4 py-1 text-right text-text-tertiary">
-                                                  <Show
-                                                    when={canUseFullFileInlineActions()}
-                                                  >
-                                                    <button
-                                                      type="button"
-                                                      class="absolute left-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-accent-emphasis text-[11px] font-semibold text-text-on-emphasis opacity-0 transition group-hover/line:opacity-100 hover:brightness-110"
-                                                      aria-label={
-                                                        "Add comment on line " +
-                                                        (lineIndex() + 1)
-                                                      }
-                                                      title={resolveInlineCommentTriggerButtonTitle(
-                                                        lineIndex() + 1,
-                                                      )}
-                                                      onClick={(event) => {
-                                                        event.stopPropagation();
-                                                        openInlineCommentComposer(
-                                                          {
-                                                            lineNumber:
-                                                              lineIndex() + 1,
-                                                            source: "full-file",
-                                                            side: "new",
-                                                            extendRange:
-                                                              event.shiftKey,
-                                                          },
-                                                        );
-                                                      }}
-                                                      onDblClick={(event) => {
-                                                        event.stopPropagation();
-                                                        openInlineCommentRangeAnchor(
-                                                          {
-                                                            lineNumber:
-                                                              lineIndex() + 1,
-                                                            source: "full-file",
-                                                            side: "new",
-                                                          },
-                                                        );
-                                                      }}
-                                                    >
-                                                      +
-                                                    </button>
-                                                  </Show>
-                                                  <button
-                                                    type="button"
-                                                    class={`rounded px-1 transition ${getInlineCommentLineButtonClass(
+                                          <Show
+                                            when={fullFileLines().length > 0}
+                                            fallback={
+                                              <div class="px-6 py-12 text-sm text-text-secondary">
+                                                The selected file is empty.
+                                              </div>
+                                            }
+                                          >
+                                            <For
+                                              each={highlightedFullFileLines()}
+                                            >
+                                              {(lineTokens, lineIndex) => (
+                                                <>
+                                                  <div
+                                                    data-qraftbox-line={
+                                                      lineIndex() + 1
+                                                    }
+                                                    class={`group/line grid ${fullFileColumnsClass()} border-b border-border-default/60 font-mono ${previewCodeTextClass()} ${getSelectedLineClass(
+                                                      lineIndex() + 1 ===
+                                                        props.selectedLineNumber &&
+                                                        !isInlineCommentHighlightedLine(
+                                                          lineIndex() + 1,
+                                                          "full-file",
+                                                          "new",
+                                                        ),
+                                                    )} ${getInlineCommentLineClass(
                                                       {
                                                         isSelected:
                                                           isActiveInlineCommentLine(
@@ -4579,68 +5285,166 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                                           ),
                                                       },
                                                     )}`}
-                                                    aria-label={
-                                                      "Select line " +
-                                                      (lineIndex() + 1)
-                                                    }
-                                                    title={resolveSelectedLineButtonTitle(
-                                                      lineIndex() + 1,
-                                                    )}
-                                                    onClick={(event) => {
-                                                      event.stopPropagation();
+                                                    onClick={() =>
                                                       selectPreviewLine(
                                                         lineIndex() + 1,
-                                                      );
-                                                    }}
+                                                      )
+                                                    }
                                                   >
-                                                    {lineIndex() + 1}
-                                                  </button>
-                                                </div>
-                                                <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
-                                                  <Show
-                                                    when={lineTokens.length > 0}
-                                                    fallback={" "}
-                                                  >
-                                                    <For each={lineTokens}>
-                                                      {(lineToken) => (
-                                                        <span
-                                                          class={
-                                                            lineToken.className
+                                                    <div class="relative px-4 py-1 text-right text-text-tertiary">
+                                                      <Show
+                                                        when={canUseFullFileInlineActions()}
+                                                      >
+                                                        <button
+                                                          type="button"
+                                                          class="absolute left-1 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-accent-emphasis text-[11px] font-semibold text-text-on-emphasis opacity-0 transition group-hover/line:opacity-100 hover:brightness-110"
+                                                          aria-label={
+                                                            "Add comment on line " +
+                                                            (lineIndex() + 1)
                                                           }
-                                                          style={
-                                                            lineToken.color !==
-                                                            undefined
-                                                              ? {
-                                                                  color:
-                                                                    lineToken.color,
-                                                                }
-                                                              : undefined
-                                                          }
+                                                          title={resolveInlineCommentTriggerButtonTitle(
+                                                            lineIndex() + 1,
+                                                          )}
+                                                          onClick={(event) => {
+                                                            event.stopPropagation();
+                                                            openInlineCommentComposer(
+                                                              {
+                                                                lineNumber:
+                                                                  lineIndex() +
+                                                                  1,
+                                                                source:
+                                                                  "full-file",
+                                                                side: "new",
+                                                                extendRange:
+                                                                  event.shiftKey,
+                                                              },
+                                                            );
+                                                          }}
+                                                          onDblClick={(
+                                                            event,
+                                                          ) => {
+                                                            event.stopPropagation();
+                                                            openInlineCommentRangeAnchor(
+                                                              {
+                                                                lineNumber:
+                                                                  lineIndex() +
+                                                                  1,
+                                                                source:
+                                                                  "full-file",
+                                                                side: "new",
+                                                              },
+                                                            );
+                                                          }}
                                                         >
-                                                          {lineToken.text
-                                                            .length > 0
-                                                            ? lineToken.text
-                                                            : " "}
-                                                        </span>
-                                                      )}
-                                                    </For>
+                                                          +
+                                                        </button>
+                                                      </Show>
+                                                      <button
+                                                        type="button"
+                                                        class={`rounded px-1 transition ${getInlineCommentLineButtonClass(
+                                                          {
+                                                            isSelected:
+                                                              isActiveInlineCommentLine(
+                                                                lineIndex() + 1,
+                                                                "full-file",
+                                                                "new",
+                                                              ),
+                                                            isRangeAnchor:
+                                                              isPendingInlineCommentAnchorLine(
+                                                                lineIndex() + 1,
+                                                                "full-file",
+                                                                "new",
+                                                              ),
+                                                          },
+                                                        )}`}
+                                                        aria-label={
+                                                          "Select line " +
+                                                          (lineIndex() + 1)
+                                                        }
+                                                        title={resolveSelectedLineButtonTitle(
+                                                          lineIndex() + 1,
+                                                        )}
+                                                        onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          selectPreviewLine(
+                                                            lineIndex() + 1,
+                                                          );
+                                                        }}
+                                                      >
+                                                        {lineIndex() + 1}
+                                                      </button>
+                                                    </div>
+                                                    <div class="px-4 py-1 whitespace-pre-wrap break-words text-text-primary">
+                                                      <Show
+                                                        when={
+                                                          lineTokens.length > 0
+                                                        }
+                                                        fallback={" "}
+                                                      >
+                                                        <For each={lineTokens}>
+                                                          {(lineToken) => (
+                                                            <span
+                                                              class={
+                                                                lineToken.className
+                                                              }
+                                                              style={
+                                                                lineToken.color !==
+                                                                undefined
+                                                                  ? {
+                                                                      color:
+                                                                        lineToken.color,
+                                                                    }
+                                                                  : undefined
+                                                              }
+                                                            >
+                                                              {lineToken.text
+                                                                .length > 0
+                                                                ? lineToken.text
+                                                                : " "}
+                                                            </span>
+                                                          )}
+                                                        </For>
+                                                      </Show>
+                                                    </div>
+                                                  </div>
+                                                  <Show
+                                                    when={
+                                                      activeInlineCommentSource() ===
+                                                        "full-file" &&
+                                                      activeFullFileRange()
+                                                        ?.endLine ===
+                                                        lineIndex() + 1
+                                                    }
+                                                  >
+                                                    {renderInlineCommentComposer()}
                                                   </Show>
-                                                </div>
-                                              </div>
-                                              <Show
-                                                when={
-                                                  activeInlineCommentSource() ===
-                                                    "full-file" &&
-                                                  activeFullFileRange()
-                                                    ?.endLine ===
-                                                    lineIndex() + 1
-                                                }
-                                              >
-                                                {renderInlineCommentComposer()}
-                                              </Show>
-                                            </>
-                                          )}
-                                        </For>
+                                                </>
+                                              )}
+                                            </For>
+                                          </Show>
+                                        }
+                                      >
+                                        <Show
+                                          when={
+                                            (props.fileContent?.content
+                                              .length ?? 0) > 0
+                                          }
+                                          fallback={
+                                            <div class="px-6 py-12 text-sm text-text-secondary">
+                                              The selected file is empty.
+                                            </div>
+                                          }
+                                        >
+                                          <div class="qraftbox-file-markdown-preview px-6 py-6">
+                                            <article
+                                              ref={
+                                                fullFileMarkdownPreviewElement
+                                              }
+                                              class="qraftbox-markdown"
+                                              innerHTML={renderedFullFileMarkdownHtml()}
+                                            />
+                                          </div>
+                                        </Show>
                                       </Show>
                                     </Show>
                                   </Show>
@@ -4954,24 +5758,87 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                               }
                               toolbarActions={
                                 <>
+                                  <button
+                                    type="button"
+                                    class={`rounded-md border p-2 transition ${
+                                      embeddedAiSessionShowSystemPrompts()
+                                        ? "border-accent-emphasis/50 bg-accent-muted text-accent-fg"
+                                        : "border-border-default bg-bg-primary text-text-secondary hover:bg-bg-hover hover:text-text-primary"
+                                    }`}
+                                    aria-pressed={embeddedAiSessionShowSystemPrompts()}
+                                    aria-label={
+                                      embeddedAiSessionShowSystemPrompts()
+                                        ? "Hide system prompts"
+                                        : hiddenEmbeddedAiSystemPromptCount() >
+                                            0
+                                          ? `Show system prompts (${hiddenEmbeddedAiSystemPromptCount()} hidden)`
+                                          : "Show system prompts"
+                                    }
+                                    title={
+                                      embeddedAiSessionShowSystemPrompts()
+                                        ? "Hide system prompts"
+                                        : hiddenEmbeddedAiSystemPromptCount() >
+                                            0
+                                          ? `Show system prompts (${hiddenEmbeddedAiSystemPromptCount()} hidden)`
+                                          : "Show system prompts"
+                                    }
+                                    onClick={() =>
+                                      setEmbeddedAiSessionShowSystemPrompts(
+                                        !embeddedAiSessionShowSystemPrompts(),
+                                      )
+                                    }
+                                  >
+                                    {renderSystemPromptVisibilityIcon(
+                                      embeddedAiSessionShowSystemPrompts()
+                                        ? 0
+                                        : hiddenEmbeddedAiSystemPromptCount(),
+                                    )}
+                                  </button>
                                   <ToolbarIconButton
                                     label="Reset chat"
                                     onClick={clearEmbeddedAiSession}
                                   >
                                     {renderReloadIcon()}
                                   </ToolbarIconButton>
+                                  <ToolbarIconButton
+                                    label="Jump to head"
+                                    disabled={
+                                      embeddedAiSessionTranscriptCollapsed() ||
+                                      embeddedAiSessionLoading() ||
+                                      embeddedAiSessionLoadingMore() ||
+                                      formattedEmbeddedAiSessionTranscript()
+                                        .length === 0
+                                    }
+                                    onClick={() =>
+                                      void jumpEmbeddedAiTranscriptToHead()
+                                    }
+                                  >
+                                    {renderJumpToHeadIcon()}
+                                  </ToolbarIconButton>
+                                  <ToolbarIconButton
+                                    label="Jump to latest"
+                                    disabled={
+                                      embeddedAiSessionTranscriptCollapsed() ||
+                                      formattedEmbeddedAiSessionTranscript()
+                                        .length === 0
+                                    }
+                                    onClick={() =>
+                                      scrollEmbeddedAiTranscriptToLatest()
+                                    }
+                                  >
+                                    {renderJumpToLatestIcon()}
+                                  </ToolbarIconButton>
                                   <Show when={embeddedAiSessionId() !== null}>
-                                    <button
-                                      type="button"
-                                      class="rounded-md border border-border-default bg-bg-primary px-3 py-2 text-xs font-medium text-text-primary transition hover:bg-bg-hover"
+                                    <ToolbarIconButton
+                                      label="Open session"
                                       onClick={() =>
                                         props.onOpenAiSession(
                                           embeddedAiSessionId()!,
                                         )
                                       }
                                     >
-                                      Open session
-                                    </button>
+                                      {renderExternalLinkIcon()}
+                                    </ToolbarIconButton>
                                   </Show>
                                   <Show
                                     when={isPhoneViewport()}
@@ -5046,8 +5913,14 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                   </div>
                                 </Show>
                               }
+                              transcriptContainerRef={(element) => {
+                                embeddedAiTranscriptScrollContainer = element;
+                              }}
+                              onTranscriptScroll={
+                                handleEmbeddedAiTranscriptScroll
+                              }
                               transcriptLoading={embeddedAiSessionLoading()}
-                              transcriptLoadingMore={false}
+                              transcriptLoadingMore={embeddedAiSessionLoadingMore()}
                               transcriptError={embeddedAiSessionError()}
                               transcriptLines={formattedEmbeddedAiSessionTranscript()}
                               copiedTranscriptLineId={embeddedAiSessionCopiedTranscriptLineId()}
@@ -5056,7 +5929,11 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                                   transcriptLine,
                                 )
                               }
-                              emptyTranscriptText="Start a new chat and its transcript will appear here."
+                              emptyTranscriptText={
+                                hiddenEmbeddedAiSystemPromptCount() > 0
+                                  ? "Only system prompts are currently hidden for this session."
+                                  : "Start a new chat and its transcript will appear here."
+                              }
                               composerCollapsed={embeddedAiSessionComposerCollapsed()}
                               onToggleComposerCollapsed={() =>
                                 setEmbeddedAiSessionComposerCollapsed(

@@ -50,6 +50,8 @@ import {
   canLoadMoreAiSessionHistory,
   canLoadMoreAiSessionTranscript,
   canClearAiSessionSearch,
+  countAiSessionSystemPromptLines,
+  createAiSessionTranscriptPageState,
   type AiSessionRequestToken,
   createAiSessionDefaultPromptMessage,
   createAiSessionImageAttachmentReferences,
@@ -64,12 +66,13 @@ import {
   createAiSessionScopeResetLoadingState,
   isAiSessionComposerBusy,
   createLatestAiSessionRequestGuard,
+  fetchAiSessionDetailArtifacts,
+  filterAiSessionTranscriptSystemPromptLines,
   isAiSessionScopeCurrent,
-  mergeAiSessionTranscriptLines,
+  loadAiSessionShowSystemPromptsPreference,
   parseAiSessionOverviewRouteState,
+  persistAiSessionShowSystemPromptsPreference,
   readAiSessionOverviewRouteSearchFromHash,
-  resolveLatestAiSessionTranscriptOffset,
-  resolvePreviousAiSessionTranscriptOffset,
   resolveAiSessionRequestToken,
   resolveAiSessionRuntimeSession,
   resolveAiSessionStreamSessionId,
@@ -101,8 +104,6 @@ const IDLE_SESSION_POLL_MS = 20_000;
 const SESSION_HISTORY_PAGE_SIZE = 20;
 const SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE = 200;
 const MAX_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
-const SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
-  "qraftbox:session-transcript-show-system-prompts";
 const DEFAULT_PROMPT_ACTION_LABELS: Readonly<
   Record<
     AiSessionDefaultPromptAction,
@@ -182,16 +183,6 @@ function readImageFileAsDataUrl(file: File): Promise<string> {
 
 function detectPhoneViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth <= 768;
-}
-
-function loadSystemPromptVisibility(): boolean {
-  try {
-    return (
-      window.localStorage.getItem(SHOW_SYSTEM_PROMPTS_STORAGE_KEY) === "true"
-    );
-  } catch {
-    return false;
-  }
 }
 
 function renderSearchIcon(): JSX.Element {
@@ -543,7 +534,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setPreferredStreamRuntimeSessionOwnerQraftAiSessionId,
   ] = createSignal<QraftAiSessionId | null>(null);
   const [showSystemPrompts, setShowSystemPrompts] = createSignal(
-    loadSystemPromptVisibility(),
+    loadAiSessionShowSystemPromptsPreference(),
   );
   const [copiedTranscriptLineId, setCopiedTranscriptLineId] = createSignal<
     string | null
@@ -615,13 +606,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     });
   };
   const visibleSelectedSessionTranscript = () =>
-    displayedSelectedSessionTranscript().filter(
-      (transcriptLine) => showSystemPrompts() || transcriptLine.role !== "system",
-    );
+    filterAiSessionTranscriptSystemPromptLines({
+      transcriptLines: displayedSelectedSessionTranscript(),
+      showSystemPrompts: showSystemPrompts(),
+    });
   const hiddenSystemPromptCount = () =>
-    displayedSelectedSessionTranscript().filter(
-      (transcriptLine) => transcriptLine.role === "system",
-    ).length;
+    countAiSessionSystemPromptLines(displayedSelectedSessionTranscript());
   const transcriptSectionSummary = () => {
     if (selectedQraftAiSessionId() === null) {
       return "New sessions start without chat history.";
@@ -795,14 +785,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
   }
 
   createEffect(() => {
-    try {
-      window.localStorage.setItem(
-        SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
-        showSystemPrompts() ? "true" : "false",
-      );
-    } catch {
-      // localStorage unavailable
-    }
+    persistAiSessionShowSystemPromptsPreference(showSystemPrompts());
   });
 
   createEffect(() => {
@@ -1136,114 +1119,60 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
     setSelectedSessionError(null);
 
     try {
-      const sessionDetailPromise =
-        params.loadOlderTranscript || params.preserveExistingContent === true
-          ? Promise.resolve(selectedSessionDetail())
-          : params.hasHistoricalSession
-            ? aiSessionsApi.fetchClaudeSession(
-                params.contextId,
-                params.qraftAiSessionId,
-              )
-            : Promise.resolve(null);
-
-      const transcriptPromise = params.loadOlderTranscript
-        ? (() => {
-            const previousTranscriptOffset =
-              resolvePreviousAiSessionTranscriptOffset({
-                currentOffset: currentTranscriptStartOffset,
-                pageSize: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-              });
-            const previousTranscriptLimit = Math.max(
-              1,
-              currentTranscriptStartOffset - previousTranscriptOffset,
-            );
-
-            return aiSessionsApi.fetchClaudeSessionTranscript(
+      const { sessionDetail, transcript } = await fetchAiSessionDetailArtifacts(
+        {
+          pageSize: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
+          loadOlderTranscript: params.loadOlderTranscript,
+          preserveExistingContent: params.preserveExistingContent === true,
+          hasHistoricalSession: params.hasHistoricalSession,
+          currentSessionDetail: selectedSessionDetail(),
+          currentTranscriptStartOffset,
+          currentLoadedEventCount,
+          fetchSessionDetail: () =>
+            aiSessionsApi.fetchClaudeSession(
               params.contextId,
               params.qraftAiSessionId,
-              {
-                offset: previousTranscriptOffset,
-                limit: previousTranscriptLimit,
-              },
-            );
-          })()
-        : params.preserveExistingContent === true
-          ? aiSessionsApi.fetchClaudeSessionTranscript(
+            ),
+          fetchTranscript: (query) =>
+            aiSessionsApi.fetchClaudeSessionTranscript(
               params.contextId,
               params.qraftAiSessionId,
-              {
-                offset: currentTranscriptStartOffset,
-                limit: Math.min(
-                  Math.max(
-                    currentLoadedEventCount +
-                      SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-                    SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-                  ),
-                  1000,
-                ),
-              },
-            )
-          : (async () => {
-              const transcriptProbe =
-                await aiSessionsApi.fetchClaudeSessionTranscript(
-                  params.contextId,
-                  params.qraftAiSessionId,
-                  {
-                    offset: 0,
-                    limit: 1,
-                  },
-                );
-              const latestTranscriptOffset =
-                resolveLatestAiSessionTranscriptOffset({
-                  totalCount: transcriptProbe.total,
-                  pageSize: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-                });
-
-              return aiSessionsApi.fetchClaudeSessionTranscript(
-                params.contextId,
-                params.qraftAiSessionId,
-                {
-                  offset: latestTranscriptOffset,
-                  limit: SELECTED_SESSION_TRANSCRIPT_PAGE_SIZE,
-                },
-              );
-            })();
-
-      const [sessionDetail, transcript] = await Promise.all([
-        sessionDetailPromise,
-        transcriptPromise,
-      ]);
+              query,
+            ),
+        },
+      );
 
       if (!selectedSessionRequestGuard.isCurrent(requestToken)) {
         return;
       }
 
       setSelectedSessionDetail(sessionDetail);
-      const nextTranscriptLines = buildAiSessionTranscriptLines(
-        transcript.events,
-        {
-          offset: transcript.offset,
-        },
-      );
-      setSelectedSessionTranscript((currentTranscriptLines) => {
-        const mergedTranscriptLines = mergeAiSessionTranscriptLines(
-          currentTranscriptLines,
-          nextTranscriptLines,
-          params.loadOlderTranscript,
-        );
+      if (transcript === null) {
+        return;
+      }
 
-        return reconcileAiSessionTranscriptLines(
-          currentTranscriptLines,
-          mergedTranscriptLines,
-        );
+      const nextTranscriptState = createAiSessionTranscriptPageState({
+        currentTranscriptLines: selectedSessionTranscript(),
+        nextTranscriptLines: buildAiSessionTranscriptLines(transcript.events, {
+          offset: transcript.offset,
+        }),
+        currentLoadedEventCount,
+        loadOlderTranscript: params.loadOlderTranscript,
+        transcriptOffset: transcript.offset,
+        transcriptTotal: transcript.total,
+        transcriptEventCount: transcript.events.length,
       });
-      setSelectedSessionTranscriptLoadedEventCount(
-        params.loadOlderTranscript
-          ? currentLoadedEventCount + transcript.events.length
-          : transcript.events.length,
+      setSelectedSessionTranscript((currentTranscriptLines) =>
+        reconcileAiSessionTranscriptLines(
+          currentTranscriptLines,
+          nextTranscriptState.transcriptLines,
+        ),
       );
-      setSelectedSessionTranscriptStartOffset(transcript.offset);
-      setSelectedSessionTranscriptTotal(transcript.total);
+      setSelectedSessionTranscriptLoadedEventCount(
+        nextTranscriptState.loadedEventCount,
+      );
+      setSelectedSessionTranscriptStartOffset(nextTranscriptState.startOffset);
+      setSelectedSessionTranscriptTotal(nextTranscriptState.totalCount);
 
       if (
         !params.loadOlderTranscript &&

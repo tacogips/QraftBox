@@ -1,7 +1,7 @@
-import { For, Show, type JSX } from "solid-js";
+import { createEffect, For, Show, type JSX } from "solid-js";
 import { ToolbarIconButton } from "../../components/ToolbarIconButton";
+import { enhanceMarkdownElements, renderMarkdownHtml } from "../../lib/markdown";
 import type { AiSessionTranscriptLine } from "./presentation";
-import { renderAiSessionMarkdown } from "./markdown";
 
 export interface AiSessionChatPaneImageAttachment {
   readonly id: string;
@@ -134,6 +134,15 @@ function getTranscriptLineRoleBadgeClass(
 }
 
 export function AiSessionChatPane(props: AiSessionChatPaneProps): JSX.Element {
+  let transcriptMarkdownContainerElement: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    props.transcriptLines;
+    if (transcriptMarkdownContainerElement !== undefined) {
+      enhanceMarkdownElements(transcriptMarkdownContainerElement);
+    }
+  });
+
   return (
     <div class="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border border-border-default bg-bg-secondary">
       <div class="flex items-start justify-between gap-3 border-b border-border-default px-4 py-3">
@@ -238,7 +247,7 @@ export function AiSessionChatPane(props: AiSessionChatPaneProps): JSX.Element {
               {props.transcriptError}
             </p>
           </Show>
-          <div class="space-y-3">
+          <div ref={transcriptMarkdownContainerElement} class="space-y-3">
             <For each={props.transcriptLines}>
               {(transcriptLine) => (
                 <article class={getTranscriptLineCardClass(transcriptLine)}>
@@ -272,10 +281,10 @@ export function AiSessionChatPane(props: AiSessionChatPaneProps): JSX.Element {
                     </div>
                   </div>
                   <div
-                    class={`transcript-markdown break-words text-sm leading-6 text-text-primary ${
+                    class={`qraftbox-markdown break-words text-sm leading-6 text-text-primary ${
                       transcriptLine.isThinking ? "animate-thinking-blink" : ""
                     }`}
-                    innerHTML={renderAiSessionMarkdown(transcriptLine.text)}
+                    innerHTML={renderMarkdownHtml(transcriptLine.text)}
                   />
                 </article>
               )}

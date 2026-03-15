@@ -6,6 +6,7 @@ import {
 } from "../../../../src/types/ai";
 import type {
   AISessionInfo,
+  AiSessionTranscriptResponse,
   PromptQueueItem,
 } from "../../../../client-shared/src/api/ai-sessions";
 import { buildScreenHash } from "../../../../client-shared/src/contracts/navigation";
@@ -54,6 +55,74 @@ export function shouldShowAiSessionComposer(params: {
   readonly isDraftComposerOpen: boolean;
 }): boolean {
   return params.selectedQraftAiSessionId !== null || params.isDraftComposerOpen;
+}
+
+export const AI_SESSION_SHOW_SYSTEM_PROMPTS_STORAGE_KEY =
+  "qraftbox:session-transcript-show-system-prompts";
+
+export function loadAiSessionShowSystemPromptsPreference(
+  storage: Pick<Storage, "getItem"> | null | undefined = typeof window ===
+  "undefined"
+    ? null
+    : window.localStorage,
+): boolean {
+  try {
+    return (
+      storage?.getItem(AI_SESSION_SHOW_SYSTEM_PROMPTS_STORAGE_KEY) === "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function persistAiSessionShowSystemPromptsPreference(
+  showSystemPrompts: boolean,
+  storage: Pick<Storage, "setItem"> | null | undefined = typeof window ===
+  "undefined"
+    ? null
+    : window.localStorage,
+): void {
+  try {
+    storage?.setItem(
+      AI_SESSION_SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
+      showSystemPrompts ? "true" : "false",
+    );
+  } catch {
+    // localStorage unavailable
+  }
+}
+
+export function filterAiSessionTranscriptSystemPromptLines<
+  TranscriptLine extends {
+    readonly role: "user" | "assistant" | "system";
+    readonly isInjectedSystemPrompt?: boolean | undefined;
+  },
+>(params: {
+  readonly transcriptLines: readonly TranscriptLine[];
+  readonly showSystemPrompts: boolean;
+}): readonly TranscriptLine[] {
+  if (params.showSystemPrompts) {
+    return params.transcriptLines;
+  }
+
+  return params.transcriptLines.filter(
+    (transcriptLine) =>
+      transcriptLine.role !== "system" &&
+      transcriptLine.isInjectedSystemPrompt !== true,
+  );
+}
+
+export function countAiSessionSystemPromptLines<
+  TranscriptLine extends {
+    readonly role: "user" | "assistant" | "system";
+    readonly isInjectedSystemPrompt?: boolean | undefined;
+  },
+>(transcriptLines: readonly TranscriptLine[]): number {
+  return transcriptLines.filter(
+    (transcriptLine) =>
+      transcriptLine.role === "system" ||
+      transcriptLine.isInjectedSystemPrompt === true,
+  ).length;
 }
 
 export function shouldAutoRefreshAiSessionOverview(params: {
@@ -192,10 +261,6 @@ export interface AiSessionPromptContextState {
   readonly changedFileCount: number;
 }
 
-function countFileContentLines(fileContent: string): number {
-  return fileContent.length === 0 ? 1 : fileContent.split("\n").length;
-}
-
 export interface AiSessionOverviewRouteState {
   readonly selectedSessionId: QraftAiSessionId | null;
   readonly isDraftComposerOpen: boolean;
@@ -262,19 +327,7 @@ function resolveFileReferenceAttachmentKind(
     return "binary";
   }
 
-  return "text";
-}
-
-function canInlineFileContent(
-  fileContent: FileContent | null,
-): fileContent is FileContent {
-  return (
-    fileContent !== null &&
-    fileContent.isBinary !== true &&
-    fileContent.isImage !== true &&
-    fileContent.isVideo !== true &&
-    fileContent.isPdf !== true
-  );
+  return undefined;
 }
 
 export function createAiSessionPromptContextState(
@@ -299,9 +352,6 @@ export function createAiSessionPromptContextState(
       {
         path: input.selectedPath,
         fileName: selectedFileName,
-        content: canInlineFileContent(selectedFileContent)
-          ? selectedFileContent.content
-          : undefined,
         mimeType: selectedFileContent?.mimeType,
         attachmentKind: resolveFileReferenceAttachmentKind(selectedFileContent),
       },
@@ -322,22 +372,10 @@ export function createAiSessionSubmitContext(
   }
 
   const promptContextState = createAiSessionPromptContextState(input);
-  const selectedFileContent =
-    input.fileContent?.path === input.selectedPath ? input.fileContent : null;
-  const canInlinePrimaryFile = canInlineFileContent(selectedFileContent);
 
   return {
-    primaryFile: canInlinePrimaryFile
-      ? {
-          path: input.selectedPath,
-          startLine: 1,
-          endLine:
-            selectedFileContent.lineCount ??
-            countFileContentLines(selectedFileContent.content),
-          content: selectedFileContent.content,
-        }
-      : undefined,
-    references: canInlinePrimaryFile ? [] : promptContextState.references,
+    primaryFile: undefined,
+    references: promptContextState.references,
     diffSummary: undefined,
   };
 }
@@ -735,6 +773,196 @@ export function canApplyAiSessionScopedRequestResult(params: {
 
 export interface AiSessionTranscriptLineLike {
   readonly id: string;
+}
+
+export interface AiSessionTranscriptQuery {
+  readonly offset: number;
+  readonly limit: number;
+}
+
+export interface AiSessionTranscriptPageState<TranscriptLine> {
+  readonly transcriptLines: readonly TranscriptLine[];
+  readonly loadedEventCount: number;
+  readonly startOffset: number;
+  readonly totalCount: number;
+}
+
+export function resolveLatestAiSessionTranscriptQuery(params: {
+  readonly totalCount: number;
+  readonly pageSize: number;
+}): AiSessionTranscriptQuery {
+  return {
+    offset: resolveLatestAiSessionTranscriptOffset(params),
+    limit: params.pageSize,
+  };
+}
+
+export function resolvePreviousAiSessionTranscriptQuery(params: {
+  readonly currentOffset: number;
+  readonly pageSize: number;
+}): AiSessionTranscriptQuery {
+  const previousTranscriptOffset = resolvePreviousAiSessionTranscriptOffset({
+    currentOffset: params.currentOffset,
+    pageSize: params.pageSize,
+  });
+
+  return {
+    offset: previousTranscriptOffset,
+    limit: Math.max(1, params.currentOffset - previousTranscriptOffset),
+  };
+}
+
+export function resolvePreservedAiSessionTranscriptQuery(params: {
+  readonly currentOffset: number;
+  readonly currentLoadedEventCount: number;
+  readonly pageSize: number;
+}): AiSessionTranscriptQuery {
+  return {
+    offset: params.currentOffset,
+    limit: Math.min(
+      Math.max(
+        params.currentLoadedEventCount + params.pageSize,
+        params.pageSize,
+      ),
+      1000,
+    ),
+  };
+}
+
+export async function fetchAiSessionDetailArtifacts<SessionDetail>(params: {
+  readonly pageSize: number;
+  readonly loadOlderTranscript: boolean;
+  readonly preserveExistingContent: boolean;
+  readonly hasHistoricalSession: boolean;
+  readonly currentSessionDetail: SessionDetail | null;
+  readonly currentTranscriptStartOffset: number;
+  readonly currentLoadedEventCount: number;
+  readonly fetchSessionDetail: () => Promise<SessionDetail>;
+  readonly fetchTranscript: (
+    query: AiSessionTranscriptQuery,
+  ) => Promise<AiSessionTranscriptResponse>;
+  readonly isPendingResourceError?: ((error: unknown) => boolean) | undefined;
+}): Promise<{
+  readonly sessionDetail: SessionDetail | null;
+  readonly transcript: AiSessionTranscriptResponse | null;
+}> {
+  const fetchWithPendingResourceFallback = async <Value>(
+    loadValue: () => Promise<Value>,
+  ): Promise<Value | null> => {
+    try {
+      return await loadValue();
+    } catch (error) {
+      if (params.isPendingResourceError?.(error) === true) {
+        return null;
+      }
+
+      throw error;
+    }
+  };
+
+  const sessionDetailPromise =
+    params.loadOlderTranscript || params.preserveExistingContent
+      ? Promise.resolve(params.currentSessionDetail)
+      : params.hasHistoricalSession
+        ? params.isPendingResourceError === undefined
+          ? params.fetchSessionDetail()
+          : fetchWithPendingResourceFallback(params.fetchSessionDetail)
+        : Promise.resolve(null);
+
+  const transcriptPromise = params.loadOlderTranscript
+    ? params.isPendingResourceError === undefined
+      ? params.fetchTranscript(
+          resolvePreviousAiSessionTranscriptQuery({
+            currentOffset: params.currentTranscriptStartOffset,
+            pageSize: params.pageSize,
+          }),
+        )
+      : fetchWithPendingResourceFallback(() =>
+          params.fetchTranscript(
+            resolvePreviousAiSessionTranscriptQuery({
+              currentOffset: params.currentTranscriptStartOffset,
+              pageSize: params.pageSize,
+            }),
+          ),
+        )
+    : params.preserveExistingContent
+      ? params.isPendingResourceError === undefined
+        ? params.fetchTranscript(
+            resolvePreservedAiSessionTranscriptQuery({
+              currentOffset: params.currentTranscriptStartOffset,
+              currentLoadedEventCount: params.currentLoadedEventCount,
+              pageSize: params.pageSize,
+            }),
+          )
+        : fetchWithPendingResourceFallback(() =>
+            params.fetchTranscript(
+              resolvePreservedAiSessionTranscriptQuery({
+                currentOffset: params.currentTranscriptStartOffset,
+                currentLoadedEventCount: params.currentLoadedEventCount,
+                pageSize: params.pageSize,
+              }),
+            ),
+          )
+      : (async () => {
+          const transcriptProbe =
+            params.isPendingResourceError === undefined
+              ? await params.fetchTranscript({
+                  offset: 0,
+                  limit: 1,
+                })
+              : await fetchWithPendingResourceFallback(() =>
+                  params.fetchTranscript({
+                    offset: 0,
+                    limit: 1,
+                  }),
+                );
+
+          if (transcriptProbe === null) {
+            return null;
+          }
+
+          return params.fetchTranscript(
+            resolveLatestAiSessionTranscriptQuery({
+              totalCount: transcriptProbe.total,
+              pageSize: params.pageSize,
+            }),
+          );
+        })();
+
+  const [sessionDetail, transcript] = await Promise.all([
+    sessionDetailPromise,
+    transcriptPromise,
+  ]);
+
+  return {
+    sessionDetail,
+    transcript,
+  };
+}
+
+export function createAiSessionTranscriptPageState<
+  TranscriptLine extends AiSessionTranscriptLineLike,
+>(params: {
+  readonly currentTranscriptLines: readonly TranscriptLine[];
+  readonly nextTranscriptLines: readonly TranscriptLine[];
+  readonly currentLoadedEventCount: number;
+  readonly loadOlderTranscript: boolean;
+  readonly transcriptOffset: number;
+  readonly transcriptTotal: number;
+  readonly transcriptEventCount: number;
+}): AiSessionTranscriptPageState<TranscriptLine> {
+  return {
+    transcriptLines: mergeAiSessionTranscriptLines(
+      params.currentTranscriptLines,
+      params.nextTranscriptLines,
+      params.loadOlderTranscript,
+    ),
+    loadedEventCount: params.loadOlderTranscript
+      ? params.currentLoadedEventCount + params.transcriptEventCount
+      : params.transcriptEventCount,
+    startOffset: params.transcriptOffset,
+    totalCount: params.transcriptTotal,
+  };
 }
 
 export function mergeAiSessionTranscriptLines<

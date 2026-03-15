@@ -5,6 +5,7 @@ import type {
   PromptQueueItem,
 } from "../../../../client-shared/src/api/ai-sessions";
 import {
+  AI_SESSION_SHOW_SYSTEM_PROMPTS_STORAGE_KEY,
   applyAiSessionSearchDraft,
   appendAiSessionSubmitContextReferences,
   buildAiSessionScreenHash,
@@ -14,11 +15,15 @@ import {
   canLoadMoreAiSessionHistory,
   canClearAiSessionSearch,
   canLoadMoreAiSessionTranscript,
+  countAiSessionSystemPromptLines,
+  createAiSessionTranscriptPageState,
   createAiSessionScopeResetLoadingState,
   createAiSessionDetailRequestKey,
   createAiSessionImageAttachmentReferences,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
+  fetchAiSessionDetailArtifacts,
+  filterAiSessionTranscriptSystemPromptLines,
   hasAiSessionActivityEntry,
   createAiSessionHiddenStateMessage,
   createAiSessionScopeResetState,
@@ -47,7 +52,9 @@ import {
   shouldAutoRefreshAiSessionOverview,
   shouldShowAiSessionComposer,
   isAiSessionComposerBusy,
+  loadAiSessionShowSystemPromptsPreference,
   readAiSessionOverviewRouteSearchFromHash,
+  persistAiSessionShowSystemPromptsPreference,
   sanitizeAiSessionAttachmentFileName,
   updateHiddenAiSessionIds,
 } from "./state";
@@ -80,7 +87,133 @@ function createActiveSessionInfo(
   };
 }
 
+function createStorageStub(): Pick<Storage, "getItem" | "setItem"> {
+  const values = new Map<string, string>();
+  return {
+    getItem(key: string): string | null {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string): void {
+      values.set(key, value);
+    },
+  };
+}
+
 describe("ai-session state helpers", () => {
+  test("loads and persists the shared system prompt visibility preference", () => {
+    const storage = createStorageStub();
+
+    expect(loadAiSessionShowSystemPromptsPreference(storage)).toBe(false);
+
+    persistAiSessionShowSystemPromptsPreference(true, storage);
+    expect(loadAiSessionShowSystemPromptsPreference(storage)).toBe(true);
+    expect(storage.getItem(AI_SESSION_SHOW_SYSTEM_PROMPTS_STORAGE_KEY)).toBe(
+      "true",
+    );
+
+    persistAiSessionShowSystemPromptsPreference(false, storage);
+    expect(loadAiSessionShowSystemPromptsPreference(storage)).toBe(false);
+  });
+
+  test("filters system prompt transcript lines when the preference is disabled", () => {
+    const transcriptLines = [
+      {
+        role: "user" as const,
+        text: "# AGENTS.md instructions for /repo",
+        isInjectedSystemPrompt: true,
+      },
+      {
+        role: "system" as const,
+        text: "System prompt",
+        isInjectedSystemPrompt: false,
+      },
+      {
+        role: "assistant" as const,
+        text: "Answer",
+        isInjectedSystemPrompt: false,
+      },
+    ];
+
+    expect(
+      filterAiSessionTranscriptSystemPromptLines({
+        transcriptLines,
+        showSystemPrompts: false,
+      }),
+    ).toEqual([
+      {
+        role: "assistant",
+        text: "Answer",
+        isInjectedSystemPrompt: false,
+      },
+    ]);
+
+    expect(
+      filterAiSessionTranscriptSystemPromptLines({
+        transcriptLines,
+        showSystemPrompts: true,
+      }),
+    ).toEqual(transcriptLines);
+    expect(countAiSessionSystemPromptLines(transcriptLines)).toBe(2);
+  });
+
+  test("loads the latest transcript page when fetching shared session detail artifacts", async () => {
+    const transcriptQueries: Array<{
+      offset: number;
+      limit: number;
+    }> = [];
+
+    const artifacts = await fetchAiSessionDetailArtifacts({
+      pageSize: 200,
+      loadOlderTranscript: false,
+      preserveExistingContent: false,
+      hasHistoricalSession: true,
+      currentSessionDetail: null,
+      currentTranscriptStartOffset: 0,
+      currentLoadedEventCount: 0,
+      fetchSessionDetail: async () => ({
+        sessionId: "claude-1",
+      }),
+      fetchTranscript: async (query) => {
+        transcriptQueries.push(query);
+        return {
+          events: [],
+          qraftAiSessionId: asQraftAiSessionId("qs-latest"),
+          offset: query.offset,
+          limit: query.limit,
+          total: 450,
+        };
+      },
+    });
+
+    expect(transcriptQueries).toEqual([
+      { offset: 0, limit: 1 },
+      { offset: 250, limit: 200 },
+    ]);
+    expect(artifacts.sessionDetail).toEqual({
+      sessionId: "claude-1",
+    });
+    expect(artifacts.transcript?.offset).toBe(250);
+  });
+
+  test("builds shared transcript page state from the latest transcript response", () => {
+    expect(
+      createAiSessionTranscriptPageState({
+        currentTranscriptLines: [{ id: "old-1" }],
+        nextTranscriptLines: [{ id: "new-1" }, { id: "new-2" }],
+        currentLoadedEventCount: 10,
+        loadOlderTranscript: false,
+        transcriptOffset: 250,
+        transcriptTotal: 450,
+        transcriptEventCount: 2,
+      }),
+    ).toEqual({
+      transcriptLines: [{ id: "new-1" }, { id: "new-2" }],
+      loadedEventCount: 2,
+      startOffset: 250,
+      totalCount: 450,
+    });
+  });
+
   test("builds a stable scope key from context and project path", () => {
     expect(createAiSessionScopeKey("ctx-1", "/tmp/repo")).toBe(
       "ctx-1:/tmp/repo",
@@ -812,9 +945,7 @@ describe("ai-session state helpers", () => {
         {
           path: "src/app.ts",
           fileName: "app.ts",
-          content: "console.log('solid');",
           mimeType: "text/typescript",
-          attachmentKind: "text",
         },
       ],
       selectedReferencePath: "src/app.ts",
@@ -1027,7 +1158,7 @@ Summarize the initial session goal
     });
   });
 
-  test("builds a primary-file submit context for the selected text file", () => {
+  test("builds a reference-only submit context for the selected text file without line selection", () => {
     expect(
       createAiSessionSubmitContext({
         selectedPath: "src/app.ts",
@@ -1051,13 +1182,14 @@ Summarize the initial session goal
         },
       }),
     ).toEqual({
-      primaryFile: {
-        path: "src/app.ts",
-        startLine: 1,
-        endLine: 2,
-        content: "console.log('solid');\nconsole.log('qraftbox');",
-      },
-      references: [],
+      primaryFile: undefined,
+      references: [
+        {
+          path: "src/app.ts",
+          fileName: "app.ts",
+          mimeType: "text/typescript",
+        },
+      ],
       diffSummary: undefined,
     });
   });

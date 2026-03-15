@@ -1,9 +1,5 @@
-import {
-  createHighlighter,
-  type BundledLanguage,
-  type Highlighter,
-  type ThemedToken,
-} from "shiki";
+import type { BundledLanguage, Highlighter, ThemedToken } from "shiki";
+import { detectFileSyntaxLanguage } from "../../../../client-shared/src/syntax/language-detection";
 
 export interface HighlightToken {
   readonly text: string;
@@ -23,102 +19,8 @@ let highlighterInstance: Highlighter | null = null;
 let initPromise: Promise<Highlighter> | null = null;
 const loadedLanguages = new Set<string>();
 
-const EXTENSION_LANGUAGE_MAP = new Map<string, string>([
-  ["ts", "typescript"],
-  ["tsx", "tsx"],
-  ["js", "javascript"],
-  ["jsx", "jsx"],
-  ["mjs", "javascript"],
-  ["cjs", "javascript"],
-  ["mts", "typescript"],
-  ["cts", "typescript"],
-  ["svelte", "svelte"],
-  ["vue", "vue"],
-  ["py", "python"],
-  ["rb", "ruby"],
-  ["rs", "rust"],
-  ["go", "go"],
-  ["java", "java"],
-  ["kt", "kotlin"],
-  ["kts", "kotlin"],
-  ["c", "c"],
-  ["h", "c"],
-  ["cpp", "cpp"],
-  ["cc", "cpp"],
-  ["cxx", "cpp"],
-  ["hpp", "cpp"],
-  ["hxx", "cpp"],
-  ["cs", "csharp"],
-  ["css", "css"],
-  ["scss", "scss"],
-  ["less", "less"],
-  ["html", "html"],
-  ["htm", "html"],
-  ["xml", "xml"],
-  ["svg", "xml"],
-  ["json", "json"],
-  ["jsonc", "jsonc"],
-  ["yaml", "yaml"],
-  ["yml", "yaml"],
-  ["md", "markdown"],
-  ["mdx", "mdx"],
-  ["sh", "bash"],
-  ["bash", "bash"],
-  ["zsh", "bash"],
-  ["fish", "fish"],
-  ["sql", "sql"],
-  ["toml", "toml"],
-  ["nix", "nix"],
-  ["lua", "lua"],
-  ["swift", "swift"],
-  ["php", "php"],
-  ["r", "r"],
-  ["graphql", "graphql"],
-  ["gql", "graphql"],
-  ["tf", "hcl"],
-  ["hcl", "hcl"],
-  ["proto", "protobuf"],
-  ["zig", "zig"],
-  ["elm", "elm"],
-  ["ex", "elixir"],
-  ["exs", "elixir"],
-  ["erl", "erlang"],
-  ["hs", "haskell"],
-  ["clj", "clojure"],
-  ["dart", "dart"],
-  ["scala", "scala"],
-  ["groovy", "groovy"],
-  ["pl", "perl"],
-  ["vim", "viml"],
-  ["ini", "ini"],
-  ["conf", "ini"],
-  ["cfg", "ini"],
-  ["diff", "diff"],
-  ["patch", "diff"],
-  ["ps1", "powershell"],
-  ["bat", "batch"],
-  ["cmd", "batch"],
-]);
-
-const FILENAME_LANGUAGE_MAP = new Map<string, string>([
-  ["dockerfile", "dockerfile"],
-  ["makefile", "makefile"],
-  ["cmakelists", "cmake"],
-  ["gemfile", "ruby"],
-  ["rakefile", "ruby"],
-  ["justfile", "just"],
-]);
-
 function createPlainToken(text: string): HighlightToken {
   return { text, className: DEFAULT_TOKEN_CLASS };
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 async function getHighlighter(): Promise<Highlighter> {
@@ -130,10 +32,12 @@ async function getHighlighter(): Promise<Highlighter> {
     return initPromise;
   }
 
-  initPromise = createHighlighter({
-    themes: [SHIKI_THEME],
-    langs: [],
-  });
+  initPromise = import("shiki").then(({ createHighlighter }) =>
+    createHighlighter({
+      themes: [SHIKI_THEME],
+      langs: [],
+    }),
+  );
 
   highlighterInstance = await initPromise;
   return highlighterInstance;
@@ -158,35 +62,10 @@ async function ensureLanguage(
   }
 }
 
-function normalizeLanguageAlias(language: string): string {
-  const normalizedLanguage = language.trim().toLowerCase();
-  return EXTENSION_LANGUAGE_MAP.get(normalizedLanguage) ?? normalizedLanguage;
-}
-
 export function detectHighlightLanguage(
   context: SyntaxHighlightContext,
 ): string {
-  const explicitLanguage = context.language?.trim().toLowerCase();
-  if (
-    explicitLanguage !== undefined &&
-    explicitLanguage.length > 0 &&
-    explicitLanguage !== "text" &&
-    explicitLanguage !== "plaintext"
-  ) {
-    return normalizeLanguageAlias(explicitLanguage);
-  }
-
-  const basename = (context.filePath?.split("/").pop() ?? "").toLowerCase();
-  const basenameWithoutExt = basename.split(".")[0] ?? basename;
-  const filenameLanguage = FILENAME_LANGUAGE_MAP.get(basenameWithoutExt);
-  if (filenameLanguage !== undefined) {
-    return filenameLanguage;
-  }
-
-  const extension = basename.includes(".")
-    ? (basename.split(".").pop() ?? "")
-    : "";
-  return EXTENSION_LANGUAGE_MAP.get(extension) ?? "text";
+  return detectFileSyntaxLanguage(context);
 }
 
 function convertTokensToLine(
