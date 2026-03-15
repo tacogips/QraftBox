@@ -43,6 +43,7 @@ import {
 import {
   countAiSessionSystemPromptLines,
   canLoadMoreAiSessionTranscript,
+  createAiSessionOptimisticUserMessage,
   createAiSessionTranscriptPageState,
   createAiSessionSubmitContext,
   fetchAiSessionDetailArtifacts,
@@ -2616,16 +2617,21 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
     setEmbeddedAiSessionError(null);
 
     try {
+      const submitContext = createAiSessionSubmitContext({
+        selectedPath: props.selectedPath,
+        fileContent: props.fileContent,
+        diffOverview: props.diffOverview,
+      });
+      const optimisticUserMessage = createAiSessionOptimisticUserMessage({
+        message: nextPrompt,
+        submitContext,
+      });
       await aiSessionsApi.submitPrompt({
         runImmediately,
         message: nextPrompt,
         projectPath: props.projectPath,
         qraftAiSessionId: sessionId,
-        context: createAiSessionSubmitContext({
-          selectedPath: props.selectedPath,
-          fileContent: props.fileContent,
-          diffOverview: props.diffOverview,
-        }),
+        context: submitContext,
         modelProfileId: selectedModelProfileId(),
       });
       setEmbeddedAiSessionId(sessionId);
@@ -2634,7 +2640,7 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
       );
       setEmbeddedAiDraftSessionId(generateQraftAiSessionId());
       setEmbeddedAiSessionPromptInput("");
-      setEmbeddedAiSessionOptimisticUserText(nextPrompt);
+      setEmbeddedAiSessionOptimisticUserText(optimisticUserMessage);
       setEmbeddedAiSessionOptimisticUserTimestamp(new Date().toISOString());
       setEmbeddedAiSessionOptimisticUserAnchorIndex(
         embeddedAiSessionTranscript().length,

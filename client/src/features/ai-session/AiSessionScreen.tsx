@@ -55,6 +55,7 @@ import {
   type AiSessionRequestToken,
   createAiSessionDefaultPromptMessage,
   createAiSessionImageAttachmentReferences,
+  createAiSessionOptimisticUserMessage,
   resolveAiSessionSelectedModelState,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
@@ -1762,6 +1763,12 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
           ? createAiSessionImageAttachmentReferences(imageAttachments())
           : [],
       });
+      const optimisticUserMessage = options.includeComposerAttachments
+        ? createAiSessionOptimisticUserMessage({
+            message,
+            submitContext,
+          })
+        : message;
       const submitResult = await aiSessionsApi.submitPrompt({
         runImmediately,
         message,
@@ -1797,7 +1804,7 @@ export function AiSessionScreen(props: AiSessionScreenProps): JSX.Element {
       setSelectedQraftAiSessionId(submitTarget.qraftAiSessionId);
       setIsDraftComposerOpen(false);
       setSelectedSessionError(null);
-      setOptimisticUserText(message);
+      setOptimisticUserText(optimisticUserMessage);
       setOptimisticUserTimestamp(new Date().toISOString());
       setOptimisticUserAnchorIndex(selectedSessionTranscript().length);
       setLiveAssistantText(null);

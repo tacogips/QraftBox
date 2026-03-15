@@ -5,13 +5,11 @@
  * Handles file references, @ mentions, and context formatting.
  */
 
-import type {
-  AIPromptRequest,
-  AIPromptContext,
-  FileReference,
-  PrimaryFileContext,
-  DiffSummaryContext,
-} from "../../types/ai";
+import type { FileReference } from "../../types/ai";
+import {
+  buildPromptWithContext,
+  formatContext,
+} from "../../utils/ai-prompt-format";
 
 /**
  * File content with metadata
@@ -197,172 +195,7 @@ export async function resolveFileReferences(
   return resolved;
 }
 
-/**
- * Format a file reference as context block
- */
-function formatFileReference(ref: FileReference): string {
-  const lines: string[] = [];
-  const isAttachment = ref.attachmentKind !== undefined;
-  const attachmentKind = ref.attachmentKind ?? "text";
-
-  // Header with path and optional line range
-  if (isAttachment) {
-    lines.push(`### Attachment: ${ref.path}`);
-  } else if (ref.startLine !== undefined && ref.endLine !== undefined) {
-    if (ref.startLine === ref.endLine) {
-      lines.push(`### File: ${ref.path} (Line ${ref.startLine})`);
-    } else {
-      lines.push(
-        `### File: ${ref.path} (Lines ${ref.startLine}-${ref.endLine})`,
-      );
-    }
-  } else {
-    lines.push(`### File: ${ref.path}`);
-  }
-
-  if (isAttachment) {
-    lines.push(`- Kind: ${attachmentKind}`);
-    if (ref.fileName !== undefined && ref.fileName.length > 0) {
-      lines.push(`- File Name: ${ref.fileName}`);
-    }
-    if (ref.mimeType !== undefined && ref.mimeType.length > 0) {
-      lines.push(`- MIME Type: ${ref.mimeType}`);
-    }
-    if (ref.encoding !== undefined) {
-      lines.push(`- Encoding: ${ref.encoding}`);
-    }
-    lines.push("");
-  }
-
-  // Content
-  if (ref.content !== undefined && ref.content.length > 0) {
-    const fenceLabel =
-      isAttachment && ref.encoding === "base64" ? "base64" : "";
-    lines.push(`\`\`\`${fenceLabel}`);
-    lines.push(ref.content);
-    lines.push("```");
-  }
-
-  return lines.join("\n");
-}
-
-/**
- * Format primary file context
- */
-function formatPrimaryFile(pf: PrimaryFileContext): string {
-  const lines: string[] = [];
-
-  lines.push("## Selected Code");
-  lines.push("");
-
-  if (pf.startLine === pf.endLine) {
-    lines.push(`**File:** ${pf.path} (Line ${pf.startLine})`);
-  } else {
-    lines.push(`**File:** ${pf.path} (Lines ${pf.startLine}-${pf.endLine})`);
-  }
-
-  lines.push("");
-  lines.push("```");
-  lines.push(pf.content);
-  lines.push("```");
-
-  return lines.join("\n");
-}
-
-/**
- * Format diff summary context
- */
-function formatDiffSummary(ds: DiffSummaryContext): string {
-  const lines: string[] = [];
-
-  lines.push("## Diff Context");
-  lines.push("");
-  lines.push(`**Base Branch:** ${ds.baseBranch}`);
-  lines.push(`**Target Branch:** ${ds.targetBranch}`);
-  lines.push("");
-
-  if (ds.changedFiles.length > 0) {
-    lines.push(`**Changed Files (${ds.changedFiles.length}):**`);
-    for (const file of ds.changedFiles.slice(0, 20)) {
-      lines.push(`- ${file}`);
-    }
-    if (ds.changedFiles.length > 20) {
-      lines.push(`- ... and ${ds.changedFiles.length - 20} more`);
-    }
-  }
-
-  return lines.join("\n");
-}
-
-function isDiffSummaryContext(value: unknown): value is DiffSummaryContext {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-  const candidate = value as Partial<DiffSummaryContext>;
-  return (
-    typeof candidate.baseBranch === "string" &&
-    typeof candidate.targetBranch === "string" &&
-    Array.isArray(candidate.changedFiles)
-  );
-}
-
-/**
- * Format the full context for a prompt
- *
- * @param context - The AI prompt context
- * @returns Formatted context string
- */
-export function formatContext(context: AIPromptContext): string {
-  const sections: string[] = [];
-
-  // Primary file (selected lines)
-  if (context.primaryFile !== undefined) {
-    sections.push(formatPrimaryFile(context.primaryFile));
-  }
-
-  // Diff summary
-  if (isDiffSummaryContext(context.diffSummary)) {
-    sections.push(formatDiffSummary(context.diffSummary));
-  }
-
-  // File references
-  const references = context.references ?? [];
-  if (references.length > 0) {
-    sections.push("## Referenced Files");
-    sections.push("");
-
-    for (const ref of references) {
-      sections.push(formatFileReference(ref));
-      sections.push("");
-    }
-  }
-
-  return sections.join("\n\n");
-}
-
-/**
- * Build the final prompt with context
- *
- * @param request - The AI prompt request
- * @returns Formatted prompt string ready for claude-code-agent
- */
-export function buildPromptWithContext(request: AIPromptRequest): string {
-  const parts: string[] = [];
-
-  // Add context first (provides background)
-  const contextText = formatContext(request.context);
-  if (contextText.length > 0) {
-    parts.push("# Context");
-    parts.push("");
-    parts.push(contextText);
-    parts.push("");
-  }
-
-  // Add user prompt as-is (no artificial heading)
-  parts.push(request.prompt);
-
-  return parts.join("\n");
-}
+export { buildPromptWithContext, formatContext };
 
 /**
  * Extract and merge file mentions from prompt into context

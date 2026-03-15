@@ -14,6 +14,7 @@ import type { FileContent } from "../../../../client-shared/src/contracts/files"
 import type { DiffOverviewState } from "../../../../client-shared/src/contracts/diff";
 import type { SessionFilters } from "../../../../src/types/claude-session";
 import type { ExtendedSessionEntry } from "../../../../src/types/claude-session";
+import { buildPromptWithContext } from "../../../../src/utils/ai-prompt-format";
 import { wrapQraftboxInternalPrompt } from "../../../../src/utils/strip-system-tags";
 
 export type AiSessionDefaultPromptAction =
@@ -420,6 +421,16 @@ export function appendAiSessionSubmitContextReferences(params: {
       ...params.additionalReferences,
     ],
   };
+}
+
+export function createAiSessionOptimisticUserMessage(params: {
+  readonly message: string;
+  readonly submitContext: AIPromptContext;
+}): string {
+  return buildPromptWithContext({
+    prompt: params.message,
+    context: params.submitContext,
+  });
 }
 
 export function createAiSessionDefaultPromptMessage(

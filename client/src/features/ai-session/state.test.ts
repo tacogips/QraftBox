@@ -20,6 +20,7 @@ import {
   createAiSessionScopeResetLoadingState,
   createAiSessionDetailRequestKey,
   createAiSessionImageAttachmentReferences,
+  createAiSessionOptimisticUserMessage,
   createAiSessionSubmitContext,
   didAiSessionHistoryFilterChange,
   fetchAiSessionDetailArtifacts,
@@ -1192,6 +1193,29 @@ Summarize the initial session goal
       ],
       diffSummary: undefined,
     });
+  });
+
+  test("builds the optimistic user message from the submitted prompt payload", () => {
+    const optimisticUserMessage = createAiSessionOptimisticUserMessage({
+      message: "say hello",
+      submitContext: createAiSessionSubmitContext({
+        selectedPath: "client/bun.lock",
+        fileContent: {
+          path: "client/bun.lock",
+          content: "lockfile",
+          language: "text",
+          mimeType: "text/plain",
+        },
+        diffOverview: {
+          files: [],
+        },
+      }),
+    });
+
+    expect(optimisticUserMessage.startsWith("# Context\n")).toBe(true);
+    expect(optimisticUserMessage).toContain("## Referenced Files");
+    expect(optimisticUserMessage).toContain("### File: client/bun.lock");
+    expect(optimisticUserMessage.endsWith("say hello")).toBe(true);
   });
 
   test("falls back to attachment-style references for binary prompt context", () => {
