@@ -69,6 +69,6 @@
     "claude-code-agent": "github:tacogips/claude-code-agent#b02ed68494f3385e1ddb20106b1f10e41daa021b",
     "codex-agent": "github:tacogips/codex-agent#23cd34cbec18ae10b1868ec154c088b6a2f1c8c1",
     "commander": "14.0.3",
-    "hono": "4.11.7"
+    "hono": "4.12.7"
   }
 }
