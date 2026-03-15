@@ -17,11 +17,14 @@ describe("renderMarkdownHtml", () => {
   });
 
   test("resolves relative markdown image paths against the markdown file", () => {
-    const renderedHtml = renderMarkdownHtml("![Architecture](./images/app.png)", {
-      markdownFilePath: "docs/README.md",
-      cacheScopeKey: "ctx-1:docs/README.md",
-      resolveFileUrl: (repoRelativePath) => `/raw/${repoRelativePath}`,
-    });
+    const renderedHtml = renderMarkdownHtml(
+      "![Architecture](./images/app.png)",
+      {
+        markdownFilePath: "docs/README.md",
+        cacheScopeKey: "ctx-1:docs/README.md",
+        resolveFileUrl: (repoRelativePath) => `/raw/${repoRelativePath}`,
+      },
+    );
 
     expect(renderedHtml).toContain('src="/raw/docs/images/app.png"');
   });
@@ -36,6 +39,8 @@ describe("renderMarkdownHtml", () => {
       },
     );
 
-    expect(renderedHtml).toContain('src="/raw/usage/resource/qraftbox_log.png"');
+    expect(renderedHtml).toContain(
+      'src="/raw/usage/resource/qraftbox_log.png"',
+    );
   });
 });

@@ -89,7 +89,10 @@ function resolveMarkdownAssetRepoPath(
   assetUrl: string,
 ): string | null {
   const { path: assetPathOnly, suffix } = splitMarkdownUrl(assetUrl.trim());
-  if (assetPathOnly.length === 0 || shouldKeepMarkdownUrlAsIs(assetUrl.trim())) {
+  if (
+    assetPathOnly.length === 0 ||
+    shouldKeepMarkdownUrlAsIs(assetUrl.trim())
+  ) {
     return assetUrl.trim();
   }
 
@@ -98,7 +101,8 @@ function resolveMarkdownAssetRepoPath(
     : [dirnameOfRepoPath(markdownFilePath), assetPathOnly]
         .filter((pathSegment) => pathSegment.length > 0)
         .join("/");
-  const normalizedRepoRelativePath = normalizeRepoRelativePath(repoRelativePath);
+  const normalizedRepoRelativePath =
+    normalizeRepoRelativePath(repoRelativePath);
   if (normalizedRepoRelativePath === null) {
     return null;
   }
@@ -125,7 +129,9 @@ function resolveMarkdownImageUrl(
     return imageUrl.trim();
   }
 
-  const { path: assetPathOnly, suffix } = splitMarkdownUrl(resolvedRepoRelativePath);
+  const { path: assetPathOnly, suffix } = splitMarkdownUrl(
+    resolvedRepoRelativePath,
+  );
   const resolvedFileUrl = options.resolveFileUrl(assetPathOnly);
   if (resolvedFileUrl === null) {
     return imageUrl.trim();
@@ -138,37 +144,27 @@ function rewriteMarkdownImageSourcesInHtml(
   html: string,
   options: MarkdownRenderOptions,
 ): string {
-  return html.replace(
-    /<img\b[^>]*>/gi,
-    (imageTagMarkup) => {
-      if (imageTagMarkup.includes('data-qraftbox-md-image="true"')) {
-        return imageTagMarkup.replace(
-          /\sdata-qraftbox-md-image="true"/i,
-          "",
-        );
-      }
+  return html.replace(/<img\b[^>]*>/gi, (imageTagMarkup) => {
+    if (imageTagMarkup.includes('data-qraftbox-md-image="true"')) {
+      return imageTagMarkup.replace(/\sdata-qraftbox-md-image="true"/i, "");
+    }
 
-      const sourceAttributeMatch = imageTagMarkup.match(
-        /\bsrc=(?:"([^"]*)"|'([^']*)')/i,
-      );
-      if (sourceAttributeMatch === null) {
-        return imageTagMarkup;
-      }
+    const sourceAttributeMatch = imageTagMarkup.match(
+      /\bsrc=(?:"([^"]*)"|'([^']*)')/i,
+    );
+    if (sourceAttributeMatch === null) {
+      return imageTagMarkup;
+    }
 
-      const originalImageUrl =
-        sourceAttributeMatch[1] ?? sourceAttributeMatch[2] ?? "";
-      const quoteCharacter =
-        sourceAttributeMatch[1] !== undefined ? '"' : "'";
-      const resolvedImageUrl = resolveMarkdownImageUrl(
-        originalImageUrl,
-        options,
-      );
-      return imageTagMarkup.replace(
-        /\bsrc=(?:"([^"]*)"|'([^']*)')/i,
-        `src=${quoteCharacter}${escapeHtml(resolvedImageUrl)}${quoteCharacter}`,
-      );
-    },
-  );
+    const originalImageUrl =
+      sourceAttributeMatch[1] ?? sourceAttributeMatch[2] ?? "";
+    const quoteCharacter = sourceAttributeMatch[1] !== undefined ? '"' : "'";
+    const resolvedImageUrl = resolveMarkdownImageUrl(originalImageUrl, options);
+    return imageTagMarkup.replace(
+      /\bsrc=(?:"([^"]*)"|'([^']*)')/i,
+      `src=${quoteCharacter}${escapeHtml(resolvedImageUrl)}${quoteCharacter}`,
+    );
+  });
 }
 
 function createMarkdownRenderer(options: MarkdownRenderOptions): Renderer {
@@ -188,9 +184,7 @@ function createMarkdownRenderer(options: MarkdownRenderOptions): Renderer {
   };
   renderer.image = ({ href, title, text }) => {
     const resolvedHref =
-      typeof href === "string"
-        ? resolveMarkdownImageUrl(href, options)
-        : "";
+      typeof href === "string" ? resolveMarkdownImageUrl(href, options) : "";
     const imageAttributes = [
       'data-qraftbox-md-image="true"',
       `src="${escapeHtml(resolvedHref)}"`,
@@ -217,7 +211,9 @@ function renderMarkdown(
   const html = typeof parsedMarkdown === "string" ? parsedMarkdown : "";
   const sanitize = (
     DOMPurify as {
-      readonly sanitize?: ((dirty: string, config?: object) => string) | undefined;
+      readonly sanitize?:
+        | ((dirty: string, config?: object) => string)
+        | undefined;
     }
   ).sanitize;
   if (typeof sanitize !== "function") {

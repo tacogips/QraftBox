@@ -23,6 +23,7 @@ export interface BrowserVerificationScenario {
     | "#/ai-session"
     | "#/commits"
     | "#/terminal"
+    | "#/workers"
     | "#/system-info"
     | "#/notifications"
     | "#/model-profiles"

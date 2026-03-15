@@ -15,6 +15,7 @@ describe("browser verification scenarios", () => {
       "ai-session-shared-git-state",
       "commits-shared-git-state",
       "terminal-shared-git-state",
+      "workers-shared-git-state",
       "system-info-shared-git-state",
       "notifications-shared-git-state",
       "model-profiles-shared-git-state",

@@ -42,9 +42,7 @@ describe("language detection", () => {
     expect(detectFileSyntaxLanguage({ filePath: "src/Main.scala" })).toBe(
       "scala",
     );
-    expect(detectFileSyntaxLanguage({ filePath: "lua/init.lua" })).toBe(
-      "lua",
-    );
+    expect(detectFileSyntaxLanguage({ filePath: "lua/init.lua" })).toBe("lua");
   });
 
   test("prefers explicit server language when it is meaningful", () => {

@@ -5,6 +5,7 @@ export type BrowserVerificationScenarioId =
   | "ai-session-shared-git-state"
   | "commits-shared-git-state"
   | "terminal-shared-git-state"
+  | "workers-shared-git-state"
   | "system-info-shared-git-state"
   | "notifications-shared-git-state"
   | "model-profiles-shared-git-state"
@@ -18,6 +19,7 @@ export interface BrowserVerificationScenarioDefinition {
     | "#/ai-session"
     | "#/commits"
     | "#/terminal"
+    | "#/workers"
     | "#/system-info"
     | "#/notifications"
     | "#/model-profiles"
@@ -97,6 +99,17 @@ export const BROWSER_VERIFICATION_SCENARIOS: readonly BrowserVerificationScenari
       checklist: [
         "Load the terminal route in both frontends against the same Git workspace state.",
         "Confirm the terminal screen renders its interactive shell chrome.",
+      ],
+      requiredTextSubstrings: [],
+      requiredApiPathSubstrings: [],
+    },
+    {
+      id: "workers-shared-git-state",
+      routeHash: "#/workers",
+      workspaceKind: "git",
+      checklist: [
+        "Load the workers route in both frontends against the same Git workspace state.",
+        "Confirm worker list and detail chrome render without route-level errors.",
       ],
       requiredTextSubstrings: [],
       requiredApiPathSubstrings: [],

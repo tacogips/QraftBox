@@ -30,6 +30,7 @@ import { createLocalPromptRoutes } from "./local-prompts.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
 import type { PromptStore } from "../../types/local-prompt.js";
 import { createGitActionsRoutes } from "./git-actions.js";
+import { createWorkersRoutes } from "./workers.js";
 import { createBranchRoutes } from "./branches.js";
 import { createSystemInfoRoutes } from "./system-info.js";
 import type { ModelConfig } from "../../types/system-info.js";
@@ -270,6 +271,10 @@ export function getNonContextRouteGroups(
     {
       prefix: "/git-actions",
       routes: createGitActionsRoutes(config.modelConfigStore),
+    },
+    {
+      prefix: "/workers",
+      routes: createWorkersRoutes(),
     },
     // Model config routes - GET/POST/PATCH /api/model-config
     ...(config.modelConfigStore !== undefined

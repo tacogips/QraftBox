@@ -104,6 +104,8 @@ describe("shared git actions api", () => {
         }),
     });
 
-    await expect(apiClient.pull("/repo")).rejects.toThrow("Pull rejected");
+    await expect(apiClient.pull("/repo", "action-2")).rejects.toThrow(
+      "Pull rejected",
+    );
   });
 });

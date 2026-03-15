@@ -40,6 +40,13 @@ describe("createScreenNavigationItems", () => {
       isActive: false,
       implementationStatus: "implemented",
     });
+    expect(items.find((item) => item.screen === "workers")).toEqual({
+      screen: "workers",
+      label: "Workers",
+      href: "#/demo-repo/workers",
+      isActive: false,
+      implementationStatus: "implemented",
+    });
   });
 
   test("keeps implemented screen labels aligned across migrated screens", () => {

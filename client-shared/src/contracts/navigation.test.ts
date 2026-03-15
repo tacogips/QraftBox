@@ -17,6 +17,7 @@ describe("navigation contracts", () => {
       "ai-session",
       "commits",
       "terminal",
+      "workers",
       "project",
       "system-info",
       "notifications",
@@ -51,9 +52,9 @@ describe("navigation contracts", () => {
   });
 
   test("parses global hashes", () => {
-    expect(parseAppHash("#/terminal")).toEqual({
+    expect(parseAppHash("#/workers")).toEqual({
       projectSlug: null,
-      screen: "terminal",
+      screen: "workers",
       contextId: null,
       selectedPath: null,
       selectedViewMode: null,

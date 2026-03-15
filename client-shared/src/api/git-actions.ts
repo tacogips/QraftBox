@@ -33,6 +33,7 @@ export interface PullRequestStatus {
 export interface GitOperationStatus {
   readonly operating: boolean;
   readonly phase: GitOperationPhase;
+  readonly workerId?: string | undefined;
 }
 
 export interface CancelGitActionResult {
@@ -55,9 +56,18 @@ export interface GitActionsApiClient {
     readonly customCtx?: string | undefined;
     readonly modelProfileId?: string | undefined;
   }): Promise<GitActionResult>;
-  push(projectPath: string): Promise<GitActionResult>;
-  pull(projectPath: string): Promise<GitActionResult>;
-  init(projectPath: string): Promise<GitActionResult>;
+  push(
+    projectPath: string,
+    actionId?: string | undefined,
+  ): Promise<GitActionResult>;
+  pull(
+    projectPath: string,
+    actionId?: string | undefined,
+  ): Promise<GitActionResult>;
+  init(
+    projectPath: string,
+    actionId?: string | undefined,
+  ): Promise<GitActionResult>;
   createPullRequest(input: {
     readonly projectPath: string;
     readonly baseBranch: string;
@@ -175,24 +185,24 @@ export function createGitActionsApiClient(
         config,
         "Failed to execute git commit action",
       ),
-    push: (projectPath) =>
+    push: (projectPath, actionId) =>
       postGitAction(
         "push",
-        { projectPath },
+        { projectPath, actionId },
         config,
         "Failed to execute git push action",
       ),
-    pull: (projectPath) =>
+    pull: (projectPath, actionId) =>
       postGitAction(
         "pull",
-        { projectPath },
+        { projectPath, actionId },
         config,
         "Failed to execute git pull action",
       ),
-    init: (projectPath) =>
+    init: (projectPath, actionId) =>
       postGitAction(
         "init",
-        { projectPath },
+        { projectPath, actionId },
         config,
         "Failed to initialize git repository",
       ),

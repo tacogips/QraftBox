@@ -161,10 +161,33 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     ],
   },
   {
+    screen: "workers",
+    label: "Workers",
+    implementationStatus: "implemented",
+    implementationOrder: 6,
+    parityGate: {
+      summary: "Worker process parity",
+      checks: [
+        "List recent git and AI-backed worker processes for the active workspace.",
+        "Render stdout, stderr, and command progress for direct git commands and agent-backed git actions.",
+        "Preserve cancellation for actively running workers.",
+      ],
+    },
+    blockers: [
+      {
+        id: "workers-browser-verification-pending",
+        scope: "screen",
+        category: "parity",
+        summary:
+          "The Workers screen still needs browser parity verification for list refresh, detail logs, and cancellation flows.",
+      },
+    ],
+  },
+  {
     screen: "system-info",
     label: "System Info",
     implementationStatus: "implemented",
-    implementationOrder: 6,
+    implementationOrder: 7,
     parityGate: {
       summary: "System info parity",
       checks: [
@@ -186,7 +209,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "notifications",
     label: "Notifications",
     implementationStatus: "implemented",
-    implementationOrder: 7,
+    implementationOrder: 8,
     parityGate: {
       summary: "Notification preference parity",
       checks: [
@@ -208,7 +231,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "model-profiles",
     label: "Model Profiles",
     implementationStatus: "implemented",
-    implementationOrder: 8,
+    implementationOrder: 9,
     parityGate: {
       summary: "Model profile parity",
       checks: [
@@ -230,7 +253,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "action-defaults",
     label: "Action Defaults",
     implementationStatus: "implemented",
-    implementationOrder: 9,
+    implementationOrder: 10,
     parityGate: {
       summary: "Action default parity",
       checks: [

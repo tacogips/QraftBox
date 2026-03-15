@@ -43,6 +43,7 @@ import { CommitsScreen } from "./features/commits/CommitsScreen";
 import { NotificationsScreen } from "./features/notifications/NotificationsScreen";
 import { SystemInfoScreen } from "./features/system-info/SystemInfoScreen";
 import { TerminalScreen } from "./features/terminal/TerminalScreen";
+import { WorkersScreen } from "./features/workers/WorkersScreen";
 import { WorkspaceShell } from "./features/workspace/WorkspaceShell";
 import { createWorkspaceViewModel } from "./features/workspace/create-workspace-view-model";
 import { WorktreeCreateButton } from "./features/worktree/WorktreeCreateButton";
@@ -61,6 +62,7 @@ const PRIMARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
 
 const SECONDARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
   "project",
+  "workers",
   "system-info",
   "notifications",
   "model-profiles",
@@ -73,6 +75,7 @@ const NAVIGATION_LABELS: Readonly<Record<AppScreen, string>> = {
   "ai-session": "Sessions",
   commits: "Commits",
   terminal: "Terminal",
+  workers: "Workers",
   "system-info": "System Info",
   notifications: "Notifications",
   "model-profiles": "Model Profiles",
@@ -908,6 +911,15 @@ export function App(props: AppProps): JSX.Element {
         <TerminalScreen
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
           contextId={activeContextId()}
+        />
+      );
+    }
+
+    if (activeRoute.screen === "workers") {
+      return (
+        <WorkersScreen
+          apiBaseUrl={props.bootstrapState.apiBaseUrl}
+          projectPath={activeProjectPath()}
         />
       );
     }

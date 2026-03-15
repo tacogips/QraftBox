@@ -220,7 +220,9 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
       setOperationPhase(
         nextOperationStatus.operating ? nextOperationStatus.phase : "idle",
       );
-      if (!nextOperationStatus.operating) {
+      if (nextOperationStatus.operating) {
+        setActiveActionId(nextOperationStatus.workerId ?? null);
+      } else {
         setActiveActionId(null);
         setCancellingOperation(false);
       }
@@ -276,10 +278,12 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
   }
 
   async function handlePull(): Promise<void> {
+    const actionId = createActionId();
     await runGitAction({
       action: "pull",
       phase: "pulling",
-      execute: () => gitActionsApi.pull(props.projectPath),
+      actionId,
+      execute: () => gitActionsApi.pull(props.projectPath, actionId),
       successMessage: "Pull completed.",
       fallbackErrorMessage: "Pull failed.",
     });
@@ -302,10 +306,12 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
   }
 
   async function handlePush(): Promise<void> {
+    const actionId = createActionId();
     await runGitAction({
       action: "push",
       phase: "pushing",
-      execute: () => gitActionsApi.push(props.projectPath),
+      actionId,
+      execute: () => gitActionsApi.push(props.projectPath, actionId),
       successMessage: "Push completed.",
       fallbackErrorMessage: "Push failed.",
     });

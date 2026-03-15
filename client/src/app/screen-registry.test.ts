@@ -91,6 +91,13 @@ describe("screen registry", () => {
           "The Terminal screen still needs browser parity verification for reconnect, command input, disconnect, and terminal output flows.",
       },
       {
+        id: "workers-browser-verification-pending",
+        scope: "screen",
+        category: "parity",
+        summary:
+          "The Workers screen still needs browser parity verification for list refresh, detail logs, and cancellation flows.",
+      },
+      {
         id: "system-info-browser-verification-pending",
         scope: "screen",
         category: "parity",
@@ -187,8 +194,8 @@ describe("screen registry", () => {
 
   test("builds a support summary that stays blocked until legacy-support gates pass", () => {
     expect(getSolidSupportReport()).toEqual({
-      implementedScreenCount: 9,
-      totalScreenCount: 9,
+      implementedScreenCount: 10,
+      totalScreenCount: 10,
       remainingScreens: [],
       outstandingBlockers: getOutstandingSolidSupportBlockers(),
       criteria: [
@@ -242,6 +249,7 @@ describe("screen registry", () => {
       "ai-session",
       "commits",
       "terminal",
+      "workers",
       "system-info",
       "notifications",
       "model-profiles",
@@ -383,6 +391,7 @@ describe("screen registry", () => {
     expect(blockerIds).toContain("ai-session-browser-verification-pending");
     expect(blockerIds).toContain("commits-browser-verification-pending");
     expect(blockerIds).toContain("terminal-browser-verification-pending");
+    expect(blockerIds).toContain("workers-browser-verification-pending");
     expect(blockerIds).toContain("system-info-browser-verification-pending");
     expect(blockerIds).toContain("notifications-browser-verification-pending");
     expect(blockerIds).toContain("model-profiles-browser-verification-pending");

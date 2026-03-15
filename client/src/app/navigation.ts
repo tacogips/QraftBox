@@ -26,6 +26,7 @@ export function createScreenNavigationItems(
       "ai-session",
       "commits",
       "terminal",
+      "workers",
       "system-info",
       "notifications",
       "model-profiles",

@@ -12,7 +12,9 @@ function hasMarkdownExtension(filePath: string): boolean {
   );
 }
 
-export function isMarkdownPreviewFile(fileContent: FileContent | null): boolean {
+export function isMarkdownPreviewFile(
+  fileContent: FileContent | null,
+): boolean {
   if (fileContent === null || fileContent.isBinary === true) {
     return false;
   }

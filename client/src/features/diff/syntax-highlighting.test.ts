@@ -41,12 +41,8 @@ describe("detectHighlightLanguage", () => {
     expect(detectHighlightLanguage({ filePath: "src/lib.rs" })).toBe("rust");
     expect(detectHighlightLanguage({ filePath: "Cargo.toml" })).toBe("toml");
     expect(detectHighlightLanguage({ filePath: "cmd/server.go" })).toBe("go");
-    expect(detectHighlightLanguage({ filePath: "src/app.erl" })).toBe(
-      "erlang",
-    );
-    expect(detectHighlightLanguage({ filePath: "src/Main.java" })).toBe(
-      "java",
-    );
+    expect(detectHighlightLanguage({ filePath: "src/app.erl" })).toBe("erlang");
+    expect(detectHighlightLanguage({ filePath: "src/Main.java" })).toBe("java");
     expect(detectHighlightLanguage({ filePath: "src/Main.scala" })).toBe(
       "scala",
     );
@@ -99,7 +95,7 @@ describe("highlightFullFileContent", () => {
     expect(highlightedLines).toHaveLength(2);
     if (shikiModule === null) {
       expect(highlightedLines).toEqual([
-        [{ text: 'const port = 5173;', className: "text-text-primary" }],
+        [{ text: "const port = 5173;", className: "text-text-primary" }],
         [{ text: 'console.log("ok");', className: "text-text-primary" }],
       ]);
       return;

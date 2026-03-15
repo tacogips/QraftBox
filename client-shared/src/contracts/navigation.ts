@@ -26,6 +26,7 @@ export const APP_SCREENS = [
   "ai-session",
   "commits",
   "terminal",
+  "workers",
   "project",
   "system-info",
   "notifications",

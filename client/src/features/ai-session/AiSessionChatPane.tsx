@@ -1,6 +1,9 @@
 import { createEffect, For, Show, type JSX } from "solid-js";
 import { ToolbarIconButton } from "../../components/ToolbarIconButton";
-import { enhanceMarkdownElements, renderMarkdownHtml } from "../../lib/markdown";
+import {
+  enhanceMarkdownElements,
+  renderMarkdownHtml,
+} from "../../lib/markdown";
 import type { AiSessionTranscriptLine } from "./presentation";
 
 export interface AiSessionChatPaneImageAttachment {
