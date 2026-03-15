@@ -11,7 +11,7 @@ import { createServer } from "../server/index";
 import type { CLIConfig } from "../types";
 
 export interface FrontendVerificationTarget {
-  readonly frontend: "svelte" | "solid";
+  readonly frontend: "solid";
   readonly baseUrl: string;
 }
 
@@ -64,12 +64,8 @@ export interface BrowserVerificationRunResult {
 const DEFAULT_FRONTEND_VERIFICATION_TARGETS: readonly FrontendVerificationTarget[] =
   [
     {
-      frontend: "svelte",
-      baseUrl: "http://127.0.0.1:7155",
-    },
-    {
       frontend: "solid",
-      baseUrl: "http://127.0.0.1:7156",
+      baseUrl: "http://127.0.0.1:7155",
     },
   ] as const;
 
@@ -84,10 +80,9 @@ const BROWSER_VERIFICATION_SCENARIOS: readonly BrowserVerificationScenario[] = [
   },
 ] as const;
 
-const DEFAULT_SVELTE_VERIFICATION_URL =
-  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ?? "http://127.0.0.1:7155";
 const DEFAULT_SOLID_VERIFICATION_URL =
-  DEFAULT_FRONTEND_VERIFICATION_TARGETS[1]?.baseUrl ?? "http://127.0.0.1:7156";
+  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ??
+  "http://127.0.0.1:7155";
 
 function parseFrontendVerificationUrl(
   value: string,
@@ -103,7 +98,6 @@ function parseFrontendVerificationUrl(
 export function parseBrowserVerificationCliArgs(
   args: readonly string[],
 ): ParsedBrowserVerificationCliArgs {
-  let svelteUrl = DEFAULT_SVELTE_VERIFICATION_URL;
   let solidUrl = DEFAULT_SOLID_VERIFICATION_URL;
   let showHelp = false;
   let useManagedSharedBackend = true;
@@ -113,17 +107,6 @@ export function parseBrowserVerificationCliArgs(
 
     if (argument === "--help" || argument === "-h") {
       showHelp = true;
-      continue;
-    }
-
-    if (argument === "--svelte-url") {
-      const nextValue = args[argumentIndex + 1];
-      if (nextValue === undefined) {
-        throw new Error("--svelte-url requires a value");
-      }
-      svelteUrl = parseFrontendVerificationUrl(nextValue, "svelte").baseUrl;
-      useManagedSharedBackend = false;
-      argumentIndex += 1;
       continue;
     }
 
@@ -143,10 +126,6 @@ export function parseBrowserVerificationCliArgs(
 
   return {
     targets: [
-      {
-        frontend: "svelte",
-        baseUrl: svelteUrl,
-      },
       {
         frontend: "solid",
         baseUrl: solidUrl,
@@ -401,13 +380,13 @@ const MANAGED_GIT_PROJECT_NAME = "browser-verify-git";
 const MANAGED_NON_GIT_PROJECT_NAME = "browser-verify-non-git";
 
 function createBrowserVerificationCliConfig(
-  frontend: FrontendVerificationTarget["frontend"],
+  _frontend: FrontendVerificationTarget["frontend"],
   projectPath: string,
 ): CLIConfig {
   return {
     port: 0,
     host: "127.0.0.1",
-    frontend: frontend === "solid" ? "current" : frontend,
+    frontend: "current",
     open: false,
     watch: false,
     syncMode: "manual",
@@ -566,16 +545,6 @@ async function startManagedVerificationServers(
   });
   const openTabsStore = createInMemoryOpenTabsStore();
 
-  const svelteHandle = await startManagedFrontendServer(
-    "svelte",
-    projectPath,
-    join(workspaceRoot, "home-svelte"),
-    contextManager,
-    recentStore,
-    openTabsStore,
-    [initialTab],
-    initialTab.path,
-  );
   const solidHandle = await startManagedFrontendServer(
     "solid",
     projectPath,
@@ -588,14 +557,12 @@ async function startManagedVerificationServers(
   );
 
   return {
-    targets: [svelteHandle.target, solidHandle.target],
+    targets: [solidHandle.target],
     requestLogs: {
-      svelte: svelteHandle.requestLog,
       solid: solidHandle.requestLog,
     },
     stop() {
       solidHandle.stop();
-      svelteHandle.stop();
     },
   };
 }
@@ -654,15 +621,14 @@ export async function runManagedFrontendMigrationBrowserVerification(
 
 export function getBrowserVerificationUsage(): string {
   return [
-    "Usage: bun run verify:frontend:migration:browser [--svelte-url <url>] [--solid-url <url>]",
+    "Usage: bun run verify:frontend:migration:browser [--solid-url <url>]",
     "",
-    "Without explicit frontend URLs, the command starts managed Svelte and Solid verification servers against shared Git and non-Git workspace fixtures.",
+    "Without an explicit frontend URL, the command starts a managed Solid verification server against shared Git and non-Git workspace fixtures.",
     "",
     "Existing server mode:",
-    "  --svelte-url http://127.0.0.1:7155",
-    "  --solid-url  http://127.0.0.1:7156",
+    "  --solid-url  http://127.0.0.1:7155",
     "",
-    "The command opens both frontends with agent-browser, checks the required project/files parity scenarios, captures snapshots/screenshots, and records tmp-solid-browser-verification.json on success.",
+    "The command opens the frontend with agent-browser, checks the required project/files parity scenarios, captures snapshots/screenshots, and records tmp-solid-browser-verification.json on success.",
   ].join("\n");
 }
 

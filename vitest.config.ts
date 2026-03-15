@@ -25,7 +25,10 @@ function findBunTestFiles(baseDir: string, dir: string): string[] {
 }
 
 const projectRoot = resolve(__dirname);
-const bunTestFiles = findBunTestFiles(projectRoot, resolve(projectRoot, "src"));
+const bunTestFiles = [
+  ...findBunTestFiles(projectRoot, resolve(projectRoot, "src")),
+  ...findBunTestFiles(projectRoot, resolve(projectRoot, "client-shared")),
+];
 
 export default defineConfig({
   resolve: {
@@ -41,6 +44,7 @@ export default defineConfig({
       "node_modules",
       "dist",
       "client",
+      "client-shared",
       "e2e",
       ".direnv",
       ...bunTestFiles,

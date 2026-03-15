@@ -243,24 +243,11 @@ bun install
 # Build the main client (Solid web UI)
 cd client && bun install && bun run build && cd ..
 
-# Optional: build the legacy Svelte frontend
-cd client-legacy && bun install && bun run build && cd ..
-
 # Start QraftBox
 bun run start
 ```
 
 Open `http://localhost:7144` in your browser.
-
-Release artifacts include both the default Solid frontend and the optional legacy Svelte frontend, so installed binaries and npm packages can still serve `--frontend svelte`.
-
-To serve the legacy Svelte frontend instead of the default Solid frontend:
-
-```bash
-QRAFTBOX_FRONTEND=svelte bun run start
-# or
-bun run start -- --frontend svelte
-```
 
 Migration verification is split into two stages:
 

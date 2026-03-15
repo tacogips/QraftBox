@@ -11,12 +11,8 @@ describe("solid browser verification", () => {
     expect(parseBrowserVerificationCliArgs([])).toEqual({
       targets: [
         {
-          frontend: "svelte",
-          baseUrl: "http://127.0.0.1:7155",
-        },
-        {
           frontend: "solid",
-          baseUrl: "http://127.0.0.1:7156",
+          baseUrl: "http://127.0.0.1:7155",
         },
       ],
       showHelp: false,
@@ -26,18 +22,9 @@ describe("solid browser verification", () => {
 
   test("parses explicit frontend URLs and normalizes trailing slashes", () => {
     expect(
-      parseBrowserVerificationCliArgs([
-        "--svelte-url",
-        "http://localhost:8001/",
-        "--solid-url",
-        "http://localhost:8002/",
-      ]),
+      parseBrowserVerificationCliArgs(["--solid-url", "http://localhost:8002/"]),
     ).toEqual({
       targets: [
-        {
-          frontend: "svelte",
-          baseUrl: "http://localhost:8001",
-        },
         {
           frontend: "solid",
           baseUrl: "http://localhost:8002",
@@ -70,18 +57,14 @@ describe("solid browser verification", () => {
     expect(agentBrowserEnvironment["NPM_TOKEN"]).toBeUndefined();
   });
 
-  test("runs both scenarios for both frontends and records the marker on success", async () => {
+  test("runs scenarios for the solid frontend and records the marker on success", async () => {
     const commands: string[][] = [];
 
     const result = await runFrontendMigrationBrowserVerification(
       [
         {
-          frontend: "svelte",
-          baseUrl: "http://localhost:7001",
-        },
-        {
           frontend: "solid",
-          baseUrl: "http://localhost:7002",
+          baseUrl: "http://localhost:7001",
         },
       ],
       {
@@ -101,12 +84,8 @@ describe("solid browser verification", () => {
       markerPath: "/tmp/workspace/tmp-solid-browser-verification.json",
       targets: [
         {
-          frontend: "svelte",
-          baseUrl: "http://localhost:7001",
-        },
-        {
           frontend: "solid",
-          baseUrl: "http://localhost:7002",
+          baseUrl: "http://localhost:7001",
         },
       ],
     });
@@ -114,42 +93,9 @@ describe("solid browser verification", () => {
     expect(commands).toEqual([
       [
         "--session",
-        "qraftbox-migration-svelte",
-        "open",
-        "http://localhost:7001#/project",
-      ],
-      [
-        "--session",
-        "qraftbox-migration-svelte",
-        "wait",
-        "--load",
-        "networkidle",
-      ],
-      ["--session", "qraftbox-migration-svelte", "get", "text", "body"],
-      ["--session", "qraftbox-migration-svelte", "snapshot", "-i"],
-      ["--session", "qraftbox-migration-svelte", "screenshot", "--full"],
-      [
-        "--session",
-        "qraftbox-migration-svelte",
-        "open",
-        "http://localhost:7001#/files",
-      ],
-      [
-        "--session",
-        "qraftbox-migration-svelte",
-        "wait",
-        "--load",
-        "networkidle",
-      ],
-      ["--session", "qraftbox-migration-svelte", "get", "text", "body"],
-      ["--session", "qraftbox-migration-svelte", "snapshot", "-i"],
-      ["--session", "qraftbox-migration-svelte", "screenshot", "--full"],
-      ["--session", "qraftbox-migration-svelte", "close"],
-      [
-        "--session",
         "qraftbox-migration-solid",
         "open",
-        "http://localhost:7002#/project",
+        "http://localhost:7001#/project",
       ],
       [
         "--session",
@@ -165,7 +111,7 @@ describe("solid browser verification", () => {
         "--session",
         "qraftbox-migration-solid",
         "open",
-        "http://localhost:7002#/files",
+        "http://localhost:7001#/files",
       ],
       [
         "--session",
@@ -188,7 +134,7 @@ describe("solid browser verification", () => {
       runFrontendMigrationBrowserVerification(
         [
           {
-            frontend: "svelte",
+            frontend: "solid",
             baseUrl: "http://localhost:7001",
           },
         ],
@@ -206,7 +152,7 @@ describe("solid browser verification", () => {
 
     expect(commands.at(-1)).toEqual([
       "--session",
-      "qraftbox-migration-svelte",
+      "qraftbox-migration-solid",
       "close",
     ]);
   });

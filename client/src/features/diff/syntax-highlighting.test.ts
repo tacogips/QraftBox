@@ -20,7 +20,7 @@ describe("detectHighlightLanguage", () => {
     expect(
       detectHighlightLanguage({
         filePath:
-          "client-legacy/components/sessions/SessionTranscriptInline.svelte",
+          "ui/components/SessionTranscriptInline.svelte",
       }),
     ).toBe("svelte");
     expect(detectHighlightLanguage({ filePath: ".prettierrc.json" })).toBe(

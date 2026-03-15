@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { existsSync } from "node:fs";
 
-export type FrontendTarget = "svelte" | "current";
+export type FrontendTarget = "current";
 export const FRONTEND_TARGET_ENV_VAR = "QRAFTBOX_FRONTEND";
 export const FRONTEND_DEV_SERVER_URL_ENV_VAR = "QRAFTBOX_FRONTEND_DEV_URL";
 
@@ -25,11 +25,6 @@ export interface ResolvedFrontendAssets {
 }
 
 const FRONTEND_BUILD_CONFIGS: Record<FrontendTarget, FrontendBuildConfig> = {
-  svelte: {
-    target: "svelte",
-    envClientDir: "QRAFTBOX_CLIENT_LEGACY_DIR",
-    defaultBuildDirName: "client-legacy",
-  },
   current: {
     target: "current",
     envClientDir: "QRAFTBOX_CLIENT_DIR",
@@ -38,7 +33,7 @@ const FRONTEND_BUILD_CONFIGS: Record<FrontendTarget, FrontendBuildConfig> = {
 };
 
 export function isFrontendTarget(value: string): value is FrontendTarget {
-  return value === "svelte" || value === "current";
+  return value === "current";
 }
 
 function resolveFrontendTargetAlias(value: string): FrontendTarget | null {
@@ -49,8 +44,8 @@ function resolveFrontendTargetAlias(value: string): FrontendTarget | null {
   return null;
 }
 
-function describeFrontendTarget(target: FrontendTarget): string {
-  return target === "current" ? "current frontend" : "legacy svelte frontend";
+function describeFrontendTarget(_target: FrontendTarget): string {
+  return "current frontend";
 }
 
 export function resolveFrontendTarget(
@@ -70,7 +65,7 @@ export function resolveFrontendTarget(
   }
 
   throw new Error(
-    `Invalid frontend target: ${value}. Must be one of: current, svelte`,
+    `Invalid frontend target: ${value}. Must be one of: current`,
   );
 }
 

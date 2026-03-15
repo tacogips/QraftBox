@@ -21,7 +21,6 @@ afterAll(() => {
 
 afterEach(() => {
   delete process.env["QRAFTBOX_CLIENT_DIR"];
-  delete process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
 });
 
 function createFrontendFixtureDir(frontendDirName: string): string {
@@ -42,7 +41,6 @@ function createEmptyFrontendFixtureDir(frontendDirName: string): string {
 
 describe("frontend config", () => {
   test("recognizes valid frontend targets", () => {
-    expect(isFrontendTarget("svelte")).toBe(true);
     expect(isFrontendTarget("current")).toBe(true);
     expect(isFrontendTarget("solid")).toBe(false);
     expect(isFrontendTarget("vue")).toBe(false);
@@ -76,7 +74,7 @@ describe("frontend config", () => {
 
     try {
       process.env[FRONTEND_TARGET_ENV_VAR] = "solid";
-      expect(resolveConfiguredFrontend("svelte")).toBe("svelte");
+      expect(resolveConfiguredFrontend("current")).toBe("current");
     } finally {
       if (originalValue === undefined) {
         delete process.env[FRONTEND_TARGET_ENV_VAR];
@@ -88,7 +86,7 @@ describe("frontend config", () => {
 
   test("throws for unknown frontend target", () => {
     expect(() => resolveFrontendTarget("vue")).toThrow(
-      "Invalid frontend target: vue. Must be one of: current, svelte",
+      "Invalid frontend target: vue. Must be one of: current",
     );
   });
 
@@ -107,17 +105,6 @@ describe("frontend config", () => {
 
     expect(() => requireFrontendAssets("current")).toThrow(
       "Frontend assets for the current frontend were not found.",
-    );
-  });
-
-  test("resolves svelte assets from QRAFTBOX_CLIENT_LEGACY_DIR", () => {
-    const svelteAssetDir = createFrontendFixtureDir("client-legacy");
-    process.env["QRAFTBOX_CLIENT_LEGACY_DIR"] = svelteAssetDir;
-
-    const resolvedAssets = requireFrontendAssets("svelte");
-    expect(resolvedAssets.assetRoot).toBe(svelteAssetDir);
-    expect(resolvedAssets.source).toBe(
-      "QRAFTBOX_CLIENT_LEGACY_DIR environment variable",
     );
   });
 

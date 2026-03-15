@@ -628,17 +628,6 @@ export function GitActionsBar(props: GitActionsBarProps): JSX.Element {
             Open PR
           </button>
         </Show>
-        <Show
-          when={
-            (prStatus()?.reason ?? "").length > 0 &&
-            prStatus()?.pr === null &&
-            !(prStatus()?.canCreatePR ?? false)
-          }
-        >
-          <span class="rounded-full border border-border-default bg-bg-primary px-2 py-1 text-[11px] text-text-secondary">
-            PR unavailable: {prStatus()?.reason}
-          </span>
-        </Show>
         <Show when={notice() !== null}>
           <span
             class={`rounded-full border px-2 py-1 text-[11px] ${getNoticeClass(

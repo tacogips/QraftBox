@@ -139,10 +139,10 @@ export function validateConfig(config: CLIConfig): ValidationResult {
     };
   }
 
-  if (config.frontend !== "svelte" && config.frontend !== "current") {
+  if (config.frontend !== "current") {
     return {
       valid: false,
-      error: "frontend must be one of: current, svelte",
+      error: "frontend must be current",
     };
   }
 

@@ -52,16 +52,13 @@ describe("createServer", () => {
   let config: CLIConfig;
   let testDir: string;
   let originalClientDir: string | undefined;
-  let originalLegacyClientDir: string | undefined;
 
   beforeEach(() => {
     testDir = mkdtempSync(join(tmpdir(), "qraftbox-test-"));
 
     // Save and clear QRAFTBOX_CLIENT_DIR to ensure tests don't pick up stale env var
     originalClientDir = process.env["QRAFTBOX_CLIENT_DIR"];
-    originalLegacyClientDir = process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
     delete process.env["QRAFTBOX_CLIENT_DIR"];
-    delete process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
     process.env["QRAFTBOX_CLIENT_DIR"] = createFrontendFixtureDir(
       testDir,
       "client",
@@ -92,12 +89,6 @@ describe("createServer", () => {
       process.env["QRAFTBOX_CLIENT_DIR"] = originalClientDir;
     } else {
       delete process.env["QRAFTBOX_CLIENT_DIR"];
-    }
-
-    if (originalLegacyClientDir !== undefined) {
-      process.env["QRAFTBOX_CLIENT_LEGACY_DIR"] = originalLegacyClientDir;
-    } else {
-      delete process.env["QRAFTBOX_CLIENT_LEGACY_DIR"];
     }
   });
 
