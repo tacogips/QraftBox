@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import tailwindcss from "@tailwindcss/vite";
 import solidPlugin from "vite-plugin-solid";
 import { resolveViteAllowedHosts } from "../src/config/vite-allowed-hosts";
 
@@ -10,7 +9,7 @@ const wsProxyTarget =
 const allowedHosts = resolveViteAllowedHosts();
 
 export default defineConfig({
-  plugins: [tailwindcss(), solidPlugin()],
+  plugins: [solidPlugin()],
   server: {
     allowedHosts,
     proxy: {

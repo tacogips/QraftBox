@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
-import tailwindcss from "@tailwindcss/vite";
 import { resolveViteAllowedHosts } from "../src/config/vite-allowed-hosts";
 
 const apiProxyTarget =
@@ -10,7 +9,7 @@ const wsProxyTarget =
 const allowedHosts = resolveViteAllowedHosts();
 
 export default defineConfig({
-  plugins: [tailwindcss(), svelte()],
+  plugins: [svelte()],
   resolve: {
     conditions: ["browser", "import", "module", "default"],
   },
