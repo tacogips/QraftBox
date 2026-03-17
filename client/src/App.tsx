@@ -23,6 +23,7 @@ import { getSolidScreenDefinition } from "./app/screen-registry";
 import { ActionDefaultsScreen } from "./features/model-config/ActionDefaultsScreen";
 import { AiSessionScreen } from "./features/ai-session/AiSessionScreen";
 import { buildAiSessionScreenHash } from "./features/ai-session/state";
+import { ChatsScreen } from "./features/chats/ChatsScreen";
 import { ModelProfilesScreen } from "./features/model-config/ModelProfilesScreen";
 import { createFilesViewModel } from "./features/diff/create-files-view-model";
 import { createDiffViewModel } from "./features/diff/create-diff-view-model";
@@ -55,6 +56,7 @@ export interface AppProps {
 
 const PRIMARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
   "files",
+  "chats",
   "ai-session",
   "commits",
   "terminal",
@@ -72,6 +74,7 @@ const SECONDARY_NAVIGATION_SCREENS: readonly AppScreen[] = [
 const NAVIGATION_LABELS: Readonly<Record<AppScreen, string>> = {
   project: "Project",
   files: "Files",
+  chats: "Chats",
   "ai-session": "Sessions",
   commits: "Commits",
   terminal: "Terminal",
@@ -896,6 +899,21 @@ export function App(props: AppProps): JSX.Element {
           apiBaseUrl={props.bootstrapState.apiBaseUrl}
           contextId={activeContextId()}
           projectSlug={activeRoute.projectSlug}
+          projectPath={activeWorkspaceTab()?.path ?? ""}
+          selectedPath={filesViewModel.selectedPath()}
+          fileContent={filesViewModel.fileContent()}
+          diffOverview={diffViewModel.diffOverview()}
+          onOpenFilesScreen={() => navigateToScreen("files")}
+          onOpenProjectScreen={() => navigateToScreen("project")}
+        />
+      );
+    }
+
+    if (activeRoute.screen === "chats") {
+      return (
+        <ChatsScreen
+          apiBaseUrl={props.bootstrapState.apiBaseUrl}
+          contextId={activeContextId()}
           projectPath={activeWorkspaceTab()?.path ?? ""}
           selectedPath={filesViewModel.selectedPath()}
           fileContent={filesViewModel.fileContent()}

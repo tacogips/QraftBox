@@ -20,6 +20,7 @@ export interface BrowserVerificationScenario {
   readonly routeHash:
     | "#/project"
     | "#/files"
+    | "#/chats"
     | "#/ai-session"
     | "#/commits"
     | "#/terminal"
@@ -81,8 +82,7 @@ const BROWSER_VERIFICATION_SCENARIOS: readonly BrowserVerificationScenario[] = [
 ] as const;
 
 const DEFAULT_SOLID_VERIFICATION_URL =
-  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ??
-  "http://127.0.0.1:7155";
+  DEFAULT_FRONTEND_VERIFICATION_TARGETS[0]?.baseUrl ?? "http://127.0.0.1:7155";
 
 function parseFrontendVerificationUrl(
   value: string,

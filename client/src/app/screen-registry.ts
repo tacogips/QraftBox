@@ -92,10 +92,33 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     ],
   },
   {
+    screen: "chats",
+    label: "Chats",
+    implementationStatus: "implemented",
+    implementationOrder: 3,
+    parityGate: {
+      summary: "Multi-column chat execution parity",
+      checks: [
+        "Run multiple chat columns against the same workspace without losing session continuity.",
+        "Keep queued-by-default prompt submission explicit while still allowing immediate runs per column.",
+        "Reuse the session detail pane so transcript browsing, prompt submission, and cancellation stay aligned with the single-session screen.",
+      ],
+    },
+    blockers: [
+      {
+        id: "chats-browser-verification-pending",
+        scope: "screen",
+        category: "parity",
+        summary:
+          "The Chats screen still needs browser verification for multi-column layout, session selection, queue/default actions, and prompt execution flows.",
+      },
+    ],
+  },
+  {
     screen: "ai-session",
     label: "AI Sessions",
     implementationStatus: "implemented",
-    implementationOrder: 3,
+    implementationOrder: 4,
     parityGate: {
       summary: "Session browsing parity",
       checks: [
@@ -118,7 +141,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "commits",
     label: "Commits",
     implementationStatus: "implemented",
-    implementationOrder: 4,
+    implementationOrder: 5,
     parityGate: {
       summary: "Commit history parity",
       checks: [
@@ -141,7 +164,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "terminal",
     label: "Terminal",
     implementationStatus: "implemented",
-    implementationOrder: 5,
+    implementationOrder: 6,
     parityGate: {
       summary: "Terminal session parity",
       checks: [
@@ -164,7 +187,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "workers",
     label: "Workers",
     implementationStatus: "implemented",
-    implementationOrder: 6,
+    implementationOrder: 7,
     parityGate: {
       summary: "Worker process parity",
       checks: [
@@ -187,7 +210,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "system-info",
     label: "System Info",
     implementationStatus: "implemented",
-    implementationOrder: 7,
+    implementationOrder: 8,
     parityGate: {
       summary: "System info parity",
       checks: [
@@ -209,7 +232,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "notifications",
     label: "Notifications",
     implementationStatus: "implemented",
-    implementationOrder: 8,
+    implementationOrder: 9,
     parityGate: {
       summary: "Notification preference parity",
       checks: [
@@ -231,7 +254,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "model-profiles",
     label: "Model Profiles",
     implementationStatus: "implemented",
-    implementationOrder: 9,
+    implementationOrder: 10,
     parityGate: {
       summary: "Model profile parity",
       checks: [
@@ -253,7 +276,7 @@ export const SOLID_SCREEN_DEFINITIONS: readonly SolidScreenDefinition[] = [
     screen: "action-defaults",
     label: "Action Defaults",
     implementationStatus: "implemented",
-    implementationOrder: 10,
+    implementationOrder: 11,
     parityGate: {
       summary: "Action default parity",
       checks: [

@@ -29,6 +29,20 @@ describe("resolveDiffLoadDecision", () => {
     });
   });
 
+  test("allows diff loading for the chats screen because it shares files context", () => {
+    expect(
+      resolveDiffLoadDecision({
+        screen: "chats",
+        activeContextId: "ctx-chat",
+        activeWorkspaceIsGitRepo: true,
+      }),
+    ).toEqual({
+      type: "load",
+      contextId: "ctx-chat",
+      unsupportedMessage: null,
+    });
+  });
+
   test("resets diff state when no workspace context is active", () => {
     expect(
       resolveDiffLoadDecision({

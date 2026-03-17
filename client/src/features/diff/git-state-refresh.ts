@@ -59,7 +59,7 @@ export function createGitStateRefreshController(
 ): GitStateRefreshController {
   const pollMs = options.pollMs ?? 15_000;
   const refreshScreens = new Set<AppScreen>(
-    options.refreshScreens ?? ["files", "ai-session"],
+    options.refreshScreens ?? ["files", "chats", "ai-session"],
   );
   const windowSource = options.windowSource ?? window;
   const documentSource = options.documentSource ?? document;

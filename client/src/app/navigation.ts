@@ -23,6 +23,7 @@ export function createScreenNavigationItems(
     [
       "project",
       "files",
+      "chats",
       "ai-session",
       "commits",
       "terminal",

@@ -12,6 +12,7 @@ describe("browser verification scenarios", () => {
       "workspace-shared-git-state",
       "diff-shared-git-state",
       "diff-shared-non-git-state",
+      "chats-shared-git-state",
       "ai-session-shared-git-state",
       "commits-shared-git-state",
       "terminal-shared-git-state",

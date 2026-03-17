@@ -14,6 +14,7 @@ describe("navigation contracts", () => {
   test("exposes the canonical app screens", () => {
     expect(APP_SCREENS).toEqual([
       "files",
+      "chats",
       "ai-session",
       "commits",
       "terminal",
@@ -89,6 +90,7 @@ describe("navigation contracts", () => {
 
   test("builds screen hashes", () => {
     expect(buildScreenHash(null, "files")).toBe("#/files");
+    expect(buildScreenHash("repo-slug", "chats")).toBe("#/repo-slug/chats");
     expect(buildScreenHash("repo-slug", "ai-session")).toBe(
       "#/repo-slug/ai-session",
     );
@@ -152,6 +154,22 @@ describe("navigation contracts", () => {
     ).toEqual({
       projectSlug: "repo-slug",
       screen: "ai-session",
+      contextId: null,
+      selectedPath: null,
+      selectedViewMode: null,
+      fileTreeMode: null,
+      selectedLineNumber: null,
+    });
+  });
+
+  test("ignores files-only query state outside the chats screen", () => {
+    expect(
+      parseAppHash(
+        "#/repo-slug/chats?path=src%2Fmain.ts&view=inline&tree=all&line=42",
+      ),
+    ).toEqual({
+      projectSlug: "repo-slug",
+      screen: "chats",
       contextId: null,
       selectedPath: null,
       selectedViewMode: null,

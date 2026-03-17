@@ -76,6 +76,30 @@ describe("createGitStateRefreshController", () => {
     expect(refreshedContextIds).toEqual(["ctx-ai"]);
   });
 
+  test("refreshes the active git context on focus when the chats screen is visible", () => {
+    const windowHarness = createEventTargetHarness();
+    const documentHarness = {
+      ...createEventTargetHarness(),
+      visibilityState: "visible" as const,
+    };
+    const refreshedContextIds: string[] = [];
+    const gitStateRefreshController = createGitStateRefreshController({
+      windowSource: windowHarness,
+      documentSource: documentHarness,
+      getContextId: () => "ctx-chat",
+      getActiveScreen: () => "chats",
+      isGitRepo: () => true,
+      refreshContext(contextId) {
+        refreshedContextIds.push(contextId);
+      },
+    });
+
+    gitStateRefreshController.connect();
+    windowHarness.dispatch("focus");
+
+    expect(refreshedContextIds).toEqual(["ctx-chat"]);
+  });
+
   test("skips refresh when the screen is outside the allowed refresh set", () => {
     const windowHarness = createEventTargetHarness();
     const documentHarness = {

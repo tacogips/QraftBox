@@ -2,6 +2,7 @@ export type BrowserVerificationScenarioId =
   | "workspace-shared-git-state"
   | "diff-shared-git-state"
   | "diff-shared-non-git-state"
+  | "chats-shared-git-state"
   | "ai-session-shared-git-state"
   | "commits-shared-git-state"
   | "terminal-shared-git-state"
@@ -16,6 +17,7 @@ export interface BrowserVerificationScenarioDefinition {
   readonly routeHash:
     | "#/project"
     | "#/files"
+    | "#/chats"
     | "#/ai-session"
     | "#/commits"
     | "#/terminal"
@@ -65,6 +67,18 @@ export const BROWSER_VERIFICATION_SCENARIOS: readonly BrowserVerificationScenari
         "Load the files screen against one shared non-Git workspace state.",
         "Confirm the route remains usable without issuing a diff bootstrap request.",
         "Keep the active non-Git project identity visible while the unsupported diff state is shown.",
+      ],
+      requiredTextSubstrings: [],
+      requiredApiPathSubstrings: [],
+    },
+    {
+      id: "chats-shared-git-state",
+      routeHash: "#/chats",
+      workspaceKind: "git",
+      checklist: [
+        "Load the chats route in both frontends against the same Git workspace state.",
+        "Confirm the multi-chat workspace renders without route-level errors.",
+        "Keep chat columns anchored to the same selected project and shared file context.",
       ],
       requiredTextSubstrings: [],
       requiredApiPathSubstrings: [],

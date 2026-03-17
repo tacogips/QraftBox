@@ -22,6 +22,7 @@ describe("createScreenNavigationItems", () => {
       isActive: true,
       implementationStatus: "implemented",
     });
+    expect(items.find((item) => item.screen === "chats")?.href).toBe("#/chats");
   });
 
   test("preserves the active project slug across implemented and planned screens", () => {
@@ -44,6 +45,13 @@ describe("createScreenNavigationItems", () => {
       screen: "workers",
       label: "Workers",
       href: "#/demo-repo/workers",
+      isActive: false,
+      implementationStatus: "implemented",
+    });
+    expect(items.find((item) => item.screen === "chats")).toEqual({
+      screen: "chats",
+      label: "Chats",
+      href: "#/demo-repo/chats",
       isActive: false,
       implementationStatus: "implemented",
     });

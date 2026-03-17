@@ -62,6 +62,26 @@ describe("refreshFilesScreenFromRealtime", () => {
     expect(refreshSelectedFileContent).toHaveBeenCalledWith("ctx-1");
   });
 
+  test("refreshes the shared file context while chats is active", async () => {
+    const refreshDiff = mock(async () => {});
+    const refreshAllFilesTree = mock(async () => {});
+    const refreshSelectedFileContent = mock(async () => {});
+
+    await refreshFilesScreenFromRealtime({
+      activeScreen: "chats",
+      activeContextId: "ctx-1",
+      targetContextId: "ctx-1",
+      activeWorkspaceIsGitRepo: true,
+      refreshDiff,
+      refreshAllFilesTree,
+      refreshSelectedFileContent,
+    });
+
+    expect(refreshDiff).toHaveBeenCalledWith("ctx-1");
+    expect(refreshAllFilesTree).toHaveBeenCalledWith("ctx-1");
+    expect(refreshSelectedFileContent).toHaveBeenCalledWith("ctx-1");
+  });
+
   test("ignores inactive files screens and stale contexts", async () => {
     const refreshDiff = mock(async () => {});
     const refreshAllFilesTree = mock(async () => {});

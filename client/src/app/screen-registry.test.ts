@@ -70,6 +70,13 @@ describe("screen registry", () => {
           "The files screen still needs browser parity verification against the Svelte baseline for diff, empty, error, and non-Git states.",
       },
       {
+        id: "chats-browser-verification-pending",
+        scope: "screen",
+        category: "parity",
+        summary:
+          "The Chats screen still needs browser verification for multi-column layout, session selection, queue/default actions, and prompt execution flows.",
+      },
+      {
         id: "ai-session-browser-verification-pending",
         scope: "screen",
         category: "parity",
@@ -194,8 +201,8 @@ describe("screen registry", () => {
 
   test("builds a support summary that stays blocked until legacy-support gates pass", () => {
     expect(getSolidSupportReport()).toEqual({
-      implementedScreenCount: 10,
-      totalScreenCount: 10,
+      implementedScreenCount: 11,
+      totalScreenCount: 11,
       remainingScreens: [],
       outstandingBlockers: getOutstandingSolidSupportBlockers(),
       criteria: [
@@ -246,6 +253,7 @@ describe("screen registry", () => {
     expect(getImplementedSolidScreens()).toEqual([
       "project",
       "files",
+      "chats",
       "ai-session",
       "commits",
       "terminal",
@@ -388,6 +396,7 @@ describe("screen registry", () => {
     expect(blockerIds).not.toContain(
       "files-parity-browser-verification-pending",
     );
+    expect(blockerIds).toContain("chats-browser-verification-pending");
     expect(blockerIds).toContain("ai-session-browser-verification-pending");
     expect(blockerIds).toContain("commits-browser-verification-pending");
     expect(blockerIds).toContain("terminal-browser-verification-pending");

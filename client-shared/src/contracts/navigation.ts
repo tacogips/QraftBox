@@ -23,6 +23,7 @@ export function isFilesSearchScope(value: string): value is FilesSearchScope {
 
 export const APP_SCREENS = [
   "files",
+  "chats",
   "ai-session",
   "commits",
   "terminal",
