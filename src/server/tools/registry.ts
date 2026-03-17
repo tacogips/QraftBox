@@ -17,18 +17,11 @@ import type {
 import type { ToolResult, ToolContext } from "./handler-strategies.js";
 import { createBuiltinTools } from "./builtin/index.js";
 import { loadPluginTools, type LoadedPluginTool } from "./plugin-loader.js";
-
-/**
- * MCP server name used by qraftbox
- *
- * This is a fixed identifier for the qraftbox MCP server instance.
- */
-const MCP_SERVER_NAME = "qraftbox-tools";
-
-/**
- * MCP server version
- */
-const MCP_SERVER_VERSION = "1.0.0";
+import {
+  formatAllowedToolName,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
+} from "./metadata.js";
 
 /**
  * SdkTool-compatible interface
@@ -366,9 +359,7 @@ export function createQraftBoxToolRegistry(
     },
 
     getAllowedToolNames(): readonly string[] {
-      return getAllTools().map(
-        (t) => `mcp__${MCP_SERVER_NAME}__${t.tool.name}`,
-      );
+      return getAllTools().map((tool) => formatAllowedToolName(tool.tool.name));
     },
   };
 }

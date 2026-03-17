@@ -12,6 +12,11 @@ import type {
   JsonSchema,
 } from "../../types/tool.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import {
+  formatAllowedToolName,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
+} from "../tools/metadata.js";
 
 /**
  * Create a mock tool registry for testing
@@ -39,12 +44,12 @@ function createMockRegistry(tools: RegisteredToolInfo[]): QraftBoxToolRegistry {
     getToolCount: () => tools.length,
     toMcpServerConfig: () => ({
       type: "sdk" as const,
-      name: "qraftbox-tools",
-      version: "1.0.0",
+      name: MCP_SERVER_NAME,
+      version: MCP_SERVER_VERSION,
       tools: [],
     }),
     getAllowedToolNames: () =>
-      tools.map((t) => `mcp__qraftbox-tools__${t.name}`),
+      tools.map((tool) => formatAllowedToolName(tool.name)),
     _setReloadResult: (result: ToolRegistrationResult) => {
       reloadResult = result;
     },
@@ -298,8 +303,8 @@ describe("createToolRoutes", () => {
         getToolCount: () => 0,
         toMcpServerConfig: () => ({
           type: "sdk" as const,
-          name: "qraftbox-tools",
-          version: "1.0.0",
+          name: MCP_SERVER_NAME,
+          version: MCP_SERVER_VERSION,
           tools: [],
         }),
         getAllowedToolNames: () => [],
@@ -329,8 +334,8 @@ describe("createToolRoutes", () => {
         getToolCount: () => 0,
         toMcpServerConfig: () => ({
           type: "sdk" as const,
-          name: "qraftbox-tools",
-          version: "1.0.0",
+          name: MCP_SERVER_NAME,
+          version: MCP_SERVER_VERSION,
           tools: [],
         }),
         getAllowedToolNames: () => [],

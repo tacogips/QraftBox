@@ -10,6 +10,7 @@
 import type { ClaudeSessionId, AIConfig } from "../../types/ai.js";
 import { AIAgent } from "../../types/ai-agent.js";
 import type { QraftBoxToolRegistry } from "../tools/registry.js";
+import { MCP_SERVER_NAME } from "../tools/metadata.js";
 import { createLogger } from "../logger.js";
 import {
   SessionRunner,
@@ -695,7 +696,7 @@ class ClaudeAgentRunner implements AgentRunner {
         agent = new SessionRunner({
           cwd: params.projectPath,
           mcpServers: {
-            "qraftbox-tools": mcpServerConfig as any,
+            [MCP_SERVER_NAME]: mcpServerConfig as any,
           },
           allowedTools: allowedToolNames,
           cliPath,

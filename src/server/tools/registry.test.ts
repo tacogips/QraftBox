@@ -9,6 +9,11 @@ import { createQraftBoxToolRegistry } from "./registry.js";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import {
+  formatAllowedToolName,
+  MCP_SERVER_NAME,
+  MCP_SERVER_VERSION,
+} from "./metadata.js";
 
 describe("QraftBoxToolRegistry", () => {
   let tempDir: string;
@@ -170,8 +175,8 @@ describe("QraftBoxToolRegistry", () => {
     const mcpConfig = registry.toMcpServerConfig();
 
     expect(mcpConfig.type).toBe("sdk");
-    expect(mcpConfig.name).toBe("qraftbox-tools");
-    expect(mcpConfig.version).toBe("1.0.0");
+    expect(mcpConfig.name).toBe(MCP_SERVER_NAME);
+    expect(mcpConfig.version).toBe(MCP_SERVER_VERSION);
     expect(mcpConfig.tools.length).toBeGreaterThan(0);
 
     // Check tool structure
@@ -197,12 +202,14 @@ describe("QraftBoxToolRegistry", () => {
 
     // All names should follow mcp__qraftbox-tools__<name> format
     for (const name of allowedNames) {
-      expect(name).toMatch(/^mcp__qraftbox-tools__[a-zA-Z0-9_-]+$/);
+      expect(name).toMatch(
+        new RegExp(`^mcp__${MCP_SERVER_NAME}__[a-zA-Z0-9_-]+$`),
+      );
     }
 
     // Should contain known built-in tools
-    expect(allowedNames).toContain("mcp__qraftbox-tools__git-status");
-    expect(allowedNames).toContain("mcp__qraftbox-tools__workspace-info");
+    expect(allowedNames).toContain(formatAllowedToolName("git-status"));
+    expect(allowedNames).toContain(formatAllowedToolName("workspace-info"));
   });
 
   test("reloadPlugins() preserves built-in tools", async () => {
