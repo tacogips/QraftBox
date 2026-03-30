@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { BranchesApiClient } from "../../../../client-shared/src/api/branches";
 import type { DiffApiClient } from "../../../../client-shared/src/api/diff";
 import type {
   DiffFile,
@@ -210,5 +211,211 @@ describe("createDiffController", () => {
     expect(diffController.getState().diffOverview.preferredViewMode).toBe(
       "current-state",
     );
+  });
+
+  test("defaults the diff base branch to the repository default branch", async () => {
+    const diffRequests: Array<{
+      readonly contextId: string;
+      readonly base?: string | undefined;
+    }> = [];
+    const diffApiClient: DiffApiClient = {
+      fetchContextDiff: async (contextId, options) => {
+        diffRequests.push({
+          contextId,
+          base: options?.base,
+        });
+        return {
+          files: [createDiffFile("src/main.ts")],
+          stats: {
+            totalFiles: 1,
+            additions: 3,
+            deletions: 1,
+          },
+        };
+      },
+    };
+    const branchesApiClient: BranchesApiClient = {
+      listBranches: async () => ({
+        branches: [],
+        current: "feature/current",
+        defaultBranch: "main",
+        total: 0,
+        offset: 0,
+        limit: 1,
+      }),
+      checkoutBranch: async () => ({
+        success: true,
+        previousBranch: "main",
+        currentBranch: "feature/current",
+      }),
+    };
+    const diffController = createDiffController({
+      diffApiClient,
+      branchesApiClient,
+    });
+
+    await diffController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-base",
+      activeWorkspaceIsGitRepo: true,
+    });
+
+    expect(diffRequests).toEqual([
+      {
+        contextId: "ctx-base",
+        base: "main",
+      },
+    ]);
+    expect(diffController.getState().selectedBaseBranch).toBe("main");
+    expect(diffController.getState().defaultBaseBranch).toBe("main");
+  });
+
+  test("reloads the diff when the selected base branch changes", async () => {
+    const diffRequests: Array<{
+      readonly contextId: string;
+      readonly base?: string | undefined;
+    }> = [];
+    const diffApiClient: DiffApiClient = {
+      fetchContextDiff: async (contextId, options) => {
+        diffRequests.push({
+          contextId,
+          base: options?.base,
+        });
+        return {
+          files: [
+            createDiffFile(
+              options?.base === undefined
+                ? "src/working-tree.ts"
+                : `src/${options.base.replaceAll("/", "-")}.ts`,
+            ),
+          ],
+          stats: {
+            totalFiles: 1,
+            additions: 3,
+            deletions: 1,
+          },
+        };
+      },
+    };
+    const branchesApiClient: BranchesApiClient = {
+      listBranches: async () => ({
+        branches: [],
+        current: "feature/current",
+        defaultBranch: "main",
+        total: 0,
+        offset: 0,
+        limit: 1,
+      }),
+      checkoutBranch: async () => ({
+        success: true,
+        previousBranch: "main",
+        currentBranch: "feature/current",
+      }),
+    };
+    const diffController = createDiffController({
+      diffApiClient,
+      branchesApiClient,
+    });
+
+    await diffController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-switch",
+      activeWorkspaceIsGitRepo: true,
+    });
+    await diffController.setBaseBranch("ctx-switch", "release/1.0");
+
+    expect(diffRequests).toEqual([
+      {
+        contextId: "ctx-switch",
+        base: "main",
+      },
+      {
+        contextId: "ctx-switch",
+        base: "release/1.0",
+      },
+    ]);
+    expect(diffController.getState().selectedBaseBranch).toBe("release/1.0");
+    expect(diffController.getState().diffOverview.selectedPath).toBe(
+      "src/release-1.0.ts",
+    );
+  });
+
+  test("clears stale base-branch state immediately when switching contexts", async () => {
+    const deferredSecondContextBranches = createDeferredPromise<{
+      readonly branches: readonly [];
+      readonly current: string;
+      readonly defaultBranch: string;
+      readonly total: number;
+      readonly offset: number;
+      readonly limit: number;
+    }>();
+    const diffApiClient: DiffApiClient = {
+      fetchContextDiff: async (_contextId, options) => ({
+        files: [
+          createDiffFile(
+            options?.base === undefined ? "src/working-tree.ts" : "src/base.ts",
+          ),
+        ],
+        stats: {
+          totalFiles: 1,
+          additions: 3,
+          deletions: 1,
+        },
+      }),
+    };
+    const branchesApiClient: BranchesApiClient = {
+      listBranches: async (contextId) => {
+        if (contextId === "ctx-first") {
+          return {
+            branches: [],
+            current: "feature/current",
+            defaultBranch: "main",
+            total: 0,
+            offset: 0,
+            limit: 1,
+          };
+        }
+
+        return deferredSecondContextBranches.promise;
+      },
+      checkoutBranch: async () => ({
+        success: true,
+        previousBranch: "main",
+        currentBranch: "feature/current",
+      }),
+    };
+    const diffController = createDiffController({
+      diffApiClient,
+      branchesApiClient,
+    });
+
+    await diffController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-first",
+      activeWorkspaceIsGitRepo: true,
+    });
+    expect(diffController.getState().selectedBaseBranch).toBe("main");
+
+    const secondContextLoad = diffController.synchronize({
+      screen: "files",
+      activeContextId: "ctx-second",
+      activeWorkspaceIsGitRepo: true,
+    });
+
+    expect(diffController.getState().selectedBaseBranch).toBeNull();
+    expect(diffController.getState().defaultBaseBranch).toBeNull();
+
+    deferredSecondContextBranches.resolve({
+      branches: [],
+      current: "feature/second",
+      defaultBranch: "develop",
+      total: 0,
+      offset: 0,
+      limit: 1,
+    });
+    await secondContextLoad;
+
+    expect(diffController.getState().selectedBaseBranch).toBe("develop");
+    expect(diffController.getState().defaultBaseBranch).toBe("develop");
   });
 });

@@ -14,12 +14,18 @@ import {
 export interface DiffViewModel {
   readonly diffOverview: () => DiffOverviewState;
   readonly preferredViewMode: () => DiffViewMode;
+  readonly selectedBaseBranch: () => string | null;
+  readonly defaultBaseBranch: () => string | null;
   readonly isLoading: () => boolean;
   readonly unsupportedMessage: () => string | null;
   readonly errorMessage: () => string | null;
   synchronize(options: DiffSynchronizationOptions): Promise<void>;
   selectPath(activeContextId: string | null, path: string): void;
   setPreferredViewMode(mode: DiffViewMode): void;
+  setBaseBranch(
+    activeContextId: string | null,
+    baseBranch: string,
+  ): Promise<void>;
 }
 
 export interface CreateDiffViewModelOptions {
@@ -46,6 +52,8 @@ export function createDiffViewModel(
     diffOverview: (): DiffOverviewState => diffState().diffOverview,
     preferredViewMode: (): DiffViewMode =>
       diffState().diffOverview.preferredViewMode,
+    selectedBaseBranch: (): string | null => diffState().selectedBaseBranch,
+    defaultBaseBranch: (): string | null => diffState().defaultBaseBranch,
     isLoading: (): boolean => diffState().isLoading,
     unsupportedMessage: (): string | null => diffState().unsupportedMessage,
     errorMessage: (): string | null => diffState().errorMessage,
@@ -59,6 +67,12 @@ export function createDiffViewModel(
     },
     setPreferredViewMode(mode: DiffViewMode): void {
       diffController.setPreferredViewMode(mode);
+    },
+    async setBaseBranch(
+      activeContextId: string | null,
+      baseBranch: string,
+    ): Promise<void> {
+      await diffController.setBaseBranch(activeContextId, baseBranch);
     },
   };
 }

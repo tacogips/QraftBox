@@ -1,4 +1,8 @@
 import {
+  createBranchesApiClient,
+  type BranchesApiClient,
+} from "../../../../client-shared/src/api/branches";
+import {
   createDiffApiClient,
   type DiffApiClient,
 } from "../../../../client-shared/src/api/diff";
@@ -16,6 +20,8 @@ import {
 
 export interface DiffControllerState {
   readonly diffOverview: DiffOverviewState;
+  readonly selectedBaseBranch: string | null;
+  readonly defaultBaseBranch: string | null;
   readonly isLoading: boolean;
   readonly unsupportedMessage: string | null;
   readonly errorMessage: string | null;
@@ -30,6 +36,7 @@ export interface DiffSynchronizationOptions {
 export interface CreateDiffControllerOptions {
   readonly apiBaseUrl?: string | undefined;
   readonly diffApiClient?: DiffApiClient | undefined;
+  readonly branchesApiClient?: BranchesApiClient | undefined;
   readonly onStateChange?: ((state: DiffControllerState) => void) | undefined;
 }
 
@@ -38,6 +45,10 @@ export interface DiffController {
   synchronize(options: DiffSynchronizationOptions): Promise<void>;
   selectPath(activeContextId: string | null, path: string): void;
   setPreferredViewMode(mode: DiffViewMode): void;
+  setBaseBranch(
+    activeContextId: string | null,
+    baseBranch: string,
+  ): Promise<void>;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -62,6 +73,8 @@ export function createInitialDiffControllerState(
 ): DiffControllerState {
   return {
     diffOverview: createDiffOverviewState([], null, preferredViewMode),
+    selectedBaseBranch: null,
+    defaultBaseBranch: null,
     isLoading: false,
     unsupportedMessage: null,
     errorMessage: null,
@@ -76,12 +89,20 @@ export function createDiffController(
     createDiffApiClient({
       apiBaseUrl: options.apiBaseUrl,
     });
+  const branchesApiClient =
+    options.branchesApiClient ??
+    createBranchesApiClient({
+      apiBaseUrl: options.apiBaseUrl,
+    });
   const notifyStateChange = options.onStateChange ?? (() => {});
   const diffRequestGuard = createLatestDiffRequestGuard();
   let preferredViewMode: DiffViewMode = "side-by-side";
   let state = createInitialDiffControllerState(preferredViewMode);
   let loadedDiffContextId: string | null = null;
   let rememberedDiffSelections: Readonly<Record<string, string>> = {};
+  let rememberedBaseBranches: Readonly<Record<string, string>> = {};
+  let rememberedDefaultBaseBranches: Readonly<Record<string, string>> = {};
+  let lastSynchronizationOptions: DiffSynchronizationOptions | null = null;
 
   function setState(nextState: DiffControllerState): void {
     state = nextState;
@@ -100,13 +121,81 @@ export function createDiffController(
     setState(createInitialDiffControllerState(preferredViewMode));
   }
 
-  return {
+  async function resolveBaseBranchSelection(contextId: string): Promise<{
+    readonly selectedBaseBranch: string | null;
+    readonly defaultBaseBranch: string | null;
+  }> {
+    const rememberedBaseBranch = rememberedBaseBranches[contextId];
+    const rememberedDefaultBaseBranch =
+      rememberedDefaultBaseBranches[contextId];
+
+    if (
+      rememberedBaseBranch !== undefined &&
+      rememberedDefaultBaseBranch !== undefined
+    ) {
+      return {
+        selectedBaseBranch: rememberedBaseBranch,
+        defaultBaseBranch: rememberedDefaultBaseBranch,
+      };
+    }
+
+    try {
+      const branchListResponse = await branchesApiClient.listBranches(
+        contextId,
+        {
+          limit: 1,
+        },
+      );
+      const defaultBaseBranch = branchListResponse.defaultBranch.trim();
+      const selectedBaseBranch =
+        rememberedBaseBranch ?? defaultBaseBranch ?? "";
+
+      if (defaultBaseBranch.length > 0) {
+        rememberedDefaultBaseBranches = {
+          ...rememberedDefaultBaseBranches,
+          [contextId]: defaultBaseBranch,
+        };
+      }
+
+      if (selectedBaseBranch.length > 0) {
+        rememberedBaseBranches = {
+          ...rememberedBaseBranches,
+          [contextId]: selectedBaseBranch,
+        };
+      }
+
+      return {
+        selectedBaseBranch:
+          selectedBaseBranch.length > 0 ? selectedBaseBranch : null,
+        defaultBaseBranch:
+          defaultBaseBranch.length > 0 ? defaultBaseBranch : null,
+      };
+    } catch {
+      return {
+        selectedBaseBranch: rememberedBaseBranch ?? null,
+        defaultBaseBranch: rememberedDefaultBaseBranch ?? null,
+      };
+    }
+  }
+
+  function resolveRememberedBaseBranchSelection(contextId: string): {
+    readonly selectedBaseBranch: string | null;
+    readonly defaultBaseBranch: string | null;
+  } {
+    return {
+      selectedBaseBranch: rememberedBaseBranches[contextId] ?? null,
+      defaultBaseBranch: rememberedDefaultBaseBranches[contextId] ?? null,
+    };
+  }
+
+  const controller: DiffController = {
     getState(): DiffControllerState {
       return state;
     },
     async synchronize(
       synchronizationOptions: DiffSynchronizationOptions,
     ): Promise<void> {
+      lastSynchronizationOptions = synchronizationOptions;
       const diffLoadDecision = resolveDiffLoadDecision(synchronizationOptions);
 
       if (diffLoadDecision.type === "reset") {
@@ -119,6 +208,8 @@ export function createDiffController(
         loadedDiffContextId = null;
         setState({
           diffOverview: createDiffOverviewState([], null, preferredViewMode),
+          selectedBaseBranch: state.selectedBaseBranch,
+          defaultBaseBranch: state.defaultBaseBranch,
           isLoading: false,
           unsupportedMessage: diffLoadDecision.unsupportedMessage,
           errorMessage: null,
@@ -139,9 +230,47 @@ export function createDiffController(
         }));
       }
 
+      const rememberedBaseBranchSelection = resolveRememberedBaseBranchSelection(
+        diffLoadDecision.contextId,
+      );
+      if (
+        state.selectedBaseBranch !==
+          rememberedBaseBranchSelection.selectedBaseBranch ||
+        state.defaultBaseBranch !==
+          rememberedBaseBranchSelection.defaultBaseBranch
+      ) {
+        updateState((currentState) => ({
+          ...currentState,
+          selectedBaseBranch:
+            rememberedBaseBranchSelection.selectedBaseBranch,
+          defaultBaseBranch: rememberedBaseBranchSelection.defaultBaseBranch,
+        }));
+      }
+
       try {
+        const baseBranchSelection = await resolveBaseBranchSelection(
+          diffLoadDecision.contextId,
+        );
+        if (!diffRequestGuard.isCurrent(requestToken)) {
+          return;
+        }
+
+        if (
+          state.selectedBaseBranch !== baseBranchSelection.selectedBaseBranch ||
+          state.defaultBaseBranch !== baseBranchSelection.defaultBaseBranch
+        ) {
+          updateState((currentState) => ({
+            ...currentState,
+            selectedBaseBranch: baseBranchSelection.selectedBaseBranch,
+            defaultBaseBranch: baseBranchSelection.defaultBaseBranch,
+          }));
+        }
+
         const diffResponse = await diffApiClient.fetchContextDiff(
           diffLoadDecision.contextId,
+          {
+            base: baseBranchSelection.selectedBaseBranch ?? undefined,
+          },
         );
         if (!diffRequestGuard.isCurrent(requestToken)) {
           return;
@@ -181,6 +310,8 @@ export function createDiffController(
           updateState((currentState) => ({
             ...currentState,
             diffOverview: nextDiffOverview,
+            selectedBaseBranch: baseBranchSelection.selectedBaseBranch,
+            defaultBaseBranch: baseBranchSelection.defaultBaseBranch,
             errorMessage: null,
             unsupportedMessage: null,
           }));
@@ -246,5 +377,37 @@ export function createDiffController(
         ),
       }));
     },
+    async setBaseBranch(
+      activeContextId: string | null,
+      baseBranch: string,
+    ): Promise<void> {
+      if (activeContextId === null) {
+        return;
+      }
+
+      const trimmedBaseBranch = baseBranch.trim();
+      if (trimmedBaseBranch.length === 0) {
+        return;
+      }
+
+      rememberedBaseBranches = {
+        ...rememberedBaseBranches,
+        [activeContextId]: trimmedBaseBranch,
+      };
+
+      updateState((currentState) => ({
+        ...currentState,
+        selectedBaseBranch: trimmedBaseBranch,
+      }));
+
+      if (
+        lastSynchronizationOptions?.activeContextId === activeContextId &&
+        lastSynchronizationOptions.activeWorkspaceIsGitRepo
+      ) {
+        await controller.synchronize(lastSynchronizationOptions);
+      }
+    },
   };
+
+  return controller;
 }

@@ -41,6 +41,35 @@ describe("shared diff api", () => {
     expect(diffResponse.files[0]?.path).toBe("src/server.ts");
   });
 
+  test("includes the selected base branch in context diff requests", async () => {
+    const fetchCalls: string[] = [];
+    const diffApiClient = createDiffApiClient({
+      fetchImplementation: async (input: Parameters<typeof fetch>[0]) => {
+        fetchCalls.push(String(input));
+        return new Response(
+          JSON.stringify({
+            files: [],
+            stats: {
+              totalFiles: 0,
+              additions: 0,
+              deletions: 0,
+            },
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      },
+    });
+
+    await diffApiClient.fetchContextDiff("ctx-beta", {
+      base: "main",
+    });
+
+    expect(fetchCalls).toEqual(["/api/ctx/ctx-beta/diff?base=main"]);
+  });
+
   test("uses server error payloads when the diff request fails", async () => {
     const diffApiClient = createDiffApiClient({
       fetchImplementation: async () =>

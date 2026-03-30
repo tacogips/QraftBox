@@ -12,7 +12,12 @@ export interface DiffApiClientOptions {
 }
 
 export interface DiffApiClient {
-  fetchContextDiff(contextId: string): Promise<{
+  fetchContextDiff(
+    contextId: string,
+    options?: {
+      readonly base?: string | undefined;
+    },
+  ): Promise<{
     readonly files: readonly DiffFile[];
     readonly stats: DiffStats;
   }>;
@@ -70,12 +75,22 @@ async function ensureOk(
 async function fetchContextDiffWithConfig(
   contextId: string,
   config: DiffApiClientConfig,
+  options?: {
+    readonly base?: string | undefined;
+  },
 ): Promise<{
   readonly files: readonly DiffFile[];
   readonly stats: DiffStats;
 }> {
+  const searchParams = new URLSearchParams();
+  const trimmedBaseBranch = options?.base?.trim();
+  if (trimmedBaseBranch !== undefined && trimmedBaseBranch.length > 0) {
+    searchParams.set("base", trimmedBaseBranch);
+  }
+  const querySuffix =
+    searchParams.size > 0 ? `?${searchParams.toString()}` : "";
   const diffResponse = await config.fetchImplementation(
-    `${config.apiBaseUrl}/ctx/${encodeURIComponent(contextId)}/diff`,
+    `${config.apiBaseUrl}/ctx/${encodeURIComponent(contextId)}/diff${querySuffix}`,
   );
   await ensureOk(diffResponse, "Failed to fetch context diff");
   const diffPayload = (await diffResponse.json()) as DiffApiResponse;
@@ -88,7 +103,11 @@ export function createDiffApiClient(
   const config = createDiffApiClientConfig(options);
 
   return {
-    fetchContextDiff: (contextId: string) =>
-      fetchContextDiffWithConfig(contextId, config),
+    fetchContextDiff: (
+      contextId: string,
+      options?: {
+        readonly base?: string | undefined;
+      },
+    ) => fetchContextDiffWithConfig(contextId, config, options),
   };
 }

@@ -69,6 +69,7 @@ import {
   type CurrentStateLine,
 } from "../../../../client-shared/src/contracts/current-state";
 import { CheckboxField } from "../../components/CheckboxField";
+import { DiffBaseBranchControl } from "./DiffBaseBranchControl";
 import type {
   DiffChange,
   DiffFile,
@@ -138,6 +139,8 @@ export interface DiffScreenProps {
   readonly selectedPath: string | null;
   readonly supportsDiff: boolean;
   readonly preferredViewMode: DiffViewMode;
+  readonly selectedBaseBranch: string | null;
+  readonly defaultBaseBranch: string | null;
   readonly fileTreeMode: FileTreeMode;
   readonly diffTree: FileTreeNode | null;
   readonly allFilesTree: FileTreeNode | null;
@@ -161,6 +164,7 @@ export interface DiffScreenProps {
   readonly searchShowIgnored: boolean;
   readonly searchShowAllFiles: boolean;
   onChangeViewMode(mode: DiffViewMode): void;
+  onChangeBaseBranch(baseBranch: string): void | Promise<void>;
   onSelectPath(path: string): void;
   onSelectLine(lineNumber: number | null): void;
   onChangeFilesTab(tab: FilesTab): void;
@@ -617,6 +621,32 @@ function renderReloadIcon(): JSX.Element {
         d="M3 8a5 5 0 1 0 1.5-3.6M3 3v3h3"
         stroke="currentColor"
         stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+    </svg>
+  );
+}
+
+function renderDiffComparisonIcon(): JSX.Element {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M3 4.25h4.75M3 8h10M8.25 11.75H13"
+        stroke="currentColor"
+        stroke-width="1.6"
+        stroke-linecap="round"
+      />
+      <path
+        d="m6.25 2.75 1.5 1.5-1.5 1.5M9.75 10.25l-1.5 1.5 1.5 1.5"
+        stroke="currentColor"
+        stroke-width="1.6"
         stroke-linecap="round"
         stroke-linejoin="round"
       />
@@ -4362,6 +4392,42 @@ export function DiffScreen(props: DiffScreenProps): JSX.Element {
                             </div>
 
                             <div class="flex min-w-0 flex-wrap items-center gap-2 text-[10px] text-text-secondary">
+                              <Show
+                                when={
+                                  props.contextId !== null && props.supportsDiff
+                                }
+                              >
+                                <div class="flex min-w-0 items-center gap-2">
+                                  <span
+                                    class="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border-default bg-bg-primary px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary"
+                                    aria-label={
+                                      props.selectedBaseBranch !== null
+                                        ? `Showing diff against ${props.selectedBaseBranch}`
+                                        : "Showing diff"
+                                    }
+                                    title={
+                                      props.selectedBaseBranch !== null
+                                        ? `Diff against ${props.selectedBaseBranch}`
+                                        : "Diff"
+                                    }
+                                  >
+                                    {renderDiffComparisonIcon()}
+                                    <span>Diff</span>
+                                  </span>
+                                  <DiffBaseBranchControl
+                                    apiBaseUrl={props.apiBaseUrl}
+                                    contextId={props.contextId}
+                                    isGitRepo={props.supportsDiff}
+                                    selectedBaseBranch={
+                                      props.selectedBaseBranch
+                                    }
+                                    defaultBaseBranch={props.defaultBaseBranch}
+                                    onSelectBaseBranch={
+                                      props.onChangeBaseBranch
+                                    }
+                                  />
+                                </div>
+                              </Show>
                               <div class="flex shrink-0 flex-wrap items-center gap-2">
                                 <For each={availableModes()}>
                                   {(viewMode) => (

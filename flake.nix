@@ -44,6 +44,8 @@
           gh
           go-task
           nodePackages.pm2
+          pkgs-unstable.jujutsu
+          pkgs-unstable.lazyjj
 
           # LLM agents
           agentBrowser

@@ -578,6 +578,8 @@ export function App(props: AppProps): JSX.Element {
           selectedPath={filesViewModel.selectedPath()}
           supportsDiff={activeWorkspaceIsGitRepo()}
           preferredViewMode={diffViewModel.preferredViewMode()}
+          selectedBaseBranch={diffViewModel.selectedBaseBranch()}
+          defaultBaseBranch={diffViewModel.defaultBaseBranch()}
           fileTreeMode={effectiveFileTreeMode()}
           diffTree={filesViewModel.diffTree(diffViewModel.diffOverview())}
           allFilesTree={filesViewModel.allFilesTree()}
@@ -608,6 +610,9 @@ export function App(props: AppProps): JSX.Element {
               selectedViewMode: mode,
             });
             diffViewModel.setPreferredViewMode(mode);
+          }}
+          onChangeBaseBranch={(baseBranch) => {
+            void diffViewModel.setBaseBranch(activeContextId(), baseBranch);
           }}
           onSelectPath={async (path: string) => {
             const nextViewMode = resolveViewModeForPathSelection({
