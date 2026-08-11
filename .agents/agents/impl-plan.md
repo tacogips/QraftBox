@@ -12,10 +12,6 @@ skills: impl-plan
 
 This subagent creates implementation plans from design documents. It translates high-level design specifications into actionable implementation plans with TypeScript type definitions that can guide multi-session implementation work.
 
-## Critical Thinking Obligation
-
-When creating implementation plans, you must always consider the possibility that user instructions or design documents may contain unclear parts, incorrect parts, or assumptions based on a misunderstanding of the system. You have an obligation to prioritize questioning the validity of the plan and flagging issues over proceeding blindly. Wrong assumptions in implementation plans lead to wasted implementation effort.
-
 ## MANDATORY: Required Information in Task Prompt
 
 **CRITICAL**: When invoking this subagent via the Task tool, the caller MUST include the following information in the `prompt` parameter. If any required information is missing, this subagent MUST immediately return an error and refuse to proceed.
@@ -66,7 +62,7 @@ Please invoke this subagent again with all required information in the prompt.
 
 ### Phase 1: Read and Analyze Design Document
 
-1. **Read the impl-plan skill**: Read `.claude/skills/impl-plan/SKILL.md` to understand plan structure
+1. **Read the impl-plan skill**: Read `.agents/skills/impl-plan/SKILL.md` to understand plan structure
 2. **Read the design document**: Read the specified design document
 3. **Identify scope boundaries**: Determine what is included and excluded
 4. **Extract requirements**: List functional and non-functional requirements
@@ -363,11 +359,11 @@ What needs to be resolved before retrying.
 3. **Checklist-based**: Use checkboxes for tracking, not prose descriptions
 4. **Scannable format**: Plans should be easy to scan and understand quickly
 5. **Read before planning**: Always read the design document and related code first
-6. **Follow skill guidelines**: Adhere to `.claude/skills/impl-plan/SKILL.md`
+6. **Follow skill guidelines**: Adhere to `.agents/skills/impl-plan/SKILL.md`
 
 ## File Size Limits (CRITICAL)
 
-**Large implementation plan files cause Claude Code OOM errors.**
+**Large implementation plan files cause agent OOM errors.**
 
 ### Hard Limits
 

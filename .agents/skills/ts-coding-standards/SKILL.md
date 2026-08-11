@@ -11,6 +11,7 @@ This skill provides modern TypeScript coding guidelines and best practices for t
 ## When to Apply
 
 Apply these standards when:
+
 - Writing new TypeScript code
 - Reviewing or refactoring existing TypeScript code
 - Designing module APIs and interfaces
@@ -23,82 +24,52 @@ Apply these standards when:
 3. **Simple Over Clever** - Prefer readable code over clever abstractions
 4. **Fail Fast** - Catch errors at compile time, not runtime
 
+## Source file size
+
+- **Target limit**: TypeScript source files under `src/` should stay below **1000 lines**. If a touched file is already over that size, avoid making it substantially larger and prefer a focused split when the task scope allows it.
+- **How to split**: Prefer clear module boundaries (feature, layer, or cohesive helpers) and choose meaningful file names that describe each split file's responsibility. When many imports point at one path, use a **thin facade** file that re-exports from `*-helpers.ts`, `*-types.ts`, or a small subdirectory so callers keep stable import paths.
+- **Agents**: When editing or reviewing code, if a touched file is **1000+ lines**, call this out and either split it in the same change set or record why the split is a separate follow-up.
+- **Automation**: Non-test sources under `src/` are checked by **Biome** (`noExcessiveLinesPerFile`, **1000** lines) as an error during local linting. `*.test.ts` files are exempt in Biome, but the target limit still applies during review.
+
+## After coding (agents)
+
+After modifying TypeScript under `src/` or `vitest.config.ts`:
+
+1. Run **`biome check . --diagnostic-level=warn`** (or **`bun run lint:biome`**, which sets that threshold). Run `mise install` first if Biome is unavailable.
+2. Run **`bun run typecheck`**.
+3. Run **`bun run test`** (or the subset relevant to the change).
+4. Run Biome formatting when you touch formatted paths: **`bun run format`** or `biome format --write` on the files you edited.
+
+If Biome reports errors or typecheck fails, fix them before declaring the task complete. Biome warnings should be fixed when they are in touched code or otherwise recorded as follow-up migration work.
+
 ## Quick Reference
 
 ### Must-Use Patterns
 
-| Pattern | Use Case |
-|---------|----------|
-| Discriminated Unions | State machines, API responses, Result types |
-| Branded Types | IDs, emails, validated strings |
-| `readonly` | Data that should not mutate |
-| `unknown` in catch | Safe error handling |
-| Explicit undefined checks | Array/object indexed access |
+| Pattern                   | Use Case                                                                                |
+| ------------------------- | --------------------------------------------------------------------------------------- |
+| Discriminated Unions      | State machines, API responses, Result types                                             |
+| Enums                     | Fixed value domains reused by validation sets, config kinds, providers, modes, statuses |
+| Branded Types             | IDs, emails, validated strings                                                          |
+| `readonly`                | Data that should not mutate                                                             |
+| `unknown` in catch        | Safe error handling                                                                     |
+| Explicit undefined checks | Array/object indexed access                                                             |
 
 ### Must-Avoid Anti-Patterns
 
-| Anti-Pattern | Alternative |
-|--------------|-------------|
-| `any` type | `unknown` with type guards |
-| Throwing exceptions for control flow | Result type pattern |
-| Optional chaining without null check | Explicit narrowing |
-| Deep folder nesting (>3 levels) | Flat, feature-based structure |
-| Implicit `undefined` in optional props | Explicit `T \| undefined` |
-| Ambiguous variable names (`store`, `id`, `data`) | Self-descriptive names (`sessionStore`, `sessionId`, `userData`) |
-| Single-character lambda params (`x => x.name`) | Descriptive params (`session => session.name`) |
-
-## Naming Conventions: Self-Descriptive Variable Names
-
-**RULE**: All variable, parameter, and property names MUST be self-descriptive. Avoid short, ambiguous names that require surrounding context to understand. Code should read like prose -- a reader should understand what a variable holds without looking at its declaration or surrounding code.
-
-### Prohibited Patterns
-
-```typescript
-// BAD - ambiguous, requires context to understand
-store.get(id);
-const res = await fetch(url);
-const val = map.get(key);
-items.filter(x => x.active);
-data.forEach(d => process(d));
-const cb = () => { /* ... */ };
-
-// GOOD - self-descriptive, intention is immediately clear
-sessionStore.get(sessionId);
-const apiResponse = await fetch(endpointUrl);
-const configValue = configMap.get(configKey);
-sessions.filter(session => session.active);
-diffEntries.forEach(diffEntry => processDiffEntry(diffEntry));
-const onSessionExpired = () => { /* ... */ };
-```
-
-### Single-Character Variables Are Prohibited
-
-Even in lambda expressions, arrow functions, and short callbacks, single-character variable names (`x`, `e`, `d`, `v`, `i`, `k`) are prohibited. Use descriptive names that convey what the value represents.
-
-```typescript
-// BAD - single-character params hide meaning
-users.map(u => u.name);
-entries.filter(e => e.isValid);
-Object.entries(obj).forEach(([k, v]) => console.log(k, v));
-for (let i = 0; i < items.length; i++) { /* ... */ }
-
-// GOOD - descriptive params
-users.map(user => user.name);
-entries.filter(entry => entry.isValid);
-Object.entries(configMap).forEach(([configKey, configValue]) => console.log(configKey, configValue));
-for (let itemIndex = 0; itemIndex < items.length; itemIndex++) { /* ... */ }
-```
-
-### General Guidelines
-
-1. **Variable names should describe WHAT, not HOW**: `sessionStore` (what it stores) over `store` (generic)
-2. **Parameters should describe the domain concept**: `sessionId` over `id`, `filePath` over `path`
-3. **Collections should hint at their contents**: `sessions` over `items`, `diffEntries` over `data`
-4. **Callbacks should describe their trigger**: `onSessionExpired` over `cb`, `handleFileChange` over `fn`
+| Anti-Pattern                           | Alternative                   |
+| -------------------------------------- | ----------------------------- |
+| `any` type                             | `unknown` with type guards    |
+| `string` for fixed known values        | string enum                   |
+| Throwing exceptions for control flow   | Result type pattern           |
+| Optional chaining without null check   | Explicit narrowing            |
+| Deep folder nesting (>3 levels)        | Flat, feature-based structure |
+| Implicit `undefined` in optional props | Explicit `T \| undefined`     |
 
 ## Detailed Guidelines
 
 For comprehensive guidance, see:
+
 - [Error Handling Patterns](./error-handling.md) - Result types, discriminated unions, neverthrow
 - [Type Safety Best Practices](./type-safety.md) - Branded types, strict config, type guards
 - [Project Layout Conventions](./project-layout.md) - Directory structure, file naming, imports

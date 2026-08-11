@@ -20,7 +20,7 @@ Apply this skill when:
 
 This skill bridges implementation plans (what to build) and actual code implementation. It provides:
 - Task selection based on dependencies and parallelization markers
-- Execution via Claude subtasks (parallel or sequential)
+- Execution via subtasks (parallel or sequential)
 - Progress tracking via PROGRESS.json and plan updates
 - Completion verification and plan finalization
 
@@ -103,7 +103,7 @@ Two execution modes are available:
 
 **Architecture**: Analysis-only subagent + Main conversation orchestration via `impl-exec-specific`.
 
-Claude Code does not support nested subagent spawning (subagents cannot use Task tool). Therefore:
+Subagents cannot spawn nested subagents because the Task tool is unavailable inside subagents. Therefore:
 - `impl-exec-auto` agent: Analyzes plans and returns executable task list
 - Main conversation: **Invokes `impl-exec-specific`** to execute tasks (NOT direct ts-coding spawning)
 
@@ -145,7 +145,7 @@ Step 2: Main conversation (orchestration via impl-exec-specific):
 
 **Why impl-exec-specific?**
 - Main conversation lacks review cycle logic and plan update format
-- impl-exec-auto cannot spawn subagents (Claude Code limitation)
+- impl-exec-auto cannot spawn subagents (subagent limitation)
 - impl-exec-specific handles the full implementation cycle
 
 ### Specific Mode (`impl-exec-specific`)
@@ -193,56 +193,9 @@ Execute tasks one at a time to avoid LLM errors:
    - Completion Criteria: From task completion criteria
 3. **Wait for completion** before proceeding
 4. **Run tests** (check-and-test-after-modify)
-5. **Browser verify** (for UI-affecting tasks, see Browser Verification section below)
-6. **Run review cycle** (ts-review, up to 3 iterations)
-7. **Update task status** in plan
-8. **Repeat** for next task
-
-### Browser Verification (after check-and-test passes)
-
-**Applies to**: Tasks that affect UI rendering, client components, CSS, API responses consumed by the UI, or any client-side behavior. Skip for pure backend/library tasks.
-
-After check-and-test-after-modify passes, the **main conversation** (not subagents) runs browser verification using `agent-browser`:
-
-```bash
-# 1. Ensure dev server is running (Playwright webServer or manual)
-agent-browser open http://localhost:7155
-
-# 2. Navigate to the area affected by the change
-agent-browser snapshot -i
-agent-browser click @eN          # Navigate to relevant area
-agent-browser wait --load networkidle
-
-# 3. Verify the UI
-agent-browser snapshot -i        # Inspect DOM structure
-agent-browser screenshot --full  # Capture visual state
-agent-browser get text @eN       # Check specific content
-
-# 4. Close
-agent-browser close
-```
-
-**If UI issues are found**: Loop back to fix:
-
-```
-Browser Verify --> Issues found
-    |
-    v
-ts-coding (fix the UI issue)
-    |
-    v
-check-and-test-after-modify (ensure no regressions)
-    |
-    v
-Browser Verify (confirm fix)
-    |
-    +-- Fixed --> Continue to ts-review
-    +-- Still broken --> Loop (max 3 iterations)
-```
-
-**Cycle limit**: Maximum 3 verify-fix iterations. After 3 cycles, document remaining UI issues in progress log and proceed.
-
-**Reference**: See `.claude/skills/e2e-tdd/SKILL.md` for detailed browser verification workflows.
+5. **Run review cycle** (ts-review, up to 3 iterations)
+6. **Update task status** in plan
+7. **Repeat** for next task
 
 ### Phase 4: Progress Update (IMMEDIATELY After Each Task)
 
@@ -343,26 +296,18 @@ For each task in the executable tasks list:
      prompt: |
        Verify changes for TASK-001
 
-4. Browser verify (for UI-affecting tasks):
-   Main conversation runs agent-browser commands directly:
-     agent-browser open http://localhost:7155
-     agent-browser snapshot -i
-     agent-browser screenshot --full
-     agent-browser close
-   If UI issues found: fix with ts-coding -> re-test -> re-verify (max 3 loops)
-
-5. Run ts-review (up to 3 iterations):
+4. Run ts-review (up to 3 iterations):
    Task tool parameters:
      subagent_type: ts-review
      prompt: |
        Review TASK-001 implementation
 
-6. Update task status in plan
+5. Update task status in plan
 
-7. Proceed to TASK-002 (repeat steps 1-6)
+6. Proceed to TASK-002 (repeat steps 1-5)
 ```
 
-**All tasks run sequentially** - each task completes fully (including browser verify + review) before the next begins.
+**All tasks run sequentially** - each task completes fully (including review) before the next begins.
 
 ## Result Handling
 
@@ -827,7 +772,7 @@ After `impl-exec-auto` returns the executable tasks list, the main conversation 
 | Approach | Problem |
 |----------|---------|
 | Main spawns ts-coding directly | Main lacks review cycle logic, plan update format |
-| impl-exec-auto spawns ts-coding | Claude Code prohibits nested subagent spawning |
+| impl-exec-auto spawns ts-coding | Subagents cannot spawn nested subagents |
 | **Main invokes impl-exec-specific** | Correct - full implementation cycle handled |
 
 ### PROGRESS.json Update (After impl-exec-specific Completes)
