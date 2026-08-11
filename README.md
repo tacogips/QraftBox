@@ -353,19 +353,19 @@ Based on Bun's PM2 guide: https://bun.com/docs/guides/ecosystem/pm2
 
 ```bash
 # Start QraftBox in daemon mode via PM2
-task pm2:start
+mise run pm2:start
 
 # Start on a custom port/host
-task pm2:start PORT=7155 HOST=127.0.0.1
+mise run pm2:start PORT=7155 HOST=127.0.0.1
 
 # Check status and logs
-task pm2:status
-task pm2:logs
+mise run pm2:status
+mise run pm2:logs
 
 # Stop / restart / remove the process
-task pm2:stop
-task pm2:restart
-task pm2:delete
+mise run pm2:stop
+mise run pm2:restart
+mise run pm2:delete
 ```
 
 ### All Options
@@ -425,17 +425,17 @@ cd QraftBox
 bun install
 
 # Run in development mode (auto-reloads on code changes)
-task dev
+mise run dev
 
 # Run tests
-task test
+mise run test
 
 # Type check
-task typecheck
+mise run typecheck
 
 # Build everything
-task build:client
-task build:server
+mise run build:client
+mise run build:server
 
 # See all available commands
 task
@@ -445,22 +445,22 @@ task
 
 ```bash
 # Build binaries for all platforms + npm package
-task release:all
+mise run release:all
 
 # Build and publish to GitHub Releases
-task release:github
+mise run release:github
 
 # Build only Mac binaries
-task release:mac
+mise run release:mac
 
 # Build only Linux binaries
-task release:linux
+mise run release:linux
 
 # Build npm package only
-task release:npm
+mise run release:npm
 
 # Build npm package and run locally
-task release:npm-run
+mise run release:npm-run
 ```
 
 ## License
@@ -829,19 +829,19 @@ Bun公式のPM2ガイドに準拠: https://bun.com/docs/guides/ecosystem/pm2
 
 ```bash
 # PM2でQraftBoxをデーモン起動
-task pm2:start
+mise run pm2:start
 
 # ポート/ホストを指定して起動
-task pm2:start PORT=7155 HOST=127.0.0.1
+mise run pm2:start PORT=7155 HOST=127.0.0.1
 
 # 状態確認とログ確認
-task pm2:status
-task pm2:logs
+mise run pm2:status
+mise run pm2:logs
 
 # 停止 / 再起動 / 登録削除
-task pm2:stop
-task pm2:restart
-task pm2:delete
+mise run pm2:stop
+mise run pm2:restart
+mise run pm2:delete
 ```
 
 ### 全オプション一覧
@@ -900,17 +900,17 @@ cd QraftBox
 bun install
 
 # 開発モードで起動（コード変更時に自動リロード）
-task dev
+mise run dev
 
 # テストを実行
-task test
+mise run test
 
 # 型チェック
-task typecheck
+mise run typecheck
 
 # すべてビルド
-task build:client
-task build:server
+mise run build:client
+mise run build:server
 
 # 利用可能なコマンド一覧
 task
@@ -920,22 +920,22 @@ task
 
 ```bash
 # 全プラットフォーム向けバイナリ + npm パッケージをビルド
-task release:all
+mise run release:all
 
 # ビルドして GitHub Releases に公開
-task release:github
+mise run release:github
 
 # Mac バイナリのみビルド
-task release:mac
+mise run release:mac
 
 # Linux バイナリのみビルド
-task release:linux
+mise run release:linux
 
 # npm パッケージのみビルド
-task release:npm
+mise run release:npm
 
 # npm パッケージをビルドしてローカルで実行
-task release:npm-run
+mise run release:npm-run
 ```
 
 ## ライセンス

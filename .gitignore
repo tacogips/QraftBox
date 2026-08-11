@@ -63,5 +63,4 @@ impl-plans/.progress.lock
 release/
 
 # Private files
-**/.envrc.private*
 .private*/

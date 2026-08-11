@@ -169,19 +169,17 @@ Key features:
 ## Development Environment
 - **Language**: TypeScript
 - **Runtime**: Bun
-- **Build Tool**: Bun (with go-task for automation)
-- **Environment Manager**: Nix flakes + direnv
-- **Development Shell**: Run `nix develop` or use direnv to activate
+- **Build Tool**: Bun, with mise as the task runner
+- **Environment Manager**: mise
+- **Tool Setup**: Run `mise install`
 
 ## Project Structure
 ```
 .
-├── flake.nix          # Nix flake configuration for TypeScript/Bun development
-├── flake.lock         # Locked flake dependencies
+├── mise.toml          # Tool versions and project tasks
 ├── package.json       # Package manifest
 ├── bun.lockb          # Bun lock file
 ├── tsconfig.json      # TypeScript configuration (maximum strictness)
-├── .envrc             # direnv configuration
 ├── src/               # Source code
 │   ├── main.ts        # Entry point
 │   ├── lib.ts         # Library code
@@ -194,7 +192,7 @@ Key features:
 - `tsc` - TypeScript compiler
 - `typescript-language-server` - TypeScript language server (LSP)
 - `prettier` - Code formatter
-- `task` - Task runner (go-task)
+- `mise` - Tool manager and task runner
 
 ## TypeScript Code Development
 
@@ -322,8 +320,8 @@ When implementing from a plan:
 5. When all tasks complete, move plan to `impl-plans/completed/`
 
 ## Task Management
-- Use `task` command for build automation
-- Define tasks in `Taskfile.yml` (to be created as needed)
+- Use `mise run` for build automation
+- Define tasks in `mise.toml` (to be created as needed)
 
 ## Git Workflow
 - Create meaningful commit messages
@@ -384,17 +382,17 @@ All other locations derive the version from it:
 | Location | How it reads the version |
 |---|---|
 | `src/cli/index.ts` | `import packageJson from "../../package.json" with { type: "json" }` (inlined at bundle time) |
-| `Taskfile.yml` (release tasks) | `node -p "require('./package.json').version"` |
+| `mise.toml` (release tasks) | `node -p "require('./package.json').version"` |
 | `.github/workflows/release.yml` | Git tag name (`v*` trigger) which must match `package.json` |
 
 **Rules**:
 - When bumping the version, edit ONLY `package.json` (root). Do NOT hardcode version strings elsewhere.
 - `client/package.json` is `"private": true` and its version is not used for distribution.
 - Release tags follow the format `v{version}` (e.g., `v0.0.1`).
-- Run `task release:github` to build, tag, and publish a GitHub Release from the current `package.json` version.
+- Run `mise run release:github` to build, tag, and publish a GitHub Release from the current `package.json` version.
 
 ## Notes
-- This project uses Nix flakes for reproducible development environments
-- Use direnv for automatic environment activation
-- All development dependencies are managed through flake.nix
+- This project uses mise for reproducible development environments
+- Run secret-dependent commands through `kinko exec`; never commit secret values.
+- All development tools and tasks are managed through mise.toml
 - Runtime is Bun, which provides fast TypeScript execution and built-in testing
