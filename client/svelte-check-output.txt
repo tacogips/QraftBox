@@ -1,0 +1,158 @@
+Loading svelte-check in workspace: /g/gits/tacogips/QraftBox/client
+Getting Svelte diagnostics...
+
+/g/gits/tacogips/QraftBox/client/src/lib/file-tree-utils.ts:46:10
+Error: Conversion of type 'FileNode' to type '{ children: FileNode[]; }' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+  Types of property 'children' are incompatible.
+    Type 'readonly FileNode[] | undefined' is not comparable to type 'FileNode[]'.
+      The type 'readonly FileNode[]' is 'readonly' and cannot be assigned to the mutable type 'FileNode[]'. 
+        children.push(newNode);
+        (current as { children: FileNode[] }).children = children;
+        current = newNode;
+
+/g/gits/tacogips/QraftBox/client/src/lib/ai-runtime.ts:185:27
+Error: Argument of type 'string' is not assignable to parameter of type 'QraftAiSessionId'.
+  Type 'string' is not assignable to type '{ readonly __brand: "QraftAiSessionId"; }'. 
+    for (const [sessionId] of sessionStreams) {
+      if (!runningIds.has(sessionId)) {
+        closeSessionStream(sessionId);
+
+/g/gits/tacogips/QraftBox/client/components/git-actions/GitPushButton.svelte:665:3
+Warn: Elements with the 'menu' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus (svelte)
+{#if menuOpen}
+  <div
+    class="git-actions-dropdown fixed w-64 bg-bg-secondary border border-border-default
+           rounded-lg shadow-lg overflow-hidden"
+    style="top: {menuTop}px; right: {menuRight}px; z-index: 9999;"
+    onclick={(e) => e.stopPropagation()}
+    onkeydown={(e) => e.stopPropagation()}
+    role="menu"
+  >
+    <!-- Commit with custom ctx -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             text-text-primary {customCtxAction === 'commit'
+        ? 'bg-bg-tertiary'
+        : ''}"
+      onclick={(e) => {
+        e.stopPropagation();
+        customCtxAction = customCtxAction === "commit" ? null : "commit";
+        customCtxText = "";
+      }}
+      disabled={operating}
+    >
+      Commit with custom ctx
+    </button>
+
+    {#if customCtxAction === "commit"}
+      <div
+        class="px-3 py-2 border-t border-border-default bg-bg-primary"
+        role="presentation"
+      >
+        <textarea
+          class="w-full h-20 px-2 py-1.5 text-xs bg-bg-secondary border border-border-default
+                 rounded text-text-primary font-mono resize-y
+                 focus:outline-none focus:border-accent-emphasis"
+          placeholder="Enter additional context for commit..."
+          bind:value={customCtxText}
+          disabled={operating}
+        ></textarea>
+        <button
+          type="button"
+          class="mt-1 px-3 py-1 text-xs bg-success-emphasis text-white rounded
+                 hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => void handleCustomCtxSubmit()}
+          disabled={operating}
+        >
+          {operating ? "Running..." : "Commit"}
+        </button>
+      </div>
+    {/if}
+
+    <!-- Separator -->
+    <div class="border-t border-border-default"></div>
+
+    <!-- Create/Update PR -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             {prCanCreate || prNumber !== null
+        ? 'text-text-primary'
+        : 'text-text-tertiary cursor-not-allowed'}
+             {showCreatePR ? 'bg-bg-tertiary' : ''}"
+      onclick={(e) => {
+        e.stopPropagation();
+        showCreatePR = !showCreatePR;
+      }}
+      disabled={(!prCanCreate && prNumber === null) || prLoading}
+    >
+      {prPrimaryActionLabel}
+      {#if prNumber !== null}
+        <span class="text-xs text-text-tertiary ml-1">(#{prNumber})</span>
+      {:else if !prCanCreate && !prLoading}
+        <span class="text-xs text-text-tertiary ml-1">(unavailable)</span>
+      {/if}
+    </button>
+
+    {#if showCreatePR && (prCanCreate || prNumber !== null)}
+      <div
+        class="px-3 py-2 border-t border-border-default bg-bg-primary"
+        role="presentation"
+      >
+        {#if prNumber === null}
+          <div class="flex items-center gap-2 mb-2">
+            <label for="create-pr-base" class="text-xs text-text-secondary"
+              >Base:</label
+            >
+            <select
+              id="create-pr-base"
+              class="flex-1 px-2 py-1 text-xs bg-bg-secondary border border-border-default rounded text-text-primary focus:outline-none focus:border-accent-emphasis"
+              bind:value={selectedCreateBaseBranch}
+            >
+              {#each prAvailableBranches as branch}
+                <option value={branch}>{branch}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+        <button
+          type="button"
+          class="px-3 py-1 text-xs bg-success-emphasis text-white rounded hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => void handlePRDropdownAction()}
+          disabled={operating ||
+            (prNumber === null && selectedCreateBaseBranch === "")}
+        >
+          {operating && operationPhase === "creating-pr"
+            ? "AI generating..."
+            : prPrimaryActionLabel}
+        </button>
+      </div>
+    {/if}
+
+    <!-- Separator -->
+    <div class="border-t border-border-default"></div>
+
+    <!-- Open current PR in Browser -->
+    <button
+      type="button"
+      role="menuitem"
+      class="w-full px-3 py-2 text-left text-sm hover:bg-bg-tertiary transition-colors
+             {currentPRUrl !== null
+        ? 'text-text-primary'
+        : 'text-text-tertiary cursor-not-allowed'}"
+      onclick={handleOpenPR}
+      disabled={currentPRUrl === null || prLoading}
+    >
+      Open current PR in Browser
+      {#if currentPRUrl === null && !prLoading}
+        <span class="text-xs text-text-tertiary ml-1">(no PR)</span>
+      {/if}
+    </button>
+  </div>
+{/if}
+
+/g/gits/tacogips/QraftBox/client/components/git-actions/GitPushButton.svelte:837:7
