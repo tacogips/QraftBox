@@ -1,0 +1,405 @@
+min_version = "2026.8.3"
+
+[[hooks.enter]]
+shell = "bash"
+script = '''
+if command -v kinko >/dev/null 2>&1 && kinko hook --help >/dev/null 2>&1; then
+  eval "$(kinko --path "$MISE_PROJECT_ROOT" hook enter bash)"
+fi
+'''
+
+[[hooks.leave]]
+shell = "bash"
+script = '''
+if command -v kinko >/dev/null 2>&1 && kinko hook --help >/dev/null 2>&1; then
+  eval "$(kinko hook leave bash)"
+fi
+'''
+
+[tools]
+bun = "latest"
+biome = "latest"
+node = "22"
+github-cli = "latest"
+"npm:@playwright/test" = "latest"
+"npm:agent-browser" = "latest"
+"npm:pm2" = "latest"
+gitleaks = "latest"
+pre-commit = "latest"
+
+[tasks."default"]
+description = "Show available tasks"
+run = '''
+mise tasks ls
+'''
+
+[tasks."install"]
+description = "Install dependencies"
+run = '''
+bun install
+(cd client && bun install)
+(cd client-legacy && bun install)
+'''
+
+[tasks."dev"]
+description = "Run backend + client dev servers with hot reload"
+depends = ["dev:server:current","dev:client"]
+run = '''
+
+'''
+
+[tasks."dev:server"]
+description = "Run backend server with watch"
+run = '''
+bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+bun run --watch src/main.ts --port ${PORT:-7144} --host ${HOST:-0.0.0.0}
+'''
+
+[tasks."dev:server:current"]
+description = "Run backend server with watch and redirect frontend traffic to the current Vite dev server"
+run = '''
+bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+QRAFTBOX_FRONTEND=current QRAFTBOX_FRONTEND_DEV_URL=${FRONTEND_DEV_URL:-http://127.0.0.1:5173} bun run --watch src/main.ts --port ${PORT:-7144} --host ${HOST:-0.0.0.0}
+'''
+
+[tasks."dev:server:legacy"]
+description = "Run backend server with watch and redirect frontend traffic to the legacy Vite dev server"
+run = '''
+bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+QRAFTBOX_FRONTEND=svelte QRAFTBOX_FRONTEND_DEV_URL=${FRONTEND_DEV_URL:-http://127.0.0.1:5174} bun run --watch src/main.ts --port ${PORT:-7144} --host ${HOST:-0.0.0.0}
+'''
+
+[tasks."dev:client"]
+description = "Run Vite dev server with HMR"
+dir = "client"
+run = '''
+bun -e "await import('vite')" >/dev/null 2>&1 || bun install
+VITE_API_PROXY_TARGET=http://${API_TARGET_HOST:-127.0.0.1}:${API_TARGET_PORT:-7144} VITE_WS_PROXY_TARGET=ws://${API_TARGET_HOST:-127.0.0.1}:${API_TARGET_PORT:-7144} bun run dev -- --host ${HOST:-0.0.0.0} --port ${PORT:-5173} --strictPort --force
+'''
+
+[tasks."dev:client-legacy"]
+description = "Run the legacy Svelte Vite dev server with HMR"
+dir = "client-legacy"
+run = '''
+bun -e "await import('vite')" >/dev/null 2>&1 || bun install
+VITE_API_PROXY_TARGET=http://${API_TARGET_HOST:-127.0.0.1}:${API_TARGET_PORT:-7144} VITE_WS_PROXY_TARGET=ws://${API_TARGET_HOST:-127.0.0.1}:${API_TARGET_PORT:-7144} bun run dev -- --host ${HOST:-0.0.0.0} --port ${PORT:-5174} --strictPort --force
+'''
+
+[tasks."dev-legacy"]
+description = "Run backend + legacy Svelte dev servers with hot reload"
+depends = ["dev:server:legacy","dev:client-legacy"]
+run = '''
+
+'''
+
+[tasks."build"]
+description = "Build the project"
+run = '''
+bun run build
+'''
+
+[tasks."start"]
+description = "Run the application"
+run = '''
+bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+bun run start
+'''
+
+[tasks."pm2:start"]
+description = "Run QraftBox as a PM2 daemon (Bun interpreter)"
+run = '''
+pm2 start src/main.ts --name qraftbox --interpreter "$(command -v bun)" -- --port ${PORT:-7144} --host ${HOST:-0.0.0.0}
+'''
+
+[tasks."pm2:restart"]
+description = "Restart PM2-managed QraftBox process"
+run = '''
+pm2 restart qraftbox
+'''
+
+[tasks."pm2:stop"]
+description = "Stop PM2-managed QraftBox process"
+run = '''
+pm2 stop qraftbox
+'''
+
+[tasks."pm2:delete"]
+description = "Remove PM2-managed QraftBox process"
+run = '''
+pm2 delete qraftbox
+'''
+
+[tasks."pm2:logs"]
+description = "Show PM2 logs for QraftBox"
+run = '''
+pm2 logs qraftbox
+'''
+
+[tasks."pm2:status"]
+description = "Show PM2 status for QraftBox"
+run = '''
+pm2 status qraftbox
+'''
+
+[tasks."test"]
+description = "Run tests with Vitest"
+run = '''
+bun run test
+'''
+
+[tasks."test-watch"]
+description = "Run tests in watch mode with Vitest"
+run = '''
+bun run test:watch
+'''
+
+[tasks."test-verbose"]
+description = "Run tests with verbose output"
+run = '''
+vitest run --reporter=verbose
+'''
+
+[tasks."test-ui"]
+description = "Run tests with Vitest UI"
+run = '''
+vitest --ui
+'''
+
+[tasks."typecheck"]
+description = "Run TypeScript type checking"
+run = '''
+bun run typecheck
+'''
+
+[tasks."fmt"]
+description = "Format code with prettier"
+run = '''
+bun run format
+'''
+
+[tasks."fmt-check"]
+description = "Check code formatting"
+run = '''
+bun run format:check
+'''
+
+[tasks."lint"]
+description = "Run all lints (format check + typecheck)"
+run = '''
+mise run fmt-check
+mise run typecheck
+'''
+
+[tasks."clean"]
+description = "Clean build artifacts"
+run = '''
+bun run clean
+'''
+
+[tasks."e2e"]
+description = "Run Playwright E2E tests"
+run = '''
+bunx playwright test
+'''
+
+[tasks."e2e-ui"]
+description = "Run Playwright E2E tests with UI mode"
+run = '''
+bunx playwright test --ui
+'''
+
+[tasks."e2e-headed"]
+description = "Run Playwright E2E tests in headed browser"
+run = '''
+bunx playwright test --headed
+'''
+
+[tasks."e2e-check"]
+description = "Verify Playwright browsers are installed and working"
+run = '''
+bunx playwright --version
+bunx playwright install --dry-run chromium
+'''
+
+[tasks."restart"]
+description = "Restart dev server on port 7155 (kill existing, start fresh)"
+run = '''
+bun -e "await import('commander'); await import('claude-code-agent/src/sdk/index.js'); await import('codex-agent')" >/dev/null 2>&1 || bun install
+for pid in $(ss -tlnp 2>/dev/null | grep ':${PORT:-7155} ' | grep -oP 'pid=\K[0-9]+'); do
+  kill "$pid" 2>/dev/null && echo "Killed PID $pid"
+done
+sleep 1
+
+bun run src/main.ts --port ${PORT:-7155} --host ${HOST:-0.0.0.0}
+'''
+
+[tasks."ci"]
+description = "Run all CI checks"
+run = '''
+mise run fmt-check
+mise run typecheck
+mise run test
+mise run build
+'''
+
+[tasks."release:clean"]
+description = "Clean release directory"
+run = '''
+rm -rf release
+'''
+
+[tasks."build:client"]
+description = "Build client assets (Solid SPA)"
+run = '''
+cd client && bun install && bun run build
+'''
+
+[tasks."build:client:legacy"]
+description = "Build legacy client assets (Svelte SPA)"
+run = '''
+cd client-legacy && bun install && bun run build
+'''
+
+[tasks."build:server"]
+description = "Bundle server code"
+run = '''
+bun build src/main.ts --outdir dist --target bun
+'''
+
+[tasks."release:prepare"]
+description = "Verify frontend migration gates, then build client and server for release"
+run = '''
+bun run check:frontend:migration:offline
+bun run typecheck:client
+mise run build:client
+mise run build:client:legacy
+mise run build:server
+'''
+
+[tasks."release:binary"]
+description = "Build a single compiled binary for a specific target (internal)"
+hide = true
+run = '''
+VERSION=$(bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)")
+: "${TARGET:?TARGET is required}"
+: "${SUFFIX:?SUFFIX is required}"
+mkdir -p release/qraftbox-v${VERSION}-${SUFFIX}/dist
+bun build src/main.ts --compile --target ${TARGET} --outfile release/qraftbox-v${VERSION}-${SUFFIX}/qraftbox
+cp -r dist/client release/qraftbox-v${VERSION}-${SUFFIX}/dist/client
+cp -r dist/client-legacy release/qraftbox-v${VERSION}-${SUFFIX}/dist/client-legacy
+cd release && tar -czf qraftbox-v${VERSION}-${SUFFIX}.tar.gz $(basename release/qraftbox-v${VERSION}-${SUFFIX})
+echo "Built release/qraftbox-v${VERSION}-${SUFFIX}.tar.gz"
+'''
+
+[tasks."release:mac"]
+description = "Build Mac binaries (arm64 + x64)"
+run = '''
+mise run release:prepare
+TARGET=bun-darwin-arm64 SUFFIX=darwin-arm64 mise run release:binary
+TARGET=bun-darwin-x64 SUFFIX=darwin-x64 mise run release:binary
+'''
+
+[tasks."release:linux"]
+description = "Build Linux binaries (arm64 + x64)"
+run = '''
+mise run release:prepare
+TARGET=bun-linux-x64 SUFFIX=linux-x64 mise run release:binary
+TARGET=bun-linux-arm64 SUFFIX=linux-arm64 mise run release:binary
+'''
+
+[tasks."release:npm-publish"]
+description = "Build npm package and publish to npmjs.com"
+run = '''
+mise run release:npm
+cd release/npm && npm publish
+'''
+
+[tasks."release:npm-publish-dry"]
+description = "Build npm package and dry-run publish (no actual upload)"
+run = '''
+mise run release:npm
+cd release/npm && npm publish --dry-run
+'''
+
+[tasks."release:npm-run"]
+description = "Build npm package and run it locally"
+run = '''
+mise run release:npm
+cd release/npm && bun bin/qraftbox.js "$@"
+'''
+
+[tasks."release:npm"]
+description = "Build npm package (.tgz) for npm install"
+run = '''
+mise run release:prepare
+mkdir -p release/npm/dist release/npm/bin
+cp dist/main.js release/npm/dist/
+cp -r dist/client release/npm/dist/client
+cp -r dist/client-legacy release/npm/dist/client-legacy
+cp bin/qraftbox.js release/npm/bin/qraftbox.js
+chmod +x release/npm/bin/qraftbox.js
+bun -e "
+  const pkg = await Bun.file('./package.json').json();
+  const npmPkg = {
+    name: pkg.name,
+    version: pkg.version,
+    description: pkg.description,
+    license: pkg.license,
+    type: 'module',
+    main: 'dist/main.js',
+    bin: { qraftbox: './bin/qraftbox.js' },
+    files: ['dist/**/*', 'bin/**/*'],
+    engines: { bun: '>=1.0.0' },
+    homepage: pkg.homepage,
+    repository: pkg.repository,
+  };
+  await Bun.write(
+    'release/npm/package.json',
+    JSON.stringify(npmPkg, null, 2) + '\n'
+  );
+"
+
+cd release/npm && bun pm pack --destination ..
+VERSION=$(bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)")
+echo "Built release/qraftbox-${VERSION}.tgz"
+
+'''
+
+[tasks."release:all"]
+description = "Build all release targets (Mac, Linux, npm)"
+run = '''
+mise run release:clean
+mise run release:prepare
+TARGET=bun-darwin-arm64 SUFFIX=darwin-arm64 mise run release:binary
+TARGET=bun-darwin-x64 SUFFIX=darwin-x64 mise run release:binary
+TARGET=bun-linux-x64 SUFFIX=linux-x64 mise run release:binary
+TARGET=bun-linux-arm64 SUFFIX=linux-arm64 mise run release:binary
+mise run release:npm
+echo "All release artifacts are in release/"
+'''
+
+[tasks."release:github"]
+description = "Build all binaries and publish to GitHub Release (requires gh CLI)"
+run = '''
+VERSION=$(bun -e "const p = await Bun.file('./package.json').json(); console.log(p.version)")
+gh auth status
+mise run release:all
+if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+  echo "Tag v${VERSION} already exists"
+else
+  git tag -a "v${VERSION}" -m "Release v${VERSION}"
+  git push origin "v${VERSION}"
+  echo "Created and pushed tag v${VERSION}"
+fi
+
+gh release create "v${VERSION}" \
+  --title "qraftbox v${VERSION}" \
+  --generate-notes \
+  release/qraftbox-v${VERSION}-darwin-arm64.tar.gz \
+  release/qraftbox-v${VERSION}-darwin-x64.tar.gz \
+  release/qraftbox-v${VERSION}-linux-x64.tar.gz \
+  release/qraftbox-v${VERSION}-linux-arm64.tar.gz \
+  release/qraftbox-${VERSION}.tgz
+
+echo "Published release v${VERSION} to GitHub"
+'''
