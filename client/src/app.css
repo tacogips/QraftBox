@@ -1,0 +1,120 @@
+@import "tailwindcss";
+
+@theme {
+  /* GitHub Dark Theme (Primer-based) */
+
+  /* Canvas / Background */
+  --color-bg-primary: #0d1117;
+  --color-bg-secondary: #151b23;
+  --color-bg-tertiary: #1c2128;
+  --color-bg-hover: #262c36;
+  --color-bg-pressed: #2a313c;
+  --color-bg-disabled: #212830;
+  --color-bg-inset: #010409;
+  --color-bg-emphasis: #3d444d;
+  --color-bg-overlay: #010409;
+
+  /* Text / Foreground */
+  --color-text-primary: #f0f6fc;
+  --color-text-secondary: #9198a1;
+  --color-text-tertiary: #656c76;
+  --color-text-disabled: #656c76;
+  --color-text-on-emphasis: #ffffff;
+
+  /* Border */
+  --color-border-default: #3d444d;
+  --color-border-muted: #3d444db3;
+  --color-border-emphasis: #656c76;
+
+  /* Accent (blue) */
+  --color-accent-fg: #4493f8;
+  --color-accent-emphasis: #1f6feb;
+  --color-accent-muted: #388bfd26;
+  --color-accent-subtle: #388bfd1a;
+
+  /* Success (green) */
+  --color-success-fg: #3fb950;
+  --color-success-emphasis: #238636;
+  --color-success-muted: #2ea04366;
+  --color-success-subtle: #2ea04326;
+
+  /* Danger (red) */
+  --color-danger-fg: #f85149;
+  --color-danger-emphasis: #da3633;
+  --color-danger-muted: #f8514966;
+  --color-danger-subtle: #f851491a;
+
+  /* Attention (yellow/warning) */
+  --color-attention-fg: #d29922;
+  --color-attention-emphasis: #9e6a03;
+  --color-attention-muted: #bb800966;
+
+  /* Neutral */
+  --color-neutral-emphasis: #656c76;
+  --color-neutral-muted: #656c7633;
+
+  /* Diff-specific */
+  --color-diff-add-bg: #2ea04326;
+  --color-diff-add-num: #3fb9504d;
+  --color-diff-add-word: #2ea04366;
+  --color-diff-del-bg: #f851491a;
+  --color-diff-del-num: #f851494d;
+  --color-diff-del-word: #f8514966;
+  --color-diff-hunk-bg: #0c2d6b;
+
+  /* Header */
+  --color-header-bg: #151b23f2;
+  --color-header-border: #656c76;
+
+  /* Done / Merged (purple) */
+  --color-done-fg: #a371f7;
+  --color-done-emphasis: #8957e5;
+  --color-done-muted: #8957e566;
+
+  /* Selection highlight */
+  --color-selection-bg: #1f6febb3;
+
+  /* Segmented Control */
+  --shadow-segmented-active: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Active session glow animation */
+@keyframes session-glow {
+  0%,
+  100% {
+    background-color: rgba(31, 111, 235, 0.06);
+    box-shadow: 0 0 0 0 rgba(31, 111, 235, 0);
+  }
+  50% {
+    background-color: rgba(31, 111, 235, 0.14);
+    box-shadow: 0 0 12px 2px rgba(31, 111, 235, 0.15);
+  }
+}
+
+.animate-session-glow {
+  animation: session-glow 3s ease-in-out infinite;
+}
+
+/* Spinning arrow for running status */
+@keyframes spin-smooth {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-smooth {
+  animation: spin-smooth 1.5s linear infinite;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+}
