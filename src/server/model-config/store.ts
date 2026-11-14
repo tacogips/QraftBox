@@ -1,0 +1,903 @@
+import { Database } from "bun:sqlite";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
+import type { CLIConfig } from "../../types/index.js";
+import type {
+  ModelAuthMode,
+  ModelConfigState,
+  ModelOperation,
+  ModelProfile,
+  ModelVendor,
+  NewModelProfileInput,
+  OperationLanguageSettings,
+  OperationLanguageTarget,
+  OperationModelBindings,
+  ResolvedModelProfile,
+  UpdateModelProfileInput,
+  UpdateOperationLanguageSettingsInput,
+  UpdateOperationModelBindingsInput,
+} from "../../types/model-config.js";
+import { createLogger } from "../logger.js";
+
+const logger = createLogger("ModelConfigStore");
+
+export interface ModelConfigStore {
+  listProfiles(): readonly ModelProfile[];
+  createProfile(input: NewModelProfileInput): ModelProfile;
+  updateProfile(id: string, input: UpdateModelProfileInput): ModelProfile;
+  deleteProfile(id: string): boolean;
+  getOperationBindings(): OperationModelBindings;
+  updateOperationBindings(
+    input: UpdateOperationModelBindingsInput,
+  ): OperationModelBindings;
+  getOperationLanguages(): OperationLanguageSettings;
+  updateOperationLanguages(
+    input: UpdateOperationLanguageSettingsInput,
+  ): OperationLanguageSettings;
+  resolveLanguageForOperation(target: OperationLanguageTarget): string;
+  getState(): ModelConfigState;
+  resolveForOperation(
+    operation: ModelOperation,
+    explicitProfileId?: string | undefined,
+  ): ResolvedModelProfile;
+}
+
+export interface ModelConfigStoreOptions {
+  readonly dbPath?: string | undefined;
+  readonly seedFromCliConfig?:
+    | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
+    | undefined;
+}
+
+export function defaultModelConfigDbPath(): string {
+  return join(homedir(), ".local", "QraftBox", "model-config.db");
+}
+
+interface ProfileRow {
+  readonly id: string;
+  readonly name: string;
+  readonly vendor: ModelVendor;
+  readonly auth_mode: ModelAuthMode;
+  readonly model: string;
+  readonly arguments_json: string;
+  readonly created_at: string;
+  readonly updated_at: string;
+}
+
+interface BindingRow {
+  readonly git_commit_profile_id: string | null;
+  readonly git_pr_profile_id: string | null;
+  readonly ai_default_profile_id: string | null;
+  readonly git_commit_language: string | null;
+  readonly git_pr_language: string | null;
+  readonly ai_session_purpose_language: string | null;
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+const DEFAULT_OPERATION_LANGUAGE = "English";
+const OPENAI_DEFAULT_MODEL = "gpt-5.3-codex";
+const OPENAI_DEFAULT_ARGUMENTS = [
+  "--dangerously-bypass-approvals-and-sandbox",
+  "--skip-git-repo-check",
+];
+const OPENAI_LIGHT_MODEL = "gpt-5-mini-codex";
+const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-6";
+const ANTHROPIC_SONNET_MODEL = "claude-sonnet-4-5";
+
+interface DefaultModelProfileTemplate {
+  readonly fileName: string;
+  readonly name: string;
+  readonly vendor: ModelVendor;
+  readonly authMode: ModelAuthMode;
+  readonly model: string;
+  readonly arguments: readonly string[];
+}
+
+interface StoredDefaultModelProfileConfig {
+  readonly name?: unknown;
+  readonly vendor?: unknown;
+  readonly authMode?: unknown;
+  readonly model?: unknown;
+  readonly arguments?: unknown;
+}
+
+function defaultModelProfilesConfigDir(): string {
+  return join(homedir(), ".config", "qraftbox", "model-profiles", "defaults");
+}
+
+function defaultModelProfileTemplates(
+  seedFromCliConfig:
+    | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
+    | undefined,
+): readonly DefaultModelProfileTemplate[] {
+  const anthropicArgs =
+    (seedFromCliConfig?.assistantAdditionalArgs.length ?? 0) !== 0
+      ? [...(seedFromCliConfig?.assistantAdditionalArgs ?? [])]
+      : [];
+
+  return [
+    {
+      fileName: "anthropic-default.json",
+      name: "Anthropic Default",
+      vendor: "anthropics",
+      authMode: "cli_auth",
+      model: seedFromCliConfig?.assistantModel ?? ANTHROPIC_DEFAULT_MODEL,
+      arguments: anthropicArgs,
+    },
+    {
+      fileName: "anthropic-sonnet.json",
+      name: "Anthropic Sonnet",
+      vendor: "anthropics",
+      authMode: "cli_auth",
+      model: ANTHROPIC_SONNET_MODEL,
+      arguments: [],
+    },
+    {
+      fileName: "openai-default.json",
+      name: "OpenAI Default",
+      vendor: "openai",
+      authMode: "cli_auth",
+      model: OPENAI_DEFAULT_MODEL,
+      arguments: OPENAI_DEFAULT_ARGUMENTS,
+    },
+    {
+      fileName: "openai-light.json",
+      name: "OpenAI Light",
+      vendor: "openai",
+      authMode: "cli_auth",
+      model: OPENAI_LIGHT_MODEL,
+      arguments: OPENAI_DEFAULT_ARGUMENTS,
+    },
+  ];
+}
+
+function parseDefaultProfileConfig(
+  raw: string,
+): Omit<DefaultModelProfileTemplate, "fileName"> | null {
+  let parsed: StoredDefaultModelProfileConfig;
+  try {
+    parsed = JSON.parse(raw) as StoredDefaultModelProfileConfig;
+  } catch {
+    return null;
+  }
+
+  const vendorCandidate =
+    typeof parsed.vendor === "string" ? parsed.vendor : "";
+
+  if (
+    typeof parsed.name !== "string" ||
+    !validateVendor(vendorCandidate) ||
+    typeof parsed.model !== "string"
+  ) {
+    return null;
+  }
+
+  const args = Array.isArray(parsed.arguments)
+    ? parsed.arguments.filter((arg): arg is string => typeof arg === "string")
+    : [];
+
+  return {
+    name: parsed.name.trim(),
+    vendor: vendorCandidate,
+    authMode:
+      typeof parsed.authMode === "string" && validateAuthMode(parsed.authMode)
+        ? parsed.authMode
+        : "cli_auth",
+    model: parsed.model.trim(),
+    arguments: normalizeArguments(args),
+  };
+}
+
+function ensureDefaultModelProfileConfigFiles(
+  templates: readonly DefaultModelProfileTemplate[],
+): readonly Omit<DefaultModelProfileTemplate, "fileName">[] {
+  const configDir = defaultModelProfilesConfigDir();
+  mkdirSync(configDir, { recursive: true });
+
+  const resolved: Omit<DefaultModelProfileTemplate, "fileName">[] = [];
+
+  for (const template of templates) {
+    const path = join(configDir, template.fileName);
+
+    if (!existsSync(path)) {
+      writeFileSync(
+        path,
+        JSON.stringify(
+          {
+            name: template.name,
+            vendor: template.vendor,
+            authMode: template.authMode,
+            model: template.model,
+            arguments: [...template.arguments],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf-8",
+      );
+      resolved.push({
+        name: template.name,
+        vendor: template.vendor,
+        authMode: template.authMode,
+        model: template.model,
+        arguments: [...template.arguments],
+      });
+      continue;
+    }
+
+    const parsed = parseDefaultProfileConfig(readFileSync(path, "utf-8"));
+    if (parsed === null) {
+      writeFileSync(
+        path,
+        JSON.stringify(
+          {
+            name: template.name,
+            vendor: template.vendor,
+            authMode: template.authMode,
+            model: template.model,
+            arguments: [...template.arguments],
+          },
+          null,
+          2,
+        ) + "\n",
+        "utf-8",
+      );
+      resolved.push({
+        name: template.name,
+        vendor: template.vendor,
+        authMode: template.authMode,
+        model: template.model,
+        arguments: [...template.arguments],
+      });
+      continue;
+    }
+
+    resolved.push(parsed);
+  }
+
+  return resolved;
+}
+
+function normalizeLanguage(input: string | null | undefined): string {
+  const trimmed = (input ?? "").trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_OPERATION_LANGUAGE;
+}
+
+function ensureModelOperationBindingsLanguageColumns(db: Database): void {
+  const rows = db
+    .prepare("PRAGMA table_info(model_operation_bindings)")
+    .all() as Array<{ readonly name: string }>;
+  const existing = new Set(rows.map((row) => row.name));
+
+  if (!existing.has("git_commit_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN git_commit_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
+  if (!existing.has("git_pr_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN git_pr_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
+  if (!existing.has("ai_session_purpose_language")) {
+    db.exec(
+      `ALTER TABLE model_operation_bindings ADD COLUMN ai_session_purpose_language TEXT NOT NULL DEFAULT '${DEFAULT_OPERATION_LANGUAGE}'`,
+    );
+  }
+}
+
+function ensureModelProfilesAuthModeColumn(db: Database): void {
+  const rows = db.prepare("PRAGMA table_info(model_profiles)").all() as Array<{
+    readonly name: string;
+  }>;
+  const existing = new Set(rows.map((row) => row.name));
+
+  if (!existing.has("auth_mode")) {
+    db.exec(
+      "ALTER TABLE model_profiles ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'cli_auth'",
+    );
+  }
+}
+
+function toProfile(row: ProfileRow): ModelProfile {
+  let parsedArgs: string[] = [];
+  try {
+    const raw = JSON.parse(row.arguments_json) as unknown;
+    if (Array.isArray(raw)) {
+      parsedArgs = raw.filter((v): v is string => typeof v === "string");
+    }
+  } catch {
+    parsedArgs = [];
+  }
+
+  return {
+    id: row.id,
+    name: row.name,
+    vendor: row.vendor,
+    authMode: normalizeAuthMode(row.auth_mode),
+    model: row.model,
+    arguments: parsedArgs,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function normalizeArguments(args: readonly string[]): string[] {
+  return args.map((arg) => arg.trim()).filter((arg) => arg.length > 0);
+}
+
+function mergeArguments(
+  currentArgs: readonly string[],
+  requiredArgs: readonly string[],
+): string[] {
+  const merged = [...normalizeArguments(currentArgs)];
+  for (const requiredArg of requiredArgs) {
+    if (!merged.includes(requiredArg)) {
+      merged.push(requiredArg);
+    }
+  }
+  return merged;
+}
+
+function generateProfileId(): string {
+  return `mp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function validateVendor(vendor: string): vendor is ModelVendor {
+  return vendor === "anthropics" || vendor === "openai";
+}
+
+function validateAuthMode(authMode: string): authMode is ModelAuthMode {
+  return authMode === "cli_auth" || authMode === "api_key";
+}
+
+function normalizeAuthMode(authMode: string | null | undefined): ModelAuthMode {
+  if (
+    authMode !== undefined &&
+    authMode !== null &&
+    validateAuthMode(authMode)
+  ) {
+    return authMode;
+  }
+  return "cli_auth";
+}
+
+class ModelConfigStoreImpl implements ModelConfigStore {
+  private readonly stmtListProfiles: ReturnType<Database["prepare"]>;
+  private readonly stmtGetProfile: ReturnType<Database["prepare"]>;
+  private readonly stmtInsertProfile: ReturnType<Database["prepare"]>;
+  private readonly stmtUpdateProfile: ReturnType<Database["prepare"]>;
+  private readonly stmtDeleteProfile: ReturnType<Database["prepare"]>;
+  private readonly stmtGetBindings: ReturnType<Database["prepare"]>;
+  private readonly stmtUpsertBindings: ReturnType<Database["prepare"]>;
+  private readonly stmtClearBindingsForProfile: ReturnType<Database["prepare"]>;
+
+  constructor(
+    db: Database,
+    seedFromCliConfig:
+      | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
+      | undefined,
+  ) {
+    this.stmtListProfiles = db.prepare(`
+      SELECT id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at
+      FROM model_profiles
+      ORDER BY name COLLATE NOCASE ASC
+    `);
+
+    this.stmtGetProfile = db.prepare(`
+      SELECT id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at
+      FROM model_profiles
+      WHERE id = ?
+      LIMIT 1
+    `);
+
+    this.stmtInsertProfile = db.prepare(`
+      INSERT INTO model_profiles (id, name, vendor, auth_mode, model, arguments_json, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    this.stmtUpdateProfile = db.prepare(`
+      UPDATE model_profiles
+      SET name = ?, vendor = ?, auth_mode = ?, model = ?, arguments_json = ?, updated_at = ?
+      WHERE id = ?
+    `);
+
+    this.stmtDeleteProfile = db.prepare(`
+      DELETE FROM model_profiles WHERE id = ?
+    `);
+
+    this.stmtGetBindings = db.prepare(`
+      SELECT
+        git_commit_profile_id,
+        git_pr_profile_id,
+        ai_default_profile_id,
+        git_commit_language,
+        git_pr_language,
+        ai_session_purpose_language
+      FROM model_operation_bindings
+      WHERE id = 1
+      LIMIT 1
+    `);
+
+    this.stmtUpsertBindings = db.prepare(`
+      INSERT INTO model_operation_bindings (
+        id,
+        git_commit_profile_id,
+        git_pr_profile_id,
+        ai_default_profile_id,
+        git_commit_language,
+        git_pr_language,
+        ai_session_purpose_language,
+        updated_at
+      )
+      VALUES (1, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        git_commit_profile_id = excluded.git_commit_profile_id,
+        git_pr_profile_id = excluded.git_pr_profile_id,
+        ai_default_profile_id = excluded.ai_default_profile_id,
+        git_commit_language = excluded.git_commit_language,
+        git_pr_language = excluded.git_pr_language,
+        ai_session_purpose_language = excluded.ai_session_purpose_language,
+        updated_at = excluded.updated_at
+    `);
+
+    this.stmtClearBindingsForProfile = db.prepare(`
+      UPDATE model_operation_bindings
+      SET
+        git_commit_profile_id = CASE WHEN git_commit_profile_id = ? THEN NULL ELSE git_commit_profile_id END,
+        git_pr_profile_id = CASE WHEN git_pr_profile_id = ? THEN NULL ELSE git_pr_profile_id END,
+        ai_default_profile_id = CASE WHEN ai_default_profile_id = ? THEN NULL ELSE ai_default_profile_id END,
+        updated_at = ?
+      WHERE id = 1
+    `);
+
+    this.seedDefaults(seedFromCliConfig);
+  }
+
+  private seedDefaults(
+    seedFromCliConfig:
+      | Pick<CLIConfig, "assistantModel" | "assistantAdditionalArgs">
+      | undefined,
+  ): void {
+    const defaultProfiles = ensureDefaultModelProfileConfigFiles(
+      defaultModelProfileTemplates(seedFromCliConfig),
+    );
+
+    const currentProfiles = this.listProfiles();
+    for (const defaultProfile of defaultProfiles) {
+      const existing = currentProfiles.find(
+        (profile) =>
+          profile.vendor === defaultProfile.vendor &&
+          profile.name === defaultProfile.name,
+      );
+      if (existing === undefined) {
+        this.createProfile({
+          name: defaultProfile.name,
+          vendor: defaultProfile.vendor,
+          authMode: defaultProfile.authMode,
+          model: defaultProfile.model,
+          arguments: defaultProfile.arguments,
+        });
+      }
+    }
+
+    const refreshedProfiles = this.listProfiles();
+    const legacyOpenAiDefault = refreshedProfiles.find(
+      (profile) =>
+        profile.vendor === "openai" &&
+        profile.name === "OpenAI Default" &&
+        profile.model === "codex5.3" &&
+        profile.arguments.length === 0,
+    );
+    if (legacyOpenAiDefault !== undefined) {
+      this.updateProfile(legacyOpenAiDefault.id, {
+        model: OPENAI_DEFAULT_MODEL,
+        arguments: OPENAI_DEFAULT_ARGUMENTS,
+      });
+    }
+
+    for (const profile of refreshedProfiles) {
+      if (
+        profile.vendor !== "openai" ||
+        (profile.name !== "OpenAI Default" && profile.name !== "OpenAI Light")
+      ) {
+        continue;
+      }
+
+      const mergedArgs = mergeArguments(
+        profile.arguments,
+        OPENAI_DEFAULT_ARGUMENTS,
+      );
+      if (mergedArgs.length !== profile.arguments.length) {
+        this.updateProfile(profile.id, {
+          arguments: mergedArgs,
+        });
+      }
+    }
+
+    const profiles = this.listProfiles();
+    const currentBindings = this.getOperationBindings();
+
+    const preferredFallbackProfileId =
+      profiles.find((profile) => profile.vendor === "anthropics")?.id ??
+      profiles[0]?.id ??
+      null;
+    const fallbackProfileId = preferredFallbackProfileId;
+    if (fallbackProfileId === null) {
+      return;
+    }
+
+    let nextGitCommitProfileId: string | null | undefined;
+    let nextGitPrProfileId: string | null | undefined;
+    let nextAiDefaultProfileId: string | null | undefined;
+    let changed = false;
+
+    if (currentBindings.gitCommitProfileId === null) {
+      nextGitCommitProfileId = fallbackProfileId;
+      changed = true;
+    }
+    if (currentBindings.gitPrProfileId === null) {
+      nextGitPrProfileId = fallbackProfileId;
+      changed = true;
+    }
+    if (currentBindings.aiDefaultProfileId === null) {
+      nextAiDefaultProfileId = fallbackProfileId;
+      changed = true;
+    }
+
+    if (changed) {
+      this.updateOperationBindings({
+        ...(nextGitCommitProfileId !== undefined && {
+          gitCommitProfileId: nextGitCommitProfileId,
+        }),
+        ...(nextGitPrProfileId !== undefined && {
+          gitPrProfileId: nextGitPrProfileId,
+        }),
+        ...(nextAiDefaultProfileId !== undefined && {
+          aiDefaultProfileId: nextAiDefaultProfileId,
+        }),
+      });
+    }
+  }
+
+  private getProfileOrThrow(id: string): ModelProfile {
+    const row = this.stmtGetProfile.get(id) as ProfileRow | undefined | null;
+    if (row === undefined || row === null) {
+      throw new Error(`Model profile not found: ${id}`);
+    }
+    return toProfile(row);
+  }
+
+  private assertProfileExists(profileId: string | null): void {
+    if (profileId === null) return;
+    this.getProfileOrThrow(profileId);
+  }
+
+  listProfiles(): readonly ModelProfile[] {
+    const rows = this.stmtListProfiles.all() as ProfileRow[];
+    return rows.map(toProfile);
+  }
+
+  createProfile(input: NewModelProfileInput): ModelProfile {
+    const name = input.name.trim();
+    const model = input.model.trim();
+    const args = normalizeArguments(input.arguments);
+    const authMode = normalizeAuthMode(input.authMode);
+
+    if (name.length === 0) {
+      throw new Error("Profile name is required");
+    }
+    if (!validateVendor(input.vendor)) {
+      throw new Error("Invalid vendor");
+    }
+    if (model.length === 0) {
+      throw new Error("Model is required");
+    }
+
+    const id = generateProfileId();
+    const ts = nowIso();
+    this.stmtInsertProfile.run(
+      id,
+      name,
+      input.vendor,
+      authMode,
+      model,
+      JSON.stringify(args),
+      ts,
+      ts,
+    );
+
+    return this.getProfileOrThrow(id);
+  }
+
+  updateProfile(id: string, input: UpdateModelProfileInput): ModelProfile {
+    const current = this.getProfileOrThrow(id);
+
+    const name = (input.name ?? current.name).trim();
+    const vendor = input.vendor ?? current.vendor;
+    const authMode = normalizeAuthMode(input.authMode ?? current.authMode);
+    const model = (input.model ?? current.model).trim();
+    const args = normalizeArguments(input.arguments ?? current.arguments);
+
+    if (name.length === 0) {
+      throw new Error("Profile name is required");
+    }
+    if (!validateVendor(vendor)) {
+      throw new Error("Invalid vendor");
+    }
+    if (model.length === 0) {
+      throw new Error("Model is required");
+    }
+
+    this.stmtUpdateProfile.run(
+      name,
+      vendor,
+      authMode,
+      model,
+      JSON.stringify(args),
+      nowIso(),
+      id,
+    );
+
+    return this.getProfileOrThrow(id);
+  }
+
+  deleteProfile(id: string): boolean {
+    const result = this.stmtDeleteProfile.run(id);
+    if (result.changes === 0) {
+      return false;
+    }
+
+    this.stmtClearBindingsForProfile.run(id, id, id, nowIso());
+
+    const profiles = this.listProfiles();
+    const fallbackId = profiles[0]?.id ?? null;
+    if (fallbackId !== null) {
+      const bindings = this.getOperationBindings();
+      this.updateOperationBindings({
+        gitCommitProfileId: bindings.gitCommitProfileId ?? fallbackId,
+        gitPrProfileId: bindings.gitPrProfileId ?? fallbackId,
+        aiDefaultProfileId: bindings.aiDefaultProfileId ?? fallbackId,
+      });
+    }
+
+    return true;
+  }
+
+  getOperationBindings(): OperationModelBindings {
+    const row = this.stmtGetBindings.get() as BindingRow | undefined | null;
+    if (row === undefined || row === null) {
+      const defaultBindings: OperationModelBindings = {
+        gitCommitProfileId: null,
+        gitPrProfileId: null,
+        aiDefaultProfileId: null,
+      };
+
+      this.stmtUpsertBindings.run(
+        null,
+        null,
+        null,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        nowIso(),
+      );
+      return defaultBindings;
+    }
+
+    return {
+      gitCommitProfileId: row.git_commit_profile_id,
+      gitPrProfileId: row.git_pr_profile_id,
+      aiDefaultProfileId: row.ai_default_profile_id,
+    };
+  }
+
+  updateOperationBindings(
+    input: UpdateOperationModelBindingsInput,
+  ): OperationModelBindings {
+    const current = this.getOperationBindings();
+    const currentLanguages = this.getOperationLanguages();
+
+    const next: OperationModelBindings = {
+      gitCommitProfileId:
+        input.gitCommitProfileId !== undefined
+          ? input.gitCommitProfileId
+          : current.gitCommitProfileId,
+      gitPrProfileId:
+        input.gitPrProfileId !== undefined
+          ? input.gitPrProfileId
+          : current.gitPrProfileId,
+      aiDefaultProfileId:
+        input.aiDefaultProfileId !== undefined
+          ? input.aiDefaultProfileId
+          : current.aiDefaultProfileId,
+    };
+
+    this.assertProfileExists(next.gitCommitProfileId);
+    this.assertProfileExists(next.gitPrProfileId);
+    this.assertProfileExists(next.aiDefaultProfileId);
+
+    this.stmtUpsertBindings.run(
+      next.gitCommitProfileId,
+      next.gitPrProfileId,
+      next.aiDefaultProfileId,
+      currentLanguages.gitCommitLanguage,
+      currentLanguages.gitPrLanguage,
+      currentLanguages.aiSessionPurposeLanguage,
+      nowIso(),
+    );
+
+    return this.getOperationBindings();
+  }
+
+  getOperationLanguages(): OperationLanguageSettings {
+    const row = this.stmtGetBindings.get() as BindingRow | undefined | null;
+    if (row === undefined || row === null) {
+      this.stmtUpsertBindings.run(
+        null,
+        null,
+        null,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        DEFAULT_OPERATION_LANGUAGE,
+        nowIso(),
+      );
+      return {
+        gitCommitLanguage: DEFAULT_OPERATION_LANGUAGE,
+        gitPrLanguage: DEFAULT_OPERATION_LANGUAGE,
+        aiSessionPurposeLanguage: DEFAULT_OPERATION_LANGUAGE,
+      };
+    }
+
+    return {
+      gitCommitLanguage: normalizeLanguage(row.git_commit_language),
+      gitPrLanguage: normalizeLanguage(row.git_pr_language),
+      aiSessionPurposeLanguage: normalizeLanguage(
+        row.ai_session_purpose_language,
+      ),
+    };
+  }
+
+  updateOperationLanguages(
+    input: UpdateOperationLanguageSettingsInput,
+  ): OperationLanguageSettings {
+    const currentBindings = this.getOperationBindings();
+    const current = this.getOperationLanguages();
+
+    const next: OperationLanguageSettings = {
+      gitCommitLanguage:
+        input.gitCommitLanguage !== undefined
+          ? normalizeLanguage(input.gitCommitLanguage)
+          : current.gitCommitLanguage,
+      gitPrLanguage:
+        input.gitPrLanguage !== undefined
+          ? normalizeLanguage(input.gitPrLanguage)
+          : current.gitPrLanguage,
+      aiSessionPurposeLanguage:
+        input.aiSessionPurposeLanguage !== undefined
+          ? normalizeLanguage(input.aiSessionPurposeLanguage)
+          : current.aiSessionPurposeLanguage,
+    };
+
+    this.stmtUpsertBindings.run(
+      currentBindings.gitCommitProfileId,
+      currentBindings.gitPrProfileId,
+      currentBindings.aiDefaultProfileId,
+      next.gitCommitLanguage,
+      next.gitPrLanguage,
+      next.aiSessionPurposeLanguage,
+      nowIso(),
+    );
+
+    return this.getOperationLanguages();
+  }
+
+  resolveLanguageForOperation(target: OperationLanguageTarget): string {
+    const operationLanguages = this.getOperationLanguages();
+    switch (target) {
+      case "git_commit":
+        return operationLanguages.gitCommitLanguage;
+      case "git_pr":
+        return operationLanguages.gitPrLanguage;
+      case "ai_session_purpose":
+        return operationLanguages.aiSessionPurposeLanguage;
+    }
+  }
+
+  getState(): ModelConfigState {
+    return {
+      profiles: this.listProfiles(),
+      operationBindings: this.getOperationBindings(),
+      operationLanguages: this.getOperationLanguages(),
+    };
+  }
+
+  resolveForOperation(
+    operation: ModelOperation,
+    explicitProfileId?: string | undefined,
+  ): ResolvedModelProfile {
+    const profileId =
+      explicitProfileId !== undefined && explicitProfileId.trim().length > 0
+        ? explicitProfileId
+        : (() => {
+            const bindings = this.getOperationBindings();
+            switch (operation) {
+              case "git_commit":
+                return bindings.gitCommitProfileId;
+              case "git_pr":
+                return bindings.gitPrProfileId;
+              case "ai_ask":
+                return bindings.aiDefaultProfileId;
+            }
+          })();
+
+    if (profileId === null || profileId === undefined) {
+      throw new Error(
+        `No model profile configured for operation: ${operation}`,
+      );
+    }
+
+    const profile = this.getProfileOrThrow(profileId);
+    return {
+      profileId: profile.id,
+      name: profile.name,
+      vendor: profile.vendor,
+      authMode: profile.authMode,
+      model: profile.model,
+      arguments: [...profile.arguments],
+    };
+  }
+}
+
+export function createModelConfigStore(
+  options?: ModelConfigStoreOptions,
+): ModelConfigStore {
+  const dbPath = options?.dbPath ?? defaultModelConfigDbPath();
+
+  mkdirSync(dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
+
+  db.exec("PRAGMA journal_mode=WAL");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS model_profiles (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      vendor TEXT NOT NULL,
+      auth_mode TEXT NOT NULL DEFAULT 'cli_auth',
+      model TEXT NOT NULL,
+      arguments_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS model_operation_bindings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      git_commit_profile_id TEXT,
+      git_pr_profile_id TEXT,
+      ai_default_profile_id TEXT,
+      git_commit_language TEXT NOT NULL DEFAULT 'English',
+      git_pr_language TEXT NOT NULL DEFAULT 'English',
+      ai_session_purpose_language TEXT NOT NULL DEFAULT 'English',
+      updated_at TEXT NOT NULL
+    )
+  `);
+
+  ensureModelOperationBindingsLanguageColumns(db);
+  ensureModelProfilesAuthModeColumn(db);
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_model_profiles_name
+    ON model_profiles(name COLLATE NOCASE)
+  `);
+
+  logger.info("Model config store initialized", { dbPath });
+
+  return new ModelConfigStoreImpl(db, options?.seedFromCliConfig);
+}
